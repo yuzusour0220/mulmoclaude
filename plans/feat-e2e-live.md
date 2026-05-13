@@ -989,6 +989,7 @@ artifact name: `mulmoclaude-tarball`（10 MB 程度、`.tgz`）。
 - [x] ~~**Safari (webkit) project の追加**~~ → 反映済（`e2e-live/playwright.config.ts` に `webkit` project + `testMatch: "media.spec.ts"`）
 - [x] ~~**webkit で L-01 が `naturalWidth=0` で fail する件の調査と修正**~~ → #1015 close 済（real bug ではなく dev server stale だっただけ。 上の 「真の原因」 セクション参照。 dev 再起動後に webkit L-01 + L-02 pass 確認）
 - [x] ~~**L-05 (generateImage)** 実装時に #983 の path-in-message を活用~~ → 実装済（path 文字列キャプチャは不要だった: `[generate-image-view]` testid 経由で `<img>.src` を読めば `/artifacts/images/...` の prefix が取れるので tool message を parse する必要がない。 #983 で server message に path が乗るのは agent 側の hint として有用、 spec 側は DOM-only assertion で十分）
+- [ ] **wiki lint 残り 3 診断カテゴリの e2e 化** (本 PR #1297 関連スコープ外として保留): 本 PR で `broken link` (L-WIKI-LINT-BROKEN) と `empty target` (L-WIKI-LINT-EMPTY-TARGET) は e2e でカバー済。 残る `Orphan page` / `Missing file` / `Tag drift` の 3 種は unit test (`findOrphanPages` / `findMissingFiles` / `findTagDrift`) で論理側はカバー済だが UI 表示の e2e net がない。 いずれも `data/wiki/index.md` を mutate する必要があり L-16 と同じく `replaceWikiIndex` / `restoreWikiIndex` 経由で書き換えてから `/wiki/lint-report` で診断行を assert する形になる。 Orphan / Missing / Tag drift は L-16 と shared 状態 (index.md) を奪い合うので **L-16 と同じ describe.serial ブロックに集約** か、 **専用 spec ファイルに切り出して describe.serial で囲む** 必要あり。 PR #1312 (issue #1297) が触っていない既存診断なので別 PR (`/make-e2e-live` 再起動) で 1〜3 シナリオ追加が筋。 PR #1312 のオリジナル QA チェックリスト C-3 / C-4 / C-5 に対応
 
 ---
 
