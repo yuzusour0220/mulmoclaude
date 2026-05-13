@@ -4,6 +4,7 @@ import { type Page, expect, test } from "@playwright/test";
 
 import { ONE_MINUTE_MS } from "../../server/utils/time.ts";
 import {
+  SESSION_URL_PATTERN,
   deleteProjectSkillViaUi,
   deleteSession,
   getCurrentSessionId,
@@ -25,7 +26,6 @@ const L21_TIMEOUT_MS = 3 * ONE_MINUTE_MS;
 const L22_TIMEOUT_MS = 3 * ONE_MINUTE_MS;
 const L31_TIMEOUT_MS = 3 * ONE_MINUTE_MS;
 const L32_TIMEOUT_MS = 3 * ONE_MINUTE_MS;
-const SESSION_URL_PATTERN = /\/chat\/[0-9a-f-]+/;
 
 // All four scenarios talk to the live LLM (L-21: chart tool dispatch,
 // L-22: skill execution, L-31: mc-manage-skills bridge dispatch

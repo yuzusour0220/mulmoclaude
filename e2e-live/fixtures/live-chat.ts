@@ -11,9 +11,20 @@ import { fileURLToPath } from "node:url";
 import { type Download, type FrameLocator, type Page, expect } from "@playwright/test";
 
 import { ONE_MINUTE_MS, ONE_SECOND_MS } from "../../server/utils/time.ts";
+import { readSessionJsonl } from "../../server/utils/files/session-io.ts";
+import { readTextUnder } from "../../server/utils/files/workspace-io.ts";
 import { isValidSlug } from "../../server/utils/slug.ts";
-import { isRecord } from "../../server/utils/types.ts";
+import { isErrorWithCode, isRecord } from "../../server/utils/types.ts";
 import { API_ROUTES } from "../../src/config/apiRoutes.ts";
+
+/**
+ * Canonical SPA session URL pattern. Both `e2e-live/fixtures/`
+ * helpers and `e2e-live/tests/*.spec.ts` route waits assert against
+ * `/chat/<uuid-ish>`; centralising the regex here prevents the two
+ * sides from drifting apart (Sourcery review on PR #1345 caught the
+ * duplicate before it caused real divergence).
+ */
+export const SESSION_URL_PATTERN = /\/chat\/[0-9a-f-]+/;
 
 const FIXTURES_DIR = path.dirname(fileURLToPath(import.meta.url));
 
@@ -362,32 +373,24 @@ function parseToolCallLine(line: string): ToolCallTraceRecord | null {
   return { toolName: parsed.toolName, args: parsed.args };
 }
 
-function isENOENT(err: unknown): boolean {
-  return typeof err === "object" && err !== null && "code" in err && err.code === "ENOENT";
-}
-
 /**
  * Read the per-session jsonl event log and return every `tool_call`
  * record in dispatch order. Specs use this to assert the agent
  * reached for a specific tool (or, conversely, that it did NOT reach
- * for `Write` against `.claude/skills/`). The path mirrors
- * `server/utils/files/session-io.ts → sessionJsonlAbsPath`
- * (`<workspace>/conversations/chat/<id>.jsonl`); resolved through
- * `resolveWorkspacePath` so a stale env override cannot escape the
- * workspace root. Returns `[]` when the jsonl is missing — agent
- * routes only flush the file once the first event is recorded, so
- * an early read can race ahead of the first tool call. The caller
- * is expected to gate this on {@link waitForAssistantTurn}.
+ * for `Write` against `.claude/skills/`). Delegates the path math
+ * and ENOENT swallow to `readSessionJsonl`
+ * (`server/utils/files/session-io.ts`) so we stay in lockstep with
+ * the server-side jsonl location and don't reinvent the
+ * `<workspace>/conversations/chat/<id>.jsonl` layout in two places
+ * (Sourcery review on PR #1345). Returns `[]` when the jsonl is
+ * missing — agent routes only flush the file once the first event
+ * is recorded, so an early read can race ahead of the first tool
+ * call. The caller is expected to gate this on
+ * {@link waitForAssistantTurn}.
  */
 export async function readSessionToolCalls(sessionId: string): Promise<ToolCallTraceRecord[]> {
-  const jsonlPath = resolveWorkspacePath(`conversations/chat/${sessionId}.jsonl`);
-  let raw: string;
-  try {
-    raw = await readFile(jsonlPath, "utf8");
-  } catch (err) {
-    if (isENOENT(err)) return [];
-    throw err;
-  }
+  const raw = await readSessionJsonl(sessionId, workspaceRoot());
+  if (raw === null) return [];
   const calls: ToolCallTraceRecord[] = [];
   for (const line of raw.split("\n")) {
     const record = parseToolCallLine(line);
@@ -410,7 +413,10 @@ export async function snapshotProjectSkillSlugs(): Promise<Set<string>> {
   try {
     entries = await readdir(skillsDir, { withFileTypes: true });
   } catch (err) {
-    if (isENOENT(err)) return new Set();
+    // ENOENT → fresh workspace with no project-scope skills yet;
+    // canonical detection via the shared `isErrorWithCode` guard
+    // (Sourcery review on PR #1345) rather than a local re-roll.
+    if (isErrorWithCode(err) && err.code === "ENOENT") return new Set();
     throw err;
   }
   return new Set(entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name));
@@ -420,17 +426,14 @@ export async function snapshotProjectSkillSlugs(): Promise<Set<string>> {
  * Read the SKILL.md body of the named project skill. Returns `null`
  * when the file is absent (e.g. cleanup race in a parallel suite),
  * so the caller can treat absence as "not ours" without distinguishing
- * it from a read failure. We go through `resolveWorkspacePath` so a
- * malformed slug cannot escape the workspace root.
+ * it from a read failure. Delegates to `readTextUnder`
+ * (`server/utils/files/workspace-io.ts`) which already swallows
+ * ENOENT to `null` and resolves the path under the given root —
+ * Sourcery review on PR #1345 noted the local copy was duplicating
+ * shared workspace-io behaviour.
  */
 export async function readProjectSkillBody(slug: string): Promise<string | null> {
-  const target = resolveWorkspacePath(`.claude/skills/${slug}/SKILL.md`);
-  try {
-    return await readFile(target, "utf8");
-  } catch (err) {
-    if (isENOENT(err)) return null;
-    throw err;
-  }
+  return readTextUnder(workspaceRoot(), `.claude/skills/${slug}/SKILL.md`);
 }
 
 const WIKI_PAGE_BODY_SELECTOR = '[data-testid="wiki-page-body"]';
@@ -701,8 +704,6 @@ export async function deleteSession(page: Page, sessionId: string): Promise<void
 
 const PRESENT_HTML_IFRAME_SELECTOR = '[data-testid="present-html-iframe"]';
 
-const SESSION_URL_PATTERN_FIXTURES = /\/chat\/[0-9a-f-]+/;
-
 /** Open the app root and start a fresh chat session. */
 export async function startNewSession(page: Page): Promise<void> {
   await page.goto("/");
@@ -734,9 +735,9 @@ export async function startGuaranteedNewSession(page: Page): Promise<string> {
   const priorSessionId = getCurrentSessionId(page);
   await page.getByTestId("new-session-btn").click();
   if (priorSessionId === null) {
-    await page.waitForURL(SESSION_URL_PATTERN_FIXTURES);
+    await page.waitForURL(SESSION_URL_PATTERN);
   } else {
-    await page.waitForURL((url) => SESSION_URL_PATTERN_FIXTURES.test(url.pathname) && !url.pathname.endsWith(priorSessionId));
+    await page.waitForURL((url) => SESSION_URL_PATTERN.test(url.pathname) && !url.pathname.endsWith(priorSessionId));
   }
   const newSessionId = getCurrentSessionId(page);
   if (newSessionId === null) {
