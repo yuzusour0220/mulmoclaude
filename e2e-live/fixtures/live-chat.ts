@@ -287,14 +287,18 @@ export async function deleteProjectSkillViaUi(page: Page, slug: string, timeoutM
 export const WRITE_TOOL_NAME = "Write";
 
 // Path of an agent Write that targets a staging skill body. Anchored
-// to `/SKILL.md` (`<sep>data<sep>skills<sep><slug><sep>SKILL.md$`)
+// to `/SKILL.md` (`(start|<sep>)data<sep>skills<sep><slug><sep>SKILL.md$`)
 // so a Write to `data/skills/<slug>/README.md` does NOT match — the
 // bridge only mirrors the canonical filename, and asserting on it is
 // what proves the bridge will fire. Slug pattern matches the bridge's
 // own `SLUG_RE`. Tolerates both POSIX and Windows separators since
 // path normalisation depends on how the SDK serialises the arg.
+// The `(?:^|[/\\])` prefix accepts bare cwd-relative paths
+// (`data/skills/<slug>/SKILL.md` — the form the mc-manage-skills
+// SKILL.md instructs the agent to use) as well as separator-prefixed
+// (`./data/...` / absolute) variants. Codex iter-2 review on this PR.
 // eslint-disable-next-line security/detect-unsafe-regex -- the slug clause is bounded by the path tail (slug ≤ 64 chars per server/utils/slug.ts) and the input is the agent-supplied file_path the Claude SDK already validated; no pathological backtracking surface.
-const STAGING_SKILL_WRITE_PATH_RE = /[/\\]data[/\\]skills[/\\]([a-z0-9]+(?:-[a-z0-9]+)*)[/\\]SKILL\.md$/;
+const STAGING_SKILL_WRITE_PATH_RE = /(?:^|[/\\])data[/\\]skills[/\\]([a-z0-9]+(?:-[a-z0-9]+)*)[/\\]SKILL\.md$/;
 
 /**
  * Extract the staging-skill slug from a `Write` tool call's
