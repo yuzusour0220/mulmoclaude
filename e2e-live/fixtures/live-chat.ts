@@ -12,6 +12,7 @@ import { type Download, type FrameLocator, type Page, expect } from "@playwright
 
 import { ONE_MINUTE_MS, ONE_SECOND_MS } from "../../server/utils/time.ts";
 import { isValidSlug } from "../../server/utils/slug.ts";
+import { isErrorWithCode } from "../../server/utils/types.ts";
 import { API_ROUTES } from "../../src/config/apiRoutes.ts";
 
 const FIXTURES_DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -78,6 +79,23 @@ export async function placeWorkspaceFile(workspaceRel: string, body: string): Pr
   await mkdir(path.dirname(dst), { recursive: true });
   await writeFile(dst, body, "utf8");
   return dst;
+}
+
+/**
+ * Read the raw text of a workspace-relative file. Returns `null` when
+ * the file does not exist so the caller can distinguish "absent" from
+ * "empty string" without ad-hoc try/catch. Used by snapshot/restore
+ * flows that round-trip a real user file across a test (e.g.
+ * `config/settings.json` in the L-SETTINGS-EFFORT spec).
+ */
+export async function readWorkspaceFile(workspaceRel: string): Promise<string | null> {
+  const target = resolveWorkspacePath(workspaceRel);
+  try {
+    return await readFile(target, "utf8");
+  } catch (err) {
+    if (isErrorWithCode(err) && err.code === "ENOENT") return null;
+    throw err;
+  }
 }
 
 /**
