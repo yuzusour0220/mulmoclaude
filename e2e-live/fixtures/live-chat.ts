@@ -811,6 +811,22 @@ const SESSION_ID_FROM_PATH_RE = /\/chat\/([0-9a-f-]+)/;
  */
 export async function startGuaranteedNewSession(page: Page): Promise<string> {
   await page.goto("/");
+  // Wait for App.vue's bootstrap navigation to settle BEFORE
+  // snapshotting the baseline. On a populated workspace
+  // `resumeOrCreateChatSession` redirects to `/chat/<resumed>`; on
+  // a clean workspace the same code path goes through
+  // `createNewSession` and lands on a freshly-minted
+  // `/chat/<bootstrap>`. Either way the URL settles on
+  // `/chat/<id>`. If we snapshot the baseline before this wait,
+  // the clean-workspace bootstrap session is NOT in the baseline
+  // (its server row only persists once bootstrap finishes), so the
+  // post-click filter accepts the bootstrap landing as the "new"
+  // session and the helper returns the wrong id (Codex GHA iter-6
+  // review on PR #1345). Gating on `waitForURL` ensures the
+  // bootstrap session has hit the server and shows up in the
+  // baseline snapshot, leaving only our click's creation as the
+  // truly-new id.
+  await page.waitForURL(SESSION_URL_PATTERN);
   const baselineIds = await fetchExistingSessionIds(page);
   await page.getByTestId("new-session-btn").click();
   await page.waitForURL((url) => {
