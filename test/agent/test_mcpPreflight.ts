@@ -7,9 +7,16 @@
 
 import { describe, it, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { findMissingRequiredEnv, preflightUserServers, _resetPreflightLogCache } from "../../server/agent/mcpPreflight.js";
+import {
+  findMissingRequiredEnv,
+  preflightUserServers,
+  logPreflightResult,
+  _resetPreflightLogCache,
+  type McpPreflightResult,
+} from "../../server/agent/mcpPreflight.js";
 import { findCatalogEntry } from "../../src/config/mcpCatalog.js";
 import type { McpServerSpec } from "../../server/system/config.js";
+import { log } from "../../server/system/logger/index.js";
 
 beforeEach(() => {
   _resetPreflightLogCache();
@@ -146,5 +153,92 @@ describe("preflightUserServers", () => {
     assert.equal(result.skipped.length, 1);
     assert.equal(result.skipped[0].serverId, "slack");
     assert.deepEqual(result.skipped[0].missing.sort(), ["SLACK_BOT_TOKEN", "SLACK_TEAM_ID"]);
+  });
+});
+
+describe("logPreflightResult — snapshot diffing (Codex review on #1355)", () => {
+  // Capture log.warn calls so we can assert on the dedup behavior
+  // without spinning up the real transport.
+  function captureWarn(): { calls: { serverId: string; missing: string[] }[]; restore: () => void } {
+    const originalWarn = log.warn;
+    const calls: { serverId: string; missing: string[] }[] = [];
+    log.warn = (_namespace, _message, data) => {
+      if (data && typeof data === "object" && "serverId" in data && "missing" in data) {
+        const { serverId, missing } = data as { serverId: unknown; missing: unknown };
+        if (typeof serverId === "string" && Array.isArray(missing)) {
+          calls.push({ serverId, missing: missing as string[] });
+        }
+      }
+    };
+    return {
+      calls,
+      restore: () => {
+        log.warn = originalWarn;
+      },
+    };
+  }
+
+  function emptyResult(): McpPreflightResult {
+    return { ready: {}, skipped: [] };
+  }
+
+  function skipResult(serverId: string, missing: string[]): McpPreflightResult {
+    return { ready: {}, skipped: [{ serverId, missing }] };
+  }
+
+  it("logs identical state only once across consecutive agent-run calls", () => {
+    const { calls, restore } = captureWarn();
+    try {
+      const notionSkipped = skipResult("notion", ["NOTION_API_KEY"]);
+      logPreflightResult(notionSkipped, "agent-run");
+      logPreflightResult(notionSkipped, "agent-run");
+      logPreflightResult(notionSkipped, "agent-run");
+      assert.equal(calls.length, 1);
+      assert.equal(calls[0].serverId, "notion");
+    } finally {
+      restore();
+    }
+  });
+
+  it("re-logs after a server goes missing → fixed → missing again", () => {
+    // Regression guard for the monotonic-Set bug Codex flagged: the
+    // earlier shape only ever added to the dedup set, so a fix-then-
+    // re-break sequence silently suppressed the second warning.
+    const { calls, restore } = captureWarn();
+    try {
+      logPreflightResult(skipResult("notion", ["NOTION_API_KEY"]), "agent-run"); // log #1
+      logPreflightResult(emptyResult(), "agent-run"); // user fixed it — nothing to log
+      logPreflightResult(skipResult("notion", ["NOTION_API_KEY"]), "agent-run"); // re-broken — must log #2
+      assert.equal(calls.length, 2);
+      assert.deepEqual(
+        calls.map((call) => call.serverId),
+        ["notion", "notion"],
+      );
+    } finally {
+      restore();
+    }
+  });
+
+  it("logs again when the missing-key set changes for the same server", () => {
+    const { calls, restore } = captureWarn();
+    try {
+      logPreflightResult(skipResult("slack", ["SLACK_BOT_TOKEN"]), "agent-run");
+      logPreflightResult(skipResult("slack", ["SLACK_BOT_TOKEN", "SLACK_TEAM_ID"]), "agent-run");
+      assert.equal(calls.length, 2);
+      assert.deepEqual(calls[1].missing, ["SLACK_BOT_TOKEN", "SLACK_TEAM_ID"]);
+    } finally {
+      restore();
+    }
+  });
+
+  it("boot mode always logs even when state hasn't changed since the last agent run", () => {
+    const { calls, restore } = captureWarn();
+    try {
+      logPreflightResult(skipResult("notion", ["NOTION_API_KEY"]), "agent-run");
+      logPreflightResult(skipResult("notion", ["NOTION_API_KEY"]), "boot");
+      assert.equal(calls.length, 2);
+    } finally {
+      restore();
+    }
   });
 });

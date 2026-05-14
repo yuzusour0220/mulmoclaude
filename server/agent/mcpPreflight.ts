@@ -134,32 +134,42 @@ export function preflightUserServers(userServers: Record<string, McpServerSpec> 
   return { ready, skipped };
 }
 
-// Dedup cache so per-agent-run logging doesn't repeat identical
-// state across chat turns. Boot-time logging bypasses the cache
-// (always logs once on startup).
-const loggedKeys = new Set<string>();
+// Snapshot of the previous run's skipped set so per-agent-run logging
+// only fires on state changes. Boot-time logging always fires (clean
+// startup signal) and seeds the snapshot for subsequent runs.
+//
+// The earlier shape — a monotonic Set that only ever grew — would
+// swallow a `missing → fixed → missing again` regression: the second
+// "missing" emitted no warning because the key had already been
+// logged on the first one (Codex review on #1355). Snapshot diffing
+// fixes that without losing the dedup property: identical state
+// across turns still logs at most once.
+let lastSkippedKeys = new Set<string>();
 
 function dedupKey(entry: { serverId: string; missing: string[] }): string {
   return `${entry.serverId}:${entry.missing.join(",")}`;
 }
 
 /** Emit structured logs for the preflight outcome.
- *  - `source: "boot"`  — runs once at startup; always logs.
- *  - `source: "agent-run"` — runs per agent invocation; dedups
- *    identical (server, missing-keys) tuples so a Settings UI
- *    change shows once and stale state stays quiet. */
+ *  - `source: "boot"`  — runs once at startup; always logs and
+ *    seeds the snapshot.
+ *  - `source: "agent-run"` — runs per agent invocation; logs only
+ *    entries that are new vs the previous run's snapshot. A server
+ *    that re-enters a broken state after being fixed will log again
+ *    because the key is absent from the snapshot. */
 export function logPreflightResult(result: McpPreflightResult, source: "boot" | "agent-run"): void {
   const isBoot = source === "boot";
+  const currentKeys = new Set(result.skipped.map(dedupKey));
   for (const entry of result.skipped) {
     const key = dedupKey(entry);
-    if (!isBoot && loggedKeys.has(key)) continue;
-    loggedKeys.add(key);
+    if (!isBoot && lastSkippedKeys.has(key)) continue;
     log.warn("mcp", "preflight: skipping server — missing required config", {
       source,
       serverId: entry.serverId,
       missing: entry.missing,
     });
   }
+  lastSkippedKeys = currentKeys;
   if (isBoot) {
     log.info("mcp", "preflight summary", {
       started: Object.keys(result.ready).length,
@@ -168,8 +178,8 @@ export function logPreflightResult(result: McpPreflightResult, source: "boot" | 
   }
 }
 
-/** Test seam — reset the dedup cache between tests so each case
- *  sees a fresh logging state. */
+/** Test seam — reset the snapshot between tests so each case sees a
+ *  fresh logging state. */
 export function _resetPreflightLogCache(): void {
-  loggedKeys.clear();
+  lastSkippedKeys = new Set();
 }
