@@ -36,6 +36,8 @@ import { loadPresetPlugins } from "./plugins/preset-loader.js";
 import { registerRuntimePlugins } from "./plugins/runtime-registry.js";
 import { makePluginRuntime } from "./plugins/runtime.js";
 import { MCP_PLUGIN_NAMES } from "./agent/plugin-names.js";
+import { setActiveBackend } from "./agent/backend/index.js";
+import { fakeEchoBackend } from "./agent/backend/fake-echo.js";
 import { startMacosReminderAdapter } from "./notifier/macosReminderAdapter.js";
 import notifierRoutes from "./api/routes/notifier.js";
 import { initNotifier } from "./notifier/engine.js";
@@ -132,6 +134,17 @@ process.on("unhandledRejection", (reason) => {
   });
   setTimeout(() => process.exit(1), FATAL_EXIT_DELAY_MS);
 });
+
+// Test-seam: CI runs without a Claude CLI / API key set the
+// MULMOCLAUDE_FAKE_AGENT env var, which swaps in an echo-stub
+// backend so the chat flow still completes. Decided once at boot;
+// the orchestrator reads the active backend with zero per-call
+// overhead. Production callers never trip this branch (no runtime
+// import-time cost beyond the small fake-echo module itself).
+if (process.env.MULMOCLAUDE_FAKE_AGENT === "1") {
+  setActiveBackend(fakeEchoBackend);
+  log.info("agent", "MULMOCLAUDE_FAKE_AGENT=1 — active backend = fake-echo");
+}
 
 initWorkspace();
 
