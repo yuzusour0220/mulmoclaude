@@ -328,7 +328,6 @@ import { useGlobalImageErrorRepair } from "./composables/useImageErrorRepair";
 import { useMergedSessions } from "./composables/useMergedSessions";
 import { useLayoutMode } from "./composables/useLayoutMode";
 import { useSidePanelVisible } from "./composables/useSidePanelVisible";
-import { useSelectedResult } from "./composables/useSelectedResult";
 import { useMcpTools } from "./composables/useMcpTools";
 import { useRoles } from "./composables/useRoles";
 import { useCurrentRole } from "./composables/useCurrentRole";
@@ -443,10 +442,11 @@ const { geminiAvailable, sandboxEnabled, cpuLoadRatio, fetchHealth } = useHealth
 const { activeSession, toolResults, sidebarResults, isRunning, activeSessionRunning, statusMessage, toolCallHistory, activeSessionCount, unreadCount } =
   useSessionDerived({ sessionMap, currentSessionId, sessions });
 
-const { selectedResultUuid } = useSelectedResult({
-  activeSession,
-  sessionMap,
-  currentSessionId,
+const selectedResultUuid = computed<string | null>({
+  get: () => activeSession.value?.selectedResultUuid ?? null,
+  set: (val) => {
+    if (activeSession.value) activeSession.value.selectedResultUuid = val;
+  },
 });
 
 // Display name and icon of the role the active session was created
@@ -855,7 +855,6 @@ async function loadSession(sessionId: string) {
     id: sessionId,
     entries: response.data,
     defaultRoleId: roles.value[0]?.id ?? "",
-    urlResult: typeof route.query.result === "string" ? route.query.result : null,
     serverSummary: sessions.value.find((summary) => summary.id === sessionId),
     nowIso: new Date().toISOString(),
   });
