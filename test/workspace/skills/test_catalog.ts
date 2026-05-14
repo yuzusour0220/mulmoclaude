@@ -12,7 +12,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync, existsSync, readFileSync
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { isCatalogSource, listCatalogEntries, starCatalogEntry } from "../../../server/workspace/skills/catalog.js";
+import { isCatalogSource, listCatalogEntries, readCatalogEntryDetail, starCatalogEntry } from "../../../server/workspace/skills/catalog.js";
 
 let workdir: string;
 let catalogPresetDir: string;
@@ -154,5 +154,50 @@ describe("starCatalogEntry", () => {
   it("rejects empty + dot-prefixed slugs", async () => {
     assert.equal((await starCatalogEntry("preset", "", { workspaceRoot: workdir })).kind, "invalid-slug");
     assert.equal((await starCatalogEntry("preset", ".hidden", { workspaceRoot: workdir })).kind, "invalid-slug");
+  });
+});
+
+describe("readCatalogEntryDetail", () => {
+  it("returns description + body for a valid entry", async () => {
+    writeCatalogEntry("mc-foo", "---\ndescription: foo desc\n---\nthe markdown body");
+    const result = await readCatalogEntryDetail("preset", "mc-foo", { workspaceRoot: workdir });
+    assert.equal(result.kind, "ok");
+    if (result.kind !== "ok") return;
+    assert.equal(result.detail.slug, "mc-foo");
+    assert.equal(result.detail.source, "preset");
+    assert.equal(result.detail.description, "foo desc");
+    assert.match(result.detail.body, /the markdown body/);
+  });
+
+  it("returns not-found when the slug doesn't exist in the catalog", async () => {
+    const result = await readCatalogEntryDetail("preset", "mc-missing", { workspaceRoot: workdir });
+    assert.deepEqual(result, { kind: "not-found", source: "preset", slug: "mc-missing" });
+  });
+
+  it("returns not-found when SKILL.md has no frontmatter", async () => {
+    const slugDir = path.join(catalogPresetDir, "mc-bad");
+    mkdirSync(slugDir);
+    writeFileSync(path.join(slugDir, "SKILL.md"), "no frontmatter, just text");
+    const result = await readCatalogEntryDetail("preset", "mc-bad", { workspaceRoot: workdir });
+    assert.equal(result.kind, "not-found");
+  });
+
+  it("rejects path-traversal slugs", async () => {
+    const result = await readCatalogEntryDetail("preset", "../etc/passwd", { workspaceRoot: workdir });
+    assert.equal(result.kind, "invalid-slug");
+  });
+
+  it("does not require alreadyActive computation (detail is catalog-only)", async () => {
+    // Different from `listCatalogEntries` — detail doesn't peek at
+    // `.claude/skills/` so it's faster and one fewer fs.stat.
+    writeCatalogEntry("mc-foo", "---\ndescription: x\n---\nbody");
+    mkdirSync(path.join(activeDir, "mc-foo"));
+    const result = await readCatalogEntryDetail("preset", "mc-foo", { workspaceRoot: workdir });
+    assert.equal(result.kind, "ok");
+    // No `alreadyActive` field on the detail shape (compared to
+    // CatalogEntry).
+    if (result.kind === "ok") {
+      assert.equal("alreadyActive" in result.detail, false);
+    }
   });
 });

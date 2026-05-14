@@ -144,6 +144,46 @@ export async function listCatalogEntries(opts: CatalogOptions = {}): Promise<Cat
   return out;
 }
 
+export interface CatalogEntryDetail {
+  slug: string;
+  source: CatalogSource;
+  description: string;
+  /** Full SKILL.md body, post-frontmatter, with leading blank lines
+   *  trimmed. Used by:
+   *  - 📖 Preview (rendered as markdown in a modal)
+   *  - ▶ Run once (fed verbatim into a new chat as the user input). */
+  body: string;
+}
+
+export type CatalogDetailResult =
+  | { kind: "ok"; detail: CatalogEntryDetail }
+  | { kind: "not-found"; source: CatalogSource; slug: string }
+  | { kind: "invalid-slug"; slug: string };
+
+/** Read one catalog entry's SKILL.md and return the description +
+ *  body. The same `safeSlugName` taint-launder used by the star
+ *  action gates the path here. */
+export async function readCatalogEntryDetail(source: CatalogSource, slug: string, opts: CatalogOptions = {}): Promise<CatalogDetailResult> {
+  const safeName = safeSlugName(slug);
+  if (safeName === null) return { kind: "invalid-slug", slug };
+  const workspaceRoot = opts.workspaceRoot ?? workspacePath;
+  const slugDir = joinUnderRoot(catalogDirForSource(source, workspaceRoot), safeName);
+  if (!(await isDirectory(slugDir))) return { kind: "not-found", source, slug: safeName };
+  const skillMdPath = path.join(slugDir, "SKILL.md");
+  let raw: string;
+  try {
+    raw = await readFile(skillMdPath, "utf-8");
+  } catch {
+    return { kind: "not-found", source, slug: safeName };
+  }
+  const parsed = parseSkillFrontmatter(raw);
+  if (!parsed) return { kind: "not-found", source, slug: safeName };
+  return {
+    kind: "ok",
+    detail: { slug: safeName, source, description: parsed.description, body: parsed.body },
+  };
+}
+
 // Slug whitelist matches the convention used by user-authored
 // skills + preset slugs. The slug becomes a directory name under
 // `.claude/skills/`, so we forbid anything that could escape (`..`,

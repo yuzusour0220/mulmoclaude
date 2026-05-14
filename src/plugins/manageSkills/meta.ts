@@ -25,6 +25,11 @@ export const META = definePluginMeta({
      *  Copies the catalog entry into `.claude/skills/<slug>/` so
      *  Claude Code's slash-command resolver picks it up. */
     catalogStar: { method: "POST", path: "/catalog/star" },
+    /** GET /api/skills/catalog/preview?source=&slug= — returns one
+     *  catalog entry's description + body. Used by the 📖 Preview
+     *  modal and the ▶ Run once action (which feeds `body` into a
+     *  fresh chat as user input). */
+    catalogPreview: { method: "GET", path: "/catalog/preview" },
   },
   mcpDispatch: "create",
 });

@@ -15,7 +15,14 @@
 import { Router, Request, Response } from "express";
 import { deleteProjectSkill, discoverSkills, saveProjectSkill, updateProjectSkill } from "../../workspace/skills/index.js";
 import type { Skill, SkillSummary } from "../../workspace/skills/index.js";
-import { isCatalogSource, listCatalogEntries, starCatalogEntry, type CatalogEntry } from "../../workspace/skills/catalog.js";
+import {
+  isCatalogSource,
+  listCatalogEntries,
+  readCatalogEntryDetail,
+  starCatalogEntry,
+  type CatalogEntry,
+  type CatalogEntryDetail,
+} from "../../workspace/skills/catalog.js";
 import { workspacePath } from "../../workspace/workspace.js";
 import { API_ROUTES } from "../../../src/config/apiRoutes.js";
 import { bindRoute } from "../../utils/router.js";
@@ -245,6 +252,44 @@ bindRoute(router, API_ROUTES.skills.catalogList, async (_req: Request, res: Resp
   log.info("skills", "catalog list: ok", { count: entries.length });
   res.json({ entries });
 });
+
+interface CatalogPreviewQuery {
+  source?: unknown;
+  slug?: unknown;
+}
+
+interface CatalogPreviewResponse {
+  detail: CatalogEntryDetail;
+}
+
+bindRoute(
+  router,
+  API_ROUTES.skills.catalogPreview,
+  async (req: Request<object, unknown, unknown, CatalogPreviewQuery>, res: Response<CatalogPreviewResponse | ErrorResponse>) => {
+    const { source, slug } = req.query;
+    if (typeof slug !== "string" || slug.length === 0) {
+      badRequest(res, "slug is required");
+      return;
+    }
+    if (!isCatalogSource(source)) {
+      badRequest(res, "source must be a known catalog source");
+      return;
+    }
+    const result = await readCatalogEntryDetail(source, slug);
+    if (result.kind === "ok") {
+      log.info("skills", "catalog preview: ok", { source, slug: result.detail.slug });
+      res.json({ detail: result.detail });
+      return;
+    }
+    if (result.kind === "not-found") {
+      log.warn("skills", "catalog preview: not found", { source, slug });
+      notFound(res, `catalog entry not found: ${result.source}/${result.slug}`);
+      return;
+    }
+    log.warn("skills", "catalog preview: invalid slug", { slug });
+    badRequest(res, `invalid slug: ${result.slug}`);
+  },
+);
 
 bindRoute(router, API_ROUTES.skills.catalogStar, async (req: Request<object, unknown, StarBody>, res: Response<StarResponse | ErrorResponse>) => {
   const { source, slug } = req.body;

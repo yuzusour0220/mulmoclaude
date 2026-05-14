@@ -38,12 +38,11 @@
           </template>
         </i18n-t>
 
-        <!-- Catalog: launcher-managed presets that haven't been
-             starred into `.claude/skills/` yet. #1335 PR-B. Rendered
-             below the Active list as a flat group; PR-C will add
-             Anthropic + community subsections. Each row is read-only
-             (Run once + Preview land in PR-B2) with a single ★ Star
-             action that copies the entry into the Active layer. -->
+        <!-- Catalog: launcher-managed presets. #1335 PR-B introduced
+             the ★ Star action that copies an entry into
+             `.claude/skills/`. PR-B2 adds 📖 Preview (modal showing
+             the SKILL.md body) and ▶ Run once (opens a fresh chat
+             with the body as the user input, no star). -->
         <div v-if="catalogPresets.length > 0" class="border-t border-gray-200 mt-2">
           <div class="px-4 py-2 text-[11px] uppercase tracking-wide text-gray-500 font-semibold" data-testid="skill-catalog-section-heading">
             {{ t("pluginManageSkills.catalogPresetHeading") }}
@@ -52,33 +51,85 @@
             v-for="entry in catalogPresets"
             :key="`catalog-preset-${entry.slug}`"
             :data-testid="`skill-catalog-item-${entry.slug}`"
-            class="px-4 py-2 border-b border-gray-100 text-sm flex items-start gap-2"
+            class="px-4 py-2 border-b border-gray-100 text-sm flex items-start gap-1"
           >
             <div class="flex-1 min-w-0">
               <div class="font-medium text-gray-700 truncate">{{ entry.name }}</div>
               <div class="text-xs text-gray-500 truncate mt-0.5">{{ entry.description }}</div>
             </div>
             <button
+              class="shrink-0 h-7 w-7 flex items-center justify-center rounded text-gray-500 hover:bg-gray-100 disabled:opacity-40"
+              :disabled="catalogActioningSlug === entry.slug"
+              :title="t('pluginManageSkills.catalogPreview')"
+              :data-testid="`skill-catalog-preview-btn-${entry.slug}`"
+              @click="previewCatalogEntry(entry)"
+            >
+              <span class="material-icons text-sm" aria-hidden="true">visibility</span>
+            </button>
+            <button
+              class="shrink-0 h-7 w-7 flex items-center justify-center rounded text-gray-500 hover:bg-gray-100 disabled:opacity-40"
+              :disabled="catalogActioningSlug === entry.slug"
+              :title="t('pluginManageSkills.catalogRunOnce')"
+              :data-testid="`skill-catalog-run-btn-${entry.slug}`"
+              @click="runOnceCatalogEntry(entry)"
+            >
+              <span class="material-icons text-sm" aria-hidden="true">play_arrow</span>
+            </button>
+            <button
               v-if="entry.alreadyActive"
-              class="shrink-0 h-7 px-2 text-[11px] rounded text-gray-400 cursor-not-allowed"
+              class="shrink-0 h-7 w-7 flex items-center justify-center rounded text-yellow-500 cursor-not-allowed"
               :title="t('pluginManageSkills.catalogStarred')"
               :data-testid="`skill-catalog-starred-${entry.slug}`"
               disabled
             >
-              {{ t("pluginManageSkills.catalogStarred") }}
+              <span class="material-icons text-sm" aria-hidden="true">star</span>
             </button>
             <button
               v-else
-              class="shrink-0 h-7 px-2 text-[11px] rounded border border-blue-300 text-blue-600 hover:bg-blue-50 disabled:opacity-40"
-              :disabled="starringSlug === entry.slug"
+              class="shrink-0 h-7 w-7 flex items-center justify-center rounded text-gray-400 hover:text-yellow-500 hover:bg-gray-100 disabled:opacity-40"
+              :disabled="catalogActioningSlug === entry.slug"
               :title="t('pluginManageSkills.catalogStar')"
               :data-testid="`skill-catalog-star-btn-${entry.slug}`"
               @click="starCatalogEntry(entry)"
             >
-              {{ t("pluginManageSkills.catalogStar") }}
+              <span class="material-icons text-sm" aria-hidden="true">star_border</span>
             </button>
           </div>
           <div v-if="catalogError" class="px-4 py-2 text-xs text-red-600">{{ catalogError }}</div>
+        </div>
+
+        <!-- Preview modal (#1335 PR-B2). pointer-events-auto inner
+             panel so clicks on the panel itself don't dismiss; only
+             the backdrop closes. -->
+        <div
+          v-if="previewOpen"
+          class="fixed inset-0 z-30 flex items-center justify-center bg-black/40"
+          data-testid="skill-catalog-preview-modal"
+          @click.self="previewOpen = false"
+        >
+          <div class="bg-white rounded-lg shadow-xl max-w-2xl w-[90%] max-h-[80vh] flex flex-col">
+            <div class="flex items-center justify-between gap-2 px-4 py-3 border-b border-gray-200">
+              <div class="min-w-0">
+                <div class="text-xs uppercase tracking-wide text-gray-400">{{ t("pluginManageSkills.catalogPreviewLabel") }}</div>
+                <h3 class="text-base font-semibold text-gray-800 truncate">{{ previewDetail?.slug ?? "" }}</h3>
+              </div>
+              <button
+                class="shrink-0 h-8 w-8 flex items-center justify-center rounded text-gray-500 hover:bg-gray-100"
+                :title="t('common.close')"
+                data-testid="skill-catalog-preview-close"
+                @click="previewOpen = false"
+              >
+                <span class="material-icons text-base" aria-hidden="true">close</span>
+              </button>
+            </div>
+            <div class="flex-1 overflow-y-auto p-4">
+              <p v-if="previewDetail" class="text-sm text-gray-600 mb-3">{{ previewDetail.description }}</p>
+              <!-- eslint-disable vue/no-v-html -- markdown sanitized via sanitizeMarkdownHtml; same trust chain as the existing skill detail body -->
+              <div v-if="previewDetail" class="prose prose-sm max-w-none text-gray-800" v-html="previewRenderedBody"></div>
+              <!-- eslint-enable vue/no-v-html -->
+              <div v-else class="text-sm text-gray-400 italic">{{ t("pluginManageSkills.loading") }}</div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -263,9 +314,30 @@ interface CatalogEntry {
   source: CatalogSource;
   alreadyActive: boolean;
 }
+interface CatalogDetail {
+  slug: string;
+  source: CatalogSource;
+  description: string;
+  body: string;
+}
 const catalogPresets = ref<CatalogEntry[]>([]);
 const catalogError = ref<string | null>(null);
-const starringSlug = ref<string | null>(null);
+// Single in-flight gate covers Star / Preview / Run once on the
+// same row so a slow request doesn't let the user fire a second
+// action while the first is mid-flight.
+const catalogActioningSlug = ref<string | null>(null);
+const previewOpen = ref(false);
+const previewDetail = ref<CatalogDetail | null>(null);
+// `appApi` is also referenced lower down by the existing `runSkill`
+// (slash-command invocation for active skills); hoisting one
+// declaration so the catalog handlers don't need their own lookup.
+const catalogAppApi = useAppApi();
+
+const previewRenderedBody = computed(() => {
+  const body = previewDetail.value?.body;
+  if (!body) return "";
+  return sanitizeMarkdownHtml(marked(body) as string);
+});
 
 async function loadCatalog(): Promise<void> {
   const response = await apiGet<{ entries: CatalogEntry[] }>(endpoints.catalogList.url);
@@ -292,9 +364,9 @@ async function refreshActiveList(): Promise<void> {
 
 async function starCatalogEntry(entry: CatalogEntry): Promise<void> {
   if (entry.alreadyActive) return;
-  starringSlug.value = entry.slug;
+  catalogActioningSlug.value = entry.slug;
   const response = await apiPost<{ starred: true; slug: string }>(endpoints.catalogStar.url, { source: entry.source, slug: entry.slug });
-  starringSlug.value = null;
+  catalogActioningSlug.value = null;
   if (!response.ok) {
     catalogError.value = t("pluginManageSkills.errCatalogStarFailed", { error: response.error });
     return;
@@ -303,6 +375,47 @@ async function starCatalogEntry(entry: CatalogEntry): Promise<void> {
   // Refresh both lists so the row flips to "Starred" and the new
   // active entry shows up in the left column.
   await Promise.all([loadCatalog(), refreshActiveList()]);
+}
+
+async function fetchCatalogDetail(entry: CatalogEntry): Promise<CatalogDetail | null> {
+  catalogActioningSlug.value = entry.slug;
+  const response = await apiGet<{ detail: CatalogDetail }>(endpoints.catalogPreview.url, { source: entry.source, slug: entry.slug });
+  catalogActioningSlug.value = null;
+  if (!response.ok) {
+    catalogError.value = t("pluginManageSkills.errCatalogPreviewFailed", { error: response.error });
+    return null;
+  }
+  catalogError.value = null;
+  return response.data.detail;
+}
+
+async function previewCatalogEntry(entry: CatalogEntry): Promise<void> {
+  // Open the modal immediately with a "loading" state, then fill in
+  // once the detail comes back. Saves the user a beat of dead UI on
+  // a slow connection.
+  previewDetail.value = null;
+  previewOpen.value = true;
+  const fetched = await fetchCatalogDetail(entry);
+  if (fetched === null) {
+    previewOpen.value = false;
+    return;
+  }
+  previewDetail.value = fetched;
+}
+
+async function runOnceCatalogEntry(entry: CatalogEntry): Promise<void> {
+  // Fetch the SKILL.md body, then open a fresh chat with it as the
+  // first user message. The skill is NOT starred — no copy into
+  // `.claude/skills/`, no system-prompt entry — so the agent reacts
+  // to the body that turn only. Matches the issue's "▶ Run once"
+  // spec.
+  const fetched = await fetchCatalogDetail(entry);
+  if (fetched === null) return;
+  if (!fetched.body.trim()) {
+    catalogError.value = t("pluginManageSkills.errCatalogRunOnceEmpty");
+    return;
+  }
+  catalogAppApi.startNewChat(fetched.body);
 }
 
 // Standalone mode: if no selectedResult was passed, fetch the skill
