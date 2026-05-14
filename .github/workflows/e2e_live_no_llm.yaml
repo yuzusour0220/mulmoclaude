@@ -1,13 +1,15 @@
-name: E2E Live (triage matrix)
+name: E2E Live (no LLM)
 
-# Runs every e2e-live spec file in its own job so we can triage which
-# scenarios work end-to-end in CI and which need extra wiring (Claude
-# auth, secrets, etc.). `fail-fast: false` keeps the matrix going so
-# one broken spec doesn't hide the rest.
+# Runs every e2e-live spec file as its own job. Each spec gates its
+# Claude-dependent suites behind `process.env.E2E_LIVE_NO_LLM === "1"`
+# via a `test.skip()` at the describe scope, so this workflow ends up
+# running the workspace / wiki / routing checks while skipping the
+# real-LLM scenarios. `fail-fast: false` keeps the matrix going so a
+# single broken spec doesn't hide the rest.
 #
-# Sandbox is disabled because CI runners don't have a logged-in
-# `claude` CLI; without DISABLE_SANDBOX=1 the server hits
-# `assertClaudeFiles()` and exits before Vite proxies anything.
+# DISABLE_SANDBOX=1 is set on the dev server because CI runners have
+# no logged-in Claude CLI; without it `assertClaudeFiles()` in
+# server/system/docker.ts would exit 1 before Vite came up.
 
 on:
   schedule:
@@ -16,12 +18,15 @@ on:
   pull_request:
     paths:
       - ".github/workflows/e2e_live_no_llm.yaml"
+      - "e2e-live/**"
+      - "server/agent/backend/claude-code.ts"
+      - "server/index.ts"
 
 permissions:
   contents: read
 
 concurrency:
-  group: e2e-live-triage-${{ github.ref }}
+  group: e2e-live-no-llm-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -33,15 +38,15 @@ jobs:
       fail-fast: false
       matrix:
         spec:
-          - wiki              # expected ✓ — no LLM, workspace-seed only
-          - wiki-nav          # expected ✓ — no LLM, workspace-seed only
-          - workspace-link-routing  # mixed — L-24 ✓, L-23 needs LLM
-          - media             # needs Claude
-          - mulmo-script-edit # needs Claude
-          - roles             # needs Claude
-          - session           # needs Claude
-          - skills            # needs Claude
-          - ui                # needs Claude
+          - wiki
+          - wiki-nav
+          - workspace-link-routing
+          - media
+          - mulmo-script-edit
+          - roles
+          - session
+          - skills
+          - ui
 
     steps:
       - uses: actions/checkout@v6
@@ -65,10 +70,6 @@ jobs:
 
       - name: Start mulmoclaude dev server (background)
         env:
-          # Skip Docker sandbox setup. Without this the server calls
-          # `assertClaudeFiles()` (server/system/docker.ts) which
-          # requires ~/.claude + ~/.claude.json to exist and exits 1
-          # otherwise — concurrently then kills Vite via -k.
           DISABLE_SANDBOX: "1"
         run: |
           yarn dev > dev-server.log 2>&1 &
@@ -89,14 +90,16 @@ jobs:
           exit 1
 
       - name: Run ${{ matrix.spec }}.spec.ts
-        run: |
-          npx playwright test \
-            --config e2e-live/playwright.config.ts \
-            ${{ matrix.spec }}.spec.ts
         env:
           E2E_LIVE_BASE_URL: http://localhost:5173
           E2E_LIVE_WORKERS: "2"
           E2E_LIVE_REPORT_SUBDIR: ${{ matrix.spec }}
+          # Tells Claude-dependent suites to test.skip themselves.
+          E2E_LIVE_NO_LLM: "1"
+        run: |
+          npx playwright test \
+            --config e2e-live/playwright.config.ts \
+            ${{ matrix.spec }}.spec.ts
 
       - name: Stop dev server
         if: always()

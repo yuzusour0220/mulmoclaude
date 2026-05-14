@@ -19,6 +19,8 @@ const LEDIT_TIMEOUT_MS = 3 * ONE_MINUTE_MS;
 test.describe.configure({ mode: "parallel" });
 
 test.describe("mulmoScript edit (real workspace)", () => {
+  test.skip(process.env.E2E_LIVE_NO_LLM === "1", "E2E_LIVE_NO_LLM=1 — Claude-dependent suite");
+
   // Regression net for #1074. The fix has three parts:
   //   1. View re-reads the script from disk on mount via
   //      `refreshScriptFromDisk` (calling the reopen endpoint

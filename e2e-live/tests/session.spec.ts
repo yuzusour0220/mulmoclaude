@@ -21,6 +21,11 @@ const L12_MAGIC_CODE = "729841";
 test.describe.configure({ mode: "parallel" });
 
 test.describe("session (real LLM)", () => {
+  // CI gate: skip the entire suite on runs without a live Claude CLI /
+  // API key (#1364). Set in `.github/workflows/e2e_live_no_llm.yaml`
+  // when E2E_LIVE_NO_LLM=1.
+  test.skip(process.env.E2E_LIVE_NO_LLM === "1", "E2E_LIVE_NO_LLM=1 — Claude-dependent suite");
+
   test("L-11: 新規セッション → 1 ターン → reload → 履歴復元", async ({ page }) => {
     test.setTimeout(L11_TIMEOUT_MS);
     // Covers B-14: history persisted on reload. The prompt asks

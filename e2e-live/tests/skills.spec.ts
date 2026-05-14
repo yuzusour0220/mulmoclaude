@@ -35,6 +35,8 @@ const L32_TIMEOUT_MS = 3 * ONE_MINUTE_MS;
 test.describe.configure({ mode: "parallel" });
 
 test.describe("skills (real LLM / static)", () => {
+  test.skip(process.env.E2E_LIVE_NO_LLM === "1", "E2E_LIVE_NO_LLM=1 — Claude-dependent suite");
+
   test("L-21: Office role + presentChart で deferred-tool dispatch が成功し chart-canvas が描画される", async ({ page }) => {
     test.setTimeout(L21_TIMEOUT_MS);
     // Covers B-41: Claude CLI auto-flips into deferred-tools mode

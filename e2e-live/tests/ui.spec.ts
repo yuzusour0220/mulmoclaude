@@ -19,6 +19,8 @@ const PRESENT_FORM_RAW_KEY_PREFIX = "pluginPresentForm.";
 test.describe.configure({ mode: "parallel" });
 
 test.describe("ui (real LLM / static)", () => {
+  test.skip(process.env.E2E_LIVE_NO_LLM === "1", "E2E_LIVE_NO_LLM=1 — Claude-dependent suite");
+
   test("L-18: presentForm の i18n キーが raw 文字列として DOM に漏れない", async ({ page }) => {
     test.setTimeout(L18_TIMEOUT_MS);
     // Covers B-34: when presentForm was promoted from external

@@ -87,6 +87,8 @@ const L01_IMG_LOCATOR = `img[alt="${L01_IMG_ALT}"]`;
 test.describe.configure({ mode: "parallel" });
 
 test.describe("media (real LLM)", () => {
+  test.skip(process.env.E2E_LIVE_NO_LLM === "1", "E2E_LIVE_NO_LLM=1 — Claude-dependent suite");
+
   test("L-01: presentHtml の <img src='../../../images/...'> が /artifacts/html 経由で描画される", async ({ page }) => {
     test.setTimeout(L01_TIMEOUT_MS);
     // Spec-unique flat path — see comment in seedL01Fixture.

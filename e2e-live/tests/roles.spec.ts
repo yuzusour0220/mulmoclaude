@@ -15,6 +15,8 @@ const SINGLE_WORD_PROMPT = "Reply with the single word: hello";
 test.describe.configure({ mode: "parallel" });
 
 test.describe("roles (real LLM)", () => {
+  test.skip(process.env.E2E_LIVE_NO_LLM === "1", "E2E_LIVE_NO_LLM=1 — Claude-dependent suite");
+
   test("L-06: General ロールで 1 ターン → 入力欄 enabled + 応答完走", async ({ page }) => {
     test.setTimeout(ROLE_TURN_TIMEOUT_MS);
     // Covers B-15 (General used to be disabled when GEMINI_API_KEY

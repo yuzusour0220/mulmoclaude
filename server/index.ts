@@ -103,6 +103,25 @@ const __dirname = path.dirname(__filename);
 
 const debugMode = process.argv.includes("--debug");
 
+// Global crash safety net (#1364). Anything we don't catch locally
+// — a stray `throw` deep in a request handler, an EventEmitter
+// without a listener (spawn ENOENT was the canonical case), an
+// unrejected Promise — must never tear down the server process.
+// Production users keep tabs open for days; CI runs share one
+// process across many tests. We log loudly so the failure is
+// triagable, but always keep the loop running. Anything genuinely
+// fatal at boot time still calls process.exit() explicitly below.
+process.on("uncaughtException", (err) => {
+  log.error("uncaughtException", err instanceof Error ? err.message : String(err), {
+    stack: err instanceof Error ? err.stack : undefined,
+  });
+});
+process.on("unhandledRejection", (reason) => {
+  log.error("unhandledRejection", reason instanceof Error ? reason.message : String(reason), {
+    stack: reason instanceof Error ? reason.stack : undefined,
+  });
+});
+
 initWorkspace();
 
 // Fire-and-forget memory migrations: legacy `memory.md` → atomic

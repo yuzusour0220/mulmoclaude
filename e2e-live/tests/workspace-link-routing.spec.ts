@@ -28,6 +28,11 @@ test.describe.configure({ mode: "parallel" });
 
 test.describe("workspace link routing (real workspace)", () => {
   test("L-23: マルチバイトファイル名を含む Markdown リンクが二重 percent-encode されず Files で開ける", async ({ page }, testInfo) => {
+    // L-23 depends on the LLM echoing the seeded markdown link in its
+    // reply (the "Strategy" comment below); L-24 in this same spec
+    // file does NOT use the LLM, so we skip per-test rather than at
+    // the describe scope.
+    test.skip(process.env.E2E_LIVE_NO_LLM === "1", "E2E_LIVE_NO_LLM=1 — needs LLM-authored reply");
     test.setTimeout(L23_TIMEOUT_MS);
     // Covers the regression behind plans/fix-workspace-link-double-encoding.md.
     //
