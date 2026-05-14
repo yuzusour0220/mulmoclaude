@@ -28,11 +28,13 @@ import { log } from "../system/logger/index.js";
 
 export const MCP_FAILURE_THRESHOLD = 3;
 
-// `[A-Za-z0-9-]+` keeps the server segment bounded to typical id
-// characters (no `_` so the trailing `__<tool>` is unambiguous).
-// Avoids the `(a+)+` style backtracking that the security linter
-// flagged in the earlier `([^_]+(?:_[^_]+)*)__` form.
-const MCP_TOOL_NAME_PATTERN = /^mcp__([A-Za-z0-9-]+)__/;
+// Server-id contract — must match `isMcpServerId` in
+// `server/system/config.ts`. Both ends agreeing on this shape is
+// what lets the monitor attribute failures back to the right
+// server entry in `mcp.json` (Codex review on #1356).
+const MCP_SERVER_ID_PATTERN = /^[a-z][a-z0-9_-]{0,63}$/;
+const MCP_PREFIX = "mcp__";
+const MCP_DELIM = "__";
 
 /** Minimal AgentEvent surface the monitor needs. Defined locally to
  *  avoid a circular import; structurally matches the relevant fields
@@ -62,11 +64,28 @@ const defaultSink: NotificationSink = {
 };
 
 /** Pure helper: returns the server id encoded in an MCP tool name,
- *  or `null` for non-MCP tools. `mcp__notion__page_create` →
- *  `"notion"`. */
+ *  or `null` for non-MCP tools.
+ *
+ *  Parses by string-split rather than a single regex so:
+ *    - server ids containing `_` (allowed by `isMcpServerId`, e.g.
+ *      `a1_b2`) attribute correctly. The first `__` after the
+ *      `mcp__` prefix is treated as the server↔tool delimiter, so
+ *      `mcp__a1_b2__do_thing` resolves to server `"a1_b2"`,
+ *      tool-part `"do_thing"`.
+ *    - no regex backtracking surface (Codex flagged ReDoS on the
+ *      previous `[^_]+(?:_[^_]+)*` form; this fix uses split + a
+ *      simple per-character validator instead). */
 export function mcpServerFromToolName(toolName: string): string | null {
-  const match = MCP_TOOL_NAME_PATTERN.exec(toolName);
-  return match ? match[1] : null;
+  if (!toolName.startsWith(MCP_PREFIX)) return null;
+  const rest = toolName.slice(MCP_PREFIX.length);
+  const delim = rest.indexOf(MCP_DELIM);
+  if (delim <= 0) return null;
+  const serverId = rest.slice(0, delim);
+  // The tool-part is everything after the delimiter; it can carry
+  // `__` of its own (some MCP authors use `__` in tool names) — we
+  // only care that something is there.
+  if (rest.length <= delim + MCP_DELIM.length) return null;
+  return MCP_SERVER_ID_PATTERN.test(serverId) ? serverId : null;
 }
 
 /** Build a session-scoped monitor. Returns the same shape as

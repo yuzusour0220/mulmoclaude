@@ -64,6 +64,32 @@ describe("mcpServerFromToolName", () => {
     assert.equal(mcpServerFromToolName("mcp__"), null);
     assert.equal(mcpServerFromToolName("mcp_notion"), null);
   });
+
+  // Regression for the Codex review on #1356: the old regex
+  // (`[A-Za-z0-9-]+`) excluded `_`, but `isMcpServerId` in
+  // `server/system/config.ts` explicitly allows underscores. Servers
+  // like `a1_b2` were silently un-attributed → their repeated
+  // failures never triggered the alert path. Pin the new shape so a
+  // future "let's tighten the regex" change can't silently regress.
+  it("attributes server ids that contain underscores (isMcpServerId contract)", () => {
+    assert.equal(mcpServerFromToolName("mcp__a1_b2__do_thing"), "a1_b2");
+    assert.equal(mcpServerFromToolName("mcp__my_server__tool"), "my_server");
+    assert.equal(mcpServerFromToolName("mcp__under_score_galore__x"), "under_score_galore");
+  });
+
+  it("uses the FIRST `__` after the `mcp__` prefix as the server↔tool delimiter", () => {
+    // Some MCP authors put `__` inside tool names too. The server
+    // half is always the first segment up to the first `__` after
+    // the prefix; what comes after is opaque tool-part.
+    assert.equal(mcpServerFromToolName("mcp__notion__page__create__subaction"), "notion");
+  });
+
+  it("rejects server ids that violate the isMcpServerId shape", () => {
+    // Uppercase / starts-with-digit / too-long / forbidden chars.
+    assert.equal(mcpServerFromToolName("mcp__Bad__tool"), null); // uppercase
+    assert.equal(mcpServerFromToolName("mcp__1foo__tool"), null); // leading digit
+    assert.equal(mcpServerFromToolName("mcp__foo!bar__tool"), null); // `!` forbidden
+  });
 });
 
 describe("createMcpFailureMonitor — threshold + notification", () => {
@@ -89,6 +115,30 @@ describe("createMcpFailureMonitor — threshold + notification", () => {
     assert.equal(publishes[0].id, "mcp-failure-notion");
     assert.match(publishes[0].body, /notion/);
     assert.equal(warns.length, 1);
+  });
+
+  // Sourcery review on #1356: `createMcpFailureMonitor` accepts a
+  // `threshold` override option, but the default-only tests above
+  // wouldn't catch a future refactor that ignores the override.
+  // Pin the wiring with an explicit per-call assertion.
+  it("honours the `threshold` override (single failure triggers when threshold=1)", () => {
+    const { sink, publishes, warns } = makeSink();
+    const monitor = createMcpFailureMonitor({ sink, threshold: 1 });
+    monitor.track(toolCall("id-0", "mcp__notion__page_create"));
+    monitor.track(toolCallResult("id-0", true));
+    assert.equal(publishes.length, 1, "threshold=1 → one failure is enough");
+    assert.equal(warns.length, 1);
+  });
+
+  it("honours a high `threshold` override (5 failures don't trigger when threshold=10)", () => {
+    const { sink, publishes, warns } = makeSink();
+    const monitor = createMcpFailureMonitor({ sink, threshold: 10 });
+    for (let callIndex = 0; callIndex < 5; callIndex += 1) {
+      monitor.track(toolCall(`id-${String(callIndex)}`, "mcp__notion__page_create"));
+      monitor.track(toolCallResult(`id-${String(callIndex)}`, true));
+    }
+    assert.equal(publishes.length, 0, "threshold=10 stays silent below 10 failures");
+    assert.equal(warns.length, 0);
   });
 
   it("resets the consecutive counter on a success", () => {
