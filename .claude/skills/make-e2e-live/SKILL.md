@@ -118,6 +118,30 @@ git checkout -b feat/e2e-live-<topic>
 
 既存パターンを踏襲する。 `plans/feat-e2e-live.md` の 「実装の詳細」 セクションが詳細仕様。
 
+### Step 0: testid 洗い出し（spec を書き始める前に必ず）
+
+このステップを後回しにすると、 spec 内に `getByText('日本語ラベル')` / `locator('.tw-xxxx')` のような i18n / class 依存 selector が残り、 翻訳変更や Tailwind class rename で壊れる。 **最初の `page.locator(...)` / `page.click(...)` を書く前に** 必ず通る関門として扱う。
+
+**先に読むべき docs**:
+- [`docs/ui-cheatsheet.md`](../../../docs/ui-cheatsheet.md) — 既存 testid の ASCII リファレンス。 触る surface が既にカバーされているか先に確認
+- [`docs/e2e-live-testing.md`](../../../docs/e2e-live-testing.md) §2 — testid 命名規約（「Functional names, not positional / text-content」）
+
+手順:
+
+1. spec で触る予定の UI 要素を箇条書きで洗い出す（input / button / iframe / preview / thumbnail / 等）
+2. それぞれが既に `data-testid` を持っているかを確認（ui-cheatsheet → grep の順）:
+   ```bash
+   grep -rn "data-testid" src/ | grep -i "<keyword>"
+   ```
+3. 不足分は **spec を書き始める前に** 同 PR 内で先に追加:
+   - source に `data-testid="<plugin>-<role>"` を追加（kebab-case、 例: `audio-play-button` / `image-thumbnail`）
+   - **機能名**で付ける — 位置（`top-right-button`）、 文言（`save-button` の "Save" ラベル直訳）、 構造（`first-row-cell`）は NG
+   - `docs/ui-cheatsheet.md` の該当 ASCII ブロックを更新（CLAUDE.md ルール）
+   - 翻訳テキストや `iframe[sandbox]` 構造属性に依存しない（脆い）
+4. testid 追加は spec 実装と独立した commit に切る（review しやすくするため）
+
+「あとでまとめて付ける」 にしないこと — spec 実装中に「ここ testid 無いな」 と気づいた時点で **その場で Step 0 に戻る**。
+
 ### 共通ルール
 
 - helper の追加先:
@@ -132,10 +156,7 @@ git checkout -b feat/e2e-live-<topic>
   - **`frameLocator` API を使う** — `page.evaluate` + `iframe.contentDocument` は Vue の srcdoc 更新で古い document を返す罠
   - iframe `toBeVisible` だけでは早すぎる。 内側の特定要素を `frameLocator(...).locator(...)` で待つ
 - assertion 達成後に `waitForAssistantResponseComplete(page)` を呼ぶ — 呼ばないと trace / video が応答途中で切れる
-- testid 新設時:
-  - 命名: `data-testid="<plugin>-<role>"` の kebab-case
-  - **同 PR で `docs/ui-cheatsheet.md` の該当 ASCII ブロックを更新**（CLAUDE.md ルール）
-  - 翻訳テキストや `iframe[sandbox]` 構造属性に依存しない（脆い）
+- testid 新設時: **Step 0 を参照**（命名規約 / `docs/ui-cheatsheet.md` 更新 / 脆い selector 回避）
 - 新規テスト追加時は `docs/e2e-live-testing.md` の skip 規約に従う — Claude 必須テストには per-test で `test.skip(process.env.E2E_LIVE_NO_LLM === "1", ...)` を付ける
 - 新規 spec ファイル追加時は `.github/workflows/e2e_live_no_llm.yaml` の `matrix.spec:` への登録も併せて確認する（1 本でも fake-friendly なテストがあれば追加）
 
