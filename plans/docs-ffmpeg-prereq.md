@@ -16,26 +16,28 @@ Tracks: [#1049](https://github.com/receptron/mulmoclaude/issues/1049) — 依存
 
 > **進捗管理ルール**: この `plans/docs-ffmpeg-prereq.md` を `#1049` umbrella の進捗ハブとして扱う。
 >
-> umbrella の各 PR の作業を始める際:
+> umbrella の各 PR に着手する際は、以下の手順で下表を更新する:
 >
 > 1. その PR 用の plan ファイルを `plans/<branch-name>.md` (例: `plans/feat-pr-4a-docker-auto-fallback.md`) に新規作成する
-> 2. **下記表の該当行の「別 PR」列に作成した plan ファイルへの相対リンクを追記する** (例: `⏳ [plan](feat-pr-4a-docker-auto-fallback.md)`)
-> 3. PR が立ったら同じ列に PR 番号も追記 (例: `🚧 [plan](feat-pr-4a-docker-auto-fallback.md) / #1380`)
+> 2. **下表の該当行の「状態」列に plan ファイルへの相対リンクを追記する** (例: `⏳ [plan](feat-pr-4a-docker-auto-fallback.md)`)
+> 3. PR が立ったら同じセルに PR 番号も追記 (例: `🚧 [plan](feat-pr-4a-docker-auto-fallback.md) / #1380`)
 > 4. PR がマージされたら `✅ #1380` に書き換え、対応する plan を `plans/done/` に移動 (`/archive-shipped-plans` skill で自動化)
 >
-> 表を update し忘れると umbrella 全体の進捗が見えなくなるので、新規 plan を作ったら **必ずこの表に行を update する** こと。
+> 表の更新を怠ると umbrella 全体の進捗が見えなくなる。新規 plan を作成したら、対応する行を必ず更新すること。
 
-| ID        | 内容                                                                                                                                                                               | この PR                                                      | 別 PR           |
-| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ | --------------- |
-| **PR-A**  | README に Prerequisites を明記 (ffmpeg / Docker / claude CLI / Node)                                                                                                               | ✅ #1367                                                     |                 |
-| **PR-1a** | bundled system skill の配布機構 (`--plugin-dir` + `discoverSkills` 拡張)                                                                                                           |                                                              | ⏳              |
-| **PR-1b** | `/check-prereqs` skill — **対話的な依存チェック**。probe → 「入れる/後で/入れない」分岐 → install ガイド → 再確認。下記 PR-1b ノート参照                                           |                                                              | ⏳ — PR-1a 依存 |
-| **PR-1c** | Settings タブの依存欠落表示 (Gemini タブ横展開)。**Gemini API key 等の「あったら便利系」も案内**                                                                                   |                                                              | ⏳              |
-| **PR-1d** | `npx` 利用者向けブラウザ onboarding                                                                                                                                                |                                                              | ⏳              |
-| **PR-1e** | `yarn dev` 開発者向け onboarding skill                                                                                                                                             | 🟡 一部 (`setup-mulmoclaude` の dependency check 拡張で先行) | 残りは ⏳       |
-| **PR-2**  | 各失敗経路 (動画 / PDF / 画像 / MCP / ブリッジ / scheduler) の Web UI 表面化 audit。**自動 disable と組み合わせて運用**                                                            |                                                              | ⏳              |
-| **PR-3**  | `UserFacingError` 型導入 (`message` / `cause` / `remediation` / `docsUrl`)。**Disabled feature の理由表示にも使用**                                                                |                                                              | ⏳              |
-| **PR-4**  | **依存欠落時の graceful degradation (capability gating)** — 起動時に `which` 等で依存を probe し、不足時は該当 feature を runtime disable + warn。落とさない。下記 PR-4 ノート参照 |                                                              | ⏳              |
+凡例: ✅ 完了 / 🟡 一部完了 / 🚧 進行中 / ⏳ 未着手
+
+| ID        | 内容                                                                                                                                                                               | 状態                                                                                          |
+| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| **PR-A**  | README に Prerequisites を明記 (ffmpeg / Docker / claude CLI / Node)                                                                                                               | ✅ [plan](docs-ffmpeg-prereq.md) / #1367                                                      |
+| **PR-1a** | bundled system skill の配布機構 (`--plugin-dir` + `discoverSkills` 拡張)                                                                                                           | ⏳                                                                                            |
+| **PR-1b** | `/check-prereqs` skill — **対話的な依存チェック**。probe → 「入れる/後で/入れない」分岐 → install ガイド → 再確認。下記 PR-1b ノート参照                                           | ⏳ — PR-1a 依存                                                                               |
+| **PR-1c** | Settings タブの依存欠落表示 (Gemini タブ横展開)。**Gemini API key 等の「あったら便利系」も案内**                                                                                   | ⏳                                                                                            |
+| **PR-1d** | `npx` 利用者向けブラウザ onboarding                                                                                                                                                | ⏳                                                                                            |
+| **PR-1e** | `yarn dev` 開発者向け onboarding skill                                                                                                                                             | 🟡 [plan](docs-ffmpeg-prereq.md) / #1367 (`setup-mulmoclaude` の dependency check 拡張で先行) |
+| **PR-2**  | 各失敗経路 (動画 / PDF / 画像 / MCP / ブリッジ / scheduler) の Web UI 表面化 audit。**自動 disable と組み合わせて運用**                                                            | ⏳                                                                                            |
+| **PR-3**  | `UserFacingError` 型導入 (`message` / `cause` / `remediation` / `docsUrl`)。**Disabled feature の理由表示にも使用**                                                                | ⏳                                                                                            |
+| **PR-4**  | **依存欠落時の graceful degradation (capability gating)** — 起動時に `which` 等で依存を probe し、不足時は該当 feature を runtime disable + warn。落とさない。下記 PR-4 ノート参照 | ⏳                                                                                            |
 
 ### PR-1b ノート (新 skill `/check-prereqs`)
 
