@@ -55,6 +55,15 @@ export interface FakeResponse {
   toolCalls?: readonly FakeToolCall[];
   /** Assistant text. Omit to skip the text event entirely. */
   text?: string;
+  /** When set, emit a single `error` AgentEvent with this message
+   *  and stop — mirrors what the claude-code backend does when the
+   *  CLI exits non-zero (`readAgentEvents`). Tool calls / text that
+   *  would otherwise follow are suppressed. */
+  error?: string;
+  /** Emit the `tool_call` for each `toolCalls` entry but NOT the
+   *  paired `tool_call_result` — simulates a truncated / partial
+   *  stream where the model died mid tool round-trip. */
+  omitToolResult?: boolean;
 }
 
 export type FakeResponseFn = (input: AgentInput) => FakeResponse | Promise<FakeResponse>;
@@ -71,6 +80,19 @@ async function defaultResponse(input: AgentInput): Promise<FakeResponse> {
   // short-circuit to read the seeded body and apply the
   // "respond with this exact line" heuristic the e2e-live canaries
   // rely on. Falls through to default echo on no match.
+  // Prompt-driven error trigger for e2e-live. The in-process
+  // `setFakeResponse()` knob is unreachable from a browser-driven
+  // spec (separate process), so the error-banner UI canary opts in
+  // by sending a message containing this exact marker. Prod never
+  // reaches fake-echo (real Claude backend) so this is inert there.
+  if (input.message.includes("__FAKE_ERROR__")) {
+    // Message text is rendered through marked() in the chat card,
+    // so keep it free of markdown-significant characters (no `__`,
+    // `*`, backticks) — the e2e-live canary asserts on a literal
+    // substring of this string.
+    return { error: "fake-echo forced error for the e2e-live error-banner canary" };
+  }
+
   const slashMatch = input.message.trim().match(/^\/([a-z0-9][a-z0-9-]*)$/i);
   if (slashMatch) {
     const skillReply = await replyFromSeededSkill(input.workspacePath, slashMatch[1]);
@@ -287,12 +309,29 @@ export function resetFakeResponse(): void {
   sessionTurns.clear();
 }
 
+// Abort is checked between every yield. Real claude-code kills the
+// subprocess on abort; the echo stub has no subprocess, so the
+// faithful equivalent is "stop emitting immediately".
+function aborted(input: AgentInput): boolean {
+  return input.abortSignal?.aborted === true;
+}
+
 async function* runFakeEchoAgent(input: AgentInput): AsyncGenerator<AgentEvent> {
+  if (aborted(input)) return;
   yield { type: EVENT_TYPES.claudeSessionId, id: randomUUID() };
 
   const response = await responseFn(input);
 
+  // Error short-circuit: surface the error and stop, exactly like
+  // the claude-code backend on a non-zero CLI exit.
+  if (response.error !== undefined) {
+    if (aborted(input)) return;
+    yield { type: EVENT_TYPES.error, message: response.error };
+    return;
+  }
+
   for (const call of response.toolCalls ?? []) {
+    if (aborted(input)) return;
     const toolUseId = `fake-${randomUUID()}`;
     yield {
       type: EVENT_TYPES.toolCall,
@@ -300,10 +339,13 @@ async function* runFakeEchoAgent(input: AgentInput): AsyncGenerator<AgentEvent> 
       toolName: call.toolName,
       args: call.args,
     };
+    // Partial-stream simulation: skip the result half.
+    if (response.omitToolResult) continue;
     // Run the actual plugin handler AND push the envelope to
     // /api/internal/tool-result so the canvas mounts the View — same
     // two-step the MCP bridge does for real Claude.
     const content = await dispatchToPlugin(call, input.port, input.sessionId);
+    if (aborted(input)) return;
     yield {
       type: EVENT_TYPES.toolCallResult,
       toolUseId,
@@ -311,7 +353,7 @@ async function* runFakeEchoAgent(input: AgentInput): AsyncGenerator<AgentEvent> 
     };
   }
 
-  if (response.text !== undefined) {
+  if (response.text !== undefined && !aborted(input)) {
     yield { type: EVENT_TYPES.text, message: response.text };
   }
 }
