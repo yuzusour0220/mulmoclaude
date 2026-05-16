@@ -1,6 +1,8 @@
 # Plan: Encore as a built-in plugin (from-scratch reimplementation)
 
-> **Status: drafted, not started.** This is a **from-scratch reimplementation** of Encore as a built-in plugin under `src/plugins/encore/`, on a new branch cut from `main`. The runtime-plugin codebase under `packages/plugins/encore-plugin/` (currently on `plan/feat-encore-dsl-v1`) is *not* touched and *not* migrated — we use its design doc as the spec and its lessons-learned section as warnings about traps, then write the built-in from zero.
+> **Status: landed on `feat/encore-builtin`, awaiting merge.** Seven implementation commits walk Steps 1 → 7 of the build plan below; the eighth (`322dc4f7`) is a stabilization batch fixing five bugs that surfaced during real-world testing (YAML round-trip lossiness, FYI auto-clear on click, `resolveNotification` exposed to the LLM, stale `activeNotificationId` after server restarts, generic 500s on Zod failures). All 8 component tests pass; `vue-tsc` + `tsc` + ESLint clean. The host's `docs/developer.md` now points at Encore as the canonical worked example of a server-state-heavy built-in plugin (chat-on-mount page + per-plugin mutex + custom YAML schema).
+>
+> This was a **from-scratch reimplementation** of Encore as a built-in plugin under `src/plugins/encore/` + `server/encore/`, on a new branch cut from `main`. The runtime-plugin codebase under `packages/plugins/encore-plugin/` (on `plan/feat-encore-dsl-v1`) was *not* touched and *not* migrated — we used its design doc as the spec and its lessons-learned section as warnings about traps, then wrote the built-in from zero.
 >
 > Companion: [`feat-encore-plugin.md`](./feat-encore-plugin.md). Read it first — it owns the DSL spec, the 28 resolved design decisions, and the 7 implementation lessons. This doc is shorter because the design work is already done; what's left is the build-out plan against a different host integration point.
 
