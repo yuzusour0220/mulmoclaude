@@ -71,6 +71,13 @@ const routes: RouteRecordRaw[] = [
   // experimental plugin features (notifier engine, etc.). Rendered by
   // the @mulmoclaude/debug-plugin runtime plugin.
   { path: "/debug", name: PAGE_ROUTES.debug, component: Stub },
+  // Encore click-handler page. Notifications published by the
+  // Encore tick set `navigateTarget: /encore?pendingId=<uuid>`;
+  // `src/plugins/encore/View.vue` mounted here dispatches
+  // `resolveNotification` on mount and redirects to /chat/<chatId>.
+  // No user-facing UI lives on this route. See
+  // plans/feat-encore-as-builtin.md §UI.
+  { path: "/encore", name: PAGE_ROUTES.encore, component: Stub },
   { path: "/:pathMatch(.*)*", redirect: "/chat" },
 ];
 

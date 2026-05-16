@@ -235,6 +235,19 @@
             Debug plugin is not loaded. Make sure @mulmoclaude/debug-plugin is built and registered as a preset.
           </div>
           <!-- eslint-enable @intlify/vue-i18n/no-raw-text -->
+          <!-- Encore click-handler page. Mounted when a user clicks
+               an Encore bell notification (navigateTarget:
+               /encore?pendingId=<uuid>). The View itself has no UI —
+               it dispatches resolveNotification and redirects. Same
+               literal-fallback policy as debug above; the page is
+               transient (~300ms before redirect) so its strings stay
+               out of the 8-locale i18n bundle. -->
+          <component :is="encoreViewComponent" v-else-if="currentPage === 'encore' && encoreViewComponent" />
+          <!-- eslint-disable @intlify/vue-i18n/no-raw-text -- encore click-handler is a transient redirect page, not a user-facing surface. -->
+          <div v-else-if="currentPage === 'encore'" class="h-full flex items-center justify-center text-sm text-gray-500">
+            Encore is not loaded.
+          </div>
+          <!-- eslint-enable @intlify/vue-i18n/no-raw-text -->
         </div>
 
         <!-- Bottom bar (Stack chat only — plugin views have no
@@ -672,6 +685,11 @@ const selectedResult = computed(() => toolResults.value.find((result) => result.
 // reactive, so this computed re-evaluates when the load completes and
 // the /debug branch in the template lights up without a refresh.
 const debugViewComponent = computed(() => getPlugin("manageDebug")?.viewComponent ?? null);
+
+// Encore plugin View — built-in plugin under src/plugins/encore/.
+// Mounted at /encore as a click-handler for notification bell entries
+// (View.vue dispatches resolveNotification on mount and redirects).
+const encoreViewComponent = computed(() => getPlugin("manageEncore")?.viewComponent ?? null);
 
 // Google Maps API key from `AppSettings.googleMapsApiKey`. Fetched
 // once on mount and refreshed whenever Settings reports a save.
