@@ -1111,6 +1111,7 @@ const enMessages = {
     catalogAddRepoSubmit: "Install",
     catalogAddRepoSuggestions: "Suggested repositories",
     catalogUninstallRepo: "Uninstall repository",
+    catalogUpdateRepo: "Update repository (re-fetch latest)",
     catalogUninstallConfirm: "Uninstall this repository? Skills you already starred stay in your active list.",
     catalogRepoInstalling: "Installing…",
     catalogRepoEmpty: "No skills found in this repository.",

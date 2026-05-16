@@ -549,4 +549,16 @@ test.describe("manageSkills plugin — external catalog (#1383 PR-C2)", () => {
     await page.getByTestId("skill-catalog-repo-uninstall-anthropics-skills").click();
     await expect.poll(() => calls.deleted).toContain("anthropics-skills");
   });
+
+  test("Update button re-installs with the repo's recorded url/subpath", async ({ page }) => {
+    const calls = { star: [] as StarCall[], install: [] as InstallCall[], deleted: [] as string[] };
+    await setupExternalCatalog(page, calls);
+    await page.goto("/chat/skills-session");
+    await expect(page.getByText("MulmoClaude")).toBeVisible();
+    await page.getByText("2 skills").first().click();
+
+    await page.getByTestId("skill-catalog-repo-update-anthropics-skills").click();
+    await expect.poll(() => calls.install.length).toBe(1);
+    expect(calls.install[0]).toMatchObject({ url: "https://github.com/anthropics/skills", subpath: "skills" });
+  });
 });

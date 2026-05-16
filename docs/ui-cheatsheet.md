@@ -396,7 +396,7 @@ already-starred skills in Active (star = fork).
 │ │ ▼ CATALOG            4  │                                       │ │
 │ │   Presets               │  (catalog row → preset/external detail│ │
 │ │ ├ [skill-catalog-…] ★   │   with ★ Star / ▶ Run once)           │ │
-│ │ ▼ owner/repo  (n) [🗑]   │                                       │ │
+│ │ ▼ owner/repo (n) [⟳][🗑] │                                       │ │
 │ │ ├ [skill-catalog-…] ☁   │                                       │ │
 │ │ [+ Add skill repository]│                                       │ │
 │ └─────────────────────────┴───────────────────────────────────────┘ │
@@ -411,6 +411,7 @@ Testids: `skill-section-{key}` / `skill-section-toggle-{key}` /
 derived slug);
 `skill-catalog-empty` when the catalog has no presets;
 `skill-catalog-repo-{repoId}` / `skill-catalog-repo-toggle-{repoId}` /
+`skill-catalog-repo-update-{repoId}` (re-fetch upstream) /
 `skill-catalog-repo-uninstall-{repoId}` per external-repo subgroup;
 `skill-catalog-add-repo` + `skill-add-repo-modal` /
 `skill-add-repo-url` / `skill-add-repo-subpath` /

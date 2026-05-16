@@ -154,6 +154,16 @@
                 </button>
                 <button
                   type="button"
+                  class="h-8 w-8 flex items-center justify-center rounded text-gray-400 hover:text-blue-600 disabled:opacity-40"
+                  :data-testid="`skill-catalog-repo-update-${group.repo.repoId}`"
+                  :disabled="updatingRepoId === group.repo.repoId"
+                  :title="t('pluginManageSkills.catalogUpdateRepo')"
+                  @click="updateRepo(group.repo)"
+                >
+                  <span class="material-icons text-sm" :class="updatingRepoId === group.repo.repoId ? 'animate-spin' : ''" aria-hidden="true">refresh</span>
+                </button>
+                <button
+                  type="button"
                   class="h-8 w-8 flex items-center justify-center rounded text-gray-400 hover:text-red-600 disabled:opacity-40"
                   :data-testid="`skill-catalog-repo-uninstall-${group.repo.repoId}`"
                   :disabled="uninstallingRepoId === group.repo.repoId"
@@ -597,6 +607,7 @@ const addRepoError = ref<string | null>(null);
 const addRepoBusy = ref(false);
 const suggestions = ref<ExternalSuggestion[]>([]);
 const uninstallingRepoId = ref<string | null>(null);
+const updatingRepoId = ref<string | null>(null);
 // Single in-flight gate covers Star / Run once on the selected
 // entry so a slow request doesn't let the user fire a second
 // action mid-flight.
@@ -730,6 +741,7 @@ watch(
     addRepoOpen.value = false;
     addRepoError.value = null;
     uninstallingRepoId.value = null;
+    updatingRepoId.value = null;
   },
 );
 
@@ -808,6 +820,25 @@ async function uninstallRepo(repoId: string): Promise<void> {
   // Starred copies survive uninstall (backend-guaranteed, C1) — pull
   // the active list so any starred-from-this-repo rows stay visible.
   await Promise.all([loadExternalRepos(), loadCatalog(), refreshActiveList()]);
+}
+
+// "Update" == re-install with the repo's recorded url/subpath. C1's
+// install path re-fetches upstream HEAD, wipes + re-copies the
+// catalog dir, and rewrites `.source.json` with the new SHA. Starred
+// copies under `.claude/skills/` are untouched (catalog-layer only).
+async function updateRepo(repo: ExternalRepo): Promise<void> {
+  if (updatingRepoId.value !== null) return;
+  updatingRepoId.value = repo.repoId;
+  const body: Record<string, string> = { url: repo.url };
+  if (repo.subpath) body.subpath = repo.subpath;
+  const response = await apiPost<{ installed: true; repoId: string }>(endpoints.externalReposInstall.url, body);
+  updatingRepoId.value = null;
+  if (!response.ok) {
+    catalogError.value = t("pluginManageSkills.errCatalogRepoInstallFailed", { error: response.error });
+    return;
+  }
+  catalogError.value = null;
+  await Promise.all([loadExternalRepos(), loadCatalog()]);
 }
 
 async function refreshActiveList(): Promise<void> {

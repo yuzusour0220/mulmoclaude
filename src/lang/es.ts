@@ -1123,6 +1123,7 @@ const esMessages = {
     catalogAddRepoSubmit: "Instalar",
     catalogAddRepoSuggestions: "Repositorios sugeridos",
     catalogUninstallRepo: "Desinstalar repositorio",
+    catalogUpdateRepo: "Actualizar repositorio (volver a obtener lo último)",
     catalogUninstallConfirm: "¿Desinstalar este repositorio? Las skills que ya marcaste con estrella permanecen en tu lista activa.",
     catalogRepoInstalling: "Instalando…",
     catalogRepoEmpty: "No se encontraron skills en este repositorio.",
