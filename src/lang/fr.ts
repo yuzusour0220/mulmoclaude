@@ -82,9 +82,9 @@ const frMessages = {
     title: "Dépendance optionnelle indisponible",
     titleNotFound: "{command} n'est pas installé",
     titleNotResponding: "{command} n'est pas en cours d'exécution",
-    notFound: "{command} introuvable — les fonctionnalités associées ont été désactivées. Installez-le et redémarrez pour les activer.",
+    notFound: "{command} introuvable — les fonctionnalités associées ont été désactivées. Installez {command} et redémarrez MulmoClaude pour les activer.",
     notResponding:
-      "{command} est installé mais n'est pas en cours d'exécution — les fonctionnalités associées ont été désactivées. Démarrez-le et redémarrez pour les activer.",
+      "{command} est installé mais n'est pas en cours d'exécution — les fonctionnalités associées ont été désactivées. Démarrez {command} et redémarrez MulmoClaude pour les activer.",
   },
   pluginErrorBoundary: {
     title: "Le plugin {pkg} a planté",

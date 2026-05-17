@@ -30,8 +30,8 @@ export function buildOptionalDepNotification(dep: OptionalDep, status: DepStatus
     priority: NOTIFICATION_PRIORITIES.normal,
     title: notFound ? `${dep.command} not installed` : `${dep.command} not running`,
     body: notFound
-      ? `${dep.command} not found — some features are disabled. Install it and restart.`
-      : `${dep.command} is installed but not running — some features are disabled. Start it and restart.`,
+      ? `${dep.command} not found — some features are disabled. Install ${dep.command} and restart MulmoClaude.`
+      : `${dep.command} is installed but not running — some features are disabled. Start ${dep.command} and restart MulmoClaude.`,
     i18n: {
       titleKey: notFound ? "optionalDeps.titleNotFound" : "optionalDeps.titleNotResponding",
       titleParams: { command: dep.command },

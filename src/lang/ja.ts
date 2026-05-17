@@ -88,8 +88,8 @@ const jaMessages = {
     title: "任意の依存コマンドを利用できません",
     titleNotFound: "{command} がインストールされていません",
     titleNotResponding: "{command} が起動していません",
-    notFound: "{command} がインストールされていないため、関連機能を停止しています。インストールしてから再起動してください。",
-    notResponding: "{command} が起動していないため、関連機能を停止しています。{command} を起動してから再起動してください。",
+    notFound: "{command} がインストールされていないため、関連機能を停止しています。{command} をインストールしてから MulmoClaude を再起動してください。",
+    notResponding: "{command} が起動していないため、関連機能を停止しています。{command} を起動してから MulmoClaude を再起動してください。",
   },
   pluginErrorBoundary: {
     title: "プラグイン {pkg} がクラッシュしました",

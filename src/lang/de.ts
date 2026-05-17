@@ -83,9 +83,10 @@ const deMessages = {
     title: "Optionale Abhängigkeit nicht verfügbar",
     titleNotFound: "{command} ist nicht installiert",
     titleNotResponding: "{command} läuft nicht",
-    notFound: "{command} nicht gefunden — zugehörige Funktionen wurden deaktiviert. Installieren Sie es und starten Sie neu, um sie zu aktivieren.",
+    notFound:
+      "{command} nicht gefunden — zugehörige Funktionen wurden deaktiviert. Installieren Sie {command} und starten Sie MulmoClaude neu, um sie zu aktivieren.",
     notResponding:
-      "{command} ist installiert, läuft aber nicht — zugehörige Funktionen wurden deaktiviert. Starten Sie es und starten Sie neu, um sie zu aktivieren.",
+      "{command} ist installiert, läuft aber nicht — zugehörige Funktionen wurden deaktiviert. Starten Sie {command} und starten Sie MulmoClaude neu, um sie zu aktivieren.",
   },
   pluginErrorBoundary: {
     title: "Plugin {pkg} ist abgestürzt",

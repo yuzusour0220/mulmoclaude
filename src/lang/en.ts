@@ -103,8 +103,8 @@ const enMessages = {
     title: "Optional dependency unavailable",
     titleNotFound: "{command} not installed",
     titleNotResponding: "{command} not running",
-    notFound: "{command} not found — related features are disabled. Install it and restart to enable them.",
-    notResponding: "{command} is installed but not running — related features are disabled. Start it and restart to enable them.",
+    notFound: "{command} not found — related features are disabled. Install {command} and restart MulmoClaude to enable them.",
+    notResponding: "{command} is installed but not running — related features are disabled. Start {command} and restart MulmoClaude to enable them.",
   },
   pluginErrorBoundary: {
     title: "Plugin {pkg} crashed",

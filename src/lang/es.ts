@@ -87,9 +87,9 @@ const esMessages = {
     title: "Dependencia opcional no disponible",
     titleNotFound: "{command} no está instalado",
     titleNotResponding: "{command} no está en ejecución",
-    notFound: "No se encontró {command} — las funciones relacionadas se han desactivado. Instálalo y reinicia para habilitarlas.",
+    notFound: "No se encontró {command} — las funciones relacionadas se han desactivado. Instala {command} y reinicia MulmoClaude para habilitarlas.",
     notResponding:
-      "{command} está instalado pero no se está ejecutando — las funciones relacionadas se han desactivado. Inícialo y reinicia para habilitarlas.",
+      "{command} está instalado pero no se está ejecutando — las funciones relacionadas se han desactivado. Inicia {command} y reinicia MulmoClaude para habilitarlas.",
   },
   pluginErrorBoundary: {
     title: "El plugin {pkg} se ha bloqueado",

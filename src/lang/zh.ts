@@ -85,8 +85,8 @@ const zhMessages = {
     title: "可选依赖不可用",
     titleNotFound: "未安装 {command}",
     titleNotResponding: "{command} 未运行",
-    notFound: "未找到 {command} — 相关功能已被禁用。安装后重启即可启用。",
-    notResponding: "{command} 已安装但未运行 — 相关功能已被禁用。启动后重启即可启用。",
+    notFound: "未找到 {command} — 相关功能已被禁用。请安装 {command} 后重启 MulmoClaude 以启用。",
+    notResponding: "{command} 已安装但未运行 — 相关功能已被禁用。请启动 {command} 后重启 MulmoClaude 以启用。",
   },
   pluginErrorBoundary: {
     title: "插件 {pkg} 已崩溃",
