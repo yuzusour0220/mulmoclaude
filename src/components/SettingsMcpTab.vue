@@ -62,6 +62,24 @@
               ></a>
             </div>
 
+            <!-- Sandbox-incompatible note (#1421 A1). A catalog entry
+                 whose template spec is stdio is dropped server-side
+                 in Docker mode (server/agent/config.ts) — the sandbox
+                 image can't host npx/python runtimes. Surface the
+                 same warning the installed-server list already shows
+                 for custom stdio servers (#1334) so the catalog
+                 toggle isn't a silent no-op under Docker. -->
+            <div
+              v-if="dockerMode && entry.spec.type === 'stdio'"
+              class="flex items-baseline gap-2 text-amber-700 text-[11px] ml-6"
+              :data-testid="`mcp-catalog-docker-warning-${entry.id}`"
+            >
+              <span>{{ t("settingsMcpTab.dockerStdioUnsupported") }}</span>
+              <a :href="MCP_SANDBOX_DOC_URL" target="_blank" rel="noopener noreferrer" class="underline whitespace-nowrap">
+                {{ t("settingsMcpTab.learnMore") }}
+              </a>
+            </div>
+
             <!-- Per-server config form (Phase 2). Only the entry being
                  actively configured renders the form; toggling a different
                  entry on closes this one. -->
