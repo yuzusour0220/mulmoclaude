@@ -390,6 +390,80 @@ describe("probeRuntimePlugins", () => {
     assert.equal(result.ok, true);
     assert.equal(call, 1);
   });
+
+  // 401/403 (auth misconfigured), non-200 status, non-JSON body, and
+  // body-shape regressions are all permanent. The retry loop must
+  // bail out on the first attempt instead of masking the failure
+  // behind the poll budget — a 10s wait before surfacing "status
+  // 401" makes CI logs harder to read, not easier.
+  it("does NOT retry on non-200 status even when expectedDevPlugin is set (fail-fast on auth/route regression)", async () => {
+    let call = 0;
+    const fetchImpl = fakeFetch(() => {
+      call += 1;
+      return new Response("Unauthorized", { status: 401 });
+    });
+    const result = await tarball.probeRuntimePlugins({
+      port: 3099,
+      token: "tok",
+      fetchImpl,
+      expectedDevPlugin: "@smoke/dev-fixture",
+      pollTimeoutMs: 5_000,
+      pollIntervalMs: 100,
+    });
+    assert.equal(result.ok, false);
+    assert.equal(result.status, 401);
+    assert.equal(call, 1, "should fail fast on 401, not poll");
+  });
+
+  it("does NOT retry on body-shape regression even when expectedDevPlugin is set (fail-fast)", async () => {
+    let call = 0;
+    const fetchImpl = fakeFetch(() => {
+      call += 1;
+      return new Response(JSON.stringify({ unrelated: true }), { status: 200, headers: { "content-type": "application/json" } });
+    });
+    const result = await tarball.probeRuntimePlugins({
+      port: 3099,
+      token: "tok",
+      fetchImpl,
+      expectedDevPlugin: "@smoke/dev-fixture",
+      pollTimeoutMs: 5_000,
+      pollIntervalMs: 100,
+    });
+    assert.equal(result.ok, false);
+    assert.match(result.lastError ?? "", /not \{ plugins/);
+    assert.equal(call, 1, "should fail fast on body-shape regression, not poll");
+  });
+
+  // Fetch failures ARE retryable: the boot poll already proved `/`
+  // answered 200, so an immediate ECONNREFUSED on the next request
+  // is a transient race against the server's shutdown / restart,
+  // not a permanent breakage.
+  it("DOES retry on fetch transport errors when expectedDevPlugin is set", async () => {
+    let call = 0;
+    let now = 0;
+    const fetchImpl = (async () => {
+      call += 1;
+      if (call < 3) throw new Error("ECONNREFUSED");
+      return new Response(JSON.stringify({ plugins: [{ name: "@smoke/dev-fixture", version: "dev" }] }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }) as unknown as typeof globalThis.fetch;
+    const result = await tarball.probeRuntimePlugins({
+      port: 3099,
+      token: "tok",
+      fetchImpl,
+      expectedDevPlugin: "@smoke/dev-fixture",
+      pollTimeoutMs: 5_000,
+      pollIntervalMs: 100,
+      now: () => now,
+      sleep: async (delayMs: number) => {
+        now += delayMs;
+      },
+    });
+    assert.equal(result.ok, true);
+    assert.equal(call, 3);
+  });
 });
 
 describe("makeDevPluginFixture", () => {

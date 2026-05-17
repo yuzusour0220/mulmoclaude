@@ -226,11 +226,14 @@ export async function readTokenFromLauncherLog({ logFile, readFileImpl = readFil
 // Plugin loading runs in a fire-and-forget IIFE that resolves AFTER
 // `app.listen()`, so the very first request can see an empty list
 // even when everything is wired correctly. When `expectedDevPlugin`
-// is set we poll until the plugin appears or the budget expires —
-// the assertion is "this plugin loads", not "it loaded by the time
-// the / route went 200". For the plain probe (no expectation), the
-// list may legitimately be empty at any moment after boot, so a
-// single shot is sufficient.
+// is set we poll the **transient** failure modes (fetch error while
+// the server is still binding, or 200 with the dev plugin not yet in
+// the list) until the plugin appears or the budget expires.
+// Permanent failures — non-200 status, body shape regression, JSON
+// parse error — fail immediately so a real auth / route regression
+// surfaces in the CI log without 10s of dead poll attempts. For the
+// plain probe (no expectation), the list may legitimately be empty
+// at any moment after boot, so a single shot is sufficient.
 export async function probeRuntimePlugins({
   port,
   token,
@@ -247,20 +250,29 @@ export async function probeRuntimePlugins({
   // Without an expected plugin we have no signal to wait for; one
   // attempt is the right behaviour (preserves the original semantics).
   if (!expectedDevPlugin) {
-    return runRuntimePluginsProbeOnce({ port, token, fetchImpl, expectedDevPlugin });
+    return stripRetryable(await runRuntimePluginsProbeOnce({ port, token, fetchImpl, expectedDevPlugin }));
   }
   const startedAt = now();
   let lastResult = await runRuntimePluginsProbeOnce({ port, token, fetchImpl, expectedDevPlugin });
-  while (!lastResult.ok && now() - startedAt < pollTimeoutMs) {
+  while (!lastResult.ok && lastResult.retryable && now() - startedAt < pollTimeoutMs) {
     await sleep(pollIntervalMs);
     lastResult = await runRuntimePluginsProbeOnce({ port, token, fetchImpl, expectedDevPlugin });
   }
-  return lastResult;
+  return stripRetryable(lastResult);
 }
 
-// Single-shot probe — one HTTP call, one verdict. Pulled out so the
-// polling layer in `probeRuntimePlugins` can drive retries without
-// re-implementing the response-shape checks.
+// `retryable` is an internal contract between the poll loop and the
+// single-shot probe — callers see the result without it (keeps the
+// public shape stable for unit tests and the smoke driver).
+function stripRetryable(result) {
+  const { retryable: _retryable, ...rest } = result;
+  return rest;
+}
+
+// Single-shot probe — one HTTP call, one verdict. The `retryable`
+// flag tells the caller whether a !ok result should trigger a retry
+// (race against fire-and-forget plugin loader) or fail immediately
+// (real configuration / route regression).
 async function runRuntimePluginsProbeOnce({ port, token, fetchImpl, expectedDevPlugin }) {
   let response;
   try {
@@ -268,28 +280,40 @@ async function runRuntimePluginsProbeOnce({ port, token, fetchImpl, expectedDevP
       headers: { Authorization: `Bearer ${token}` },
     });
   } catch (err) {
-    return { ok: false, status: null, plugins: 0, lastError: `fetch failed: ${err instanceof Error ? err.message : String(err)}` };
+    // Transport-level failure — server is still binding, or the
+    // listener went away mid-boot. Retry: the boot probe already
+    // confirmed `/` answered 200, so this is transient by design.
+    return { ok: false, status: null, plugins: 0, lastError: `fetch failed: ${err instanceof Error ? err.message : String(err)}`, retryable: true };
   }
   if (response.status !== 200) {
-    return { ok: false, status: response.status, plugins: 0, lastError: `status ${response.status}` };
+    // 401 / 403 / 5xx are configuration or route regressions, not
+    // races. Fail fast so the CI log points at the actual problem
+    // instead of "we waited 10s and still got 401".
+    return { ok: false, status: response.status, plugins: 0, lastError: `status ${response.status}`, retryable: false };
   }
   let body;
   try {
     body = await response.json();
   } catch (err) {
-    return { ok: false, status: 200, plugins: 0, lastError: `json parse failed: ${err instanceof Error ? err.message : String(err)}` };
+    // 200 with a non-JSON body means the route is serving the wrong
+    // content (e.g. an error page proxied through). Permanent.
+    return { ok: false, status: 200, plugins: 0, lastError: `json parse failed: ${err instanceof Error ? err.message : String(err)}`, retryable: false };
   }
   if (!Array.isArray(body?.plugins)) {
-    return { ok: false, status: 200, plugins: 0, lastError: "response body is not { plugins: [...] }" };
+    // Response shape regression — the contract changed under us.
+    // Retrying can't heal a broken contract.
+    return { ok: false, status: 200, plugins: 0, lastError: "response body is not { plugins: [...] }", retryable: false };
   }
   if (expectedDevPlugin) {
     const match = body.plugins.find((entry) => entry.name === expectedDevPlugin && entry.version === "dev");
     if (!match) {
+      // The race we're actually fixing: route is wired, body shape
+      // is right, but the IIFE hasn't registered yet. Retry.
       const seen = body.plugins.map((entry) => `${entry.name}@${entry.version}`).join(", ");
-      return { ok: false, status: 200, plugins: body.plugins.length, lastError: `dev plugin "${expectedDevPlugin}@dev" not in list — saw: ${seen}` };
+      return { ok: false, status: 200, plugins: body.plugins.length, lastError: `dev plugin "${expectedDevPlugin}@dev" not in list — saw: ${seen}`, retryable: true };
     }
   }
-  return { ok: true, status: 200, plugins: body.plugins.length, lastError: null };
+  return { ok: true, status: 200, plugins: body.plugins.length, lastError: null, retryable: false };
 }
 
 // Lay out a minimal dev-plugin fixture: a directory with package.json
