@@ -118,23 +118,47 @@ function countBraces(line: string): { opens: number; closes: number } {
   return { opens, closes };
 }
 
+// Mutable scope tracker for the allowed-function brace scanner. Once
+// the scanner sees an allowed function declaration, it waits for the
+// first `{` (body entry — handles multi-line headers), then exits
+// when braceDepth returns to 0. The earlier "exit when braceDepth
+// === 0 && opens > 0" was a bug — on a closing-brace-only line
+// `opens === 0`, so the flag never reset and every line below the
+// allowed function was silently skipped (caught by review on PR #1433).
+interface AllowedScopeState {
+  inAllowedFn: boolean;
+  entered: boolean;
+  braceDepth: number;
+}
+
+function makeScopeState(): AllowedScopeState {
+  return { inAllowedFn: false, entered: false, braceDepth: 0 };
+}
+
+function advanceScope(state: AllowedScopeState, line: string): void {
+  if (NOTIFIER_BOUNDARY_ALLOWED_FUNCTIONS.test(line)) {
+    state.inAllowedFn = true;
+    state.entered = false;
+    state.braceDepth = 0;
+  }
+  if (!state.inAllowedFn) return;
+  const { opens, closes } = countBraces(line);
+  state.braceDepth += opens - closes;
+  if (!state.entered && state.braceDepth > 0) state.entered = true;
+  if (state.entered && state.braceDepth <= 0) {
+    state.inAllowedFn = false;
+    state.entered = false;
+  }
+}
+
 function collectFileViolations(file: string, raw: string): NotifierViolation[] {
   const out: NotifierViolation[] = [];
   const lines = raw.split("\n");
-  let inAllowedFn = false;
-  let braceDepth = 0;
+  const scope = makeScopeState();
   for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
     const line = lines[lineIdx];
-    if (NOTIFIER_BOUNDARY_ALLOWED_FUNCTIONS.test(line)) {
-      inAllowedFn = true;
-      braceDepth = 0;
-    }
-    if (inAllowedFn) {
-      const { opens, closes } = countBraces(line);
-      braceDepth += opens - closes;
-      if (braceDepth === 0 && opens > 0) inAllowedFn = false;
-    }
-    if (inAllowedFn) continue;
+    advanceScope(scope, line);
+    if (scope.inAllowedFn) continue;
     if (NOTIFIER_CALL.test(line)) {
       out.push({ file, lineNumber: lineIdx + 1, line: line.trim() });
     }
@@ -319,6 +343,24 @@ describe("Encore reconciler — unit tests", () => {
       violations.push(...collectFileViolations(file, raw));
     }
     assert.deepEqual(violations, [], formatViolationList(violations));
+  });
+
+  it("collectFileViolations: scope tracker exits the allowed function and catches violations placed below it", () => {
+    // Regression test for the brace-depth scope bug. With the old
+    // exit condition (`braceDepth === 0 && opens > 0`), the closing
+    // `}` of an allowed function never reset `inAllowedFn`, so a
+    // subsequent encoreNotifier.* call was silently skipped.
+    const fixture = [
+      `async function handleOrphanResolve() {`,
+      `  await encoreNotifier.clear("inside-allowed");`, // ALLOWED
+      `}`,
+      `async function someOtherHandler() {`,
+      `  await encoreNotifier.clear("smuggled");`, // MUST flag
+      `}`,
+    ].join("\n");
+    const violations = collectFileViolations("fixture.ts", fixture);
+    assert.equal(violations.length, 1, `expected exactly one violation (the smuggled call); got ${JSON.stringify(violations)}`);
+    assert.match(violations[0].line, /smuggled/);
   });
 
   it("inactive status: clears every bell + ticket for the obligation, no republish", async () => {

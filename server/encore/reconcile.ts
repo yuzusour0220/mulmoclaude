@@ -184,17 +184,21 @@ async function trimOrEscalateTicket(
   const stepDef = dsl.steps.find((step) => step.id === ticket.stepId);
   if (!stepDef) {
     // Step no longer exists in the DSL (e.g., amend dropped it).
-    // Clear the bell and unlink the ticket so we don't leak.
-    await safeClearBell(ticket.notificationId, "step removed", log);
-    await unlink(pendingClearPath(ticket.pendingId));
+    // Clear the bell and unlink the ticket so we don't leak. If the
+    // clear failed, keep the ticket on disk so the next reconcile
+    // retries — unlinking an un-cleared bell would orphan it.
+    if (await safeClearBell(ticket.notificationId, "step removed", log)) {
+      await unlink(pendingClearPath(ticket.pendingId));
+    }
     return null;
   }
 
   const liveTargets = ticket.targets.filter((targetId) => isPairInBundle(state.records[targetId], stepDef, nowIso));
 
   if (liveTargets.length === 0) {
-    await safeClearBell(ticket.notificationId, "bundle drained", log);
-    await unlink(pendingClearPath(ticket.pendingId));
+    if (await safeClearBell(ticket.notificationId, "bundle drained", log)) {
+      await unlink(pendingClearPath(ticket.pendingId));
+    }
     return null;
   }
 
@@ -204,14 +208,30 @@ async function trimOrEscalateTicket(
 
   if (severityChanged) {
     // Escalation. Clear the old bell entry and republish at the new
-    // severity with the trimmed bundle.
-    await safeClearBell(ticket.notificationId, "severity escalation", log);
+    // severity with the trimmed bundle. If the clear failed, bail
+    // BEFORE publishing — otherwise the old bell would remain while
+    // we attach a fresh ticket to a new id, leaving a duplicate.
+    if (!(await safeClearBell(ticket.notificationId, "severity escalation", log))) {
+      log.warn("encore", "reconcile: skipping escalation; clear failed", {
+        pendingId: ticket.pendingId,
+        notificationId: ticket.notificationId,
+      });
+      return { targets: liveTargets };
+    }
     const members = liveTargets.map((targetId) => ({ targetId }));
     const title = bundleTitle(dsl, stepDef, members);
     const body = bundleBody(dsl, stepDef, members);
     const navigateTarget = encoreUrlFor(ticket.pendingId);
     const { id: newId } = await encoreNotifier.publish({ severity: phase.severity, title, body, navigateTarget });
-    await writeTicket({ ...ticket, notificationId: newId, severity: phase.severity, targets: liveTargets });
+    // Roll back the just-published bell entry if the ticket write
+    // fails — otherwise the bell would have no matching ticket and
+    // the next reconcile would see "un-fired" → publish a duplicate.
+    try {
+      await writeTicket({ ...ticket, notificationId: newId, severity: phase.severity, targets: liveTargets });
+    } catch (err) {
+      await safeClearBell(newId, "rollback: ticket write failed after escalation publish", log);
+      throw err;
+    }
     log.info("encore", "reconcile: escalated", {
       obligationId: dsl.id,
       cycleId: state.cycleId,
@@ -321,7 +341,15 @@ async function fireGroup(dsl: EncoreDsl, state: CycleState, group: BundleGroup, 
     seedPrompt: buildSeedPrompt(dsl, group, pendingId, state.cycleId),
     createdAt: new Date().toISOString(),
   };
-  await writeTicket(ticket);
+  // Roll back the just-published bell entry if the ticket write
+  // fails — without rollback the bell would be live with no ticket,
+  // and the next reconcile would re-publish a duplicate.
+  try {
+    await writeTicket(ticket);
+  } catch (err) {
+    await safeClearBell(notificationId, "rollback: ticket write failed after publish", log);
+    throw err;
+  }
   log.info("encore", "reconcile: published bundled notification", {
     obligationId: dsl.id,
     cycleId: state.cycleId,
@@ -399,9 +427,13 @@ async function clearAllForObligation(obligationId: string, reason: string, log: 
       continue;
     }
     if (ticket.obligationId !== obligationId) continue;
-    await safeClearBell(ticket.notificationId, reason, log);
-    await unlink(rel);
-    cleared += 1;
+    // Only unlink the ticket if the bell clear succeeded; otherwise
+    // a transient notifier failure would orphan the host bell entry.
+    // Leaving the ticket lets the next reconcile retry.
+    if (await safeClearBell(ticket.notificationId, reason, log)) {
+      await unlink(rel);
+      cleared += 1;
+    }
   }
   if (cleared > 0) log.info("encore", "reconcile: cleared all for obligation", { obligationId, reason, cleared });
 }
@@ -410,9 +442,10 @@ async function clearAllForCycle(obligationId: string, cycleId: string, reason: s
   const tickets = await ticketsForCycle(obligationId, cycleId);
   let cleared = 0;
   for (const ticket of tickets) {
-    await safeClearBell(ticket.notificationId, reason, log);
-    await unlink(pendingClearPath(ticket.pendingId));
-    cleared += 1;
+    if (await safeClearBell(ticket.notificationId, reason, log)) {
+      await unlink(pendingClearPath(ticket.pendingId));
+      cleared += 1;
+    }
   }
   if (cleared > 0) log.info("encore", "reconcile: cleared all for cycle", { obligationId, cycleId, reason, cleared });
 }
@@ -552,11 +585,19 @@ async function ticketsForCycle(obligationId: string, cycleId: string): Promise<P
   return out;
 }
 
-async function safeClearBell(notificationId: string, reason: string, log: typeof defaultLog): Promise<void> {
+/** Try to clear the bell entry. Returns `true` on success, `false`
+ *  on failure (logged). Callers MUST consult the return value before
+ *  destructive follow-ups (unlinking the ticket, republishing at a
+ *  new id, etc.); swallowing a clear failure and proceeding would
+ *  orphan the host bell entry — the pre-refactor escalation aborted
+ *  on clear failure for exactly this reason. */
+async function safeClearBell(notificationId: string, reason: string, log: typeof defaultLog): Promise<boolean> {
   try {
     await encoreNotifier.clear(notificationId);
+    return true;
   } catch (err) {
     log.warn("encore", "reconcile: notifier.clear failed", { reason, notificationId, error: err instanceof Error ? err.message : String(err) });
+    return false;
   }
 }
 
