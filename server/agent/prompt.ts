@@ -357,76 +357,6 @@ When the user mentions a time without explicitly naming a city or timezone, assu
 // prompt-level mention stays in sync with what the image actually
 // ships; if you add/remove a tool there, update this too.
 
-// Files ≤ this threshold stay inlined verbatim; above it, only a short
-// summary + pointer reaches the system prompt and the full content is
-// fetched on demand via the Read tool. 2000 chars keeps today's small
-// helps (github.md ~1.2K, spreadsheet.md ~1.4K) inline, while wiki.md /
-// mulmoscript.md / telegram.md (4–7K each) switch to summary mode. See
-// plans/done/feat-help-pointer-threshold.md and issue #487.
-const HELP_INLINE_THRESHOLD_CHARS = 2000;
-const HELP_SUMMARY_PARAGRAPH_CAP = 200;
-
-// Pull a short, prompt-friendly summary from a help file:
-// - first H1 heading (identifies the file)
-// - first non-empty, non-heading paragraph, truncated to ~200 chars
-// No frontmatter required — the goal is zero ceremony for help authors.
-export function summarizeHelpContent(content: string): string {
-  const lines = content.split("\n");
-  const heading = lines
-    .find((line) => /^#\s+\S/.test(line))
-    ?.replace(/^#\s+/, "")
-    .trim();
-
-  let paragraph = "";
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) {
-      if (paragraph) break;
-      continue;
-    }
-    paragraph = paragraph ? `${paragraph} ${trimmed}` : trimmed;
-    if (paragraph.length >= HELP_SUMMARY_PARAGRAPH_CAP) break;
-  }
-  if (paragraph.length > HELP_SUMMARY_PARAGRAPH_CAP) {
-    paragraph = `${paragraph.slice(0, HELP_SUMMARY_PARAGRAPH_CAP).trimEnd()}…`;
-  }
-
-  const parts: string[] = [];
-  if (heading) parts.push(heading);
-  if (paragraph) parts.push(paragraph);
-  return parts.join(" — ");
-}
-
-export function buildInlinedHelpFiles(rolePrompt: string, workspacePath: string): string[] {
-  // Match either legacy `helps/<name>.md` or post-#284
-  // `config/helps/<name>.md` references in role prompts. Both
-  // resolve to the same on-disk file under `config/helps/`.
-  const matches = rolePrompt.match(/(?:config\/)?helps\/[\w.-]+\.md/g) ?? [];
-  const unique = [...new Set(matches)];
-  return unique
-    .map((ref) => {
-      // Strip an optional leading `config/` so the on-disk lookup
-      // always goes through `WORKSPACE_DIRS.helps` (which already
-      // resolves to `config/helps`).
-      const name = ref.replace(/^config\//, "").replace(/^helps\//, "");
-      const fullPath = join(workspacePath, WORKSPACE_DIRS.helps, name);
-      if (!existsSync(fullPath)) return null;
-      const content = readFileSync(fullPath, "utf-8").trim();
-      if (!content) return null;
-      // Keep the heading anchored to the canonical post-#284 path so
-      // the LLM can't accidentally Read() the stale legacy location.
-      const canonicalPath = `${WORKSPACE_DIRS.helps}/${name}`;
-      const header = `### ${canonicalPath}`;
-      if (content.length <= HELP_INLINE_THRESHOLD_CHARS) {
-        return `${header}\n\n${content}`;
-      }
-      const summary = summarizeHelpContent(content);
-      const pointer = `Detailed reference: use Read on \`${canonicalPath}\` when you need the full content.`;
-      return summary ? `${header}\n\n${summary}\n\n${pointer}` : `${header}\n\n${pointer}`;
-    })
-    .filter((section): section is string => section !== null);
-}
-
 // Wrap a list of sub-entries under a single markdown heading, or
 // return null when the list is empty so the caller can skip the
 // whole section. Used for "## Reference Files" / "## Plugin
@@ -465,7 +395,6 @@ export function buildSystemPrompt(params: SystemPromptParams): string {
     { name: "news-concierge", content: buildNewsConciergeContext(role) },
     { name: "custom-dirs", content: buildCustomDirsPrompt(getCachedCustomDirs()) },
     { name: "reference-dirs", content: buildReferenceDirsPrompt(getCachedReferenceDirs(), useDocker) },
-    { name: "helps", content: headingSection("Reference Files", buildInlinedHelpFiles(role.prompt, workspacePath)) },
     { name: "plugins", content: headingSection("Plugin Instructions", buildPluginPromptSections(role)) },
   ];
 
