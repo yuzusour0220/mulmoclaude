@@ -299,7 +299,9 @@ describe("probeRuntimePlugins", () => {
           headers: { "content-type": "application/json" },
         }),
     );
-    const result = await tarball.probeRuntimePlugins({ port: 3099, token: "tok", fetchImpl, expectedDevPlugin: "@smoke/dev-fixture" });
+    // pollTimeoutMs=0 skips retries — this test asserts on the
+    // single-attempt error shape, not the poll-and-give-up path.
+    const result = await tarball.probeRuntimePlugins({ port: 3099, token: "tok", fetchImpl, expectedDevPlugin: "@smoke/dev-fixture", pollTimeoutMs: 0 });
     assert.equal(result.ok, false);
     assert.match(result.lastError ?? "", /@smoke\/dev-fixture@dev/);
     assert.match(result.lastError ?? "", /@example\/installed@0\.1\.0/);
@@ -317,8 +319,76 @@ describe("probeRuntimePlugins", () => {
           headers: { "content-type": "application/json" },
         }),
     );
-    const result = await tarball.probeRuntimePlugins({ port: 3099, token: "tok", fetchImpl, expectedDevPlugin: "@smoke/dev-fixture" });
+    const result = await tarball.probeRuntimePlugins({ port: 3099, token: "tok", fetchImpl, expectedDevPlugin: "@smoke/dev-fixture", pollTimeoutMs: 0 });
     assert.equal(result.ok, false);
+  });
+
+  // Plugin loading runs in a fire-and-forget IIFE that resolves AFTER
+  // `app.listen()`, so `/` can return 200 while the list endpoint
+  // still reports `[]`. When `expectedDevPlugin` is set the probe
+  // must poll until the plugin appears — otherwise the smoke flakes
+  // on fast boots that win the race against plugin loading.
+  it("polls until expectedDevPlugin appears when initial responses show an empty list", async () => {
+    let call = 0;
+    const fetchImpl = fakeFetch(() => {
+      call += 1;
+      const plugins = call < 3 ? [] : [{ name: "@smoke/dev-fixture", version: "dev" }];
+      return new Response(JSON.stringify({ plugins }), { status: 200, headers: { "content-type": "application/json" } });
+    });
+    const sleeps: number[] = [];
+    let now = 0;
+    const result = await tarball.probeRuntimePlugins({
+      port: 3099,
+      token: "tok",
+      fetchImpl,
+      expectedDevPlugin: "@smoke/dev-fixture",
+      pollTimeoutMs: 5_000,
+      pollIntervalMs: 100,
+      now: () => now,
+      sleep: async (delayMs: number) => {
+        sleeps.push(delayMs);
+        now += delayMs;
+      },
+    });
+    assert.equal(result.ok, true, "should succeed once the dev plugin appears");
+    assert.equal(call, 3, "should have probed three times");
+    assert.deepEqual(sleeps, [100, 100], "should have slept between probes");
+  });
+
+  // The polling has to terminate even when the plugin never shows up
+  // (e.g. the IIFE crashed). The last attempt's error message must
+  // surface intact so the CI log explains what was actually seen.
+  it("gives up after the poll timeout and returns the last error", async () => {
+    const fetchImpl = fakeFetch(() => new Response(JSON.stringify({ plugins: [] }), { status: 200, headers: { "content-type": "application/json" } }));
+    let now = 0;
+    const result = await tarball.probeRuntimePlugins({
+      port: 3099,
+      token: "tok",
+      fetchImpl,
+      expectedDevPlugin: "@smoke/dev-fixture",
+      pollTimeoutMs: 500,
+      pollIntervalMs: 100,
+      now: () => now,
+      sleep: async (delayMs: number) => {
+        now += delayMs;
+      },
+    });
+    assert.equal(result.ok, false);
+    assert.match(result.lastError ?? "", /@smoke\/dev-fixture@dev/);
+  });
+
+  // Without `expectedDevPlugin`, the empty list is a legitimate state
+  // (fresh install) — don't burn the poll budget on something that's
+  // already true.
+  it("does NOT poll when expectedDevPlugin is absent (empty list is a valid state)", async () => {
+    let call = 0;
+    const fetchImpl = fakeFetch(() => {
+      call += 1;
+      return new Response(JSON.stringify({ plugins: [] }), { status: 200, headers: { "content-type": "application/json" } });
+    });
+    const result = await tarball.probeRuntimePlugins({ port: 3099, token: "tok", fetchImpl });
+    assert.equal(result.ok, true);
+    assert.equal(call, 1);
   });
 });
 

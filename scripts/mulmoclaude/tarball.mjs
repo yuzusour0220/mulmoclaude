@@ -32,6 +32,16 @@ const DEFAULT_POLL_INTERVAL_MS = 500;
 const DEFAULT_PACK_TIMEOUT_MS = 60_000;
 const DEFAULT_INSTALL_TIMEOUT_MS = 180_000;
 const KILL_GRACE_MS = 2_000;
+// Plugin loading runs inside a fire-and-forget IIFE in `server/index.ts`
+// that fires AFTER `app.listen()` returns. The `/` route therefore goes
+// 200 before presets / user-installed / dev plugins finish resolving.
+// On slow boots (cold yarn install) the list is populated by probe
+// time; on fast boots the probe wins the race and sees `[]`. Poll the
+// list endpoint up to this budget so the assertion survives either
+// ordering. 10s comfortably covers preset + dev-fixture import on CI
+// hardware while still failing fast when the IIFE actually crashed.
+const DEFAULT_PLUGIN_PROBE_TIMEOUT_MS = 10_000;
+const DEFAULT_PLUGIN_PROBE_INTERVAL_MS = 250;
 
 // Ask the OS for a random free TCP port on 127.0.0.1. Binding to 0
 // returns whatever port the kernel assigns; we close immediately and
@@ -212,10 +222,46 @@ export async function readTokenFromLauncherLog({ logFile, readFileImpl = readFil
 // list MUST contain a plugin matching that name with version `"dev"`.
 // This is what proves the `--dev-plugin` CLI flag → env-var → server
 // loader → registry → /list pipeline made it end-to-end (#1159 PR2).
-export async function probeRuntimePlugins({ port, token, fetchImpl = globalThis.fetch, expectedDevPlugin = null } = {}) {
+//
+// Plugin loading runs in a fire-and-forget IIFE that resolves AFTER
+// `app.listen()`, so the very first request can see an empty list
+// even when everything is wired correctly. When `expectedDevPlugin`
+// is set we poll until the plugin appears or the budget expires —
+// the assertion is "this plugin loads", not "it loaded by the time
+// the / route went 200". For the plain probe (no expectation), the
+// list may legitimately be empty at any moment after boot, so a
+// single shot is sufficient.
+export async function probeRuntimePlugins({
+  port,
+  token,
+  fetchImpl = globalThis.fetch,
+  expectedDevPlugin = null,
+  pollTimeoutMs = DEFAULT_PLUGIN_PROBE_TIMEOUT_MS,
+  pollIntervalMs = DEFAULT_PLUGIN_PROBE_INTERVAL_MS,
+  now = Date.now,
+  sleep = defaultSleep,
+} = {}) {
   if (!token) {
     return { ok: false, status: null, plugins: 0, lastError: "no bearer token (could not extract from launcher log)" };
   }
+  // Without an expected plugin we have no signal to wait for; one
+  // attempt is the right behaviour (preserves the original semantics).
+  if (!expectedDevPlugin) {
+    return runRuntimePluginsProbeOnce({ port, token, fetchImpl, expectedDevPlugin });
+  }
+  const startedAt = now();
+  let lastResult = await runRuntimePluginsProbeOnce({ port, token, fetchImpl, expectedDevPlugin });
+  while (!lastResult.ok && now() - startedAt < pollTimeoutMs) {
+    await sleep(pollIntervalMs);
+    lastResult = await runRuntimePluginsProbeOnce({ port, token, fetchImpl, expectedDevPlugin });
+  }
+  return lastResult;
+}
+
+// Single-shot probe — one HTTP call, one verdict. Pulled out so the
+// polling layer in `probeRuntimePlugins` can drive retries without
+// re-implementing the response-shape checks.
+async function runRuntimePluginsProbeOnce({ port, token, fetchImpl, expectedDevPlugin }) {
   let response;
   try {
     response = await fetchImpl(`http://127.0.0.1:${port}/api/plugins/runtime/list`, {
