@@ -59,31 +59,28 @@ assistant の応答 (Japanese, real LLM):
 - slash command `/e2e-live-l22-...` は送信されている
 - だが Claude の skill 実行 (Agent SDK 経由) が失敗 → 自然言語で言い訳
 
-### 仮説 (更新: 2026-05-18 — root cause 判明)
+### 真の root cause (2026-05-19 判明)
 
-実際の session JSONL (`~/.claude/projects/-home-node-mulmoclaude/5612f40a-*.jsonl`) で観測した tool 呼び出し:
+session JSONL で観測した tool 呼び出し:
 
 ```json
 {"type":"tool_use","name":"Skill","input":{"skill":"e2e-live-l22-..."}}
 {"type":"tool_result","content":"Execute skill: e2e-live-l22-...","is_error":true}
 ```
 
-→ **claude CLI 2.1.141+ で `Skill` ツールが regress している**。 過去 ~80 セッションを集計した結果:
+過去 ~80 セッションを集計した結果、 失敗は claude CLI 2.1.141+ に集中 (2.1.119 / 2.1.140 では 0 件)。 「CLI の Skill ツール regression」だと当初推測し、 私は `server/agent/config.ts` に `--disallowedTools Skill` を入れる workaround を commit した (`0c4a39a3`, `ae49b335`)。
 
-| version | Skill 呼び出し成功 | Skill 呼び出し失敗 |
-|---|---:|---:|
-| 2.1.119 | 18 件 | 0 |
-| 2.1.140 | 4 件 | 0 |
-| **2.1.141** | 0 | **3** |
-| **2.1.143** | 0 | **4** |
+ところがこれは **逆方向** だった。 upstream で別の作者が PR #1445 (`9c024d01 fix(agent): permit the Skill tool so .claude/skills/ skills are invokable`) を main に投入:
 
-mulmoclaude は `~/.local/share/claude/versions/` 配下の claude CLI を spawn するので、 自動アップデートで 2.1.141+ になった瞬間に L-22 が壊れる。
+> "`--allowedTools` is passed as a strict allowlist, but `Skill` (the tool Claude Code uses to execute a discovered `.claude/skills/<name>/SKILL.md`) was missing from `BASE_ALLOWED_TOOLS`. Every autonomous `Skill({skill:"…"})` call was therefore permission-denied: the harness errored with `Execute skill: <name>`..."
 
-### 修正方針 (実施済 `0c4a39a3`)
+つまり真の原因は **`Skill` が `BASE_ALLOWED_TOOLS` から欠落していた permission-deny**。 修正は **add `"Skill"` to allowedTools** (allow)、 私の `--disallowedTools` は症状を悪化させる方向。
 
-`server/agent/config.ts` の `buildCliArgs` に `--disallowedTools Skill` を追加し、 claude CLI を inline-resolution 経路に固定。 これで Skill ツール経由ではなく SKILL.md body を直接プロンプトに展開する古い挙動になり、 全 version で安定。
+### 修正方針 (実施済)
 
-unit test (`test/agent/test_agent_config.ts`) で flag の存在を assert。 verbose comment で workaround の lifecycle と scope を明記済。
+1. 私の `0c4a39a3` + `ae49b335` を **`git revert`** で打ち消し (`d227f9f7`, `e7553ef5`)
+2. main を merge — PR #1445 (`9c024d01`) の正しい修正が入る
+3. L-22 は main の `Skill` allowlist 修正で通る想定 (verify は手元で要確認)
 
 ---
 
@@ -165,10 +162,10 @@ PR #1430 でロール分割が入ったが、 `mc-manage-skills` は skill prese
 - [x] codex-cross-review iter-1 (plans) — 3 findings 適用 (`9ff8834d`)
 - [x] L-ERR fix — `startGuaranteedNewSession` 置換 (`24abb8e6`)
 - [x] L-15b fix — testLabel lowercase (`1481a204`)
-- [x] L-22 fix — `--disallowedTools Skill` (`0c4a39a3`) + iter-2 review nits (`ae49b335`)
-- [x] codex-cross-review iter-2 (code) — LGTM (with 2 nits, 適用済)
-- [x] local checks (yarn format / lint / typecheck / build / test) — 全 pass
-- [ ] yarn dev 再起動 + L-ERR / L-15b / L-22 を実機で再走させて pass 確認 (server 変更があるため dev restart 必須)
+- [x] (誤判断) `--disallowedTools Skill` を commit → 真の原因は逆向きだったため revert (`d227f9f7`, `e7553ef5`)
+- [x] main を merge — PR #1445 (`9c024d01`) の **正しい修正** (`Skill` を allowedTools に追加) を取り込み
+- [x] local checks (yarn install / typecheck / lint / test) — 全 pass
+- [ ] yarn dev 再起動 + L-22 を実機で再走させて main の修正で通ることを確認
+- [ ] L-ERR の取り扱い相談 (fake-echo 専用設計 vs real-Claude 通せ、 はユーザー判断)
 - [ ] PR 作成 (push 後 `gh pr create`)
-- [ ] PR マージ後に e2e-live 全量を 2 周再走 (回帰なし確認)
 - [ ] 2nd PR (L-SETTINGS-EFFORT, L-31) スコープ精査と修正
