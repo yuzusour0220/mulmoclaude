@@ -70,11 +70,11 @@ This is not a property of any individual plugin. It is a property of the registr
 
 ## An invitation
 
-MulmoClaude is MIT-licensed and open-source. Installation is one command: `npx mulmoclaude`. The plugin SDK is `npx create-mulmoclaude-plugin`. If you have been waiting for someone to publish a working blueprint of an AI-native application before you commit to building one — this is the blueprint.
+MulmoClaude is MIT-licensed and open-source. Installation instructions are in the [README](README.md). If you have been waiting for someone to publish a working blueprint of an AI-native application before you commit to building one — this is the blueprint.
 
 The thing to take away is not "use MulmoClaude." Most readers won't, and that is fine. The thing to take away is: this design is real, it works, and the three commitments above are achievable today. If you are building business software in 2026, you are going to have to decide whether your application is a traditional one with AI features bolted on, or a genuinely AI-native one. That decision has architectural consequences. The earlier you make it, the easier the rest of the design becomes.
 
 AI will not eliminate software. It will reorganize it. The interesting work is at the architecture review.
 
 — Satoshi Nakajima
-github.com/receptron/mulmoclaude · `npx mulmoclaude`
+github.com/receptron/mulmoclaude

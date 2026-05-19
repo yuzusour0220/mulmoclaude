@@ -57,7 +57,7 @@ The two claims in the title:
 
 The architectural argument is in [MANIFEST.md](https://github.com/receptron/mulmoclaude/blob/main/MANIFEST.md) — three commitments (universal controller / chat summons GUIs / open protocol extending MCP) plus the patterns proven by the accounting and Encore plugins.
 
-Install: `npx mulmoclaude` (needs Node 20+ and the Claude Code CLI installed and OAuth'd).
+Install: see the [Quick Start in the README](https://github.com/receptron/mulmoclaude#quick-start) — needs Node 20+ and the Claude Code CLI installed and OAuth'd.
 
 Three things I'd genuinely value HN feedback on:
 
