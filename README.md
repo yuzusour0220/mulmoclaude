@@ -10,17 +10,7 @@
 
 > **[How AI-Native Applications Should Be Built](MANIFEST.md)** — the architecture, UX, and protocol thesis behind MulmoClaude.
 
-GUI-chat with Claude Code — long-term memory, rich visual output, sandboxed execution, and remote access from anywhere.
-
-**Long-term memory**: a built-in personal wiki — inspired by Andrej Karpathy's idea of giving an LLM a notebook that grows over time — gives Claude **persistent knowledge** that builds with every conversation.
-
-Chat with Claude Code and get back not just text but **interactive visual output**: documents, spreadsheets, mind maps, charts, images, forms, 3D scenes, and more.
-
-**Sandboxed execution**: Claude Code runs inside a sandbox, protecting your system against prompt injection attacks.
-
-**Access from anywhere**: connect Telegram, Slack, LINE, Discord, or [10 other messaging apps](#messaging-bridges) to talk to your AI agent from your phone.
-
-**Scheduled tasks**: hand off recurring work — daily summaries, periodic checks, timed reminders — to a built-in scheduler that runs your agent on a cron schedule.
+MulmoClaude is an open-source AI-native application that runs on your machine. You chat with Claude; Claude responds in markdown, charts, forms, wikis, spreadsheets, 3D scenes — whatever the content needs. Plugins (built-in or third-party npm packages) extend what Claude can do. All data lives as plain files in your workspace.
 
 ## Quick Start
 
