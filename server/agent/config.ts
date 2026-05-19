@@ -258,35 +258,22 @@ export function buildCliArgs(params: CliArgsParams): string[] {
   // the manageSkills Run button) against `~/.claude/skills/`. In the
   // old `-p <text>` mode the CLI treats the message as literal text
   // and "/shiritori" never reaches the skill resolver.
-  // `--disallowedTools Skill`: workaround for a claude CLI 2.1.141+
-  // regression — when the LLM picks the `Skill` tool to invoke a
-  // slash-command skill (e.g. `Skill({ skill: "<slug>" })` in
-  // response to a user `/<slug>` message), the tool returns a
-  // tool_result with `is_error: true` and a single line
-  // `"Execute skill: <slug>"`, and the LLM falls back to prose
-  // narration instead of executing the SKILL.md body. Empirically
-  // reproduced across a survey of ~80 e2e-live sessions: 0 failures
-  // on 2.1.119 / 2.1.140; the failures cluster on 2.1.141 / 2.1.143
-  // specifically. Forcing the tool off keeps slash-command
-  // invocations on the CLI's inline-resolution path (the body is
-  // read into the prompt context up front instead of via a tool
-  // round-trip), which still works on all observed versions.
-  //
-  // Scope of the workaround: covers ALL skill sources — seeded e2e
-  // fixtures, user-installed `~/.claude/skills/<name>/`, project
-  // `.claude/skills/<name>/`, and the preset `mc-*` skills mulmoclaude
-  // ships. Every one stays reachable via `/<name>` from chat or the
-  // Skills "Run" button (both routes ultimately hit the same inline
-  // resolver). What this drops is only the LLM's ability to model-
-  // pick the Skill tool, which mulmoclaude does not surface to users
-  // anywhere.
-  //
-  // This is intentionally unconditional rather than version-gated:
-  // once upstream restores Skill-tool behaviour we can drop the flag
-  // outright (one diff, no version branches to age out). Until then
-  // the flag is harmless on the versions where Skill works, since
-  // the inline path is what every previous mulmoclaude release also
-  // relied on.
+  // `--disallowedTools Skill`: claude CLI 2.1.141+ regressed the
+  // `Skill` tool — when the LLM picks it to invoke a slash-command
+  // skill (e.g. `Skill({ skill: "<slug>" })` in response to a user
+  // `/<slug>` message), the tool returns a tool_result with
+  // `is_error: true` and a single line `"Execute skill: <slug>"`,
+  // and the LLM falls back to prose narration instead of executing
+  // the SKILL.md body. Empirically reproduced across a survey of
+  // ~80 e2e-live sessions: 0 failures on 2.1.119 / 2.1.140; the
+  // failures cluster on 2.1.141 / 2.1.143 specifically. Forcing the
+  // tool off keeps slash-command invocations on the CLI's inline-
+  // resolution path (the body is read into the prompt context up
+  // front instead of via a tool round-trip), which still works on
+  // all observed versions. Existing skills remain reachable via
+  // `/<slug>` from chat or the Skills "Run" button; this only
+  // removes the LLM's ability to model-pick the Skill tool, which
+  // mulmoclaude does not surface to users anywhere.
   const args = [
     "--output-format",
     "stream-json",
