@@ -4,7 +4,7 @@ The idea that AI is going to reshape application software is no longer controver
 
 It was built from scratch on a specific set of architectural commitments, not as a thought experiment. The code is open-source under MIT, it runs on your laptop, and you can install it with one command. What follows is the design, and the reasoning behind it.
 
-## Three layers
+## Three commitments
 
 An AI-native application is built on three commitments. They are independent — any one of them can be adopted alone — but they reinforce each other. Take all three seriously and the resulting software does not look or feel like SaaS at all.
 
@@ -18,7 +18,7 @@ But here is the more important shift. **A traditional controller belongs to one 
 
 The LLM-as-controller dissolves that boundary. In MulmoClaude, the agent does not control one application — it controls a **registry of plugins** that, in any other product, would have been separate applications. When the user says "summarize last month's expenses as a pie chart," the agent reads from the accounting plugin and writes to the chart plugin in a single turn. When the user says "pull what we agreed with this vendor and turn it into a recurring obligation," the agent reads from the wiki plugin and writes to Encore. What used to require two apps, two contexts, and a copy-paste is now one sentence. This kind of cross-plugin orchestration is not a special case. It is the default mode of operation.
 
-This is what makes the LLM a **universal controller**, not just another controller. The unit of software the user interacts with is no longer the application. The unit is the agent, and the applications dissolve into the registry of plugins it composes across.
+This is what makes the LLM a **universal controller**, not just another controller. The unit of interaction is no longer the application. The unit is the agent, and the applications dissolve into the registry of plugins it composes across.
 
 ### 2. Chat summons GUIs
 
