@@ -31,3 +31,12 @@ export const CandidateEntrySchema = z.object({
 });
 
 export type CandidateEntry = z.infer<typeof CandidateEntrySchema>;
+
+import type { ToolResultComplete } from "gui-chat-protocol";
+
+export interface ExtendedToolResultComplete extends ToolResultComplete<any> {
+  args?: {
+    action?: string;
+    [key: string]: any;
+  };
+}

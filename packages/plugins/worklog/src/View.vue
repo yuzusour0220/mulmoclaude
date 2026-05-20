@@ -416,11 +416,10 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from "vue";
 import { useRuntime } from "gui-chat-protocol/vue";
-import type { ToolResultComplete } from "gui-chat-protocol/vue";
-import type { WorklogEntry, CandidateEntry } from "./types";
+import type { WorklogEntry, CandidateEntry, ExtendedToolResultComplete } from "./types";
 import { useT } from "./lang";
 
-const props = defineProps<{ selectedResult: ToolResultComplete<any> }>();
+const props = defineProps<{ selectedResult: ExtendedToolResultComplete }>();
 const t = useT();
 
 // Tabs: 'rollup' (Weekly summary) or 'review' (Candidate board)
@@ -471,8 +470,10 @@ onMounted(() => {
     void refresh();
   });
 
-  // If there are candidates waiting on first load, open the Review board
-  if (candidates.value.length > 0) {
+  // If action is create or there are candidates waiting on first load, open the Review board
+  if (props.selectedResult?.args?.action === "create") {
+    activeTab.value = "review";
+  } else if (candidates.value.length > 0) {
     activeTab.value = "review";
   }
 });
@@ -484,6 +485,9 @@ watch(
     committed.value = props.selectedResult.data?.committed ?? [];
     candidates.value = props.selectedResult.data?.candidates ?? [];
     weekOffset.value = 0;
+    if (props.selectedResult?.args?.action === "create") {
+      activeTab.value = "review";
+    }
     void refresh();
   },
 );
