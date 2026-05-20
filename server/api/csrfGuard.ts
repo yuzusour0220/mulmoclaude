@@ -92,6 +92,42 @@ export function isAllowedOrigin(origin: string, trustedOrigins: readonly string[
   return isLocalhostOrigin(origin) || isTrustedOrigin(origin, trustedOrigins);
 }
 
+// Cap on the per-request Origin preview we emit to the log. Bounds
+// log-line size and thwarts log-noise / log-forging via a hostile
+// proxy that crams megabytes of payload into the Origin header.
+// 512 chars is plenty for any legitimate Origin (a normal Origin
+// is under 100 chars).
+const ORIGIN_LOG_CAP_CHARS = 512;
+
+// Render an Origin value (whatever its raw type) into a single
+// string suitable for the structured log: strip ASCII control
+// characters (CR / LF / NUL / etc.) to prevent log-injection of
+// fake fields, and cap the length. Array values are joined with
+// commas first — that's what the eventual rejection log line will
+// actually show.
+function sanitizeOriginForLog(value: unknown): string {
+  const raw = Array.isArray(value) ? value.map(String).join(",") : String(value);
+  // eslint-disable-next-line no-control-regex -- stripping control chars from attacker-controlled header before logging
+  const stripped = raw.replace(/[\x00-\x1f\x7f]/g, "?");
+  return stripped.length > ORIGIN_LOG_CAP_CHARS ? `${stripped.slice(0, ORIGIN_LOG_CAP_CHARS)}…` : stripped;
+}
+
+// Security-relevant event helper: an upstream caller just hit us
+// from off-localhost (or with a malformed Origin) on a state-
+// changing method. Log at warn so operators see it in both the
+// console and the rotating file log even if the attack is
+// otherwise silent on the wire, then 403. Always passes the
+// offending value through `sanitizeOriginForLog` because the
+// Origin header is attacker-controlled.
+function rejectCrossOrigin(req: Request, res: Response, offendingOrigin: unknown): void {
+  log.warn("csrf", "rejected cross-origin request", {
+    origin: sanitizeOriginForLog(offendingOrigin),
+    method: req.method,
+    path: req.path,
+  });
+  forbidden(res, "Forbidden: cross-origin request rejected");
+}
+
 // Factory: build an Express middleware bound to a specific
 // trusted-origins list. The exported `requireSameOrigin` is the
 // env-bound instance; tests use this factory to drive the middleware
@@ -103,26 +139,25 @@ export function requireSameOriginWith(trustedOrigins: readonly string[]) {
       return;
     }
     const { origin } = req.headers;
-    if (typeof origin !== "string") {
+    if (origin === undefined) {
       // Missing Origin: non-browser caller (curl, MCP, Node HTTP
       // libraries). Trusted because the server binds to 127.0.0.1.
       next();
+      return;
+    }
+    if (typeof origin !== "string") {
+      // Array or other unexpected type → header smuggling / multi-
+      // forwarding proxy / synthetic client. The trusted-missing
+      // path above only covers genuine non-browser callers; a
+      // malformed Origin header is present-but-untrustworthy.
+      rejectCrossOrigin(req, res, origin);
       return;
     }
     if (isAllowedOrigin(origin, trustedOrigins)) {
       next();
       return;
     }
-    // Security-relevant event: an upstream caller just hit us from
-    // off-localhost with a state-changing method. Log it at warn so
-    // operators see it in both the console and the rotating file
-    // log even if the attack is otherwise silent on the wire.
-    log.warn("csrf", "rejected cross-origin request", {
-      origin,
-      method: req.method,
-      path: req.path,
-    });
-    forbidden(res, "Forbidden: cross-origin request rejected");
+    rejectCrossOrigin(req, res, origin);
   };
 }
 

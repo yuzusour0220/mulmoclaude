@@ -108,10 +108,13 @@ describe("isLocalhostOrigin — rejects everything else", () => {
 // --- requireSameOrigin: Express middleware behaviour ------------
 
 // Minimal fake Request/Response/NextFunction for middleware
-// testing — avoids pulling in supertest.
+// testing — avoids pulling in supertest. The `headers` value type
+// is intentionally widened to `unknown` so tests can simulate
+// header-smuggling-style malformed values (e.g. an array Origin)
+// even though Express's runtime type is `string | string[]`.
 interface FakeReq {
   method: string;
-  headers: Record<string, string | undefined>;
+  headers: Record<string, unknown>;
 }
 
 interface FakeRes {
@@ -428,6 +431,55 @@ describe("requireSameOriginWith — trusted-origins allowlist wiring", () => {
   });
 });
 
+// --- Malformed Origin header (array / non-string) ---------------
+
+// Node's `IncomingMessage.headers.origin` is typed `string | string[]
+// | undefined`. In practice the parser folds repeated headers into a
+// comma-joined string, but the type contract still admits arrays
+// (e.g. a custom proxy adapter forwarding multiple `Origin:` lines,
+// a test fixture, or a deliberate header-smuggling attempt). The
+// guard treats those as present-but-untrustworthy: the localhost-
+// binding trust argument only covers the genuine *missing*-Origin
+// path, not multi-valued / non-string values.
+
+function makeReqWithRawOrigin(method: string, rawOrigin: unknown): FakeReq {
+  return {
+    method,
+    headers: { origin: rawOrigin },
+  };
+}
+
+describe("requireSameOriginWith — malformed Origin (non-string / array)", () => {
+  const trusted = ["http://192.168.1.42:5173"] as const;
+
+  it("rejects a POST whose Origin is an array (even if one entry is trusted)", () => {
+    const { nextCalled, statusCode } = runWith(trusted, makeReqWithRawOrigin("POST", ["http://192.168.1.42:5173", "http://evil.example"]), makeRes());
+    assert.equal(nextCalled, false);
+    assert.equal(statusCode, 403);
+  });
+
+  it("rejects a POST whose Origin is an array (no localhost trust shortcut)", () => {
+    const { nextCalled, statusCode } = runWith([], makeReqWithRawOrigin("POST", ["http://localhost:5173", "http://localhost:5173"]), makeRes());
+    assert.equal(nextCalled, false);
+    assert.equal(statusCode, 403);
+  });
+
+  it("still allows POST when the Origin header is genuinely absent (undefined)", () => {
+    // The trusted-missing path stays open for curl / MCP / Node HTTP
+    // callers. Without this, a regression here would break the
+    // bearer-auth'd MCP subprocess flow.
+    const { nextCalled } = runWith([], makeReqWithRawOrigin("POST", undefined), makeRes());
+    assert.equal(nextCalled, true);
+  });
+
+  it("lets GET through even with an array Origin (safe method bypass)", () => {
+    // Safe-method bypass applies before the Origin type check —
+    // GETs are idempotent per RFC 9110, no CSRF angle.
+    const { nextCalled } = runWith([], makeReqWithRawOrigin("GET", ["x", "y"]), makeRes());
+    assert.equal(nextCalled, true);
+  });
+});
+
 describe("requireSameOrigin (env-bound export) — smoke test", () => {
   // We can't easily mutate `env.trustedOrigins` between tests (it's
   // frozen at module load), so we only smoke-test that the default
@@ -551,6 +603,17 @@ describe("requireSameOrigin (env-bound export) — env-binding integration", () 
 
   it("falls back to localhost-only behaviour when the env var is unset", async () => {
     const middleware = await loadEnvBoundMiddleware(undefined);
+    assert.equal(callMiddleware(middleware, "POST", "http://localhost:5173").nextCalled, true);
+    assert.equal(callMiddleware(middleware, "POST", "http://192.168.1.42:5173").nextCalled, false);
+  });
+
+  it("treats an empty-string env var as an empty allowlist (localhost-only)", async () => {
+    // Pins the `asCsv("")` → `[]` semantic from server/system/env.ts —
+    // an explicit `MULMOCLAUDE_TRUSTED_ORIGINS=` line in `.env`
+    // behaves the same as no entry at all, not as a permissive
+    // wildcard. Regression guard for any future change to the CSV
+    // parser that might surface `[""]` here instead of `[]`.
+    const middleware = await loadEnvBoundMiddleware("");
     assert.equal(callMiddleware(middleware, "POST", "http://localhost:5173").nextCalled, true);
     assert.equal(callMiddleware(middleware, "POST", "http://192.168.1.42:5173").nextCalled, false);
   });
