@@ -141,6 +141,13 @@ describe("Worklog plugin — end-to-end integration through the loader", () => {
     assert.equal(res.jsonData?.entries.length, 1);
     assert.equal(res.jsonData.entries[0].id, worklogId);
 
+    // 6a. MCP Present action returns visual data payload.
+    const presentRes = (await plugin.execute({}, { action: "present" })) as WorklogActionResult;
+    assert.ok(!presentRes.error);
+    assert.ok(presentRes.data);
+    assert.equal(presentRes.message, "Presented the Worklog Review Board and committed logs.");
+    assert.equal(presentRes.instructions, "Show the Worklog Review Board and committed logs.");
+
     // 7. Edit the committed log (action: "edit").
     res = (await plugin.execute(
       {},

@@ -102,6 +102,14 @@ export default definePlugin((runtime) => {
           };
         });
       }
+      case "present": {
+        return {
+          data: {},
+          message: "Presented the Worklog Review Board and committed logs.",
+          jsonData: {},
+          instructions: "Show the Worklog Review Board and committed logs.",
+        };
+      }
       default: {
         return { error: `unknown action: ${action}`, status: 400 };
       }

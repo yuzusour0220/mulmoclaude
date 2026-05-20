@@ -11,7 +11,7 @@ export const TOOL_DEFINITION = {
     properties: {
       action: {
         type: "string",
-        enum: ["create", "approve", "list", "edit", "delete"],
+        enum: ["create", "approve", "list", "edit", "delete", "present"],
         description: "The action to perform on the worklog database.",
       },
       clientId: {
