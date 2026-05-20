@@ -583,7 +583,14 @@ const thisWeekCommitted = computed(() => {
       const dStr = toLocalYMD(d);
       return dStr >= start && dStr < end;
     })
-    .sort((a, b) => b.startTime.localeCompare(a.startTime));
+    .sort((a, b) => {
+      const tA = new Date(a.startTime).getTime();
+      const tB = new Date(b.startTime).getTime();
+      if (isNaN(tA) || isNaN(tB)) {
+        return b.startTime.localeCompare(a.startTime);
+      }
+      return tB - tA;
+    });
 });
 
 // Grouped rollup row calculations for sheet view

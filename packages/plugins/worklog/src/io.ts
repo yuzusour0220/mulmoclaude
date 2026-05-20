@@ -59,7 +59,14 @@ export function resolveWorklogEntries(rawEntries: WorklogEntry[]): WorklogEntry[
   }
 
   // Default sorting: chronologically by startTime
-  return resolved.sort((a, b) => a.startTime.localeCompare(b.startTime));
+  return resolved.sort((a, b) => {
+    const tA = new Date(a.startTime).getTime();
+    const tB = new Date(b.startTime).getTime();
+    if (isNaN(tA) || isNaN(tB)) {
+      return a.startTime.localeCompare(b.startTime);
+    }
+    return tA - tB;
+  });
 }
 
 /**
