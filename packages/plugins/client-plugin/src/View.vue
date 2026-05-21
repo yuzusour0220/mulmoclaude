@@ -47,7 +47,7 @@
               :class="{ active: statusFilter === status }"
               @click="statusFilter = status as any"
             >
-              {{ status === "all" ? "All" : t(("status" + status.charAt(0).toUpperCase() + status.slice(1)) as any) }}
+              {{ status === "all" ? t("statusAll") : t(("status" + status.charAt(0).toUpperCase() + status.slice(1)) as any) }}
             </button>
           </div>
         </div>
@@ -56,15 +56,15 @@
           <table class="crm-table">
             <thead>
               <tr>
-                <th>{{ t("title").slice(0, -6) || "Client" }}</th>
-                <th>Status</th>
+                <th>{{ t("client") }}</th>
+                <th>{{ t("status") }}</th>
                 <th>{{ t("rate") }}</th>
                 <th>{{ t("paymentTerms") }}</th>
                 <th>{{ t("contacts") }}</th>
                 <th>{{ t("projectsHeader") }}</th>
                 <th>{{ t("tags") }}</th>
                 <th>{{ t("firstEngagement") }}</th>
-                <th class="text-right">Actions</th>
+                <th class="text-right">{{ t("actions") }}</th>
               </tr>
             </thead>
             <tbody>
@@ -98,7 +98,7 @@
                 </td>
                 <td class="text-muted text-sm font-mono">{{ client.firstEngagement }}</td>
                 <td class="text-right" @click.stop>
-                  <button type="button" class="btn-action" @click="selectClient(client.id)">🔍 Details</button>
+                  <button type="button" class="btn-action" @click="selectClient(client.id)">🔍 {{ t("details") }}</button>
                 </td>
               </tr>
               <tr v-if="filteredClients.length === 0">
@@ -124,17 +124,17 @@
           <!-- Client Candidates -->
           <div v-for="cand in clientCandidates" :key="cand.candidateId" class="candidate-card bg-amber-border">
             <div class="candidate-header">
-              <span class="type-badge client-badge">🏢 CLIENT DRAFT</span>
+              <span class="type-badge client-badge">🏢 {{ t("clientDraft").toUpperCase() }}</span>
               <span class="date-badge font-mono">{{ new Date(cand.createdAt).toLocaleDateString() }}</span>
             </div>
             <div class="candidate-body">
               <div class="field-group">
-                <label class="field-label">Client Name</label>
+                <label class="field-label">{{ t("clientName") }}</label>
                 <input v-model="cand.data.name" type="text" class="form-input" />
               </div>
               <div class="field-row">
                 <div class="field-group flex-1">
-                  <label class="field-label">ID (Slug)</label>
+                  <label class="field-label">{{ t("idSlug") }}</label>
                   <input v-model="cand.data.id" type="text" class="form-input font-mono" />
                 </div>
                 <div class="field-group flex-1">
@@ -143,14 +143,14 @@
                 </div>
               </div>
               <div class="field-group">
-                <label class="field-label">Billing Rate</label>
+                <label class="field-label">{{ t("rate") }}</label>
                 <div class="rate-input-row">
                   <input v-model.number="cand.data.rate.amount" type="number" class="form-input font-mono flex-1" />
                   <input v-model="cand.data.rate.currency" type="text" class="form-input text-xs w-16 text-center font-mono" placeholder="USD" />
                   <select v-model="cand.data.rate.unit" class="form-select text-xs w-20">
-                    <option value="hour">hour</option>
-                    <option value="fixed">fixed</option>
-                    <option value="month">month</option>
+                    <option value="hour">{{ t("rateHour") }}</option>
+                    <option value="fixed">{{ t("rateFixed") }}</option>
+                    <option value="month">{{ t("rateMonth") }}</option>
                   </select>
                 </div>
               </div>
@@ -172,20 +172,22 @@
               <div class="candidate-contacts-section">
                 <div class="field-label font-bold mb-1">{{ t("contacts") }} ({{ cand.data.contacts?.length ?? 0 }})</div>
                 <div v-for="(c, i) in cand.data.contacts" :key="i" class="candidate-contact-row">
-                  <input v-model="c.name" type="text" placeholder="Name" class="form-input text-xs" />
-                  <input v-model="c.email" type="text" placeholder="Email" class="form-input text-xs" />
-                  <input v-model="c.role" type="text" placeholder="Role" class="form-input text-xs" />
+                  <input v-model="c.name" type="text" :placeholder="t('contactName')" class="form-input text-xs" />
+                  <input v-model="c.email" type="text" :placeholder="t('contactEmail')" class="form-input text-xs" />
+                  <input v-model="c.role" type="text" :placeholder="t('contactRole')" class="form-input text-xs" />
                   <button type="button" class="btn-remove" @click="cand.data.contacts.splice(i, 1)">×</button>
                 </div>
-                <button type="button" class="btn-add-contact" @click="cand.data.contacts.push({ name: '', email: '', role: '' })">➕ Add Contact</button>
+                <button type="button" class="btn-add-contact" @click="cand.data.contacts.push({ name: '', email: '', role: '' })">
+                  ➕ {{ t("addContact") }}
+                </button>
               </div>
             </div>
             <div class="candidate-actions">
               <button type="button" class="btn-approve" :disabled="approving[cand.candidateId]" @click="approveClientCandidate(cand)">
-                {{ approving[cand.candidateId] ? "Approving..." : "✓ " + t("approve") }}
+                {{ approving[cand.candidateId] ? t("approving") : "✓ " + t("approve") }}
               </button>
               <button type="button" class="btn-reject" :disabled="deletingCand[cand.candidateId]" @click="deleteCandidate(cand.candidateId, cand.data.name)">
-                {{ deletingCand[cand.candidateId] ? "Deleting..." : "🗑️ " + t("reject") }}
+                {{ deletingCand[cand.candidateId] ? t("deleting") : "🗑️ " + t("reject") }}
               </button>
             </div>
           </div>
@@ -193,31 +195,31 @@
           <!-- Project Candidates -->
           <div v-for="cand in projectCandidates" :key="cand.candidateId" class="candidate-card bg-purple-border">
             <div class="candidate-header">
-              <span class="type-badge project-badge">📁 PROJECT DRAFT</span>
+              <span class="type-badge project-badge">📁 {{ t("projectDraft").toUpperCase() }}</span>
               <span class="date-badge font-mono">{{ new Date(cand.createdAt).toLocaleDateString() }}</span>
             </div>
             <div class="candidate-body">
               <div class="field-row">
                 <div class="field-group flex-1">
-                  <label class="field-label">Project Name</label>
+                  <label class="field-label">{{ t("projectName") }}</label>
                   <input v-model="cand.data.name" type="text" class="form-input" />
                 </div>
                 <div class="field-group flex-1">
-                  <label class="field-label">Client Slug</label>
+                  <label class="field-label">{{ t("clientSlug") }}</label>
                   <input v-model="cand.data.clientId" type="text" class="form-input font-mono" disabled />
                 </div>
               </div>
               <div class="field-row">
                 <div class="field-group flex-1">
-                  <label class="field-label">ID (Slug)</label>
+                  <label class="field-label">{{ t("idSlug") }}</label>
                   <input v-model="cand.data.id" type="text" class="form-input font-mono" />
                 </div>
                 <div class="field-group flex-1">
-                  <label class="field-label">Fee Model</label>
+                  <label class="field-label">{{ t("feeModel") }}</label>
                   <select v-model="cand.data.feeModel" class="form-select">
-                    <option value="hour">hour</option>
-                    <option value="fixed">fixed</option>
-                    <option value="retainer">retainer</option>
+                    <option value="hour">{{ t("rateHourOption") }}</option>
+                    <option value="fixed">{{ t("rateFixedOption") }}</option>
+                    <option value="retainer">{{ t("rateRetainerOption") }}</option>
                   </select>
                 </div>
               </div>
@@ -232,10 +234,10 @@
             </div>
             <div class="candidate-actions">
               <button type="button" class="btn-approve-project" :disabled="approving[cand.candidateId]" @click="approveProjectCandidate(cand)">
-                {{ approving[cand.candidateId] ? "Approving..." : "✓ " + t("approve") }}
+                {{ approving[cand.candidateId] ? t("approving") : "✓ " + t("approve") }}
               </button>
               <button type="button" class="btn-reject" :disabled="deletingCand[cand.candidateId]" @click="deleteCandidate(cand.candidateId, cand.data.name)">
-                {{ deletingCand[cand.candidateId] ? "Deleting..." : "🗑️ " + t("reject") }}
+                {{ deletingCand[cand.candidateId] ? t("deleting") : "🗑️ " + t("reject") }}
               </button>
             </div>
           </div>
@@ -252,7 +254,7 @@
         <div class="details-topbar">
           <button type="button" class="btn-secondary" @click="switchToSpreadsheet">⬅️ {{ t("backToList") }}</button>
           <div class="details-status-control">
-            <span class="text-sm font-semibold">Status:</span>
+            <span class="text-sm font-semibold">{{ t("status") }}:</span>
             <select
               :value="selectedClient.status"
               class="status-select"
@@ -270,14 +272,14 @@
           <!-- Left Column: Settings and Metadata -->
           <div class="details-col-left">
             <div class="details-card glass-panel">
-              <h3 class="panel-heading">📋 Profile Details</h3>
+              <h3 class="panel-heading">📋 {{ t("profileDetails") }}</h3>
               <div class="form-grid">
                 <div class="field-group">
-                  <label class="field-label">Name</label>
+                  <label class="field-label">{{ t("contactName") }}</label>
                   <input v-model="editClientForm.name" type="text" class="form-input font-bold" />
                 </div>
                 <div class="field-group">
-                  <label class="field-label">ID (Slug)</label>
+                  <label class="field-label">{{ t("idSlug") }}</label>
                   <input :value="selectedClient.id" type="text" class="form-input font-mono text-muted" disabled />
                 </div>
                 <div class="field-group">
@@ -295,9 +297,9 @@
                     <input v-model.number="editClientForm.rate.amount" type="number" class="form-input font-mono flex-1" />
                     <input v-model="editClientForm.rate.currency" type="text" class="form-input text-xs w-16 text-center font-mono" placeholder="USD" />
                     <select v-model="editClientForm.rate.unit" class="form-select text-xs w-20">
-                      <option value="hour">hour</option>
-                      <option value="fixed">fixed</option>
-                      <option value="month">month</option>
+                      <option value="hour">{{ t("rateHour") }}</option>
+                      <option value="fixed">{{ t("rateFixed") }}</option>
+                      <option value="month">{{ t("rateMonth") }}</option>
                     </select>
                   </div>
                 </div>
@@ -313,14 +315,14 @@
                       </span>
                     </div>
                     <div class="tag-input-row">
-                      <input v-model="newTagInput" type="text" placeholder="Add tag..." class="form-input text-xs" @keyup.enter="addTag" />
+                      <input v-model="newTagInput" type="text" :placeholder="t('addTagPlaceholder')" class="form-input text-xs" @keyup.enter="addTag" />
                       <button type="button" class="btn-tag-add" @click="addTag">➕</button>
                     </div>
                   </div>
                 </div>
 
                 <button type="button" class="btn-primary w-full justify-center" :disabled="updatingClient" @click="saveClientMetadata">
-                  💾 {{ updatingClient ? "Saving..." : "Save Profile Details" }}
+                  💾 {{ updatingClient ? t("saving") : t("saveProfileDetails") }}
                 </button>
               </div>
             </div>
@@ -335,36 +337,36 @@
                 <table class="contacts-table">
                   <thead>
                     <tr>
-                      <th>Name</th>
-                      <th>Email</th>
-                      <th>Role</th>
-                      <th class="text-right">Action</th>
+                      <th>{{ t("contactName") }}</th>
+                      <th>{{ t("contactEmail") }}</th>
+                      <th>{{ t("contactRole") }}</th>
+                      <th class="text-right">{{ t("action") }}</th>
                     </tr>
                   </thead>
                   <tbody>
                     <tr v-for="(contact, index) in editClientForm.contacts" :key="index">
                       <td>
-                        <input v-model="contact.name" type="text" class="table-input font-semibold" placeholder="Name" />
+                        <input v-model="contact.name" type="text" class="table-input font-semibold" :placeholder="t('contactName')" />
                       </td>
                       <td>
-                        <input v-model="contact.email" type="text" class="table-input font-mono" placeholder="Email" />
+                        <input v-model="contact.email" type="text" class="table-input font-mono" :placeholder="t('contactEmail')" />
                       </td>
                       <td>
-                        <input v-model="contact.role" type="text" class="table-input" placeholder="Role (e.g. CEO)" />
+                        <input v-model="contact.role" type="text" class="table-input" :placeholder="t('contactRolePlaceholder')" />
                       </td>
                       <td class="text-right">
                         <button type="button" class="btn-circle-danger" @click="removeContact(index)">🗑️</button>
                       </td>
                     </tr>
                     <tr v-if="editClientForm.contacts.length === 0">
-                      <td colspan="4" class="text-center text-muted py-4 text-xs font-italic">No contacts added. Click below to add one.</td>
+                      <td colspan="4" class="text-center text-muted py-4 text-xs font-italic">{{ t("noContacts") }}</td>
                     </tr>
                   </tbody>
                 </table>
               </div>
               <div class="contacts-actions">
-                <button type="button" class="btn-secondary text-xs" @click="addNewContactRow">➕ Add Contact Row</button>
-                <button type="button" class="btn-primary text-xs" :disabled="updatingClient" @click="saveClientMetadata">💾 Save Contacts</button>
+                <button type="button" class="btn-secondary text-xs" @click="addNewContactRow">➕ {{ t("addContactRow") }}</button>
+                <button type="button" class="btn-primary text-xs" :disabled="updatingClient" @click="saveClientMetadata">💾 {{ t("saveContacts") }}</button>
               </div>
             </div>
 
@@ -373,48 +375,48 @@
               <div class="panel-heading-row">
                 <h3 class="panel-heading">📁 {{ t("projectsHeader") }} ({{ clientProjects.length + clientProjectCandidates.length }})</h3>
                 <button type="button" class="btn-secondary text-xs" @click="showAddProjectForm = !showAddProjectForm">
-                  {{ showAddProjectForm ? "Cancel" : "➕ " + t("createNewProject") }}
+                  {{ showAddProjectForm ? t("cancel") : "➕ " + t("createNewProject") }}
                 </button>
               </div>
 
               <!-- Inline New Project Candidate Form -->
               <div v-if="showAddProjectForm" class="new-project-candidate-form">
-                <h4 class="form-subheading">✨ Create Project Candidate</h4>
+                <h4 class="form-subheading">✨ {{ t("createNewProject") }}</h4>
                 <div class="form-grid">
                   <div class="field-row">
                     <div class="field-group flex-1">
-                      <label class="field-label">Project Name</label>
-                      <input v-model="newProjectForm.name" type="text" class="form-input" placeholder="e.g. Mobile App v2" />
+                      <label class="field-label">{{ t("projectName") }}</label>
+                      <input v-model="newProjectForm.name" type="text" class="form-input" :placeholder="t('projectNamePlaceholder')" />
                     </div>
                     <div class="field-group flex-1">
-                      <label class="field-label">ID Slug (lowercase, hyphens)</label>
-                      <input v-model="newProjectForm.id" type="text" class="form-input font-mono" placeholder="e.g. mobile-app-v2" />
+                      <label class="field-label">{{ t("idSlugHelp") }}</label>
+                      <input v-model="newProjectForm.id" type="text" class="form-input font-mono" :placeholder="t('idSlugPlaceholder')" />
                     </div>
                   </div>
                   <div class="field-row">
                     <div class="field-group flex-1">
-                      <label class="field-label">Fee Model</label>
+                      <label class="field-label">{{ t("feeModel") }}</label>
                       <select v-model="newProjectForm.feeModel" class="form-select">
-                        <option value="hour">Hourly Rate</option>
-                        <option value="fixed">Fixed Price</option>
-                        <option value="retainer">Monthly Retainer</option>
+                        <option value="hour">{{ t("rateHourOption") }}</option>
+                        <option value="fixed">{{ t("rateFixedOption") }}</option>
+                        <option value="retainer">{{ t("rateRetainerOption") }}</option>
                       </select>
                     </div>
                     <div class="field-group flex-1">
-                      <label class="field-label">Billing Rate Override (Optional)</label>
+                      <label class="field-label">{{ t("billingRateOverride") }}</label>
                       <input v-model.number="newProjectForm.rateAmount" type="number" class="form-input font-mono" placeholder="0" />
                     </div>
                   </div>
                   <div class="field-group">
                     <label class="field-label">{{ t("deliverables") }}</label>
-                    <input v-model="newProjectForm.expectedDeliverables" type="text" class="form-input" placeholder="Deliverables outline..." />
+                    <input v-model="newProjectForm.expectedDeliverables" type="text" class="form-input" :placeholder="t('deliverablesPlaceholder')" />
                   </div>
                   <div class="field-group">
                     <label class="field-label">{{ t("notes") }}</label>
-                    <textarea v-model="newProjectForm.notes" class="form-textarea" rows="2" placeholder="Project specs, objectives..."></textarea>
+                    <textarea v-model="newProjectForm.notes" class="form-textarea" rows="2" :placeholder="t('projectSpecsPlaceholder')"></textarea>
                   </div>
                   <button type="button" class="btn-primary w-full justify-center" :disabled="creatingProject" @click="submitProjectCandidate">
-                    🚀 {{ creatingProject ? "Creating..." : "Create Draft Candidate" }}
+                    🚀 {{ creatingProject ? t("creating") : t("createDraftCandidate") }}
                   </button>
                 </div>
               </div>
@@ -425,7 +427,7 @@
                 <div v-for="cand in clientProjectCandidates" :key="cand.candidateId" class="project-item-card draft border-amber">
                   <div class="project-item-head">
                     <div class="project-item-name font-bold">{{ cand.data.name }}</div>
-                    <span class="project-status-badge draft animate-pulse">Draft</span>
+                    <span class="project-status-badge draft animate-pulse">{{ t("draftBadge") }}</span>
                   </div>
                   <div class="project-item-meta text-xs">
                     <span>💵 {{ cand.data.feeModel }}</span>
@@ -433,8 +435,8 @@
                   </div>
                   <div class="project-item-desc" v-if="cand.data.notes">{{ cand.data.notes.slice(0, 100) }}...</div>
                   <div class="project-draft-actions">
-                    <button type="button" class="btn-approve-mini" @click="approveProjectCandidateDirect(cand)">✓ Commit</button>
-                    <button type="button" class="btn-reject-mini" @click="deleteCandidateDirect(cand.candidateId, cand.data.name)">🗑️ Delete</button>
+                    <button type="button" class="btn-approve-mini" @click="approveProjectCandidateDirect(cand)">✓ {{ t("commit") }}</button>
+                    <button type="button" class="btn-reject-mini" @click="deleteCandidateDirect(cand.candidateId, cand.data.name)">🗑️ {{ t("delete") }}</button>
                   </div>
                 </div>
 
@@ -447,11 +449,11 @@
                   <div class="project-item-meta text-xs text-muted">
                     <span>💵 {{ proj.feeModel }}</span>
                     <span v-if="proj.rate"> · {{ proj.rate.amount }} {{ proj.rate.currency }}/{{ proj.rate.unit }}</span>
-                    <span> · Started: {{ proj.startDate }}</span>
+                    <span> · {{ t("startedLabel") }}: {{ proj.startDate }}</span>
                   </div>
                   <div class="project-item-desc text-sm" v-if="proj.notes">{{ proj.notes.slice(0, 120) }}{{ proj.notes.length > 120 ? "..." : "" }}</div>
                   <div v-if="proj.expectedDeliverables" class="project-deliverables text-xs">
-                    <strong>Deliverables:</strong> {{ proj.expectedDeliverables }}
+                    <strong>{{ t("deliverablesLabel") }}:</strong> {{ proj.expectedDeliverables }}
                   </div>
                 </div>
 
@@ -464,23 +466,20 @@
             <!-- Notes Markdown Editor and Render Pane -->
             <div class="details-card glass-panel">
               <div class="panel-heading-row">
-                <h3 class="panel-heading">📝 {{ t("notes") }} & CRM Log</h3>
+                <h3 class="panel-heading">📝 {{ t("notes") }} & {{ t("crmLog") }}</h3>
                 <div class="notes-tabs">
-                  <button type="button" class="notes-tab-btn" :class="{ active: notesMode === 'edit' }" @click="notesMode = 'edit'">Edit</button>
-                  <button type="button" class="notes-tab-btn" :class="{ active: notesMode === 'preview' }" @click="notesMode = 'preview'">Preview</button>
+                  <button type="button" class="notes-tab-btn" :class="{ active: notesMode === 'edit' }" @click="notesMode = 'edit'">{{ t("edit") }}</button>
+                  <button type="button" class="notes-tab-btn" :class="{ active: notesMode === 'preview' }" @click="notesMode = 'preview'">
+                    {{ t("preview") }}
+                  </button>
                 </div>
               </div>
 
               <!-- Notes Editor -->
               <div v-if="notesMode === 'edit'" class="notes-editor-pane">
-                <textarea
-                  v-model="editClientForm.notes"
-                  class="notes-textarea font-mono"
-                  rows="10"
-                  placeholder="Record client preferences, conversation histories, contract specifics..."
-                ></textarea>
+                <textarea v-model="editClientForm.notes" class="notes-textarea font-mono" rows="10" :placeholder="t('notesPlaceholder')"></textarea>
                 <div class="notes-actions mt-2">
-                  <button type="button" class="btn-primary text-xs" :disabled="updatingClient" @click="saveClientMetadata">💾 Save Notes</button>
+                  <button type="button" class="btn-primary text-xs" :disabled="updatingClient" @click="saveClientMetadata">💾 {{ t("saveNotes") }}</button>
                 </div>
               </div>
 
