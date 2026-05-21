@@ -98,4 +98,8 @@ export default {
   errorDeleteCandidate: "Fehler beim Löschen des Entwurfs.",
   projectNameRequired: "Projektname ist erforderlich.",
   errorCreateProjectCandidate: "Fehler beim Erstellen des Projektentwurfs.",
+  noNotesRecorded: "Keine Notizen erfasst.",
+  feeModelHour: "Stundenweise",
+  feeModelFixed: "Festpreis",
+  feeModelRetainer: "Pauschale",
 };

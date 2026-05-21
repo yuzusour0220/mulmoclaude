@@ -97,4 +97,8 @@ export default {
   errorDeleteCandidate: "Failed to delete candidate.",
   projectNameRequired: "Project name is required.",
   errorCreateProjectCandidate: "Failed to create project candidate.",
+  noNotesRecorded: "No notes recorded.",
+  feeModelHour: "Hourly",
+  feeModelFixed: "Fixed",
+  feeModelRetainer: "Retainer",
 };

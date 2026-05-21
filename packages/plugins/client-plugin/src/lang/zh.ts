@@ -97,4 +97,8 @@ export default {
   errorDeleteCandidate: "删除候选失败。",
   projectNameRequired: "项目名称为必填项。",
   errorCreateProjectCandidate: "创建项目候选失败。",
+  noNotesRecorded: "暂无备注。",
+  feeModelHour: "按小时",
+  feeModelFixed: "固定价",
+  feeModelRetainer: "月聘",
 };

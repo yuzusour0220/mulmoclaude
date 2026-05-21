@@ -97,4 +97,8 @@ export default {
   errorDeleteCandidate: "후보를 삭제하지 못했습니다.",
   projectNameRequired: "프로젝트 이름은 필수입니다.",
   errorCreateProjectCandidate: "프로젝트 후보를 생성하지 못했습니다.",
+  noNotesRecorded: "기록된 메모가 없습니다.",
+  feeModelHour: "시간제",
+  feeModelFixed: "고정",
+  feeModelRetainer: "리테이너",
 };

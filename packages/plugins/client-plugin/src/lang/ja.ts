@@ -98,4 +98,8 @@ export default {
   errorDeleteCandidate: "候補の削除に失敗しました。",
   projectNameRequired: "プロジェクト名は必須です。",
   errorCreateProjectCandidate: "プロジェクト候補の作成に失敗しました。",
+  noNotesRecorded: "メモが記録されていません。",
+  feeModelHour: "時間制",
+  feeModelFixed: "固定額",
+  feeModelRetainer: "月額契約",
 };

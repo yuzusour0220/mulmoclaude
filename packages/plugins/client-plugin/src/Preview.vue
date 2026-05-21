@@ -5,14 +5,12 @@
     <div class="flex items-center justify-between gap-3 flex-wrap">
       <div class="flex items-center gap-2 flex-wrap">
         <div class="flex items-center gap-1">
-          <span class="text-slate-400" aria-hidden="true">👤</span>
           <span
             >{{ t("activeClients") }}: <strong class="font-extrabold text-slate-900">{{ activeClientsCount }}</strong></span
           >
         </div>
         <span class="text-slate-300">|</span>
         <div class="flex items-center gap-1">
-          <span class="text-slate-400" aria-hidden="true">📁</span>
           <span
             >{{ t("activeProjects") }}: <strong class="font-extrabold text-slate-900">{{ activeProjectsCount }}</strong></span
           >

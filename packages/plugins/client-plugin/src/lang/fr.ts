@@ -98,4 +98,8 @@ export default {
   errorDeleteCandidate: "Impossible de supprimer le candidat.",
   projectNameRequired: "Le nom du projet est requis.",
   errorCreateProjectCandidate: "Impossible de créer le candidat du projet.",
+  noNotesRecorded: "Aucune note enregistrée.",
+  feeModelHour: "Horaire",
+  feeModelFixed: "Forfait",
+  feeModelRetainer: "Acompte",
 };

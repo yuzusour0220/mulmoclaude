@@ -3,19 +3,23 @@
     <!-- Header with Glassmorphism and Tab Navigation -->
     <header class="crm-header">
       <div class="crm-logo-area">
-        <span class="crm-icon">💼</span>
         <h1 class="crm-title">{{ t("title") }}</h1>
       </div>
       <nav class="crm-tabs">
-        <button type="button" class="tab-btn" :class="{ active: activeTab === 'spreadsheet' }" @click="switchToSpreadsheet">🗂️ {{ t("title") }}</button>
+        <button type="button" class="tab-btn" :class="{ active: activeTab === 'spreadsheet' }" @click="switchToSpreadsheet">
+          <span class="material-icons text-base leading-none">folder</span>
+          {{ t("title") }}
+        </button>
         <button type="button" class="tab-btn" :class="{ active: activeTab === 'review' }" @click="switchToReview">
-          ⚖️ {{ t("reviewBoard") }}
+          <span class="material-icons text-base leading-none">rate_review</span>
+          {{ t("reviewBoard") }}
           <span v-if="pendingReviewCount > 0" class="review-badge animate-pulse">
             {{ pendingReviewCount }}
           </span>
         </button>
         <button v-if="selectedClientId" type="button" class="tab-btn" :class="{ active: activeTab === 'details' }" @click="activeTab = 'details'">
-          🔍 {{ t("details") }}
+          <span class="material-icons text-base leading-none">visibility</span>
+          {{ t("details") }}
         </button>
       </nav>
     </header>
@@ -23,11 +27,11 @@
     <!-- Main Content Area -->
     <main class="crm-main">
       <div v-if="successMsg" class="alert alert-success">
-        <span>✨ {{ successMsg }}</span>
+        <span>{{ successMsg }}</span>
         <button type="button" class="alert-close" @click="successMsg = ''">×</button>
       </div>
       <div v-if="errorMsg" class="alert alert-error">
-        <span>⚠️ {{ errorMsg }}</span>
+        <span>{{ errorMsg }}</span>
         <button type="button" class="alert-close" @click="errorMsg = ''">×</button>
       </div>
 
@@ -35,7 +39,7 @@
       <section v-if="activeTab === 'spreadsheet'" class="tab-pane">
         <div class="toolbar">
           <div class="search-box">
-            <span class="search-icon">🔍</span>
+            <span class="search-icon material-icons">search</span>
             <input v-model="searchQuery" type="text" :placeholder="t('searchPlaceholder')" class="search-input" />
           </div>
           <div class="filter-group">
@@ -71,7 +75,6 @@
               <tr v-for="client in filteredClients" :key="client.id" class="table-row" @click="selectClient(client.id)">
                 <td class="client-name-cell">
                   <div class="name-wrapper">
-                    <span class="client-avatar">🏢</span>
                     <div>
                       <div class="client-name">{{ client.name }}</div>
                       <div class="client-id-sub">@{{ client.id }}</div>
@@ -98,7 +101,10 @@
                 </td>
                 <td class="text-muted text-sm font-mono">{{ client.firstEngagement }}</td>
                 <td class="text-right" @click.stop>
-                  <button type="button" class="btn-action" @click="selectClient(client.id)">🔍 {{ t("details") }}</button>
+                  <button type="button" class="btn-action" @click="selectClient(client.id)">
+                    <span class="material-icons text-sm leading-none">visibility</span>
+                    {{ t("details") }}
+                  </button>
                 </td>
               </tr>
               <tr v-if="filteredClients.length === 0">
@@ -114,7 +120,7 @@
       <!-- REVIEW BOARD TAB (AI-on-a-Leash) -->
       <section v-if="activeTab === 'review'" class="tab-pane">
         <div class="review-intro">
-          <h2>⚖️ {{ t("reviewBoard") }}</h2>
+          <h2>{{ t("reviewBoard") }}</h2>
           <p class="text-muted text-sm">
             {{ t("reviewBoardIntro") }}
           </p>
@@ -124,7 +130,7 @@
           <!-- Client Candidates -->
           <div v-for="cand in clientCandidates" :key="cand.candidateId" class="candidate-card bg-amber-border">
             <div class="candidate-header">
-              <span class="type-badge client-badge">🏢 {{ t("clientDraft").toUpperCase() }}</span>
+              <span class="type-badge client-badge">{{ t("clientDraft").toUpperCase() }}</span>
               <span class="date-badge font-mono">{{ new Date(cand.createdAt).toLocaleDateString() }}</span>
             </div>
             <div class="candidate-body">
@@ -178,16 +184,19 @@
                   <button type="button" class="btn-remove" @click="cand.data.contacts.splice(i, 1)">×</button>
                 </div>
                 <button type="button" class="btn-add-contact" @click="cand.data.contacts.push({ name: '', email: '', role: '' })">
-                  ➕ {{ t("addContact") }}
+                  <span class="material-icons text-sm leading-none">add</span>
+                  {{ t("addContact") }}
                 </button>
               </div>
             </div>
             <div class="candidate-actions">
               <button type="button" class="btn-approve" :disabled="approving[cand.candidateId]" @click="approveClientCandidate(cand)">
-                {{ approving[cand.candidateId] ? t("approving") : "✓ " + t("approve") }}
+                <span v-if="!approving[cand.candidateId]" class="material-icons text-sm leading-none">check</span>
+                {{ approving[cand.candidateId] ? t("approving") : t("approve") }}
               </button>
               <button type="button" class="btn-reject" :disabled="deletingCand[cand.candidateId]" @click="deleteCandidate(cand.candidateId, cand.data.name)">
-                {{ deletingCand[cand.candidateId] ? t("deleting") : "🗑️ " + t("reject") }}
+                <span v-if="!deletingCand[cand.candidateId]" class="material-icons text-sm leading-none">delete</span>
+                {{ deletingCand[cand.candidateId] ? t("deleting") : t("reject") }}
               </button>
             </div>
           </div>
@@ -195,7 +204,7 @@
           <!-- Project Candidates -->
           <div v-for="cand in projectCandidates" :key="cand.candidateId" class="candidate-card bg-purple-border">
             <div class="candidate-header">
-              <span class="type-badge project-badge">📁 {{ t("projectDraft").toUpperCase() }}</span>
+              <span class="type-badge project-badge">{{ t("projectDraft").toUpperCase() }}</span>
               <span class="date-badge font-mono">{{ new Date(cand.createdAt).toLocaleDateString() }}</span>
             </div>
             <div class="candidate-body">
@@ -234,16 +243,17 @@
             </div>
             <div class="candidate-actions">
               <button type="button" class="btn-approve-project" :disabled="approving[cand.candidateId]" @click="approveProjectCandidate(cand)">
-                {{ approving[cand.candidateId] ? t("approving") : "✓ " + t("approve") }}
+                <span v-if="!approving[cand.candidateId]" class="material-icons text-sm leading-none">check</span>
+                {{ approving[cand.candidateId] ? t("approving") : t("approve") }}
               </button>
               <button type="button" class="btn-reject" :disabled="deletingCand[cand.candidateId]" @click="deleteCandidate(cand.candidateId, cand.data.name)">
-                {{ deletingCand[cand.candidateId] ? t("deleting") : "🗑️ " + t("reject") }}
+                <span v-if="!deletingCand[cand.candidateId]" class="material-icons text-sm leading-none">delete</span>
+                {{ deletingCand[cand.candidateId] ? t("deleting") : t("reject") }}
               </button>
             </div>
           </div>
 
           <div v-if="pendingReviewCount === 0" class="no-candidates-panel">
-            <span class="info-icon">⚖️</span>
             <div class="info-text">{{ t("noCandidates") }}</div>
           </div>
         </div>
@@ -252,7 +262,10 @@
       <!-- CLIENT DETAILS TAB -->
       <section v-if="activeTab === 'details' && selectedClient" class="tab-pane details-pane">
         <div class="details-topbar">
-          <button type="button" class="btn-secondary" @click="switchToSpreadsheet">⬅️ {{ t("backToList") }}</button>
+          <button type="button" class="btn-secondary" @click="switchToSpreadsheet">
+            <span class="material-icons text-sm leading-none">arrow_back</span>
+            {{ t("backToList") }}
+          </button>
           <div class="details-status-control">
             <span class="text-sm font-semibold">{{ t("status") }}:</span>
             <select
@@ -272,7 +285,7 @@
           <!-- Left Column: Settings and Metadata -->
           <div class="details-col-left">
             <div class="details-card glass-panel">
-              <h3 class="panel-heading">📋 {{ t("profileDetails") }}</h3>
+              <h3 class="panel-heading">{{ t("profileDetails") }}</h3>
               <div class="form-grid">
                 <div class="field-group">
                   <label class="field-label">{{ t("contactName") }}</label>
@@ -316,13 +329,16 @@
                     </div>
                     <div class="tag-input-row">
                       <input v-model="newTagInput" type="text" :placeholder="t('addTagPlaceholder')" class="form-input text-xs" @keyup.enter="addTag" />
-                      <button type="button" class="btn-tag-add" @click="addTag">➕</button>
+                      <button type="button" class="btn-tag-add" @click="addTag" :aria-label="t('addContact')">
+                        <span class="material-icons text-sm leading-none">add</span>
+                      </button>
                     </div>
                   </div>
                 </div>
 
                 <button type="button" class="btn-primary w-full justify-center" :disabled="updatingClient" @click="saveClientMetadata">
-                  💾 {{ updatingClient ? t("saving") : t("saveProfileDetails") }}
+                  <span v-if="!updatingClient" class="material-icons text-base leading-none">save</span>
+                  {{ updatingClient ? t("saving") : t("saveProfileDetails") }}
                 </button>
               </div>
             </div>
@@ -332,7 +348,7 @@
           <div class="details-col-right flex flex-col gap-4">
             <!-- Contacts Management -->
             <div class="details-card glass-panel">
-              <h3 class="panel-heading">👥 {{ t("contacts") }} ({{ editClientForm.contacts.length }})</h3>
+              <h3 class="panel-heading">{{ t("contacts") }} ({{ editClientForm.contacts.length }})</h3>
               <div class="contacts-table-wrapper">
                 <table class="contacts-table">
                   <thead>
@@ -355,7 +371,9 @@
                         <input v-model="contact.role" type="text" class="table-input" :placeholder="t('contactRolePlaceholder')" />
                       </td>
                       <td class="text-right">
-                        <button type="button" class="btn-circle-danger" @click="removeContact(index)">🗑️</button>
+                        <button type="button" class="btn-circle-danger" @click="removeContact(index)" :aria-label="t('delete')">
+                          <span class="material-icons text-sm leading-none">delete</span>
+                        </button>
                       </td>
                     </tr>
                     <tr v-if="editClientForm.contacts.length === 0">
@@ -365,23 +383,30 @@
                 </table>
               </div>
               <div class="contacts-actions">
-                <button type="button" class="btn-secondary text-xs" @click="addNewContactRow">➕ {{ t("addContactRow") }}</button>
-                <button type="button" class="btn-primary text-xs" :disabled="updatingClient" @click="saveClientMetadata">💾 {{ t("saveContacts") }}</button>
+                <button type="button" class="btn-secondary text-xs" @click="addNewContactRow">
+                  <span class="material-icons text-sm leading-none">add</span>
+                  {{ t("addContactRow") }}
+                </button>
+                <button type="button" class="btn-primary text-xs" :disabled="updatingClient" @click="saveClientMetadata">
+                  <span class="material-icons text-sm leading-none">save</span>
+                  {{ t("saveContacts") }}
+                </button>
               </div>
             </div>
 
             <!-- Committed & Candidate Projects -->
             <div class="details-card glass-panel">
               <div class="panel-heading-row">
-                <h3 class="panel-heading">📁 {{ t("projectsHeader") }} ({{ clientProjects.length + clientProjectCandidates.length }})</h3>
+                <h3 class="panel-heading">{{ t("projectsHeader") }} ({{ clientProjects.length + clientProjectCandidates.length }})</h3>
                 <button type="button" class="btn-secondary text-xs" @click="showAddProjectForm = !showAddProjectForm">
-                  {{ showAddProjectForm ? t("cancel") : "➕ " + t("createNewProject") }}
+                  <span v-if="!showAddProjectForm" class="material-icons text-sm leading-none">add</span>
+                  {{ showAddProjectForm ? t("cancel") : t("createNewProject") }}
                 </button>
               </div>
 
               <!-- Inline New Project Candidate Form -->
               <div v-if="showAddProjectForm" class="new-project-candidate-form">
-                <h4 class="form-subheading">✨ {{ t("createNewProject") }}</h4>
+                <h4 class="form-subheading">{{ t("createNewProject") }}</h4>
                 <div class="form-grid">
                   <div class="field-row">
                     <div class="field-group flex-1">
@@ -416,7 +441,8 @@
                     <textarea v-model="newProjectForm.notes" class="form-textarea" rows="2" :placeholder="t('projectSpecsPlaceholder')"></textarea>
                   </div>
                   <button type="button" class="btn-primary w-full justify-center" :disabled="creatingProject" @click="submitProjectCandidate">
-                    🚀 {{ creatingProject ? t("creating") : t("createDraftCandidate") }}
+                    <span v-if="!creatingProject" class="material-icons text-base leading-none">add</span>
+                    {{ creatingProject ? t("creating") : t("createDraftCandidate") }}
                   </button>
                 </div>
               </div>
@@ -430,13 +456,19 @@
                     <span class="project-status-badge draft animate-pulse">{{ t("draftBadge") }}</span>
                   </div>
                   <div class="project-item-meta text-xs">
-                    <span>💵 {{ cand.data.feeModel }}</span>
+                    <span>{{ localizedFeeModel(cand.data.feeModel) }}</span>
                     <span v-if="cand.data.rate"> · {{ cand.data.rate.amount }} {{ cand.data.rate.currency }}/{{ cand.data.rate.unit }}</span>
                   </div>
                   <div class="project-item-desc" v-if="cand.data.notes">{{ cand.data.notes.slice(0, 100) }}...</div>
                   <div class="project-draft-actions">
-                    <button type="button" class="btn-approve-mini" @click="approveProjectCandidateDirect(cand)">✓ {{ t("commit") }}</button>
-                    <button type="button" class="btn-reject-mini" @click="deleteCandidateDirect(cand.candidateId, cand.data.name)">🗑️ {{ t("delete") }}</button>
+                    <button type="button" class="btn-approve-mini" @click="approveProjectCandidateDirect(cand)">
+                      <span class="material-icons text-sm leading-none">check</span>
+                      {{ t("commit") }}
+                    </button>
+                    <button type="button" class="btn-reject-mini" @click="deleteCandidateDirect(cand.candidateId, cand.data.name)">
+                      <span class="material-icons text-sm leading-none">delete</span>
+                      {{ t("delete") }}
+                    </button>
                   </div>
                 </div>
 
@@ -444,10 +476,10 @@
                 <div v-for="proj in clientProjects" :key="proj.id" class="project-item-card" :class="proj.status">
                   <div class="project-item-head">
                     <div class="project-item-name font-bold text-slate-900">{{ proj.name }}</div>
-                    <span class="project-status-badge" :class="proj.status">{{ proj.status }}</span>
+                    <span class="project-status-badge" :class="proj.status">{{ localizedStatus(proj.status) }}</span>
                   </div>
                   <div class="project-item-meta text-xs text-muted">
-                    <span>💵 {{ proj.feeModel }}</span>
+                    <span>{{ localizedFeeModel(proj.feeModel) }}</span>
                     <span v-if="proj.rate"> · {{ proj.rate.amount }} {{ proj.rate.currency }}/{{ proj.rate.unit }}</span>
                     <span> · {{ t("startedLabel") }}: {{ proj.startDate }}</span>
                   </div>
@@ -466,7 +498,7 @@
             <!-- Notes Markdown Editor and Render Pane -->
             <div class="details-card glass-panel">
               <div class="panel-heading-row">
-                <h3 class="panel-heading">📝 {{ t("notes") }} & {{ t("crmLog") }}</h3>
+                <h3 class="panel-heading">{{ t("notes") }} & {{ t("crmLog") }}</h3>
                 <div class="notes-tabs">
                   <button type="button" class="notes-tab-btn" :class="{ active: notesMode === 'edit' }" @click="notesMode = 'edit'">{{ t("edit") }}</button>
                   <button type="button" class="notes-tab-btn" :class="{ active: notesMode === 'preview' }" @click="notesMode = 'preview'">
@@ -479,7 +511,10 @@
               <div v-if="notesMode === 'edit'" class="notes-editor-pane">
                 <textarea v-model="editClientForm.notes" class="notes-textarea font-mono" rows="10" :placeholder="t('notesPlaceholder')"></textarea>
                 <div class="notes-actions mt-2">
-                  <button type="button" class="btn-primary text-xs" :disabled="updatingClient" @click="saveClientMetadata">💾 {{ t("saveNotes") }}</button>
+                  <button type="button" class="btn-primary text-xs" :disabled="updatingClient" @click="saveClientMetadata">
+                    <span class="material-icons text-sm leading-none">save</span>
+                    {{ t("saveNotes") }}
+                  </button>
                 </div>
               </div>
 
@@ -511,6 +546,18 @@ const messages = useT();
 function t(key: keyof typeof messages.value, params?: Record<string, string | number>): string {
   const template = messages.value[key];
   return params ? format(template, params) : template;
+}
+
+function localizedStatus(status: "active" | "paused" | "archived"): string {
+  if (status === "active") return t("statusActive");
+  if (status === "paused") return t("statusPaused");
+  return t("statusArchived");
+}
+
+function localizedFeeModel(model: "hour" | "fixed" | "retainer"): string {
+  if (model === "hour") return t("feeModelHour");
+  if (model === "fixed") return t("feeModelFixed");
+  return t("feeModelRetainer");
 }
 
 // Typing for dispatch responses
@@ -621,7 +668,7 @@ const filteredClients = computed(() => {
 
 const renderedNotes = computed(() => {
   const notesText = editClientForm.value.notes;
-  if (!notesText) return `<p class="text-muted font-italic">No notes recorded.</p>`;
+  if (!notesText) return `<p class="text-muted font-italic">${t("noNotesRecorded")}</p>`;
   return renderMarkdownLite(notesText);
 });
 
@@ -793,7 +840,7 @@ async function updateClientStatus(newStatus: "active" | "paused" | "archived") {
       patch: { status: newStatus },
     });
     if (res?.ok) {
-      successMsg.value = format(t("statusUpdated"), { status: newStatus });
+      successMsg.value = format(t("statusUpdated"), { status: localizedStatus(newStatus) });
       await refreshAll();
     }
   } catch (err: any) {
@@ -1123,6 +1170,13 @@ function formatInline(input: string): string {
 
 <style scoped>
 /* CRM Glassmorphic Style Design */
+button:has(.material-icons) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+}
+
 .crm-container {
   display: flex;
   flex-direction: column;
@@ -1159,10 +1213,6 @@ function formatInline(input: string): string {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-}
-
-.crm-icon {
-  font-size: 1.5rem;
 }
 
 .crm-title {
@@ -1305,7 +1355,7 @@ function formatInline(input: string): string {
   transform: translateY(-50%);
   color: #94a3b8;
   pointer-events: none;
-  font-size: 0.875rem;
+  font-size: 1.125rem;
 }
 
 .search-input {
@@ -1407,16 +1457,6 @@ function formatInline(input: string): string {
   display: flex;
   align-items: center;
   gap: 0.75rem;
-}
-
-.client-avatar {
-  font-size: 1.25rem;
-  background: #f1f5f9;
-  padding: 0.35rem;
-  border-radius: 0.375rem;
-  display: flex;
-  justify-content: center;
-  align-items: center;
 }
 
 .client-name {
@@ -1767,12 +1807,6 @@ function formatInline(input: string): string {
   border-radius: 0.75rem;
   border: 1px dashed #cbd5e1;
   color: #94a3b8;
-}
-
-.info-icon {
-  font-size: 2.5rem;
-  display: block;
-  margin-bottom: 0.5rem;
 }
 
 .info-text {

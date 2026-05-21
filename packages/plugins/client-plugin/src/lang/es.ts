@@ -98,4 +98,8 @@ export default {
   errorDeleteCandidate: "Error al eliminar el candidato.",
   projectNameRequired: "El nombre del proyecto es obligatorio.",
   errorCreateProjectCandidate: "Error al crear el candidato del proyecto.",
+  noNotesRecorded: "No hay notas registradas.",
+  feeModelHour: "Por hora",
+  feeModelFixed: "Fijo",
+  feeModelRetainer: "Retenedor",
 };
