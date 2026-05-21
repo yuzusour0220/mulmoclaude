@@ -62,7 +62,7 @@ function discoverPluginDirs(repoRoot) {
     if (!name.startsWith("@mulmoclaude/")) continue;
     if (!name.endsWith("-plugin")) continue;
     if (!scripts || typeof scripts.build !== "string") continue;
-    found.push(`packages/plugins/${entry.name}`);
+    found.push(join("packages", "plugins", entry.name));
   }
   found.sort();
   return found;

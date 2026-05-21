@@ -42,7 +42,11 @@ export interface WorklogRenameMigrationOptions {
 }
 
 export interface WorklogRenameMigrationResult {
-  /** Per-root outcome — "renamed", "no-source", or "conflict". */
+  /** Per-root outcome — "renamed" (atomic move succeeded), "no-source"
+   *  (nothing to migrate), "conflict" (both legacy and current present;
+   *  skipped to avoid clobber), or "error" (rename threw; next boot
+   *  retries). Callers MUST treat the "error" branch as a non-fatal
+   *  warning rather than a success. */
   data: "renamed" | "no-source" | "conflict" | "error";
   config: "renamed" | "no-source" | "conflict" | "error";
 }
@@ -61,29 +65,24 @@ export async function migrateWorklogPackageRename(opts: WorklogRenameMigrationOp
 async function renameSegment(root: string, label: "data" | "config"): Promise<WorklogRenameMigrationResult["data"]> {
   const legacy = path.join(root, LEGACY_SEG);
   const current = path.join(root, CURRENT_SEG);
-  if (!existsSync(legacy)) {
-    return "no-source";
-  }
+  if (!existsSync(legacy)) return "no-source";
   if (existsSync(current)) {
-    // Both paths populated — refuse to merge or clobber. The user has
-    // to reconcile manually (likely `mv` of individual files); we log
+    // Both paths populated — refuse to merge or clobber. The user
+    // reconciles manually (likely `mv` of individual files); log
     // loudly so the situation is visible rather than silent.
-    log.warn("worklog-rename", `${label}: both legacy and current paths exist; manual reconciliation required`, {
-      legacy,
-      current,
-    });
+    log.warn("worklog-rename", `${label}: both legacy and current paths exist; manual reconciliation required`, { legacy, current });
     return "conflict";
   }
+  return performRename(legacy, current, label);
+}
+
+async function performRename(legacy: string, current: string, label: "data" | "config"): Promise<"renamed" | "error"> {
   try {
     await rename(legacy, current);
     log.info("worklog-rename", `${label}: migrated plugin directory`, { legacy, current });
     return "renamed";
   } catch (err) {
-    log.warn("worklog-rename", `${label}: rename failed (will retry next boot)`, {
-      legacy,
-      current,
-      error: errorMessage(err),
-    });
+    log.warn("worklog-rename", `${label}: rename failed (will retry next boot)`, { legacy, current, error: errorMessage(err) });
     return "error";
   }
 }
