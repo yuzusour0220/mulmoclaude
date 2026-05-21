@@ -104,6 +104,7 @@ export const ROLES: Role[] = [
       TOOL_NAMES.manageTodoList,
       TOOL_NAMES.manageSpotify,
       TOOL_NAMES.manageWorklog,
+      TOOL_NAMES.manageClient,
     ],
     queries: [
       "Show me my calendar",
@@ -138,6 +139,7 @@ export const ROLES: Role[] = [
       TOOL_NAMES.searchX,
       TOOL_NAMES.notify,
       TOOL_NAMES.manageWorklog,
+      TOOL_NAMES.manageClient,
     ],
     queries: [
       "Show me the discount cash flow analysis of monthly income of $10,000 for two years. Make it possible to change the discount rate and monthly income.",
@@ -391,6 +393,7 @@ export const ROLES: Role[] = [
       TOOL_NAMES.manageTodoList,
       TOOL_NAMES.manageSpotify,
       TOOL_NAMES.manageWorklog,
+      TOOL_NAMES.manageClient,
       // manageRecipes removed (#1286) — recipe-book-plugin no longer
       // in PRESET_PLUGINS; recipes drive via the `mc-cooking-coach`
       // preset skill.

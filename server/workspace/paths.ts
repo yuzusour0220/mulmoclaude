@@ -20,7 +20,7 @@
 // `WORKSPACE_DIRS` record below. The absolute path is derived
 // automatically via `WORKSPACE_PATHS`.
 
-import { homedir } from "os";
+import { homedir, tmpdir, userInfo } from "os";
 import path from "path";
 
 // Well-known individual files — imported from the shared
@@ -65,12 +65,28 @@ type PluginWorkspaceDirsContribution<M> = M extends { readonly workspaceDirs: in
 
 type PluginWorkspaceDirsMap<T extends BuiltInPluginMetas> = UnionToIntersection<PluginWorkspaceDirsContribution<T[number]>>;
 
-// Workspace root. Hard-coded to `~/mulmoclaude` — there is no
-// WORKSPACE_PATH env override today; changing the location
-// requires a code edit or a symlink. Re-exported by
-// `server/workspace.ts` for backwards compatibility of existing
-// callers that `import { workspacePath } from "./workspace.js"`.
-export const workspacePath = path.join(homedir(), "mulmoclaude");
+// Detect Node test runner or other typical test environments
+export const isTestEnv =
+  process.env.NODE_ENV === "test" ||
+  process.execArgv.includes("--test") ||
+  process.argv.some((arg) => arg.includes("test")) ||
+  typeof process.env.NODE_TEST_CONTEXT !== "undefined";
+
+// Detect if process.env.HOME has been overridden (a common pattern in workspace/IO integration tests to isolate runs)
+const realUserHome = (() => {
+  try {
+    return userInfo().homedir;
+  } catch {
+    return homedir();
+  }
+})();
+const isHomeOverridden = homedir() !== realUserHome;
+
+// Workspace root. Configurable via environment variable or isolated
+// inside a temporary directory under test environments (unless process.env.HOME
+// is already overridden to isolate the test, in which case we preserve the overridden homedir).
+export const workspacePath =
+  process.env.MULMOCLAUDE_WORKSPACE_PATH || (isTestEnv && !isHomeOverridden ? path.join(tmpdir(), "mulmoclaude-test") : path.join(homedir(), "mulmoclaude"));
 
 // Workspace-relative paths. Keys are the stable code-side identifiers
 // (e.g. `markdowns` — unchanged for call-site compatibility); values
@@ -100,6 +116,7 @@ const HOST_WORKSPACE_DIRS = {
   // own `files.data` scope at `data/plugins/%40mulmoclaude%2Ftodo-plugin/`.
   calendar: "data/calendar",
   contacts: "data/contacts",
+  clients: "data/clients",
   scheduler: "data/scheduler",
   sources: "data/sources",
   translation: "data/translation",
@@ -249,6 +266,7 @@ export const EAGER_WORKSPACE_DIRS: readonly WorkspaceDirKey[] = [
   "chat",
   "calendar",
   "contacts",
+  "clients",
   "scheduler",
   "roles",
   "stories",

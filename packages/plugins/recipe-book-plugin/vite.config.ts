@@ -22,15 +22,17 @@ export default defineConfig({
   // 5.9.3 compiler engine and silently drops every export when the
   // workspace runs on TS 6+. Per-file d.ts emit by `vite-plugin-dts`
   // uses the workspace's own tsc, so it tracks the toolchain.
-  // `compilerOptions.rootDir: "src"` strips `src/` from the d.ts
-  // paths so `dist/index.d.ts` matches the package.json `exports`
-  // map (would otherwise emit to `dist/src/index.d.ts`).
+  // Setting `entryRoot: "src"` on the `vite-plugin-dts` plugin is responsible
+  // for stripping the `src/` prefix so that `dist/index.d.ts` is produced and
+  // aligns with the package.json exports. Meanwhile, `compilerOptions.rootDir: "../.."`
+  // ensures the correct absolute root mapping is maintained for high-fidelity type generation.
   plugins: [
     vue(),
     dts({
       include: ["src/**/*.{ts,vue}"],
       outDir: "dist",
-      compilerOptions: { rootDir: "src" },
+      entryRoot: "src",
+      compilerOptions: { rootDir: "../.." },
     }),
   ],
   build: {

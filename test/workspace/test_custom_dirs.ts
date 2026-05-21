@@ -25,7 +25,7 @@ describe("loadCustomDirs", () => {
     const root = tmpRoot();
     writeConfig(root, [
       {
-        path: "data/clients",
+        path: "data/customers",
         description: "Client files",
         structure: "by-name",
       },
@@ -37,7 +37,7 @@ describe("loadCustomDirs", () => {
     ]);
     const entries = loadCustomDirs(root);
     assert.equal(entries.length, 2);
-    assert.equal(entries[0].path, "data/clients");
+    assert.equal(entries[0].path, "data/customers");
     assert.equal(entries[0].structure, DIR_STRUCTURES.byName);
     assert.equal(entries[1].path, "artifacts/reports");
   });
@@ -161,7 +161,7 @@ describe("ensureCustomDirs", () => {
     const root = tmpRoot();
     const entries = [
       {
-        path: "data/clients",
+        path: "data/customers",
         description: "Clients",
         structure: DIR_STRUCTURES.byName,
       },
@@ -172,7 +172,7 @@ describe("ensureCustomDirs", () => {
       },
     ];
     ensureCustomDirs(entries, root);
-    assert.ok(existsSync(path.join(root, "data", "clients")));
+    assert.ok(existsSync(path.join(root, "data", "customers")));
     assert.ok(existsSync(path.join(root, "artifacts", "reports")));
   });
 });
@@ -190,7 +190,7 @@ describe("buildCustomDirsPrompt", () => {
         structure: DIR_STRUCTURES.flat,
       },
       {
-        path: "data/clients",
+        path: "data/customers",
         description: "Client folders",
         structure: DIR_STRUCTURES.byName,
       },
