@@ -741,6 +741,22 @@ function removeContact(index: number) {
   editClientForm.value.contacts.splice(index, 1);
 }
 
+function buildClientPatch(form: typeof editClientForm.value) {
+  return {
+    name: form.name,
+    paymentTerms: form.paymentTerms,
+    firstEngagement: form.firstEngagement,
+    rate: form.rate,
+    tags: form.tags,
+    contacts: form.contacts,
+    notes: form.notes,
+  };
+}
+
+function handleSaveError(err: any) {
+  errorMsg.value = err?.message || "An unexpected error occurred.";
+}
+
 // Save Metadata
 async function saveClientMetadata() {
   if (!selectedClientId.value) return;
@@ -752,15 +768,7 @@ async function saveClientMetadata() {
     const res = await dispatch<ActionResponse>({
       action: "update",
       id: selectedClientId.value,
-      patch: {
-        name: editClientForm.value.name,
-        paymentTerms: editClientForm.value.paymentTerms,
-        firstEngagement: editClientForm.value.firstEngagement,
-        rate: editClientForm.value.rate,
-        tags: editClientForm.value.tags,
-        contacts: editClientForm.value.contacts,
-        notes: editClientForm.value.notes,
-      },
+      patch: buildClientPatch(editClientForm.value),
     });
 
     if (res?.ok) {
@@ -770,7 +778,7 @@ async function saveClientMetadata() {
       errorMsg.value = res?.error ?? "Failed to save client changes.";
     }
   } catch (err: any) {
-    errorMsg.value = err.message || "An unexpected error occurred.";
+    handleSaveError(err);
   } finally {
     updatingClient.value = false;
   }
@@ -802,6 +810,29 @@ function updateCandidateTags(cand: ClientCandidate, csv: string) {
     .filter(Boolean);
 }
 
+async function approveThenUpdate(cand: ClientCandidate) {
+  const approveRes = await dispatch<ActionResponse & { id: string }>({
+    action: "approveClient",
+    candidateId: cand.candidateId,
+  });
+
+  if (approveRes?.ok) {
+    await dispatch<ActionResponse>({
+      action: "update",
+      id: approveRes.id,
+      patch: {
+        name: cand.data.name,
+        paymentTerms: cand.data.paymentTerms,
+        rate: cand.data.rate,
+        tags: cand.data.tags,
+        contacts: cand.data.contacts,
+        notes: cand.data.notes,
+      },
+    });
+  }
+  return approveRes;
+}
+
 async function approveClientCandidate(cand: ClientCandidate) {
   const name = cand.data.name;
   if (
@@ -818,42 +849,25 @@ async function approveClientCandidate(cand: ClientCandidate) {
   errorMsg.value = "";
 
   try {
-    // Wait! In order to preserve the edited details in the review form, we must first
-    // approve, and then we will update it! But wait! The approveClient action only promotes the JSON file as-is.
-    // If the user modified the candidate fields, can we write them back?
-    // Since there is no "saveCandidate" backend API, we can approve it first,
-    // and then immediately send a sequential "update" command with the edited fields!
-    // This is a brilliant and flawless way to support inline candidate editing!
-    const approveRes = await dispatch<ActionResponse & { id: string }>({
-      action: "approveClient",
-      candidateId: cand.candidateId,
-    });
-
-    if (approveRes?.ok) {
-      // Send the update patch in case they changed details
-      await dispatch<ActionResponse>({
-        action: "update",
-        id: approveRes.id,
-        patch: {
-          name: cand.data.name,
-          paymentTerms: cand.data.paymentTerms,
-          rate: cand.data.rate,
-          tags: cand.data.tags,
-          contacts: cand.data.contacts,
-          notes: cand.data.notes,
-        },
-      });
-
+    const res = await approveThenUpdate(cand);
+    if (res?.ok) {
       successMsg.value = `Client "${name}" committed successfully!`;
       await refreshAll();
     } else {
-      errorMsg.value = approveRes?.error ?? "Failed to approve client candidate.";
+      errorMsg.value = res?.error ?? "Failed to approve client candidate.";
     }
   } catch (err: any) {
     errorMsg.value = err.message || "Failed to approve client.";
   } finally {
     approving.value[cand.candidateId] = false;
   }
+}
+
+async function approveProjectRequest(candidateId: string) {
+  return await dispatch<ActionResponse>({
+    action: "approveProject",
+    candidateId,
+  });
 }
 
 async function approveProjectCandidate(cand: ProjectCandidate) {
@@ -872,11 +886,7 @@ async function approveProjectCandidate(cand: ProjectCandidate) {
   errorMsg.value = "";
 
   try {
-    const res = await dispatch<ActionResponse>({
-      action: "approveProject",
-      candidateId: cand.candidateId,
-    });
-
+    const res = await approveProjectRequest(cand.candidateId);
     if (res?.ok) {
       successMsg.value = `Project "${name}" committed successfully!`;
       await refreshAll();
@@ -890,17 +900,16 @@ async function approveProjectCandidate(cand: ProjectCandidate) {
   }
 }
 
-async function deleteCandidate(candidateId: string, name: string) {
-  if (
-    !(await openConfirm({
-      title: t("reject"),
-      message: format(t("confirmDeleteCandidate"), { name }),
-      confirmText: t("reject"),
-      variant: "danger",
-    }))
-  )
-    return;
+async function confirmDeleteCandidate(name: string) {
+  return await openConfirm({
+    title: t("reject"),
+    message: format(t("confirmDeleteCandidate"), { name }),
+    confirmText: t("reject"),
+    variant: "danger",
+  });
+}
 
+async function executeDeleteCandidate(candidateId: string, name: string) {
   deletingCand.value[candidateId] = true;
   errorMsg.value = "";
 
@@ -920,6 +929,12 @@ async function deleteCandidate(candidateId: string, name: string) {
     errorMsg.value = err.message || "Failed to delete candidate.";
   } finally {
     deletingCand.value[candidateId] = false;
+  }
+}
+
+async function deleteCandidate(candidateId: string, name: string) {
+  if (await confirmDeleteCandidate(name)) {
+    await executeDeleteCandidate(candidateId, name);
   }
 }
 

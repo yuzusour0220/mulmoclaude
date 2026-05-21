@@ -27,12 +27,13 @@ const VERSION = "0.1.0";
 
 function makeRecordingPubSub(): { pubsub: IPubSub; published: { channel: string; data: unknown }[] } {
   const published: { channel: string; data: unknown }[] = [];
-  return {
-    pubsub: {
-      publish(channel, data) {
-        published.push({ channel, data });
-      },
+  const pubsub: IPubSub = {
+    publish(channel, data) {
+      published.push({ channel, data });
     },
+  };
+  return {
+    pubsub,
     published,
   };
 }
@@ -236,8 +237,31 @@ describe("Client plugin — end-to-end integration through the loader", () => {
 
     await Promise.all(promises);
 
-    const listRes = (await execute({}, { action: "list" })) as any;
+    let listRes = (await execute({}, { action: "list" })) as any;
     assert.ok(listRes.ok);
     assert.equal(listRes.candidates.length, CONCURRENCY);
+
+    // Issue second batch of concurrent creations using the SAME conflicting ID to verify contention safety
+    const conflictPromises = Array.from({ length: CONCURRENCY }, () =>
+      execute(
+        {},
+        {
+          action: "create",
+          id: "client-conflict",
+          patch: {
+            name: "Conflict",
+          },
+        },
+      ),
+    );
+
+    await Promise.all(conflictPromises);
+
+    listRes = (await execute({}, { action: "list" })) as any;
+    assert.ok(listRes.ok);
+    // All 5 conflict candidates should have been saved cleanly (total = CONCURRENCY + 5)
+    assert.equal(listRes.candidates.length, CONCURRENCY + 5);
+    const conflictCands = listRes.candidates.filter((cand: any) => cand.data.id === "client-conflict");
+    assert.equal(conflictCands.length, CONCURRENCY, "Should save all conflict candidate records safely");
   });
 });
