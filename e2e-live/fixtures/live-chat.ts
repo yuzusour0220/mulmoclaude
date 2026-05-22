@@ -560,6 +560,38 @@ export async function navigateToWikiPage(page: Page, slug: string): Promise<void
 }
 
 /**
+ * Generic "the SPA landed on the wiki page for `slug` and the body
+ * hydrated with `marker`" assertion. Collapses the three boilerplate
+ * checks every wiki-navigation spec repeats:
+ *
+ *   1. URL pathname ends with `/wiki/pages/<encoded-slug>` — the SPA
+ *      router pushed the expected path. The predicate compares the
+ *      encoded suffix as a literal string, side-stepping the
+ *      `encodeURIComponent` regex-safety pitfall (encodeURIComponent
+ *      preserves `.`, `(`, `)`, `*`, all of which are regex
+ *      metacharacters — splicing the encoded slug into a `RegExp`
+ *      would silently overmatch for any caller whose slug includes
+ *      those chars).
+ *   2. `WIKI_PAGE_BODY_SELECTOR` contains `marker` — the page body
+ *      actually rendered (vs. an empty shell or a 404 view).
+ *   3. URL does NOT match `/chat` — sentinel for the B-23 / B-24
+ *      regression shape where the catch-all router swallowed
+ *      `/wiki/pages/<slug>` and bounced to the chat surface.
+ *
+ * Per-test sentinels that are NOT generic (e.g. L-15b's #1194
+ * collision negative `not.toContainText(sourceMarker)`, L-WIKI-PIPE's
+ * `not.toHaveURL(/%7C/)` alias-leak guard) stay inline at the call
+ * site so the spec narrative around those bugs is readable — this
+ * helper only owns the three checks every wiki landing test shares.
+ */
+export async function expectWikiPageBody(page: Page, slug: string, marker: string): Promise<void> {
+  const expectedPathSuffix = `/wiki/pages/${encodeURIComponent(slug)}`;
+  await expect(page).toHaveURL((url) => url.pathname.endsWith(expectedPathSuffix));
+  await expect(page.locator(WIKI_PAGE_BODY_SELECTOR)).toContainText(marker);
+  await expect(page).not.toHaveURL(/\/chat/);
+}
+
+/**
  * Wait for an `<img>` matching `imgSelector` to appear inside the
  * rendered wiki page body. Counterpart to `waitForImgInPresentHtml`
  * for the markdown surface — no iframe boundary, the body is a

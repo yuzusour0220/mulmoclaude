@@ -3,7 +3,15 @@ import { randomUUID } from "node:crypto";
 import { type Page, expect, test } from "@playwright/test";
 
 import { ONE_MINUTE_MS } from "../../server/utils/time.ts";
-import { navigateToWikiIndex, navigateToWikiPage, placeWikiPage, removeWikiPage, replaceWikiIndex, restoreWikiIndex } from "../fixtures/live-chat.ts";
+import {
+  expectWikiPageBody,
+  navigateToWikiIndex,
+  navigateToWikiPage,
+  placeWikiPage,
+  removeWikiPage,
+  replaceWikiIndex,
+  restoreWikiIndex,
+} from "../fixtures/live-chat.ts";
 
 const L14_TIMEOUT_MS = ONE_MINUTE_MS;
 const L15_TIMEOUT_MS = ONE_MINUTE_MS;
@@ -73,11 +81,9 @@ test.describe("wiki navigation (real workspace)", () => {
       await placeWikiPage(targetSlug, [`# L-14 target`, ``, targetMarker, ``].join("\n"));
       await navigateToWikiPage(page, sourceSlug);
       await page.locator(`.wiki-link[data-page="${targetSlug}"]`).first().click();
-      await expect(page).toHaveURL(new RegExp(`/wiki/pages/${encodeURIComponent(targetSlug)}$`));
-      await expect(page.getByTestId("wiki-page-body")).toContainText(targetMarker);
-      // Negative guard: if the catch-all regression resurfaces, the
-      // SPA falls through to /chat (B-24's reported failure mode).
-      await expect(page).not.toHaveURL(/\/chat/);
+      // Three-in-one wiki landing assertion (URL + body marker +
+      // B-24 /chat sentinel) — see `expectWikiPageBody` docstring.
+      await expectWikiPageBody(page, targetSlug, targetMarker);
     } finally {
       await removeWikiPage(sourceSlug);
       await removeWikiPage(targetSlug);
@@ -114,13 +120,6 @@ test.describe("wiki navigation (real workspace)", () => {
     const targetSlug = `日本語タイトル-nonascii-target-${projectSlug}-${nonce}`;
     const sourceSlug = `e2e-live-l15-source-${projectSlug}-${nonce}`;
     const targetMarker = "L-15 target body marker (本文サンプル)";
-    // encodeURIComponent output is the percent-encoded path the
-    // browser actually sits on; reuse it both for the URL assertion
-    // regex and for documenting the encoded form. encodeURIComponent
-    // is regex-safe (no `.` `(` `)` `*` etc. in its output for our
-    // input), so we splice it into the RegExp source verbatim — same
-    // shape L-14 uses one screen up.
-    const encodedTargetSlug = encodeURIComponent(targetSlug);
     try {
       await placeWikiPage(sourceSlug, [`# L-15 source`, ``, `[[${targetSlug}]]`, ``].join("\n"));
       await placeWikiPage(targetSlug, [`# 日本語タイトル`, ``, targetMarker, ``].join("\n"));
@@ -128,13 +127,10 @@ test.describe("wiki navigation (real workspace)", () => {
       // (A) Direct URL routing — non-ASCII slug, no wikilink in the
       // path, just isSafeWikiSlug + resolvePagePath. If B-26 ever
       // regresses, the server returns "page not found" and the body
-      // marker assertion fails fast.
+      // marker assertion fails fast (B-24 /chat sentinel + URL +
+      // body marker are all in `expectWikiPageBody`).
       await navigateToWikiPage(page, targetSlug);
-      await expect(page.getByTestId("wiki-page-body")).toContainText(targetMarker);
-      await expect(page).toHaveURL(new RegExp(`/wiki/pages/${encodedTargetSlug}$`));
-      // Negative guard mirroring L-14 — the catch-all router must
-      // not swallow non-ASCII page slugs (B-24 regression shape).
-      await expect(page).not.toHaveURL(/\/chat/);
+      await expectWikiPageBody(page, targetSlug, targetMarker);
 
       // (B) Wikilink click — `[[日本語…]]` renders verbatim into a
       // `.wiki-link[data-page="…"]` span (renderWikiLinks does no
@@ -143,9 +139,7 @@ test.describe("wiki navigation (real workspace)", () => {
       // router-push pipeline honest for non-ASCII targets.
       await navigateToWikiPage(page, sourceSlug);
       await page.locator(`.wiki-link[data-page="${targetSlug}"]`).first().click();
-      await expect(page).toHaveURL(new RegExp(`/wiki/pages/${encodedTargetSlug}$`));
-      await expect(page.getByTestId("wiki-page-body")).toContainText(targetMarker);
-      await expect(page).not.toHaveURL(/\/chat/);
+      await expectWikiPageBody(page, targetSlug, targetMarker);
     } finally {
       await removeWikiPage(sourceSlug);
       await removeWikiPage(targetSlug);
@@ -222,7 +216,6 @@ test.describe("wiki navigation (real workspace)", () => {
     const sourceSlug = `e2e-live-l15b-source-${projectSlug}-${nonce}`;
     const targetMarker = `L-15b target body marker ${nonce}`;
     const sourceMarker = `L-15b source body marker ${nonce}`;
-    const encodedTargetSlug = encodeURIComponent(targetSlug);
     try {
       // Seed source first — the original bug's repro relied on the
       // source page being readdir-first when both keys partial-
@@ -238,14 +231,16 @@ test.describe("wiki navigation (real workspace)", () => {
       // trace viewer renders (A) and (B) as separate, named nodes
       // and CI failures attribute to the correct route without
       // hunting through a flat assertion log (Sourcery review
-      // #1347). The four assertions inside each step are
-      // intentionally duplicated rather than extracted into a
-      // helper — collision repro semantics differ subtly between
-      // routes (e.g. the "click into a colliding wikilink" shape
-      // is route-(B)-only), and a helper would obscure that.
+      // #1347). The three generic checks (URL + body marker +
+      // B-24 /chat sentinel) collapse into `expectWikiPageBody`;
+      // the route-specific #1194 collision sentinel
+      // (`not.toContainText(sourceMarker)`) stays inline so its
+      // semantics — "the resolver did NOT return the colliding
+      // source page" — are obvious at the call site rather than
+      // hidden behind a helper signature.
       await test.step("(A) direct URL navigation to target slug", async () => {
         await navigateToWikiPage(page, targetSlug);
-        await expect(page.getByTestId("wiki-page-body"), "target page body must render (positive assertion)").toContainText(targetMarker);
+        await expectWikiPageBody(page, targetSlug, targetMarker);
         // Negative assertion = #1194 regression sentinel. If the
         // fuzzy resolver ever silently picks the source page again,
         // this is the line that fails.
@@ -253,10 +248,6 @@ test.describe("wiki navigation (real workspace)", () => {
           page.getByTestId("wiki-page-body"),
           "source marker must NOT appear — would indicate #1194 regression (fuzzy resolver returned colliding page)",
         ).not.toContainText(sourceMarker);
-        await expect(page).toHaveURL(new RegExp(`/wiki/pages/${encodedTargetSlug}$`));
-        // Negative guard mirroring L-14 / L-15 — catch-all router
-        // must not swallow non-ASCII page slugs (B-24 shape).
-        await expect(page).not.toHaveURL(/\/chat/);
       });
 
       await test.step("(B) wikilink click from source page → target", async () => {
@@ -267,13 +258,11 @@ test.describe("wiki navigation (real workspace)", () => {
         // and the target marker never appears.
         await navigateToWikiPage(page, sourceSlug);
         await page.locator(`.wiki-link[data-page="${targetSlug}"]`).first().click();
-        await expect(page).toHaveURL(new RegExp(`/wiki/pages/${encodedTargetSlug}$`));
-        await expect(page.getByTestId("wiki-page-body"), "target page body must render after wikilink click").toContainText(targetMarker);
+        await expectWikiPageBody(page, targetSlug, targetMarker);
         await expect(
           page.getByTestId("wiki-page-body"),
           "source marker must NOT appear after wikilink click — would indicate #1194 regression",
         ).not.toContainText(sourceMarker);
-        await expect(page).not.toHaveURL(/\/chat/);
       });
     } finally {
       await removeWikiPage(sourceSlug);
@@ -334,14 +323,12 @@ test.describe("wiki navigation (real workspace)", () => {
       await expect(page.locator(`.wiki-link[data-page*="|"]`), "no wiki-link's data-page should contain a literal pipe").toHaveCount(0);
 
       await pipeLink.first().click();
-      // Strict URL assertion — path must end with the target slug
-      // exactly, no `|` (or its `%7C` percent-encoding) anywhere.
-      await expect(page).toHaveURL(new RegExp(`/wiki/pages/${encodeURIComponent(targetSlug)}$`));
+      // `expectWikiPageBody` covers URL ends with target slug + body
+      // hydrates + B-24 /chat sentinel. The %7C-leak sentinel is
+      // #1297-specific (route owns it, helper doesn't), so it stays
+      // inline.
+      await expectWikiPageBody(page, targetSlug, targetMarker);
       await expect(page, "URL must not contain a percent-encoded pipe (regression sentinel for %7C alias leak)").not.toHaveURL(/%7C/);
-      // Negative guard mirroring L-14/L-15/L-16 — the catch-all
-      // router must not swallow the click into /chat.
-      await expect(page).not.toHaveURL(/\/chat/);
-      await expect(page.getByTestId("wiki-page-body"), "target page must hydrate after click").toContainText(targetMarker);
     } finally {
       await removeWikiPage(sourceSlug);
       await removeWikiPage(targetSlug);
@@ -572,18 +559,10 @@ test.describe("wiki navigation (real workspace)", () => {
         await expect(page.getByTestId(`wiki-page-entry-${slugA}`), "alpha entry must appear in the index list").toBeVisible();
         await expect(page.getByTestId(`wiki-page-entry-${slugB}`), "beta entry must appear in the index list").toBeVisible();
 
-        // Click entry A — expect /wiki/pages/<slugA> + body marker.
-        // encodeURIComponent matches the L-14 / L-15 assertion shape
-        // (a no-op for ASCII slugs, but explicit about intent and
-        // silences static analysis flags on raw template-string regex).
+        // Click entry A — expect URL + body marker + B-24 /chat
+        // sentinel, all via `expectWikiPageBody`.
         await page.getByTestId(`wiki-page-entry-${slugA}`).click();
-        await expect(page).toHaveURL(new RegExp(`/wiki/pages/${encodeURIComponent(slugA)}$`));
-        await expect(page.getByTestId("wiki-page-body"), "alpha page body must hydrate after clicking the index entry").toContainText(markerA);
-        // Negative guard mirroring L-14: if the catch-all router ever
-        // swallows wiki page navigations again (B-24 regression), the
-        // URL would land on /chat — fail loud here so the diagnostic
-        // points at the right bug.
-        await expect(page).not.toHaveURL(/\/chat/);
+        await expectWikiPageBody(page, slugA, markerA);
 
         // Back to the index, click entry B — same shape, different
         // page. Two clicks, not one, because B-23 historically
@@ -592,9 +571,7 @@ test.describe("wiki navigation (real workspace)", () => {
         // false-pass.
         await navigateToWikiIndex(page);
         await page.getByTestId(`wiki-page-entry-${slugB}`).click();
-        await expect(page).toHaveURL(new RegExp(`/wiki/pages/${encodeURIComponent(slugB)}$`));
-        await expect(page.getByTestId("wiki-page-body"), "beta page body must hydrate after clicking the index entry").toContainText(markerB);
-        await expect(page).not.toHaveURL(/\/chat/);
+        await expectWikiPageBody(page, slugB, markerB);
       } finally {
         if (replacedIndex) await restoreWikiIndex(originalIndex);
         await removeWikiPage(slugA);
