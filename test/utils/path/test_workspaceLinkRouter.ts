@@ -180,15 +180,43 @@ describe("classifyWorkspacePath", () => {
       });
     });
 
-    it("rejects literal `..` traversal that escapes workspace root", () => {
-      // Literal `..` (not %2E%2E) is still detected by normalizePath
-      // and rejected — the traversal protection that mattered (raw
-      // `..` segments) is unchanged.
+    it("treats encoded %2E%2E root-escape as an opaque file path (not a traversal)", () => {
+      // Encoded %2E%2E never reaches the `..` collapse, so an
+      // attacker-crafted "%2E%2E/%2E%2E/etc/passwd" classifies as a
+      // file path containing literal '%' '2' 'E' bytes rather than
+      // resolving up two levels. Literal `..` traversal is still
+      // rejected by normalizePath — that case is pinned in the
+      // "returns null for paths that escape the workspace root" test
+      // below. The server's resolveWithinRoot is the authoritative
+      // defense against any encoded form that does reach the file API.
       const result = classifyWorkspacePath("%2E%2E/%2E%2E/etc/passwd");
       assert.deepEqual(result, {
         kind: "file",
         path: "%2E%2E/%2E%2E/etc/passwd",
       });
+    });
+
+    it("preserves lowercase ASCII percent encodings as literal (%2f / %2e%2e)", () => {
+      // The regex used for decoding is case-insensitive over high-byte
+      // sequences only. Lowercase ASCII encodings must be preserved
+      // verbatim, just like their uppercase counterparts.
+      const result = classifyWorkspacePath("data/plugins/%40mulmoclaude%2fworklog/%2e%2e/file.md");
+      assert.deepEqual(result, {
+        kind: "file",
+        path: "data/plugins/%40mulmoclaude%2fworklog/%2e%2e/file.md",
+      });
+    });
+
+    it("classifies a wiki filename containing literal %2F as a (synthetic) wiki match", () => {
+      // ASCII %2F is preserved as a literal segment character, so the
+      // slug capture `([^/]+)` happily eats `foo%2Fbar`. This is a
+      // synthetic shape — marked.parse never emits this for real wiki
+      // links, and wiki page filenames don't carry '/' in practice —
+      // so we accept the match and let the wiki view 404 if the page
+      // does not exist on disk. Pinning the current behaviour so any
+      // future "reject %2F in slugs" tightening is an explicit decision.
+      const result = classifyWorkspacePath("data/wiki/pages/foo%2Fbar.md");
+      assert.deepEqual(result, { kind: "wiki", slug: "foo%2Fbar" });
     });
 
     it("decodes multibyte while preserving ASCII percent literals in the same path (#1473)", () => {
