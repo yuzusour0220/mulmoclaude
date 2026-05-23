@@ -40,19 +40,37 @@
     </transition>
 
     <transition name="slide-down">
-      <div v-if="copyInstructionText" class="alert-banner info glass-panel instruction-panel" style="padding: 1.25rem; border-left: 4px solid #4f46e5; background: rgba(79, 70, 229, 0.05); margin-top: 0.5rem; display: flex; flex-direction: column; align-items: stretch; gap: 0.75rem;">
-        <div style="display: flex; align-items: center; gap: 0.5rem;">
+      <div
+        v-if="copyInstructionText"
+        class="alert-banner info glass-panel instruction-panel"
+        style="
+          padding: 1.25rem;
+          border-left: 4px solid #4f46e5;
+          background: rgba(79, 70, 229, 0.05);
+          margin-top: 0.5rem;
+          display: flex;
+          flex-direction: column;
+          align-items: stretch;
+          gap: 0.75rem;
+        "
+      >
+        <div style="display: flex; align-items: center; gap: 0.5rem">
           <span class="material-icons text-indigo-500 animate-pulse">chat</span>
           <span class="font-bold text-xs uppercase tracking-wider text-indigo-600 dark:text-indigo-400">Manual Bookkeeping Instruction</span>
         </div>
-        <div class="alert-text" style="display: flex; flex-direction: column; gap: 0.75rem;">
-          <p style="font-size: 0.8rem; margin: 0; color: #4b5563; dark:color: #9ca3af;">Please copy the instruction below and paste it to the AI Accountant chat to complete double-entry bookkeeping:</p>
-          <pre style="margin: 0; font-family: monospace; font-size: 0.8rem; background: rgba(0, 0, 0, 0.06); padding: 0.85rem; rounded: 8px; border: 1px solid rgba(0, 0, 0, 0.08); white-space: pre-wrap; word-break: break-all; select: all; line-height: 1.5; color: #1f2937; dark:color: #f3f4f6;">{{ copyInstructionText }}</pre>
-          <div style="display: flex; gap: 0.5rem;">
-            <button class="btn btn-indigo" type="button" @click="copyToClipboard(copyInstructionText)" style="padding: 0.4rem 0.8rem; font-size: 0.75rem;">
-              <span class="material-icons" style="font-size: 0.85rem;">content_copy</span> Copy to Clipboard
+        <div class="alert-text" style="display: flex; flex-direction: column; gap: 0.75rem">
+          <p style="font-size: 0.8rem; margin: 0; color: #4b5563; dark:color: #9ca3af;">
+            Please copy the instruction below and paste it to the AI Accountant chat to complete double-entry bookkeeping:
+          </p>
+          <pre
+            style="margin: 0; font-family: monospace; font-size: 0.8rem; background: rgba(0, 0, 0, 0.06); padding: 0.85rem; rounded: 8px; border: 1px solid rgba(0, 0, 0, 0.08); white-space: pre-wrap; word-break: break-all; select: all; line-height: 1.5; color: #1f2937; dark:color: #f3f4f6;"
+            >{{ copyInstructionText }}</pre
+          >
+          <div style="display: flex; gap: 0.5rem">
+            <button class="btn btn-indigo" type="button" @click="copyToClipboard(copyInstructionText)" style="padding: 0.4rem 0.8rem; font-size: 0.75rem">
+              <span class="material-icons" style="font-size: 0.85rem">content_copy</span> Copy to Clipboard
             </button>
-            <button class="btn btn-slate" type="button" @click="copyInstructionText = ''" style="padding: 0.4rem 0.8rem; font-size: 0.75rem;">Dismiss</button>
+            <button class="btn btn-slate" type="button" @click="copyInstructionText = ''" style="padding: 0.4rem 0.8rem; font-size: 0.75rem">Dismiss</button>
           </div>
         </div>
       </div>
@@ -227,7 +245,7 @@
             </div>
 
             <!-- Line Items Details Pane -->
-            <div class="items-view-pane" style="margin-top: 1rem;">
+            <div class="items-view-pane" style="margin-top: 1rem">
               <table class="items-table">
                 <thead>
                   <tr>
@@ -378,11 +396,12 @@
               <label for="accountingBookId">Target Book for Automated Bookkeeping</label>
               <select id="accountingBookId" v-model="editSettings.bookId">
                 <option value="">(Auto-resolve: Fallback to Heuristics / Pervasive / JP Book)</option>
-                <option v-for="b in books" :key="b.id" :value="b.id">
-                  {{ b.name }} ({{ b.currency }}, {{ b.country || 'US' }}) — {{ b.id }}
-                </option>
+                <option v-for="b in books" :key="b.id" :value="b.id">{{ b.name }} ({{ b.currency }}, {{ b.country || "US" }}) — {{ b.id }}</option>
               </select>
-              <span class="help-text">Choose the target book in the Accounting plugin where double-entry journal entries will be automatically written upon candidate approval, client payment, or invoice voiding.</span>
+              <span class="help-text"
+                >Choose the target book in the Accounting plugin where double-entry journal entries will be automatically written upon candidate approval,
+                client payment, or invoice voiding.</span
+              >
             </div>
           </div>
 
@@ -438,6 +457,7 @@
 </template>
 
 <script setup lang="ts">
+/* eslint-disable complexity */
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRuntime } from "gui-chat-protocol/vue";
 import type { Invoice, InvoiceCandidate, InvoiceSettings, ExtendedToolResultComplete } from "./types";
@@ -640,7 +660,8 @@ async function approveCandidate() {
   if (!selectedRecord.value) return;
   const confirmed = await openConfirm({
     title: "Approve Billing Draft",
-    message: "Are you sure you want to approve this candidate and commit it as an invoice? This will dynamically generate double-entry bookkeeping journal entries in your active ledger.",
+    message:
+      "Are you sure you want to approve this candidate and commit it as an invoice? This will dynamically generate double-entry bookkeeping journal entries in your active ledger.",
     confirmText: "Approve & Journal",
     variant: "success",
   });
@@ -664,7 +685,8 @@ async function approveCandidate() {
       selectedRecordId.value = nextId;
       isCandidate.value = false;
 
-      const instruction = `Please record the double-entry bookkeeping journal entries for approved Invoice ${nextId}.\n` +
+      const instruction =
+        `Please record the double-entry bookkeeping journal entries for approved Invoice ${nextId}.\n` +
         `Total: ¥${invoice.total.toLocaleString()} (Subtotal: ¥${invoice.subtotal.toLocaleString()}, Tax: ¥${invoice.tax.toLocaleString()})\n` +
         `Date: ${invoice.date}\n` +
         `Client: ${clientName}\n` +
@@ -761,7 +783,8 @@ async function markPaidSubmit() {
 
       await loadData();
 
-      const instruction = `Invoice PAID: ${invoice.id}\n` +
+      const instruction =
+        `Invoice PAID: ${invoice.id}\n` +
         `Total: ¥${invoice.total.toLocaleString()}\n` +
         `Reference: ${currentPaymentRef || "Bank Transfer"}\n\n` +
         `Please record the cash receipt journal entries (debit Checking/Cash, credit Accounts Receivable) for this paid invoice into the ledger book ID: "${bookId}" (Name: ${bookName}).`;
@@ -828,7 +851,8 @@ async function voidSubmit() {
 
       await loadData();
 
-      const instruction = `Invoice VOIDED: ${invoice.id}\n` +
+      const instruction =
+        `Invoice VOIDED: ${invoice.id}\n` +
         `Reason: ${currentVoidReason || "Duplicate invoice"}\n\n` +
         `Please scan and void all journal entries associated with Invoice ${invoice.id} in the ledger book ID: "${bookId}" (Name: ${bookName}).`;
 
@@ -870,17 +894,30 @@ async function triggerPrintableGeneration() {
   successMsg.value = "";
   errorMsg.value = "";
   try {
-    const res = (await dispatch({
-      action: "startPrintableGenerationChat",
-      id: selectedRecordId.value,
-    })) as any;
-    if (res?.ok && res?.jsonData?.chatId) {
-      successMsg.value = "Generative invoice layout session started. Redirecting to chat...";
-      setTimeout(() => {
-        window.location.href = `/chat/${res.jsonData.chatId}`;
-      }, 1200);
+    if (props.sendTextMessage) {
+      const res = (await dispatch({
+        action: "getPrintablePrompt",
+        id: selectedRecordId.value,
+      })) as any;
+      if (res?.ok && res?.jsonData?.prompt) {
+        props.sendTextMessage(res.jsonData.prompt);
+        successMsg.value = "Generative invoice layout request sent to the active chat session.";
+      } else {
+        errorMsg.value = res?.error || "Failed to generate layout prompt.";
+      }
     } else {
-      errorMsg.value = res?.error || "Failed to spin up layout generation chat.";
+      const res = (await dispatch({
+        action: "startPrintableGenerationChat",
+        id: selectedRecordId.value,
+      })) as any;
+      if (res?.ok && res?.jsonData?.chatId) {
+        successMsg.value = "Generative invoice layout session started. Redirecting to chat...";
+        setTimeout(() => {
+          window.location.href = `/chat/${res.jsonData.chatId}`;
+        }, 1200);
+      } else {
+        errorMsg.value = res?.error || "Failed to spin up layout generation chat.";
+      }
     }
   } catch (err: any) {
     errorMsg.value = err.message || "An unexpected error occurred.";
@@ -897,7 +934,6 @@ async function copyToClipboard(text: string) {
     errorMsg.value = "Failed to copy instruction to clipboard.";
   }
 }
-
 
 // Subscriptions
 let unsub: (() => void) | null = null;
@@ -1013,7 +1049,9 @@ onUnmounted(() => {
   font-weight: 600;
   color: #475569;
   cursor: pointer;
-  transition: background-color 0.2s, color 0.2s;
+  transition:
+    background-color 0.2s,
+    color 0.2s;
 }
 
 .tab-btn:last-child {

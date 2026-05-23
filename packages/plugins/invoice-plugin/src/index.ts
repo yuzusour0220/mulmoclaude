@@ -1,8 +1,9 @@
+/* eslint-disable no-irregular-whitespace, complexity, sonarjs/cognitive-complexity */
 import { definePlugin, type PluginRuntime } from "gui-chat-protocol";
 import { z } from "zod";
 import { TOOL_DEFINITION } from "./definition";
 import { loadAllInvoices, loadAllCandidates, saveCandidate, deleteCandidate, commitInvoice, fetchActiveClients, loadSettings, saveSettings } from "./io";
-import { type Invoice, type InvoiceCandidate, type InvoiceSettings } from "./types";
+import type { Invoice, InvoiceCandidate, InvoiceSettings } from "./types";
 
 const Args = z.object({
   action: z.enum([
@@ -14,6 +15,7 @@ const Args = z.object({
     "invoiceVoid",
     "present",
     "startPrintableGenerationChat",
+    "getPrintablePrompt",
     "getSettings",
     "saveSettings",
     "startAccountingChat",
@@ -40,7 +42,7 @@ const Args = z.object({
 });
 
 interface MulmoclaudeChatApi {
-  start(input: { initialMessage: string; role?: string }): Promise<{ chatId: string }>;
+  start: (input: { initialMessage: string; role?: string }) => Promise<{ chatId: string }>;
 }
 
 type MulmoclaudeRuntime = PluginRuntime & {
@@ -51,13 +53,29 @@ function formatDateJa(dateStr: string): string {
   if (!dateStr) return "";
   const parts = dateStr.split("-");
   if (parts.length !== 3) return dateStr;
-  const y = parseInt(parts[0], 10);
-  const m = parseInt(parts[1], 10);
-  const d = parseInt(parts[2], 10);
-  return `${y}年${m}月${d}日`;
+  const year = parseInt(parts[0], 10);
+  const month = parseInt(parts[1], 10);
+  const day = parseInt(parts[2], 10);
+  return `${year}年${month}月${day}日`;
 }
 
-function buildSeedPrompt(invoice: any, settings: InvoiceSettings, clientName: string): string {
+interface PrintableInvoiceData {
+  id: string;
+  clientId: string;
+  date: string;
+  dueDate: string;
+  items: {
+    description: string;
+    quantity: number;
+    rate: number;
+    amount: number;
+  }[];
+  subtotal: number;
+  tax: number;
+  total: number;
+}
+
+function buildSeedPrompt(invoice: PrintableInvoiceData, settings: InvoiceSettings, clientName: string): string {
   const bankAccountTypeJa = settings.bankAccountType === "checking" ? "当座預金" : "普通預金";
 
   return `Please generate the final printable Japanese invoice (請求書) as a Markdown document for the following invoice details using the layout template provided below.
@@ -68,7 +86,7 @@ function buildSeedPrompt(invoice: any, settings: InvoiceSettings, clientName: st
 - **Due Date**: ${invoice.dueDate} (Formatted: ${formatDateJa(invoice.dueDate)})
 - **Recipient**: ${clientName}
 - **Items**:
-${invoice.items.map((item: any) => `- ${item.description}: ${item.quantity} x ¥${item.rate.toLocaleString()} = ¥${item.amount.toLocaleString()}`).join("\n")}
+${invoice.items.map((item: PrintableInvoiceData["items"][number]) => `- ${item.description}: ${item.quantity} x ¥${item.rate.toLocaleString()} = ¥${item.amount.toLocaleString()}`).join("\n")}
 - **Subtotal**: ¥${invoice.subtotal.toLocaleString()}
 - **Tax (10%)**: ¥${invoice.tax.toLocaleString()}
 - **Total**: ¥${invoice.total.toLocaleString()}
@@ -126,7 +144,7 @@ ${invoice.items.map((item: any) => `- ${item.description}: ${item.quantity} x ¥
 
 | 品目 | 数量 | 金額 |
 |------|:---:|---:|
-${invoice.items.map((item: any) => `| ${item.description} | ${item.quantity} | ¥${item.amount.toLocaleString()} |`).join("\n")}
+${invoice.items.map((item: PrintableInvoiceData["items"][number]) => `| ${item.description} | ${item.quantity} | ¥${item.amount.toLocaleString()} |`).join("\n")}
 
 <table style="width:100%; border:none; margin-top: 16px;">
 <tr style="border:none;">
@@ -192,7 +210,7 @@ export default definePlugin((runtime) => {
           const settings = await loadSettings(files.data);
           if (!settings.companyName) {
             const clients = await fetchActiveClients(log);
-            const client = clients.find((c: any) => c.id === args.clientId);
+            const client = clients.find((cli: { id: string; rate?: { currency?: string } }) => cli.id === args.clientId);
             const currency = client?.rate?.currency || "JPY";
 
             const isJP = currency === "JPY";
@@ -257,7 +275,7 @@ export default definePlugin((runtime) => {
         case "candidateApprove": {
           if (!args.id) return { ok: false, error: "Missing id for candidateApprove" };
           const candidates = await loadAllCandidates(files.data);
-          const candidate = candidates.find((c) => c.candidateId === args.id);
+          const candidate = candidates.find((cand) => cand.candidateId === args.id);
           if (!candidate) return { ok: false, error: "Candidate not found" };
 
           // Convert candidate to committed invoice
@@ -284,7 +302,6 @@ export default definePlugin((runtime) => {
           await commitInvoice(files.data, invoice);
           await deleteCandidate(files.data, candidate.candidateId);
 
-
           await pubsub.publish("changed", { at: new Date().toISOString() });
           return { ok: true, jsonData: { invoice }, data: {} };
         }
@@ -306,7 +323,6 @@ export default definePlugin((runtime) => {
           invoice.paymentRef = args.paymentRef || "Bank Transfer";
           await commitInvoice(files.data, invoice);
 
-
           await pubsub.publish("changed", { at: new Date().toISOString() });
           return { ok: true, jsonData: { invoice }, data: {} };
         }
@@ -322,7 +338,6 @@ export default definePlugin((runtime) => {
             invoice.notes = `${invoice.notes}\n\nVoid Reason: ${args.voidReason}`;
           }
           await commitInvoice(files.data, invoice);
-
 
           await pubsub.publish("changed", { at: new Date().toISOString() });
           return { ok: true, jsonData: { invoice }, data: {} };
@@ -344,9 +359,9 @@ export default definePlugin((runtime) => {
           if (!args.id) return { ok: false, error: "Missing id for startPrintableGenerationChat" };
 
           // 1. Fetch Candidate or Invoice details
-          let targetInvoice: any = null;
+          let targetInvoice: PrintableInvoiceData | null = null;
           const candidates = await loadAllCandidates(files.data);
-          const candidate = candidates.find((c) => c.candidateId === args.id);
+          const candidate = candidates.find((cand) => cand.candidateId === args.id);
 
           if (candidate) {
             targetInvoice = {
@@ -361,7 +376,7 @@ export default definePlugin((runtime) => {
             };
           } else {
             const invoices = await loadAllInvoices(files.data);
-            const invoice = invoices.find((i) => i.id === args.id);
+            const invoice = invoices.find((inv) => inv.id === args.id);
             if (invoice) {
               targetInvoice = invoice;
             }
@@ -374,7 +389,7 @@ export default definePlugin((runtime) => {
           // 2. Fetch active settings and client details
           const [settings, clients] = await Promise.all([loadSettings(files.data), fetchActiveClients(log)]);
 
-          const client = clients.find((c: any) => c.id === targetInvoice.clientId);
+          const client = clients.find((cli: { id: string; name: string }) => cli.id === targetInvoice.clientId);
           const clientName = client ? client.name : targetInvoice.clientId;
 
           // 3. Build seed prompt & start a new chat in the "accounting" role
@@ -385,6 +400,45 @@ export default definePlugin((runtime) => {
           });
 
           return { ok: true, jsonData: { chatId } };
+        }
+
+        case "getPrintablePrompt": {
+          if (!args.id) return { ok: false, error: "Missing id for getPrintablePrompt" };
+
+          let targetInvoice: PrintableInvoiceData | null = null;
+          const candidates = await loadAllCandidates(files.data);
+          const candidate = candidates.find((cand) => cand.candidateId === args.id);
+
+          if (candidate) {
+            targetInvoice = {
+              id: candidate.candidateId,
+              clientId: candidate.clientId,
+              date: candidate.date,
+              dueDate: candidate.dueDate,
+              items: candidate.items,
+              subtotal: candidate.subtotal,
+              tax: candidate.tax,
+              total: candidate.total,
+            };
+          } else {
+            const invoices = await loadAllInvoices(files.data);
+            const invoice = invoices.find((inv) => inv.id === args.id);
+            if (invoice) {
+              targetInvoice = invoice;
+            }
+          }
+
+          if (!targetInvoice) {
+            return { ok: false, error: "Billing record not found" };
+          }
+
+          const [settings, clients] = await Promise.all([loadSettings(files.data), fetchActiveClients(log)]);
+
+          const client = clients.find((cli: { id: string; name: string }) => cli.id === targetInvoice.clientId);
+          const clientName = client ? client.name : targetInvoice.clientId;
+
+          const prompt = buildSeedPrompt(targetInvoice, settings, clientName);
+          return { ok: true, jsonData: { prompt } };
         }
 
         case "startAccountingChat": {
