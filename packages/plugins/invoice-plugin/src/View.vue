@@ -234,11 +234,26 @@
                   Printable Layout Preview
                 </button>
               </div>
-              <button v-if="viewMode === 'preview'" type="button" class="btn btn-indigo" @click="printInvoice" style="padding: 0.3rem 0.75rem; font-size: 0.75rem; display: flex; align-items: center; gap: 0.35rem; margin-bottom: 4px;">
-                <span class="material-icons" style="font-size: 0.95rem;">picture_as_pdf</span>
-                Print / Save PDF
-              </button>
+              <div v-if="viewMode === 'preview'" style="display: flex; gap: 0.5rem; margin-bottom: 4px;">
+                <button type="button" class="btn btn-indigo" :disabled="pdfDownloading" @click="downloadInvoicePdf" style="padding: 0.3rem 0.75rem; font-size: 0.75rem; display: flex; align-items: center; gap: 0.35rem;">
+                  <span class="material-icons" style="font-size: 0.95rem;">file_download</span>
+                  {{ pdfDownloading ? 'Downloading...' : 'Download PDF' }}
+                </button>
+                <button type="button" class="btn btn-slate" @click="printInvoice" style="padding: 0.3rem 0.75rem; font-size: 0.75rem; display: flex; align-items: center; gap: 0.35rem;">
+                  <span class="material-icons" style="font-size: 0.95rem;">print</span>
+                  Print
+                </button>
+              </div>
             </div>
+
+            <!-- PDF Error alert banner -->
+            <transition name="fade">
+              <div v-if="viewMode === 'preview' && pdfError" class="alert-banner error glass-panel" style="margin-top: 0.5rem; padding: 0.5rem 1rem; font-size: 0.75rem;">
+                <span class="material-icons" style="font-size: 1rem;">error</span>
+                <span class="alert-text">{{ pdfError }}</span>
+                <button type="button" class="alert-close" @click="pdfError = null">&times;</button>
+              </div>
+            </transition>
 
             <!-- Details Content Mode -->
             <div v-if="viewMode === 'details'" class="items-view-pane">
@@ -481,6 +496,8 @@ const viewMode = ref<"details" | "preview">("details");
 const successMsg = ref("");
 const errorMsg = ref("");
 const copyInstructionText = ref("");
+const pdfDownloading = ref(false);
+const pdfError = ref<string | null>(null);
 const actionPending = ref(false);
 const dataLoaded = ref(false);
 
@@ -542,7 +559,8 @@ const recordPaymentRef = computed(() => {
 });
 
 // Setup dynamic printable invoice compiler preview
-const renderedInvoiceTemplate = computed(() => {
+// Setup dynamic printable invoice compiler preview
+const rawInvoiceMarkdown = computed(() => {
   const record = selectedRecord.value;
   if (!record) return "";
 
@@ -746,7 +764,11 @@ const renderedInvoiceTemplate = computed(() => {
     `;
   }
 
-  return marked.parse(markdown);
+  return markdown;
+});
+
+const renderedInvoiceTemplate = computed(() => {
+  return marked.parse(rawInvoiceMarkdown.value);
 });
 
 // Load all details in one swoop
@@ -1197,6 +1219,43 @@ function printInvoice() {
     printWindow.document.close();
   } else {
     errorMsg.value = "Failed to open print window. Please allow popup windows for this application.";
+  }
+}
+
+async function downloadInvoicePdf() {
+  const record = selectedRecord.value;
+  if (!record) return;
+
+  pdfError.value = null;
+  pdfDownloading.value = true;
+  let url: string | null = null;
+  const filename = `${recordId.value}.pdf`;
+  try {
+    const response = await fetch("/api/pdf/markdown", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        markdown: rawInvoiceMarkdown.value,
+        filename,
+      }),
+    });
+    if (!response.ok) {
+      const errText = await response.text().catch(() => "");
+      pdfError.value = `PDF generation error ${response.status}: ${errText}`;
+      return;
+    }
+    const blob = await response.blob();
+    url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = filename;
+    anchor.click();
+    successMsg.value = `PDF downloaded successfully as ${filename}`;
+  } catch (err: any) {
+    pdfError.value = err.message || "An unexpected error occurred during PDF generation.";
+  } finally {
+    if (url) URL.revokeObjectURL(url);
+    pdfDownloading.value = false;
   }
 }
 
