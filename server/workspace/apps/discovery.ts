@@ -14,7 +14,7 @@ import { SCHEMA_FILE, resolveDataDir, safeSlugName } from "./paths.js";
 import type { AppDetail, AppSchema, AppSource, AppSummary } from "./types.js";
 
 const FieldSpecSchema = z.object({
-  type: z.enum(["string", "text", "email", "number", "date", "markdown"]),
+  type: z.enum(["string", "text", "email", "number", "date", "boolean", "markdown"]),
   label: z.string().min(1),
   primary: z.boolean().optional(),
   required: z.boolean().optional(),
@@ -38,7 +38,7 @@ interface LoadedApp {
   dataDir: string;
 }
 
-async function loadOneApp(skillsRoot: string, slug: string, source: AppSource): Promise<LoadedApp | null> {
+async function loadOneApp(skillsRoot: string, slug: string, source: AppSource, workspaceRoot: string): Promise<LoadedApp | null> {
   const safeName = safeSlugName(slug);
   if (safeName === null) return null;
   const schemaPath = path.join(skillsRoot, safeName, SCHEMA_FILE);
@@ -87,16 +87,16 @@ async function loadOneApp(skillsRoot: string, slug: string, source: AppSource): 
     return null;
   }
 
-  const dataDir = resolveDataDir(schema.dataPath);
+  const dataDir = resolveDataDir(schema.dataPath, workspaceRoot);
   if (dataDir === null) {
-    log.warn("apps", "schema.json dataPath escapes workspace, skipping", { slug: safeName, dataPath: schema.dataPath });
+    log.warn("apps", "schema.json dataPath escapes workspace, skipping", { slug: safeName, dataPath: schema.dataPath, workspaceRoot });
     return null;
   }
 
   return { slug: safeName, source, schema, dataDir };
 }
 
-async function collectAppsFromDir(skillsRoot: string, source: AppSource): Promise<LoadedApp[]> {
+async function collectAppsFromDir(skillsRoot: string, source: AppSource, workspaceRoot: string): Promise<LoadedApp[]> {
   let entries: string[];
   try {
     entries = await readdir(skillsRoot);
@@ -120,17 +120,38 @@ async function collectAppsFromDir(skillsRoot: string, source: AppSource): Promis
       continue;
     }
     if (!dirStat.isDirectory()) continue;
-    const app = await loadOneApp(skillsRoot, safeName, source);
+    const app = await loadOneApp(skillsRoot, safeName, source, workspaceRoot);
     if (app) results.push(app);
   }
   return results;
 }
 
+export interface DiscoveryOptions {
+  /** Override the workspace root for project-scope skill discovery.
+   *  Default: the live `workspacePath`. Tests point this at a
+   *  `mkdtempSync` tree so they don't touch the user's real
+   *  `~/mulmoclaude/`. Mirrors the pattern in
+   *  `server/workspace/skills/catalog.ts#CatalogOptions`. */
+  workspaceRoot?: string;
+  /** Override `~/.claude/skills/` for tests. Production callers
+   *  leave this unset. Without an override, even a test-scoped
+   *  workspaceRoot still scans the real user home — which can leak
+   *  unrelated skills into the result. */
+  userSkillsDir?: string;
+}
+
 /** Discover every schema-driven app available to this workspace.
- *  Project-scope apps override user-scope on slug collision. */
-export async function discoverApps(): Promise<LoadedApp[]> {
-  const userApps = await collectAppsFromDir(USER_SKILLS_DIR, "user");
-  const projectApps = await collectAppsFromDir(projectSkillsDir(workspacePath), "project");
+ *  Project-scope apps override user-scope on slug collision. The
+ *  `workspaceRoot` override also flows into each app's dataDir
+ *  resolution so a tmpdir-scoped test gets dataDirs under the same
+ *  tmpdir (Codex P1 review on PR #1489 — previously dataDir was
+ *  always rooted at the live workspacePath regardless of override). */
+export async function discoverApps(opts: DiscoveryOptions = {}): Promise<LoadedApp[]> {
+  const workspaceRoot = opts.workspaceRoot ?? workspacePath;
+  const userDir = opts.userSkillsDir ?? USER_SKILLS_DIR;
+  const projectDir = projectSkillsDir(workspaceRoot);
+  const userApps = await collectAppsFromDir(userDir, "user", workspaceRoot);
+  const projectApps = await collectAppsFromDir(projectDir, "project", workspaceRoot);
   const merged = new Map<string, LoadedApp>();
   for (const app of userApps) merged.set(app.slug, app);
   for (const app of projectApps) merged.set(app.slug, app);
@@ -139,13 +160,16 @@ export async function discoverApps(): Promise<LoadedApp[]> {
 
 /** Load one app by slug. Returns null if the slug is invalid, no
  *  matching skill exists, or the schema is malformed. */
-export async function loadApp(slug: string): Promise<LoadedApp | null> {
+export async function loadApp(slug: string, opts: DiscoveryOptions = {}): Promise<LoadedApp | null> {
   const safeName = safeSlugName(slug);
   if (safeName === null) return null;
+  const workspaceRoot = opts.workspaceRoot ?? workspacePath;
+  const userDir = opts.userSkillsDir ?? USER_SKILLS_DIR;
+  const projectDir = projectSkillsDir(workspaceRoot);
   // Project first (overrides user).
-  const projectApp = await loadOneApp(projectSkillsDir(workspacePath), safeName, "project");
+  const projectApp = await loadOneApp(projectDir, safeName, "project", workspaceRoot);
   if (projectApp) return projectApp;
-  return loadOneApp(USER_SKILLS_DIR, safeName, "user");
+  return loadOneApp(userDir, safeName, "user", workspaceRoot);
 }
 
 export function toSummary(app: LoadedApp): AppSummary {
