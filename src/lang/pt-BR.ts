@@ -10,6 +10,8 @@ const ptBRMessages = {
     dismiss: "Dispensar",
     add: "Adicionar",
     remove: "Remover",
+    yes: "Sim",
+    no: "Não",
     saving: "Salvando...",
     saved: "Salvo",
     noResultsYet: "Ainda não há resultados",
@@ -282,6 +284,7 @@ const ptBRMessages = {
     automations: { label: "Ações" },
     encore: { label: "Encore" },
     wiki: { label: "Wiki" },
+    apps: { label: "Aplicativos" },
     sources: { label: "Fontes" },
     news: { label: "Notícias" },
     skills: { label: "Skills" },
@@ -1312,6 +1315,26 @@ const ptBRMessages = {
     // enquanto o texto é traduzível.
     explanation:
       "Nomes adicionais de ferramentas a serem passados ao Claude via {allowedTools}. Um por linha. Útil para servidores MCP integrados ao Claude Code como Gmail / Google Calendar após autenticar via {claudeMcp}.",
+  },
+  appsView: {
+    title: "Aplicativos",
+    backToIndex: "Voltar para aplicativos",
+    indexEmpty: "Nenhum aplicativo instalado. Marque com estrela uma skill que inclua um schema na página Skills para vê-la aqui.",
+    editItem: "Editar",
+    confirmDelete: "Excluir este item? Esta ação não pode ser desfeita.",
+    itemsEmpty: "Ainda não há itens. Clique em + para adicionar um.",
+    appNotFound: "Aplicativo não encontrado",
+    loadFailed: "Falha ao carregar",
+    requiredField: "Este campo é obrigatório",
+    source: {
+      user: "Usuário",
+      project: "Projeto",
+    },
+  },
+  confirmModal: {
+    defaultTitle: "Confirmar",
+    defaultConfirm: "Confirmar",
+    defaultCancel: "Cancelar",
   },
 };
 
