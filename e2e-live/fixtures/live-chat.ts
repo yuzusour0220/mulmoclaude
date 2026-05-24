@@ -253,6 +253,17 @@ export async function removeProjectSkill(slug: string): Promise<void> {
 const ENCORE_OBLIGATION_ID_RE = /^[a-z][a-z0-9-]*$/;
 
 /**
+ * Workspace-relative segment for `data/plugins/encore/obligations/`.
+ * Centralised so the helpers below and any future caller compose
+ * platform-portable paths via `path.join` rather than slash literals
+ * (CodeRabbit review on PR #1493 — CLAUDE.md cross-platform rule).
+ */
+const ENCORE_OBLIGATIONS_DIR = path.join("data", "plugins", "encore", "obligations");
+
+/** Workspace-relative segment for `data/plugins/encore/tickets/`. */
+const ENCORE_TICKETS_DIR = path.join("data", "plugins", "encore", "tickets");
+
+/**
  * Best-effort fs-level delete of an Encore obligation. Removes the
  * obligation directory at
  * `<workspace>/data/plugins/encore/obligations/<obligationId>/`
@@ -286,7 +297,7 @@ export async function removeEncoreObligation(obligationId: string): Promise<void
   if (!ENCORE_OBLIGATION_ID_RE.test(obligationId)) {
     throw new Error(`removeEncoreObligation: invalid obligationId ${JSON.stringify(obligationId)} — must match ${ENCORE_OBLIGATION_ID_RE.source}`);
   }
-  const obligationDir = resolveWorkspacePath(`data/plugins/encore/obligations/${obligationId}`);
+  const obligationDir = resolveWorkspacePath(path.join(ENCORE_OBLIGATIONS_DIR, obligationId));
   await rm(obligationDir, { recursive: true, force: true });
   await sweepEncoreTicketsFor(obligationId);
 }
@@ -297,36 +308,62 @@ export async function removeEncoreObligation(obligationId: string): Promise<void
  * {@link removeEncoreObligation}; not exported because the obligation
  * dir + ticket sweep belong together — callers want
  * "delete this obligation everywhere on disk", not "scan tickets in
- * isolation". A malformed / partially-written ticket is logged and
- * dropped (the file would not contribute to a future reconcile
- * either way).
+ * isolation". Per-file parse / match / delete concerns are split
+ * into the helpers below to keep this function under the 20-line cap
+ * (CodeRabbit review on PR #1493).
  */
 async function sweepEncoreTicketsFor(obligationId: string): Promise<void> {
-  const ticketsDir = resolveWorkspacePath("data/plugins/encore/tickets");
-  let entries: string[];
-  try {
-    entries = await readdir(ticketsDir);
-  } catch (err) {
-    // No tickets dir at all (workspace never wrote one) → nothing
-    // to sweep. Any other readdir error is logged; cleanup is
-    // best-effort by contract.
-    if (isErrorWithCode(err) && err.code === "ENOENT") return;
-    console.warn(`sweepEncoreTicketsFor: readdir ${ticketsDir} failed`, err);
-    return;
-  }
+  const ticketsDir = resolveWorkspacePath(ENCORE_TICKETS_DIR);
+  const entries = await listTicketEntries(ticketsDir);
+  if (entries === null) return;
   for (const entry of entries) {
     if (!entry.endsWith(".json")) continue;
     const filePath = path.join(ticketsDir, entry);
-    try {
-      const raw = await readFile(filePath, "utf8");
-      const parsed: unknown = JSON.parse(raw);
-      if (isRecord(parsed) && parsed.obligationId === obligationId) {
-        await rm(filePath, { force: true });
-      }
-    } catch (err) {
-      console.warn(`sweepEncoreTicketsFor: skipping ${filePath}`, err);
+    const parsed = await readTicketJsonOrNull(filePath);
+    if (ticketMatchesObligation(parsed, obligationId)) {
+      await rm(filePath, { force: true });
     }
   }
+}
+
+/**
+ * Read the tickets directory. Returns `null` when the dir doesn't
+ * exist (workspace never wrote one — nothing to sweep) so the caller
+ * can early-return. Other read errors are logged and treated as
+ * empty (best-effort cleanup is the contract). Split out of
+ * {@link sweepEncoreTicketsFor} per CodeRabbit's <20-line guidance.
+ */
+async function listTicketEntries(ticketsDir: string): Promise<string[] | null> {
+  try {
+    return await readdir(ticketsDir);
+  } catch (err) {
+    if (isErrorWithCode(err) && err.code === "ENOENT") return null;
+    console.warn(`sweepEncoreTicketsFor: readdir ${ticketsDir} failed`, err);
+    return null;
+  }
+}
+
+/**
+ * Read + JSON.parse a single ticket file. Returns `null` on any
+ * read / parse error so the caller's match-and-delete loop can move
+ * on (a malformed ticket wouldn't drive any future reconcile either).
+ */
+async function readTicketJsonOrNull(filePath: string): Promise<unknown> {
+  try {
+    return JSON.parse(await readFile(filePath, "utf8"));
+  } catch (err) {
+    console.warn(`sweepEncoreTicketsFor: skipping ${filePath}`, err);
+    return null;
+  }
+}
+
+/**
+ * Predicate: is this parsed ticket pointing at the named obligation?
+ * `isRecord` filters out null / array / primitive payloads so the
+ * `.obligationId` access is type-safe.
+ */
+function ticketMatchesObligation(parsed: unknown, obligationId: string): boolean {
+  return isRecord(parsed) && parsed.obligationId === obligationId;
 }
 
 /**

@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import path from "node:path";
 
 import { type Page, expect, test } from "@playwright/test";
 
@@ -63,6 +64,37 @@ function defineEncoreCallTargetsDisplayName(call: ToolCallTraceRecord, displayNa
   const { dsl } = call.args;
   if (!isRecord(dsl)) return false;
   return dsl.displayName === displayName;
+}
+
+/**
+ * Start a fresh General-role session, switch to the named role
+ * (which spawns a second session), and push BOTH ids onto the
+ * caller's cleanup array as they appear so a mid-helper throw
+ * still drains the General-side session in `finally`. Returns the
+ * role-switched session id (the one the spec sends prompts at).
+ *
+ * Extracted from L-21B to keep the test body under the 20-line cap
+ * (CodeRabbit review on PR #1493). The same dance is open-coded in
+ * L-21 (chart, Office role); a follow-up PR could route L-21 through
+ * this helper too, but is out of scope here.
+ */
+async function setupRoleSession(page: Page, roleId: string, sessionsToCleanup: string[]): Promise<string> {
+  await startNewSession(page);
+  await page.waitForURL(SESSION_URL_PATTERN);
+  const generalSessionId = getCurrentSessionId(page);
+  if (generalSessionId === null) {
+    throw new Error("setupRoleSession: getCurrentSessionId returned null after startNewSession — URL pattern likely drifted");
+  }
+  sessionsToCleanup.push(generalSessionId);
+  await selectRole(page, roleId);
+  await page.waitForURL((url) => SESSION_URL_PATTERN.test(url.pathname) && !url.pathname.endsWith(generalSessionId));
+  const roleSessionId = getCurrentSessionId(page);
+  if (roleSessionId === null) {
+    throw new Error(`setupRoleSession: getCurrentSessionId returned null after selectRole(${roleId}) — URL pattern likely drifted`);
+  }
+  sessionsToCleanup.push(roleSessionId);
+  await expect(page.getByTestId("role-selector-btn"), `role chip must reflect ${roleId} after switch`).toHaveAttribute("data-role", roleId);
+  return roleSessionId;
 }
 
 test.describe("skills (real LLM / static)", () => {
@@ -235,24 +267,12 @@ test.describe("skills (real LLM / static)", () => {
     ].join("\n");
     const sessionsToCleanup: string[] = [];
     try {
-      // Capture both the auto-created General session and the
-      // role-switched Personal session for cleanup — same dance as
-      // L-21 between General and Office.
-      await startNewSession(page);
-      await page.waitForURL(SESSION_URL_PATTERN);
-      const generalSessionId = getCurrentSessionId(page);
-      if (generalSessionId === null) {
-        throw new Error("getCurrentSessionId returned null after startNewSession + waitForURL — URL pattern likely drifted");
-      }
-      sessionsToCleanup.push(generalSessionId);
-      await selectRole(page, "personal");
-      await page.waitForURL((url) => SESSION_URL_PATTERN.test(url.pathname) && !url.pathname.endsWith(generalSessionId));
-      const personalSessionId = getCurrentSessionId(page);
-      if (personalSessionId === null) {
-        throw new Error("getCurrentSessionId returned null after selectRole(personal) — URL pattern likely drifted");
-      }
-      sessionsToCleanup.push(personalSessionId);
-      await expect(page.getByTestId("role-selector-btn"), "role chip must reflect personal after switch").toHaveAttribute("data-role", "personal");
+      // setupRoleSession captures both the auto-created General
+      // session and the role-switched Personal session, pushing both
+      // onto `sessionsToCleanup` as they appear so a mid-setup throw
+      // still drains the General side in `finally`. Mirrors L-21's
+      // dance between General and Office.
+      const personalSessionId = await setupRoleSession(page, "personal", sessionsToCleanup);
       await sendChatMessage(page, userPrompt);
       // waitForAssistantTurn (not waitForAssistantResponseComplete) is
       // mandatory here. The assertions read disk and a jsonl trace;
@@ -288,11 +308,13 @@ test.describe("skills (real LLM / static)", () => {
       // call landed at handleSetup and made it past schema validation.
       // `readWorkspaceFile` returns null on ENOENT, so the assertion
       // shape is "got a string body back" rather than a separate
-      // existence check + read.
-      const indexBody = await readWorkspaceFile(`data/plugins/encore/obligations/${expectedSlug}/index.md`);
+      // existence check + read. The path is composed with `path.join`
+      // per CLAUDE.md cross-platform rule (CodeRabbit review on PR #1493).
+      const indexRel = path.join("data", "plugins", "encore", "obligations", expectedSlug, "index.md");
+      const indexBody = await readWorkspaceFile(indexRel);
       expect(
         indexBody,
-        `obligation index data/plugins/encore/obligations/${expectedSlug}/index.md must exist on disk — proves the dispatched tool call reached handleSetup and wrote the DSL (no schema validation rejection)`,
+        `obligation index ${indexRel} must exist on disk — proves the dispatched tool call reached handleSetup and wrote the DSL (no schema validation rejection)`,
       ).not.toBeNull();
     } finally {
       for (const sid of sessionsToCleanup) {
