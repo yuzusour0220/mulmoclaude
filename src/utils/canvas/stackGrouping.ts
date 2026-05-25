@@ -50,3 +50,47 @@ export function buildStackDisplayItems<T>(
   }
   return items;
 }
+
+// Scroll-spy core: given the rendered cards (already in DOM order) and a
+// way to read each card's top coordinate, return the canonical uuid of
+// the LAST card whose top edge is at or above `paddedTopPx`. Iterating
+// `StackDisplayItem`s — not the flat result list — is the whole point:
+// a merged group shares one element across several member uuids, so a
+// flat walk would let a later member resolve back to the group's
+// earlier element and wrongly win the active slot (Codex review on
+// #1504). The early `break` relies on cards being top-sorted, which
+// the rendered order guarantees.
+export function pickActiveCardUuid<T>(
+  items: readonly StackDisplayItem<T>[],
+  uuidOf: (result: T) => string,
+  topOfCardPx: (headUuid: string) => number | null,
+  paddedTopPx: number,
+): string | null {
+  let activeUuid: string | null = null;
+  for (const item of items) {
+    const headUuid = uuidOf(item.head);
+    const topPx = topOfCardPx(headUuid);
+    if (topPx === null) continue;
+    if (topPx <= paddedTopPx) activeUuid = headUuid;
+    else break;
+  }
+  return activeUuid;
+}
+
+export type LatestScrollTarget = { kind: "bottom" } | { kind: "card"; headUuid: string } | { kind: "none" };
+
+// Where to scroll when a new result arrives. Usually the newest result
+// creates/extends the BOTTOM card → scroll to the bottom. But session-
+// wide grouping can merge a new result into an EARLIER card, so bottom-
+// scrolling would jump away from where it rendered. Returns `bottom`
+// only when the newest result lands in the last card; otherwise the
+// (earlier) card to bring into view (Codex review on #1504).
+export function resolveLatestScrollTarget<T>(items: readonly StackDisplayItem<T>[], newest: T | undefined, uuidOf: (result: T) => string): LatestScrollTarget {
+  if (newest === undefined) return { kind: "none" };
+  const newestUuid = uuidOf(newest);
+  const containsNewest = (item: StackDisplayItem<T>): boolean => item.members.some((member) => uuidOf(member) === newestUuid);
+  const lastCard = items[items.length - 1];
+  if (lastCard !== undefined && containsNewest(lastCard)) return { kind: "bottom" };
+  const card = items.find(containsNewest);
+  return card === undefined ? { kind: "none" } : { kind: "card", headUuid: uuidOf(card.head) };
+}

@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { buildStackDisplayItems } from "../../../src/utils/canvas/stackGrouping.js";
+import { buildStackDisplayItems, pickActiveCardUuid, resolveLatestScrollTarget } from "../../../src/utils/canvas/stackGrouping.js";
 
 // Minimal result shape the grouper needs.
 interface Row {
@@ -96,5 +96,90 @@ describe("buildStackDisplayItems", () => {
     assert.equal(items.length, 1);
     assert.equal(items[0].isGroup, true);
     assert.equal(items[0].members.length, 1);
+  });
+});
+
+// Behaviour-level regression for the scroll-spy / latest-scroll logic
+// that previously assumed `toolResults` order == DOM order (Codex
+// #1504). Both helpers are exercised over the non-contiguous sequence
+// `A(g1), B, C(g1)` — the exact shape that broke — driven through the
+// real `buildStackDisplayItems` projection, not hand-built cards.
+describe("pickActiveCardUuid (scroll-spy over rendered card order)", () => {
+  // A(g1), B, C(g1) renders as two cards: [group g1 (head C), B]. The
+  // group card sits at A's slot (top), B below it.
+  const items = build([
+    { uuid: "a", group: "g1" },
+    { uuid: "b", group: null },
+    { uuid: "c", group: "g1" },
+  ]);
+  // Card → simulated top-edge px. The group card is keyed by its HEAD
+  // uuid ("c") — that is what `pickActiveCardUuid` resolves against.
+  const GROUP_CARD_TOP_PX = 0;
+  const B_CARD_TOP_PX = 100;
+  const topOfCardPx = (headUuid: string): number | null => {
+    if (headUuid === "c") return GROUP_CARD_TOP_PX;
+    if (headUuid === "b") return B_CARD_TOP_PX;
+    return null;
+  };
+
+  it("returns B (not the group's member C) when the viewport sits on B", () => {
+    // Padded line below both cards → last card at/above the line wins.
+    // The flat-walk regression returned C here because C's uuid mapped
+    // back to the group element above B.
+    const active = pickActiveCardUuid(items, (row) => row.uuid, topOfCardPx, B_CARD_TOP_PX + 10);
+    assert.equal(active, "b");
+  });
+
+  it("returns the group's canonical (head) uuid when only the group card is above the line", () => {
+    const active = pickActiveCardUuid(items, (row) => row.uuid, topOfCardPx, B_CARD_TOP_PX - 10);
+    assert.equal(active, "c", "the group card emits its head uuid, never an arbitrary member");
+  });
+
+  it("returns null when no card has been mounted yet", () => {
+    const active = pickActiveCardUuid(
+      items,
+      (row) => row.uuid,
+      () => null,
+      999,
+    );
+    assert.equal(active, null);
+  });
+});
+
+describe("resolveLatestScrollTarget (latest-result auto-scroll)", () => {
+  it("targets the EARLIER group card (not the bottom) when a new result merges into it", () => {
+    // A(g1), B, C(g1): C is newest but its card is the group at the
+    // TOP. Bottom-scrolling would jump away from where C rendered.
+    const rows: Row[] = [
+      { uuid: "a", group: "g1" },
+      { uuid: "b", group: null },
+      { uuid: "c", group: "g1" },
+    ];
+    const target = resolveLatestScrollTarget(build(rows), rows[rows.length - 1], uuidOf);
+    assert.deepEqual(target, { kind: "card", headUuid: "c" });
+  });
+
+  it("scrolls to the bottom when the newest result lands in the last card", () => {
+    const rows: Row[] = [
+      { uuid: "a", group: null },
+      { uuid: "b", group: null },
+    ];
+    const target = resolveLatestScrollTarget(build(rows), rows[rows.length - 1], uuidOf);
+    assert.deepEqual(target, { kind: "bottom" });
+  });
+
+  it("scrolls to the bottom when the newest result extends a trailing group card", () => {
+    const rows: Row[] = [
+      { uuid: "a", group: null },
+      { uuid: "b", group: "g1" },
+      { uuid: "c", group: "g1" },
+    ];
+    const target = resolveLatestScrollTarget(build(rows), rows[rows.length - 1], uuidOf);
+    assert.deepEqual(target, { kind: "bottom" });
+  });
+
+  it("returns none when there is no newest result", () => {
+    const target = resolveLatestScrollTarget(build([]), undefined, uuidOf);
+    assert.deepEqual(target, { kind: "none" });
   });
 });

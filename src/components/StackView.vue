@@ -114,7 +114,7 @@ import { clampIframeHeight } from "../utils/dom/iframeHeightClamp";
 import type { TextResponseData } from "../plugins/textResponse/types";
 import { formatSmartTime } from "../utils/format/date";
 import { isRecord } from "../utils/types";
-import { buildStackDisplayItems } from "../utils/canvas/stackGrouping";
+import { buildStackDisplayItems, pickActiveCardUuid, resolveLatestScrollTarget } from "../utils/canvas/stackGrouping";
 import CanvasViewToggle from "./CanvasViewToggle.vue";
 import CopyChatButton from "./CopyChatButton.vue";
 import type { LayoutMode } from "../utils/canvas/layoutMode";
@@ -394,24 +394,12 @@ function readPaddingTop(element: HTMLElement): number {
 function computeActiveUuidFromScroll(): string | null {
   if (!containerRef.value) return null;
   const container = containerRef.value;
-  const paddedTop = container.getBoundingClientRect().top + readPaddingTop(container);
-  let activeUuid: string | null = null;
-  // Iterate RENDERED card order (`displayItems`), not the flat
-  // `toolResults`. A merged map group shares one DOM element across
-  // multiple member uuids; walking `toolResults` would let a later
-  // member (positioned after a non-grouped card) resolve back to the
-  // group's earlier element and wrongly win the active slot. Each
-  // card resolves via its head uuid; the head uuid is what we emit.
-  for (const item of displayItems.value) {
-    const element = itemRefs.get(item.head.uuid);
-    if (!element) continue;
-    if (element.getBoundingClientRect().top <= paddedTop) {
-      activeUuid = item.head.uuid;
-    } else {
-      break;
-    }
-  }
-  return activeUuid;
+  const paddedTopPx = container.getBoundingClientRect().top + readPaddingTop(container);
+  const topOfCardPx = (headUuid: string): number | null => {
+    const element = itemRefs.get(headUuid);
+    return element ? element.getBoundingClientRect().top : null;
+  };
+  return pickActiveCardUuid(displayItems.value, (result) => result.uuid, topOfCardPx, paddedTopPx);
 }
 
 function onContainerScroll(): void {
@@ -463,22 +451,12 @@ watch(latestResultScrollKey, () => {
   nextTick(() => {
     if (containerRef.value) {
       beginSuppressScrollSync();
-      // The newest result usually creates/extends the BOTTOM card →
-      // scroll to the bottom. But with session-wide map grouping it
-      // can merge into an EARLIER group card; jumping to the bottom
-      // would scroll away from where the update actually rendered.
-      // So: bottom-scroll only when the newest result is in the last
-      // card; otherwise bring its (earlier) card into view (Codex
-      // review on #1504).
-      const items = displayItems.value;
       const newest = props.toolResults[props.toolResults.length - 1];
-      const lastCard = items[items.length - 1];
-      const newestInLastCard = newest !== undefined && lastCard !== undefined && lastCard.members.some((member) => member.uuid === newest.uuid);
-      if (newestInLastCard) {
+      const target = resolveLatestScrollTarget(displayItems.value, newest, (result) => result.uuid);
+      if (target.kind === "bottom") {
         containerRef.value.scrollTop = containerRef.value.scrollHeight;
-      } else if (newest) {
-        const card = items.find((item) => item.members.some((member) => member.uuid === newest.uuid));
-        const element = card ? itemRefs.get(card.head.uuid) : null;
+      } else if (target.kind === "card") {
+        const element = itemRefs.get(target.headUuid);
         if (element) element.scrollIntoView({ block: "nearest", behavior: "auto" });
       }
     }
