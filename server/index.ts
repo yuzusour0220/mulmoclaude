@@ -726,8 +726,20 @@ if (env.isProduction) {
   // with the built index.html. We need our own handler that reads
   // the file and substitutes the bearer token placeholder on each
   // request — see the wildcard fallback below.
-  app.use(express.static(path.join(__dirname, "../client"), { index: false }));
-  const indexHtmlPath = path.join(__dirname, "../client/index.html");
+  //
+  // Default layout: `prepare-dist.js` copies `dist/client/` to
+  // `<pkg>/client/` so `../client` from `<pkg>/server/` resolves
+  // (`packages/mulmoclaude/bin/prepare-dist.js`). When running the
+  // server straight from source — fresh-user smoke tests spawn
+  // `tsx server/index.ts` without that copy step — there is no
+  // `<repo-root>/client/`, so `MULMOCLAUDE_CLIENT_DIR` lets the
+  // caller point at `<repo-root>/dist/client/` directly. Empty
+  // string is treated as "not set" so a shell that exports the var
+  // unset doesn't break the prepared-package default.
+  const clientDirOverride = process.env.MULMOCLAUDE_CLIENT_DIR;
+  const clientDir = typeof clientDirOverride === "string" && clientDirOverride.length > 0 ? clientDirOverride : path.join(__dirname, "../client");
+  app.use(express.static(clientDir, { index: false }));
+  const indexHtmlPath = path.join(clientDir, "index.html");
   app.get("/{*splat}", (_req: Request, res: Response) => {
     let html: string;
     try {
