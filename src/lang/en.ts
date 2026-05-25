@@ -1146,9 +1146,9 @@ const enMessages = {
     sectionActive: "Active",
     sectionCatalog: "Catalog",
     sectionLegendActive:
-      "Active: skills Claude can use right now ({system} mc- bundled / {project} project / {user} user-wide). Claude calls them automatically in the flow of a conversation, or you can invoke one by typing its name.",
+      "Skills Claude can use right now. Claude calls them automatically in the flow of a conversation, or you can invoke one by typing its name. {system} System (mc- bundled) / {project} Project (editable, MulmoClaude only) / {user} User (skills in ~/.claude/skills/).",
     sectionLegendCatalog:
-      "Catalog: skills that become Active when starred. Unstarring from Active sends a skill back to Catalog — Claude stops using it (the skill is not deleted). ▶ runs the skill once without adding it.",
+      "Catalog: skills that become Active when you mark them with {star}. Removing {star} from an Active skill sends it back to Catalog — Claude stops using it (the skill is not deleted). {runOnce} runs the skill once without adding it.",
     catalogEmpty: "No preset skills available.",
     catalogPresetHeading: "Presets",
     catalogStar: "Star",

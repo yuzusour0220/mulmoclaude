@@ -1146,9 +1146,9 @@ const jaMessages = {
     sectionActive: "アクティブ",
     sectionCatalog: "カタログ",
     sectionLegendActive:
-      "アクティブ: Claude がいま使えるスキル ({system} mc- 同梱 / {project} プロジェクト / {user} ユーザー共通)。会話の流れで Claude が自動的に使うほか、スキル名を指定して呼び出すこともできます。",
+      "Claude がいま使えるスキル。会話の流れで Claude が自動的に使うほか、スキル名を指定して呼び出すこともできます。{system} システム(同梱 mc-) / {project} プロジェクト(編集可。MulmoClaude 専用) / {user} ユーザー(~/.claude/skills/ のスキル)。",
     sectionLegendCatalog:
-      "カタログ: ★ を付けるとアクティブになるスキル。アクティブから ★ を外せばカタログに戻り、Claude は使わなくなります (削除はされません)。▶ は追加せずに 1 回だけ実行します。",
+      "カタログ: {star} を付けるとアクティブになるスキル。アクティブから {star} を外せばカタログに戻り、Claude は使わなくなります (削除はされません)。{runOnce} は追加せずに 1 回だけ実行します。",
     catalogEmpty: "利用できるプリセットスキルがありません。",
     catalogPresetHeading: "プリセット",
     catalogStar: "スター",

@@ -1154,9 +1154,9 @@ const frMessages = {
     sectionActive: "Actives",
     sectionCatalog: "Catalogue",
     sectionLegendActive:
-      "Actives : skills que Claude peut utiliser dès maintenant ({system} mc- intégrée / {project} projet / {user} utilisateur). Claude les utilise automatiquement dans le fil de la conversation, ou vous pouvez en invoquer une en saisissant son nom.",
+      "Skills que Claude peut utiliser dès maintenant. Claude les utilise automatiquement dans le fil de la conversation, ou vous pouvez en invoquer une en saisissant son nom. {system} Système (mc- intégrée) / {project} Projet (modifiable, MulmoClaude uniquement) / {user} Utilisateur (skills dans ~/.claude/skills/).",
     sectionLegendCatalog:
-      "Catalogue : skills qui deviennent Actives quand vous les marquez par ★. Retirer le favori depuis Actives renvoie la skill au Catalogue — Claude cesse de l'utiliser (la skill n'est pas supprimée). ▶ exécute la skill une seule fois sans l'ajouter.",
+      "Catalogue : skills qui deviennent Actives quand vous les marquez par {star}. Retirer {star} depuis Actives renvoie la skill au Catalogue — Claude cesse de l'utiliser (la skill n'est pas supprimée). {runOnce} exécute la skill une seule fois sans l'ajouter.",
     catalogEmpty: "Aucune skill de préréglage disponible.",
     catalogPresetHeading: "Préréglages",
     catalogStar: "Favori",

@@ -16,7 +16,14 @@
             <span class="material-icons !text-sm align-middle leading-none text-blue-500" aria-hidden="true">home</span>
           </template>
         </i18n-t>
-        <p class="text-xs text-gray-400 mt-0.5">{{ t("pluginManageSkills.sectionLegendCatalog") }}</p>
+        <i18n-t keypath="pluginManageSkills.sectionLegendCatalog" tag="p" class="text-xs text-gray-400 mt-0.5">
+          <template #star>
+            <span class="material-icons !text-sm align-middle leading-none text-amber-500" aria-hidden="true">star</span>
+          </template>
+          <template #runOnce>
+            <span class="material-icons !text-sm align-middle leading-none text-blue-600" aria-hidden="true">play_arrow</span>
+          </template>
+        </i18n-t>
       </div>
     </div>
 

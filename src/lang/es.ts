@@ -1160,9 +1160,9 @@ const esMessages = {
     sectionActive: "Activas",
     sectionCatalog: "Catálogo",
     sectionLegendActive:
-      "Activas: skills que Claude puede usar ahora mismo ({system} mc- incluida / {project} proyecto / {user} de usuario). Claude las usa automáticamente en el flujo de la conversación, o puedes invocar una escribiendo su nombre.",
+      "Skills que Claude puede usar ahora mismo. Claude las usa automáticamente en el flujo de la conversación, o puedes invocar una escribiendo su nombre. {system} Sistema (mc- incluida) / {project} Proyecto (editable, solo MulmoClaude) / {user} Usuario (skills en ~/.claude/skills/).",
     sectionLegendCatalog:
-      "Catálogo: skills que pasan a Activas al destacarlas con ★. Quitar la estrella desde Activas devuelve la skill al Catálogo — Claude deja de usarla (la skill no se elimina). ▶ ejecuta la skill una sola vez sin añadirla.",
+      "Catálogo: skills que pasan a Activas al marcarlas con {star}. Quitar {star} desde Activas devuelve la skill al Catálogo — Claude deja de usarla (la skill no se elimina). {runOnce} ejecuta la skill una sola vez sin añadirla.",
     catalogEmpty: "No hay skills de preajuste disponibles.",
     catalogPresetHeading: "Preajustes",
     catalogStar: "Destacar",
