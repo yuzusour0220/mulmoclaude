@@ -15,6 +15,7 @@ import { readSessionJsonl } from "../../server/utils/files/session-io.ts";
 import { readTextUnder } from "../../server/utils/files/workspace-io.ts";
 import { isValidSlug } from "../../server/utils/slug.ts";
 import { isErrorWithCode, isRecord } from "../../server/utils/types.ts";
+import type { NotifierEntry } from "../../server/notifier/types.ts";
 import { API_ROUTES } from "../../src/config/apiRoutes.ts";
 
 /**
@@ -1593,66 +1594,45 @@ export function bashCommandFromCall(call: ToolCallTraceRecord): string | null {
   return typeof command === "string" ? command : null;
 }
 
-// ── Notifier inject (env-gated test seam) ───────────────────────────
+// ── Notifier helpers (used by the L-17 bell-vs-history-badge canary) ─
+
+type NotifierListProbe = { ok: true; entries: NotifierEntry[] } | { ok: false; reason: string };
 
 /**
- * Minimal `engine.publish` input shape the L-17 test inject endpoint
- * accepts. Mirrors `PublishInput` from `server/notifier/types.ts` but
- * stays scoped to the fields the canary actually exercises — title,
- * severity, lifecycle, pluginPkg. `body` / `navigateTarget` /
- * `pluginData` are intentionally omitted; the spec asserts the badge
- * count, not the row contents.
+ * GET-equivalent for the active notifier entries: POST
+ * `{ action: "list" }` to `/api/notifier` via the in-page bearer
+ * token. Reused by L-17 to (a) capture the pre-prompt baseline so
+ * background notifications (Encore obligations, ghost-bell recovery,
+ * etc.) don't false-pass the post-prompt comparison, and (b) clean
+ * up the nonce-bearing entry the agent published during the run.
  */
-export interface NotifierInjectInput {
-  pluginPkg: string;
-  severity: "info" | "nudge" | "urgent";
-  lifecycle?: "fyi" | "action";
-  title: string;
-}
-
-type NotifierInjectProbe = { ok: true; id: string } | { ok: false; status: number; reason: string };
-
-/**
- * POST `{ action: "publish", ... }` to `/api/notifier` via the test
- * seam (env-gated by `MULMOCLAUDE_E2E_NOTIFIER_INJECT=1` on the dev
- * server — see top-of-file note in `server/api/routes/notifier.ts`).
- *
- * Returns a discriminated probe so the L-17 spec can `test.skip` on
- * a 400 "unknown action" response (= seam not enabled on this dev
- * server) instead of failing opaquely. The bearer token rides on the
- * same `<meta name="mulmoclaude-auth">` channel every other authed
- * fixture uses, so the helper inherits the bearer-token trust model.
- */
-export async function injectNotifierEntry(page: Page, input: NotifierInjectInput): Promise<NotifierInjectProbe> {
-  return await page.evaluate(
-    async ({ url, body }): Promise<NotifierInjectProbe> => {
-      const meta = document.querySelector('meta[name="mulmoclaude-auth"]');
-      const token = meta?.getAttribute("content") ?? "";
-      try {
-        const res = await fetch(url, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        });
-        const text = await res.text();
-        if (!res.ok) return { ok: false, status: res.status, reason: text || `HTTP ${res.status}` };
-        const parsed = JSON.parse(text) as unknown;
-        if (parsed === null || typeof parsed !== "object" || !("id" in parsed) || typeof (parsed as { id: unknown }).id !== "string") {
-          return { ok: false, status: res.status, reason: `unexpected publish response: ${text}` };
-        }
-        return { ok: true, id: (parsed as { id: string }).id };
-      } catch (err) {
-        return { ok: false, status: 0, reason: `POST ${url} threw: ${err instanceof Error ? err.message : String(err)}` };
-      }
-    },
-    { url: API_ROUTES.notifier.dispatch, body: { action: "publish", ...input } },
-  );
+export async function listNotifierEntries(page: Page): Promise<NotifierEntry[]> {
+  const probe: NotifierListProbe = await page.evaluate(async (url): Promise<NotifierListProbe> => {
+    const meta = document.querySelector('meta[name="mulmoclaude-auth"]');
+    const token = meta?.getAttribute("content") ?? "";
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "list" }),
+      });
+      if (!res.ok) return { ok: false, reason: `list returned HTTP ${res.status}` };
+      const body = (await res.json()) as { entries?: NotifierEntry[] };
+      if (!Array.isArray(body.entries)) return { ok: false, reason: `list missing entries[]: ${JSON.stringify(body)}` };
+      return { ok: true, entries: body.entries };
+    } catch (err) {
+      return { ok: false, reason: `list threw: ${err instanceof Error ? err.message : String(err)}` };
+    }
+  }, API_ROUTES.notifier.dispatch);
+  if (!probe.ok) throw new Error(`listNotifierEntries: ${probe.reason}`);
+  return probe.entries;
 }
 
 /**
- * Clear a notifier entry by id via the public `{ action: "clear" }`
- * dispatch. Used by the L-17 spec teardown so an injected fyi entry
- * doesn't survive into the next run's bell.
+ * Clear a notifier entry by id via the always-on `{ action: "clear" }`
+ * dispatch. L-17 uses this in `finally` to wipe the agent-published
+ * entry so the dev server's persisted `active.json` doesn't bleed
+ * into the next run's bell.
  */
 export async function clearNotifierEntry(page: Page, entryId: string): Promise<void> {
   const result = await page.evaluate(

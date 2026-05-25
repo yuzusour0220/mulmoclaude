@@ -84,12 +84,6 @@ jobs:
           # (server/agent/backend/fake-echo.ts), lazy-loaded via
           # dynamic import so production never touches this code.
           MULMOCLAUDE_FAKE_AGENT: "1"
-          # Open the env-gated `publish` action on /api/notifier so
-          # the L-17 (B-50) canary in ui.spec.ts can inject a fyi
-          # notification end-to-end. Production never sets this — the
-          # surface stays closed (see top-of-file note in
-          # server/api/routes/notifier.ts).
-          MULMOCLAUDE_E2E_NOTIFIER_INJECT: "1"
         run: |
           yarn dev > dev-server.log 2>&1 &
           echo $! > dev-server.pid

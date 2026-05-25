@@ -101,7 +101,7 @@ In **Stack layout** this sidebar isn't rendered; the same data flows through `<S
    🔴[session-history-unread-badge: "N"] (top-right, shown when unreadCount > 0)
 ```
 
-Lives inside `<SessionHeaderControls>` (top chrome of every page). The **unread badge** is the "history badge" referenced in the B-50 ("通知二重表示") regression spec — it flips on when any session has `hasUnread = true` (typically a non-human-origin turn completed), independent of the notification bell. The L-17 e2e-live canary asserts this independence: a notifier engine publish ticks only `[notification-badge]`, not `[session-history-unread-badge]`.
+Lives inside `<SessionHeaderControls>` (top chrome of every page). The **unread badge** is the "history badge" referenced in the B-50 ("通知二重表示") regression spec — it flips on when any session has `hasUnread = true` (typically a non-human-origin turn completed), independent of the notification bell. The L-17 e2e-live canary drives a publish through the `notify` MCP tool (production path) and asserts the bell ticks while `[session-history-unread-badge]` stays unchanged — locking in that notifier publish and `session.hasUnread` are wired through independent channels.
 
 ## /chat — the chat page
 

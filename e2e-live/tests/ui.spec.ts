@@ -7,19 +7,18 @@ import {
   clearNotifierEntry,
   deleteSession,
   getCurrentSessionId,
-  injectNotifierEntry,
+  listNotifierEntries,
   sendChatMessage,
   startNewSession,
   waitForAssistantResponseComplete,
 } from "../fixtures/live-chat.ts";
 
-const L17_TIMEOUT_MS = ONE_MINUTE_MS;
-// Inject takes one notifier-engine write + one pubsub fan-out + one
-// composable refresh on the SPA side; in practice the badge appears in
-// well under 1s, but 5s gives generous headroom for a loaded laptop
-// running multiple workers in parallel without making a real flake
-// look like a transient wait.
-const L17_BADGE_SETTLE_MS = 5 * ONE_SECOND_MS;
+const L17_TIMEOUT_MS = 2 * ONE_MINUTE_MS;
+// One agent turn (real LLM or fake-echo) + notifier-engine write +
+// pubsub fan-out + composable refresh on the SPA side. fake-echo
+// runs in milliseconds; real LLM is the bound. Generous enough for a
+// loaded laptop without masking real flake.
+const L17_BADGE_SETTLE_MS = 30 * ONE_SECOND_MS;
 const L18_TIMEOUT_MS = 3 * ONE_MINUTE_MS;
 const L19_TIMEOUT_MS = 2 * ONE_MINUTE_MS;
 const L20_TIMEOUT_MS = ONE_MINUTE_MS;
@@ -54,100 +53,108 @@ async function snapshotUnreadBadge(badge: ReturnType<Page["getByTestId"]>): Prom
 }
 
 test.describe("ui (real LLM / static)", () => {
-  test("L-17: notifier engine publish はベルバッジだけを更新し session-history unread badge は変えない (B-50)", async ({ page }) => {
+  test("L-17: notify tool 経由の publish はベルだけを更新し session-history unread badge は変えない (B-50)", async ({ page }) => {
     test.setTimeout(L17_TIMEOUT_MS);
-    // Covers B-50: PR #818 (`fix/skip-bell-on-bridge-completion`)
-    // commented out `publishNotification()` in `runAgentInBackground`'s
-    // finally block because bridge-origin agent completions already
-    // tick the Session History side panel's unread badge via
-    // `endRun()` flipping `session.hasUnread = true`. Two badges for
-    // one event was the duplicate-notification user report.
+    // Covers B-50 ("二重通知"): PR #818
+    // (`fix/skip-bell-on-bridge-completion`) commented out
+    // `publishNotification()` in `runAgentInBackground`'s finally
+    // block because bridge-origin agent completions already tick
+    // the Session History side panel's unread badge via `endRun()`
+    // flipping `session.hasUnread = true`. Two badges for one event
+    // was the duplicate-notification user report.
     //
-    // We can't drive a real bridge-origin agent run cheaply (would
-    // need a connected bridge WebSocket + a real LLM round-trip), so
-    // the canary takes the cheaper-but-still-meaningful slice: prove
-    // that the notifier engine boundary itself stays single-purpose.
-    // A single `engine.publish` ticks **only** `[notification-badge]`,
-    // **never** `[session-history-unread-badge]`. If a future refactor
-    // accidentally couples the notifier publish path to
-    // `session.hasUnread` (e.g. via a shared event channel), the
-    // session-history badge would tick on every publish too — exactly
-    // the two-badges-for-one-event shape PR #818 fixed.
+    // Canary strategy: drive a publish through the production code
+    // path that real users hit (`notify` MCP tool → `publishNotification`
+    // → `engine.publish` → pubsub fan-out → `useNotifications`
+    // composable). Then assert (a) the bell row materialises (proves
+    // the publish event made it end-to-end), and (b) the
+    // `[session-history-unread-badge]` snapshot is unchanged (the
+    // B-50 invariant: notifier publishes do NOT touch session
+    // `hasUnread`).
     //
-    // The publish action is gated behind `MULMOCLAUDE_E2E_NOTIFIER_INJECT=1`
-    // on the dev server. Without it the POST returns 400 "unknown
-    // action" and we skip — same shape as production sees, so a
-    // developer running `yarn dev` without the env doesn't get a
-    // confusing failure.
+    // The prompt is shaped so both backends route to notify:
+    //   - real LLM: Claude's tool dispatch will call the notify MCP
+    //     tool when asked explicitly. We pin the title verbatim so
+    //     it can't be paraphrased.
+    //   - fake-echo: `detectNotify` matches the literal `title "..."`
+    //     in the prompt and dispatches via `dispatchNotifyInProcess`
+    //     (calls notify.handler directly, same engine path).
+    // The nonce keeps parallel workers and previous runs isolated.
+    const nonce = randomUUID().slice(0, 8);
+    const title = `e2e-live-l17-${nonce}`;
+    const userPrompt = `Use the notify tool with title "${title}". Do not include a body.`;
+
     await page.goto("/");
-    // The notification bell renders on every route (in SidebarHeader);
-    // we don't need to land on /chat for this canary.
     const bell = page.getByTestId("notification-bell");
     await expect(bell, "notification-bell must mount on the top chrome").toBeVisible();
 
-    // Capture the unread badge baseline BEFORE the inject. The badge
-    // has `v-if="unreadCount > 0"`, so the testid is absent at zero
-    // and present at ≥1. We compare visibility + textContent so a
-    // stray unread-count change (count went from 2 → 3 with the
-    // badge already visible) still fails the assertion.
+    // Capture the session-history unread-badge baseline BEFORE the
+    // agent turn. The badge has `v-if="unreadCount > 0"`, so the
+    // testid is absent at zero and present at ≥1. Compare both
+    // visibility AND textContent so a stray count change (2 → 3 with
+    // the badge already visible on both sides) still fails the
+    // assertion.
     const unreadBadge = page.getByTestId("session-history-unread-badge");
     const unreadBefore = await snapshotUnreadBadge(unreadBadge);
 
-    // Probe the seam. If publish is gated off, skip — the spec
-    // is only meaningful when the engine actually accepts the
-    // inject. The nonce keeps parallel workers from clobbering each
-    // other's entries (and from confusing this run with stale rows
-    // left by a prior crashed run).
-    const nonce = randomUUID().slice(0, 8);
-    const title = `e2e-live-l17-${nonce}`;
-    const probe = await injectNotifierEntry(page, {
-      pluginPkg: "e2e-live-l17",
-      severity: "info",
-      lifecycle: "fyi",
-      title,
-    });
-    if (!probe.ok) {
-      test.skip(
-        probe.status === 400,
-        `MULMOCLAUDE_E2E_NOTIFIER_INJECT=1 is required on the dev server to enable the publish action — got HTTP ${probe.status}: ${probe.reason}`,
-      );
-      throw new Error(`injectNotifierEntry unexpected failure: HTTP ${probe.status} — ${probe.reason}`);
-    }
-    const injectedId = probe.id;
-
+    let chatSessionId: string | null = null;
+    let publishedNotifierId: string | null = null;
     try {
-      // Bell row appears via the `notifier` pubsub channel +
-      // useNotifications composable refresh. Match the nonce-bearing
-      // row so background notifications the dev server happens to
-      // publish on its own (Encore obligations, ghost-bell recovery)
-      // don't false-pass the visibility check. Opening the panel is
-      // the only way to inspect row testids — the badge above is a
-      // counter, not a list.
+      await startNewSession(page);
+      await sendChatMessage(page, userPrompt);
+      // Drain the assistant turn first so the notify tool call has
+      // landed before we go looking for the bell row.
+      await waitForAssistantResponseComplete(page);
+      chatSessionId = getCurrentSessionId(page);
+
+      // Find the entry the agent just published. We can't predict
+      // its id (engine assigns a UUID), so list active entries and
+      // match by the nonce-bearing title. Filtering by title
+      // discounts background publishers (Encore obligations,
+      // ghost-bell recovery) that the dev server might fire on its
+      // own during the run.
+      await expect
+        .poll(
+          async () => {
+            const entries = await listNotifierEntries(page);
+            return entries.find((entry) => entry.title === title) ?? null;
+          },
+          {
+            timeout: L17_BADGE_SETTLE_MS,
+            message: "the notify tool call must produce a notifier entry with the spec-pinned title",
+          },
+        )
+        .not.toBeNull();
+      const entries = await listNotifierEntries(page);
+      const ours = entries.find((entry) => entry.title === title);
+      if (!ours) throw new Error(`L-17: published entry vanished between poll and re-list (title=${title})`);
+      publishedNotifierId = ours.id;
+
+      // Open the bell panel and confirm the row is visible — proves
+      // the pubsub fan-out reached `useNotifications` and the bell
+      // mounted the row, not just that the disk record exists.
       await bell.click();
-      const ourRow = page.getByTestId(`notification-item-${injectedId}`);
-      await expect(ourRow, "the injected notifier row must mount in the bell panel").toBeVisible({ timeout: L17_BADGE_SETTLE_MS });
-      await expect(ourRow, "the injected row must carry the unique title (proves our publish landed)").toContainText(title);
-      // Close the panel so the post-test screenshot is tidy and so
-      // the unread-badge probe below isn't visually obscured by the
-      // popup on a small viewport.
+      await expect(page.getByTestId(`notification-item-${publishedNotifierId}`), "the published notifier row must mount in the bell panel").toBeVisible({
+        timeout: L17_BADGE_SETTLE_MS,
+      });
       await page.keyboard.press("Escape");
 
-      // B-50 regression assertion. The notifier publish must not have
-      // flipped any session's `hasUnread`, so the unread badge state
-      // must be identical to the pre-inject snapshot. If a future
-      // refactor accidentally couples the notifier publish path to
+      // B-50 regression assertion. The notifier publish must not
+      // have flipped any session's `hasUnread`. If a future refactor
+      // accidentally couples the notifier publish path to
       // `session.hasUnread` (e.g. via a shared event channel), the
       // session-history badge would tick on every publish — exactly
       // the two-badges-for-one-event shape PR #818 fixed.
       const unreadAfter = await snapshotUnreadBadge(unreadBadge);
-      expect(unreadAfter, "notifier publish must not affect [session-history-unread-badge] — B-50 regression").toEqual(unreadBefore);
+      expect(unreadAfter, "notify publish must not affect [session-history-unread-badge] — B-50 regression").toEqual(unreadBefore);
     } finally {
-      // Restore engine state regardless of assertion outcome — the
-      // dev server persists active entries to `~/mulmoclaude/data/
-      // notifier/active.json`, so a leaked row would survive across
-      // test runs and pollute the bell. `clearNotifierEntry` is a
-      // no-op when the id no longer exists, so failures don't cascade.
-      await clearNotifierEntry(page, injectedId);
+      // Cleanup order matters: clear the notifier entry FIRST so a
+      // failed session delete doesn't leave a row on the bell, then
+      // delete the chat session so it doesn't pollute the sidebar.
+      if (publishedNotifierId !== null) {
+        await clearNotifierEntry(page, publishedNotifierId).catch(() => {});
+      }
+      if (chatSessionId !== null) await deleteSession(page, chatSessionId);
     }
   });
 
