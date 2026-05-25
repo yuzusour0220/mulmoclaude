@@ -1119,6 +1119,7 @@ const koMessages = {
   },
   pluginManageSkills: {
     deleteProjectSkill: "이 프로젝트 스킬 삭제",
+    unstarPresetSkill: "이 프리셋 별표 해제 — 카탈로그로 돌아갑니다",
     heading: "스킬",
     previewCount: "{count}개 스킬",
     previewMore: "+{count}개 더",
@@ -1135,16 +1136,20 @@ const koMessages = {
     emptyBody: "(본문 비어 있음)",
     btnEdit: "편집",
     btnDelete: "삭제",
+    btnUnstar: "별표 해제",
     btnRun: "실행",
     errListFailed: "스킬 목록 불러오기 실패: {error}",
     errDetailFailed: "스킬 상세 불러오기 실패: {error}",
     errSaveFailed: "저장 실패: {error}",
     errDeleteFailed: "삭제 실패",
     confirmDelete: '스킬 "{name}" 을(를) 삭제할까요? ~/mulmoclaude/.claude/skills/{name}/SKILL.md 가 제거됩니다.',
+    confirmUnstar: '"{name}" 을(를) 카탈로그로 되돌릴까요? 프롬프트에는 더 이상 로드되지 않지만, 카탈로그의 복사본은 남아 있어 언제든 다시 별표할 수 있습니다.',
     sectionActive: "활성",
     sectionCatalog: "카탈로그",
-    sectionLegend:
-      "활성: 프롬프트에 로드됨 ({system} 시스템 = mc- 동봉 · {project} 프로젝트 = 편집 가능 · {user} 사용자 = ~/.claude/skills/). 카탈로그: 프롬프트를 키우지 않고 살펴보거나 ★별 표시 또는 ▶한 번만 실행할 수 있습니다.",
+    sectionLegendActive:
+      "Claude가 지금 사용할 수 있는 스킬. 대화 흐름에서 Claude가 자동으로 사용하거나, 스킬 이름을 입력해 호출할 수 있습니다. {system} 시스템(동봉 mc-) / {project} 프로젝트(편집 가능, 이 워크스페이스 전용) / {user} 사용자(~/.claude/skills/ 의 스킬).",
+    sectionLegendCatalog:
+      "카탈로그: {star}를 누르면 활성이 되는 스킬. 활성에서 {star}를 해제하면 카탈로그로 돌아가고 Claude는 사용하지 않게 됩니다 (스킬은 삭제되지 않습니다). {runOnce}는 추가하지 않고 한 번만 실행합니다.",
     catalogEmpty: "사용 가능한 프리셋 스킬이 없습니다.",
     catalogPresetHeading: "프리셋",
     catalogStar: "별 표시",

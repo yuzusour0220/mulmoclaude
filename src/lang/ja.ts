@@ -1118,6 +1118,7 @@ const jaMessages = {
   },
   pluginManageSkills: {
     deleteProjectSkill: "このプロジェクト限定スキルを削除",
+    unstarPresetSkill: "このプリセットのスターを外す — カタログに戻る",
     heading: "スキル",
     previewCount: "{count} スキル",
     previewMore: "他 {count} 件",
@@ -1134,16 +1135,20 @@ const jaMessages = {
     emptyBody: "（本文なし）",
     btnEdit: "編集",
     btnDelete: "削除",
+    btnUnstar: "スターを外す",
     btnRun: "実行",
     errListFailed: "スキル一覧の読み込みに失敗: {error}",
     errDetailFailed: "スキルの読み込みに失敗: {error}",
     errSaveFailed: "保存失敗: {error}",
     errDeleteFailed: "削除に失敗しました",
     confirmDelete: "スキル「{name}」を削除しますか? ~/mulmoclaude/.claude/skills/{name}/SKILL.md が削除されます。",
+    confirmUnstar: "「{name}」をカタログに戻しますか? アクティブから外れてプロンプトに読み込まれなくなりますが、カタログには残るのでいつでも再有効化できます。",
     sectionActive: "アクティブ",
     sectionCatalog: "カタログ",
-    sectionLegend:
-      "アクティブ: プロンプトに読み込まれる ({system} システム = mc- 同梱 · {project} プロジェクト = 編集可 · {user} ユーザー = ~/.claude/skills/)。カタログ: プロンプトを肥大化させずに閲覧・★スター・▶今だけ実行ができる。",
+    sectionLegendActive:
+      "Claude がいま使えるスキル。会話の流れで Claude が自動的に使うほか、スキル名を指定して呼び出すこともできます。{system} システム(同梱 mc-) / {project} プロジェクト(編集可。このワークスペース専用) / {user} ユーザー(~/.claude/skills/ のスキル)。",
+    sectionLegendCatalog:
+      "カタログ: {star} を付けるとアクティブになるスキル。アクティブから {star} を外せばカタログに戻り、Claude は使わなくなります (削除はされません)。{runOnce} は追加せずに 1 回だけ実行します。",
     catalogEmpty: "利用できるプリセットスキルがありません。",
     catalogPresetHeading: "プリセット",
     catalogStar: "スター",
