@@ -30,8 +30,8 @@
 
 import { type ChildProcess, execFileSync, spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { existsSync } from "node:fs";
-import { copyFile, mkdir, mkdtemp, rm, stat } from "node:fs/promises";
+import { type Dirent, existsSync } from "node:fs";
+import { copyFile, mkdir, mkdtemp, readdir, rm, stat } from "node:fs/promises";
 import { createServer } from "node:net";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
@@ -57,11 +57,29 @@ const HEALTH_FETCH_TIMEOUT_MS = 2 * ONE_SECOND_MS;
 const SHUTDOWN_GRACE_MS = 10 * ONE_SECOND_MS;
 const SHUTDOWN_POLL_INTERVAL_MS = 200;
 
-export interface HostMtimeBaseline {
-  /** Absolute path observed for the host baseline. */
-  readonly path: string;
-  /** `null` when the path was absent at baseline time. */
-  readonly mtimeMs: number | null;
+/**
+ * Recursive mtime snapshot of one host root we want to prove stays
+ * untouched across the test. `entries` is a flat map keyed by
+ * absolute path → `mtimeMs`, covering the root itself AND every
+ * descendant file / dir reachable at snapshot time. An empty `entries`
+ * with `existed = false` means the root did not exist at baseline.
+ *
+ * Why flat-recursive rather than top-level dir mtime (Codex GHA
+ * iter-2 review on PR #1506): `stat(parentDir).mtimeMs` only
+ * advances when entries are added or removed from that dir — an
+ * in-place rewrite of an existing file (e.g. an isolation leak that
+ * mutates `~/mulmoclaude/config/settings.json`) leaves the parent
+ * dir mtime unchanged and was silently accepted by the previous
+ * top-level check. The recursive walk catches add / remove / rewrite
+ * uniformly.
+ */
+export interface HostFsBaseline {
+  /** Absolute path of the snapshot root (e.g. `~/.claude/skills`). */
+  readonly root: string;
+  /** `false` when the root did not exist at baseline. */
+  readonly existed: boolean;
+  /** Flat map of `<absolutePath>` → `mtimeMs` for every descendant. */
+  readonly entries: ReadonlyMap<string, number>;
 }
 
 export interface IsolatedServerHandle {
@@ -71,7 +89,7 @@ export interface IsolatedServerHandle {
   readonly workspaceDir: string;
   /** Bearer token the server is enforcing (pinned via `MULMOCLAUDE_AUTH_TOKEN`). */
   readonly authToken: string;
-  readonly hostBaselines: readonly HostMtimeBaseline[];
+  readonly hostBaselines: readonly HostFsBaseline[];
   /** Internal — kept on the handle so `stopIsolatedDevServer` can `SIGTERM` it. */
   readonly _process: ChildProcess;
 }
@@ -118,20 +136,68 @@ async function probeFreePort(): Promise<number> {
   });
 }
 
-async function snapshotMtime(target: string): Promise<HostMtimeBaseline> {
+/**
+ * Walk `dir` and record every entry's `mtimeMs` into `into` keyed by
+ * absolute path. Recurses into subdirectories. ENOENT (file
+ * disappeared between readdir and stat — common race when an
+ * external process is concurrently mutating the tree) is treated as
+ * "skip this entry" rather than aborting the walk, otherwise a
+ * baseline snapshot taken while the user has `yarn dev` running
+ * would intermittently throw.
+ */
+async function walkMtimeTree(dir: string, into: Map<string, number>): Promise<void> {
+  // Explicit `Dirent[]` (Dirent<string>) so TypeScript picks the
+  // string-name overload — `Awaited<ReturnType<typeof readdir>>`
+  // collapses through every overload and `entry.name` widens to
+  // `string | Buffer`, which then refuses `path.join`.
+  let entries: Dirent[];
   try {
-    const stats = await stat(target);
-    return { path: target, mtimeMs: stats.mtimeMs };
+    entries = await readdir(dir, { withFileTypes: true });
   } catch (err) {
-    if (isErrorWithCode(err) && err.code === "ENOENT") {
-      return { path: target, mtimeMs: null };
-    }
+    if (isErrorWithCode(err) && err.code === "ENOENT") return;
     throw err;
+  }
+  for (const entry of entries) {
+    const full = path.join(dir, entry.name);
+    try {
+      const stats = await stat(full);
+      into.set(full, stats.mtimeMs);
+      if (entry.isDirectory()) await walkMtimeTree(full, into);
+    } catch (err) {
+      if (isErrorWithCode(err) && err.code === "ENOENT") continue;
+      throw err;
+    }
   }
 }
 
-async function snapshotHostBaselines(): Promise<readonly HostMtimeBaseline[]> {
-  return Promise.all([HOST_WORKSPACE_PATH, HOST_CLAUDE_SKILLS_PATH].map((target) => snapshotMtime(target)));
+/**
+ * Snapshot one host root recursively. Returns `existed: false` with
+ * an empty `entries` map when the root is absent (so the after-test
+ * check can correctly assert "still absent" vs "created during test").
+ *
+ * Exported so unit tests can drive the snapshot/diff pair against
+ * tmp dir fixtures without spawning a server. The shape mirrors what
+ * `snapshotHostBaselines` produces internally.
+ */
+export async function snapshotHostFs(root: string): Promise<HostFsBaseline> {
+  const entries = new Map<string, number>();
+  let existed = true;
+  try {
+    const rootStats = await stat(root);
+    entries.set(root, rootStats.mtimeMs);
+  } catch (err) {
+    if (isErrorWithCode(err) && err.code === "ENOENT") {
+      existed = false;
+      return { root, existed, entries };
+    }
+    throw err;
+  }
+  await walkMtimeTree(root, entries);
+  return { root, existed, entries };
+}
+
+async function snapshotHostBaselines(): Promise<readonly HostFsBaseline[]> {
+  return Promise.all([HOST_WORKSPACE_PATH, HOST_CLAUDE_SKILLS_PATH].map((target) => snapshotHostFs(target)));
 }
 
 async function copyHostCredentialsToTestHome(testHome: string): Promise<void> {
@@ -296,25 +362,67 @@ export async function stopIsolatedDevServer(server: IsolatedServerHandle): Promi
 /**
  * Verify that the test did not mutate the developer's real workspace
  * or `~/.claude/skills/`. Tests call this in `finally` AFTER the
- * server has been stopped — if a host path's `mtime` advanced, the
+ * server has been stopped — if any host file under the snapshotted
+ * roots has a changed mtime, been created, or been removed, the
  * isolation contract is broken (probably a stray `homedir()` call
  * that bypassed the env override).
+ *
+ * Implementation: re-snapshot each root via {@link snapshotHostFs}
+ * and diff the flat maps three ways — modified (mtime advanced),
+ * created (key in current but not baseline), removed (key in
+ * baseline but not current). Codex GHA review on PR #1506 surfaced
+ * that the prior top-level-only check missed in-place file
+ * rewrites; this recursive check is the fix.
+ *
+ * Known false-positive risk: if an external process (the developer's
+ * own `yarn dev`, an editor autosave, etc.) mutates files under the
+ * snapshotted roots while a test runs, the diff will surface those
+ * external changes as if our test caused them. Acceptable because
+ * the target environments for this assertion are (a) CI runners with
+ * no concurrent dev, (b) local runs explicitly without a backing
+ * `yarn dev`. The L-FRESH-BOOT spec is the canonical use case and
+ * both apply.
+ *
+ * `maxDriftReported` caps the error message so a runaway leak
+ * (thousands of files) does not produce an unreadable trace; the
+ * total count is always reported even when truncated.
  */
-export async function assertHostUntouched(baselines: readonly HostMtimeBaseline[]): Promise<void> {
+const MAX_DRIFT_REPORTED = 20;
+
+export async function assertHostUntouched(baselines: readonly HostFsBaseline[]): Promise<void> {
   const drift: string[] = [];
   for (const baseline of baselines) {
-    const current = await snapshotMtime(baseline.path);
-    if (current.mtimeMs !== baseline.mtimeMs) {
-      drift.push(`${baseline.path}: baseline=${formatMtime(baseline.mtimeMs)} now=${formatMtime(current.mtimeMs)}`);
+    const current = await snapshotHostFs(baseline.root);
+    if (baseline.existed !== current.existed) {
+      drift.push(`${baseline.root}: existence flipped (baseline=${baseline.existed ? "present" : "absent"} now=${current.existed ? "present" : "absent"})`);
+      continue;
+    }
+    collectDrift(baseline, current, drift);
+  }
+  if (drift.length === 0) return;
+  const head = drift.slice(0, MAX_DRIFT_REPORTED).join("\n");
+  const tail = drift.length > MAX_DRIFT_REPORTED ? `\n…and ${drift.length - MAX_DRIFT_REPORTED} more (total ${drift.length} drift entries)` : "";
+  throw new Error(`Isolated server contaminated host paths:\n${head}${tail}`);
+}
+
+function collectDrift(baseline: HostFsBaseline, current: HostFsBaseline, drift: string[]): void {
+  for (const [absPath, mtime] of baseline.entries) {
+    const currentMtime = current.entries.get(absPath);
+    if (currentMtime === undefined) {
+      drift.push(`${absPath}: removed during test (baseline=${formatMtime(mtime)})`);
+    } else if (currentMtime !== mtime) {
+      drift.push(`${absPath}: mtime advanced (baseline=${formatMtime(mtime)} now=${formatMtime(currentMtime)})`);
     }
   }
-  if (drift.length > 0) {
-    throw new Error(`Isolated server contaminated host paths:\n${drift.join("\n")}`);
+  for (const [absPath, mtime] of current.entries) {
+    if (!baseline.entries.has(absPath)) {
+      drift.push(`${absPath}: created during test (mtime=${formatMtime(mtime)})`);
+    }
   }
 }
 
-function formatMtime(mtimeMs: number | null): string {
-  return mtimeMs === null ? "absent" : new Date(mtimeMs).toISOString();
+function formatMtime(mtimeMs: number): string {
+  return new Date(mtimeMs).toISOString();
 }
 
 export const ISOLATED_SERVER_HEALTH_TIMEOUT_MS = HEALTH_POLL_TIMEOUT_MS;
