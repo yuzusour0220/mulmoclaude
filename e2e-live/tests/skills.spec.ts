@@ -7,6 +7,7 @@ import { ONE_MINUTE_MS } from "../../server/utils/time.ts";
 import {
   SESSION_URL_PATTERN,
   type ToolCallTraceRecord,
+  copyPresetCatalogToActive,
   deleteProjectSkillViaUi,
   deleteSession,
   getCurrentSessionId,
@@ -780,10 +781,26 @@ test.describe("skills (real LLM / static)", () => {
       // UI testids only needs updating one site.
       await starPresetViaCatalog(page, L33B_PRESET_SLUG);
     } finally {
-      // Restore the EXACT original starred state. removeProjectSkill
-      // is idempotent (ENOENT-tolerant) so it's safe even if we never
-      // reached the click step (e.g. an early assertion threw).
-      if (!wasOriginallyStarred) {
+      // Reconcile to the EXACT original starred state by looking at
+      // current disk (not just the original snapshot). The naive
+      // "if !wasOriginallyStarred → unstar" pattern was destructive
+      // in the edge case where the test threw between the up-front
+      // fs-unstar and a successful UI star: an originally-starred
+      // preset would be left unstarred (Codex GHA + CodeRabbit on
+      // iter-1 PR review). The 4-cell reconcile table handles every
+      // start/end combination:
+      //   (orig=T, now=T): no-op (the click succeeded, fs already correct)
+      //   (orig=T, now=F): re-star via fs cp from catalog (test threw
+      //                    after our fs-unstar but before / during click)
+      //   (orig=F, now=T): unstar (we starred via UI, clean up)
+      //   (orig=F, now=F): no-op (either the early assert blocked our
+      //                    own fs-unstar, or the test threw before click)
+      // Both fs ops are idempotent so a transient failure between the
+      // snapshot and the reconcile cannot corrupt the result.
+      const isCurrentlyStarred = (await snapshotProjectSkillSlugs()).has(L33B_PRESET_SLUG);
+      if (wasOriginallyStarred && !isCurrentlyStarred) {
+        await copyPresetCatalogToActive(L33B_PRESET_SLUG);
+      } else if (!wasOriginallyStarred && isCurrentlyStarred) {
         await removeProjectSkill(L33B_PRESET_SLUG);
       }
     }
