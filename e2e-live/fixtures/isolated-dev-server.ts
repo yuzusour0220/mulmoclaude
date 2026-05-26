@@ -388,6 +388,7 @@ export async function spawnIsolatedDevServer(options: SpawnOptions): Promise<Iso
     await waitForHealth(baseUrl, authToken);
   } catch (err) {
     await killChild(child);
+    await rm(path.dirname(homeDir), { recursive: true, force: true }).catch(() => undefined);
     throw err;
   }
   return { baseUrl, port, homeDir, workspaceDir, authToken, hostBaselines, _process: child };

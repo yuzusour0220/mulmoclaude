@@ -10,6 +10,14 @@ describe("resolveClientDir", () => {
     assert.equal(resolveClientDir("/custom/client", DEFAULT_DIR), "/custom/client");
   });
 
+  it("trims env value when non-empty", () => {
+    assert.equal(resolveClientDir("  /custom/client  ", DEFAULT_DIR), "/custom/client");
+  });
+
+  it("uses env value when relative", () => {
+    assert.equal(resolveClientDir("./client", DEFAULT_DIR), "./client");
+  });
+
   it("falls back to default when env is undefined", () => {
     assert.equal(resolveClientDir(undefined, DEFAULT_DIR), DEFAULT_DIR);
   });
