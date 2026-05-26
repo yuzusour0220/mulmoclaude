@@ -17,4 +17,8 @@ describe("resolveClientDir", () => {
   it("falls back to default when env is empty string", () => {
     assert.equal(resolveClientDir("", DEFAULT_DIR), DEFAULT_DIR);
   });
+
+  it("falls back to default when env is whitespace-only", () => {
+    assert.equal(resolveClientDir("   ", DEFAULT_DIR), DEFAULT_DIR);
+  });
 });
