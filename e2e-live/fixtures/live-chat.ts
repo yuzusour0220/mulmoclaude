@@ -265,8 +265,13 @@ export async function removeProjectSkill(slug: string): Promise<void> {
  */
 export async function copyPresetCatalogToActive(slug: string): Promise<void> {
   assertValidSkillSlug(slug);
-  const src = resolveWorkspacePath(`data/skills/catalog/preset/${slug}`);
-  const dst = resolveWorkspacePath(`.claude/skills/${slug}`);
+  // `path.join` for cross-platform safety per CLAUDE.md
+  // ("Build paths with node:path; never concatenate with '/'").
+  // Other helpers in this file predate the rule and still use
+  // template literals; a sweep is out of scope here (CodeRabbit
+  // iter-2).
+  const src = resolveWorkspacePath(path.join("data", "skills", "catalog", "preset", slug));
+  const dst = resolveWorkspacePath(path.join(".claude", "skills", slug));
   await cp(src, dst, { recursive: true, force: true });
 }
 

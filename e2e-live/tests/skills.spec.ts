@@ -797,11 +797,22 @@ test.describe("skills (real LLM / static)", () => {
       //                    own fs-unstar, or the test threw before click)
       // Both fs ops are idempotent so a transient failure between the
       // snapshot and the reconcile cannot corrupt the result.
-      const isCurrentlyStarred = (await snapshotProjectSkillSlugs()).has(L33B_PRESET_SLUG);
-      if (wasOriginallyStarred && !isCurrentlyStarred) {
-        await copyPresetCatalogToActive(L33B_PRESET_SLUG);
-      } else if (!wasOriginallyStarred && isCurrentlyStarred) {
-        await removeProjectSkill(L33B_PRESET_SLUG);
+      //
+      // try/catch around the whole reconcile so a transient fs error
+      // (catalog source missing, ENOSPC, IO hiccup) does NOT overwrite
+      // an in-flight assertion failure from the `try` block. Playwright
+      // surfaces only the last thrown error otherwise, masking the
+      // real regression signal (Codex iter-2 review). Mirrors the
+      // L-21B / L-32 cleanup pattern in this file.
+      try {
+        const isCurrentlyStarred = (await snapshotProjectSkillSlugs()).has(L33B_PRESET_SLUG);
+        if (wasOriginallyStarred && !isCurrentlyStarred) {
+          await copyPresetCatalogToActive(L33B_PRESET_SLUG);
+        } else if (!wasOriginallyStarred && isCurrentlyStarred) {
+          await removeProjectSkill(L33B_PRESET_SLUG);
+        }
+      } catch (err) {
+        console.warn(`L-33B finally: state reconciliation failed for ${L33B_PRESET_SLUG}, original test error (if any) preserved`, err);
       }
     }
   });
