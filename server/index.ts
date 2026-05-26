@@ -58,6 +58,7 @@ import { initAccountingEventPublisher } from "./accounting/eventPublisher.js";
 import { getRole, loadAllRoles } from "./workspace/roles.js";
 import { discoverSkills } from "./workspace/skills/index.js";
 import { WORKSPACE_PATHS } from "./workspace/paths.js";
+import { resolveClientDir } from "./utils/clientDir.js";
 import { serverError } from "./utils/httpError.js";
 import { makeUuid } from "./utils/id.js";
 import { mcpToolsRouter, mcpTools, isMcpToolEnabled } from "./agent/mcp-tools/index.js";
@@ -715,8 +716,16 @@ if (env.isProduction) {
   // with the built index.html. We need our own handler that reads
   // the file and substitutes the bearer token placeholder on each
   // request — see the wildcard fallback below.
-  app.use(express.static(path.join(__dirname, "../client"), { index: false }));
-  const indexHtmlPath = path.join(__dirname, "../client/index.html");
+  //
+  // Default `<__dirname>/../client/` is the layout
+  // `packages/mulmoclaude/bin/prepare-dist.js` produces when packaging
+  // the tarball. Fresh-user smoke specs spawn `tsx server/index.ts`
+  // straight from source (no prepare-dist copy step) and override via
+  // `MULMOCLAUDE_CLIENT_DIR=<repo-root>/dist/client/`. Empty string
+  // env falls back to the default via `||` (empty is falsy).
+  const clientDir = resolveClientDir(process.env.MULMOCLAUDE_CLIENT_DIR, path.join(__dirname, "../client"));
+  app.use(express.static(clientDir, { index: false }));
+  const indexHtmlPath = path.join(clientDir, "index.html");
   app.get("/{*splat}", (_req: Request, res: Response) => {
     let html: string;
     try {
