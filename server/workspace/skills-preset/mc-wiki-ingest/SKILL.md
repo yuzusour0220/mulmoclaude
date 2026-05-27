@@ -82,8 +82,23 @@ by relevance score; if fewer than 5 pages look relevant, edit fewer.
 For each of the (up to) 5 picked pages, **append a single bullet** or a
 short link reference under the most appropriate H2 — never rewrite the
 existing body. The bullet ties the existing page to the new source via
-a `[[<new-slug>|<source title>]]` link plus a one-sentence reason the
-link is being made.
+a `[[<new-slug>|<display>]]` link plus a one-sentence reason the link
+is being made.
+
+**Display-text normalisation** (mandatory — the raw source title can
+contain characters that break wiki-link parsing or the downstream
+graph / lint passes):
+
+- Remove every `[`, `]`, and `|` character (these are wiki-link
+  syntax delimiters; even one stray `]` corrupts the link)
+- Replace newlines / tabs / runs of whitespace with a single space
+- Trim leading / trailing whitespace
+- Truncate to **80 characters** (with a trailing `…` if cut). Long
+  titles otherwise produce unreadable bullets
+
+If normalisation leaves the display empty (the title was entirely
+syntax characters), fall back to `<new-slug>` itself (omit the `|`
+section: `[[<new-slug>]]`).
 
 ### 4. Append the log entry
 
