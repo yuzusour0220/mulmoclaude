@@ -119,6 +119,9 @@ const jaMessages = {
     copiedMarkdown: "コピーしました",
   },
   rightSidebar: {
+    permalink: "パーマリンク",
+    copyPermalink: "パーマリンクをコピー",
+    copiedPermalink: "コピーしました!",
     toggleSystemPrompt: "システムプロンプトの表示切替",
     systemPrompt: "システムプロンプト",
     availableTools: "利用可能ツール",

@@ -114,6 +114,9 @@ const ptBRMessages = {
     copiedMarkdown: "Copiado!",
   },
   rightSidebar: {
+    permalink: "Link permanente",
+    copyPermalink: "Copiar link permanente",
+    copiedPermalink: "Copiado!",
     toggleSystemPrompt: "Alternar system prompt",
     systemPrompt: "System Prompt",
     availableTools: "Ferramentas disponíveis",

@@ -1,6 +1,30 @@
 <template>
   <div class="w-80 flex-shrink-0 border-l border-gray-200 flex flex-col bg-white text-gray-900">
     <div ref="historyContainer" class="flex-1 overflow-y-auto min-h-0">
+      <div v-if="permalink" class="bg-white border-b border-gray-200 p-4 space-y-2">
+        <span class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{ t("rightSidebar.permalink") }}</span>
+        <div class="flex items-center gap-2">
+          <input
+            :value="permalink"
+            readonly
+            class="flex-1 min-w-0 text-xs font-mono bg-gray-50 border border-gray-200 rounded px-2 py-1 text-gray-700"
+            data-testid="permalink-input"
+            @focus="selectAllOnFocus"
+          />
+          <button
+            type="button"
+            class="h-8 w-8 flex-shrink-0 flex items-center justify-center rounded text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+            :class="{ '!text-green-600': permalinkCopied }"
+            data-testid="copy-permalink"
+            :title="permalinkCopied ? t('rightSidebar.copiedPermalink') : t('rightSidebar.copyPermalink')"
+            :aria-label="permalinkCopied ? t('rightSidebar.copiedPermalink') : t('rightSidebar.copyPermalink')"
+            @click="onCopyPermalink"
+          >
+            <span class="material-icons text-lg" aria-hidden="true">{{ permalinkCopied ? "check" : "content_copy" }}</span>
+          </button>
+        </div>
+      </div>
+
       <div class="bg-white border-b border-gray-200">
         <button
           class="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50"
@@ -100,7 +124,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, nextTick } from "vue";
+import { ref, computed, nextTick } from "vue";
 import { useI18n } from "vue-i18n";
 import type { ToolCallHistoryItem } from "../types/toolCallHistory";
 import { formatTime } from "../utils/format/date";
@@ -113,9 +137,35 @@ const props = defineProps<{
   availableTools: string[];
   rolePrompt: string;
   toolDescriptions: Record<string, string>;
+  sessionId: string | null;
+  selectedResultUuid: string | null;
 }>();
 
 const { copied, copy } = useClipboardCopy();
+
+// Permalink to the currently-selected message inside this chat session.
+// Intentionally NOT mirrored into the browser URL bar (#179587b1 removed
+// the `?result=` URL persistence because per-click history writes turned
+// the back button into an "undo panel selection" anti-pattern). The
+// debug pane exposes the string as a copyable field so you can paste
+// "investigate this message" pointers into a chat without polluting
+// browser navigation.
+const permalink = computed<string | null>(() => {
+  if (!props.sessionId) return null;
+  const base = `${window.location.origin}/chat/${props.sessionId}`;
+  return props.selectedResultUuid ? `${base}?result=${props.selectedResultUuid}` : base;
+});
+
+const { copied: permalinkCopied, copy: copyPermalink } = useClipboardCopy();
+
+async function onCopyPermalink(): Promise<void> {
+  if (permalink.value) await copyPermalink(permalink.value);
+}
+
+function selectAllOnFocus(event: FocusEvent): void {
+  const { target } = event;
+  if (target instanceof HTMLInputElement) target.select();
+}
 
 async function onCopyHistory(): Promise<void> {
   await copy(formatJson(props.toolCallHistory));

@@ -114,6 +114,9 @@ const frMessages = {
     copiedMarkdown: "Copié !",
   },
   rightSidebar: {
+    permalink: "Lien permanent",
+    copyPermalink: "Copier le lien permanent",
+    copiedPermalink: "Copié !",
     toggleSystemPrompt: "Basculer le system prompt",
     systemPrompt: "System Prompt",
     availableTools: "Outils disponibles",
