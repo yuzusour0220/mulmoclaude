@@ -25,7 +25,12 @@ function buildWideTree() {
   return { dirAFiles, dirBFiles };
 }
 
-type FileNode = { name: string; path: string; type: "file"; size: number };
+interface FileNode {
+  name: string;
+  path: string;
+  type: "file";
+  size: number;
+}
 
 function rootDirResponse() {
   return {
