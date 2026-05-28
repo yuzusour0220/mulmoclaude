@@ -61,7 +61,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted, nextTick } from "vue";
+import { ref, computed, watch, onMounted, onUnmounted } from "vue";
 import { useRoute } from "vue-router";
 import { useI18n } from "vue-i18n";
 import FileTreePane from "./FileTreePane.vue";
@@ -203,11 +203,14 @@ watch(
 // restored from localStorage lazy-load their children later via each
 // FileTree's own watcher. Each of those loads pushes the selected
 // row further down, so scrollIntoView must re-run whenever the tree
-// grows, not just once on selection change.
-async function revealSelectedInTree(): Promise<void> {
+// grows, not just once on selection change. A pending-rAF guard
+// coalesces a burst of childrenByPath updates into a single scroll.
+let pendingRevealRaf = 0;
+function revealSelectedInTree(): void {
   if (!selectedPath.value) return;
-  await nextTick();
-  requestAnimationFrame(() => {
+  if (pendingRevealRaf !== 0) return;
+  pendingRevealRaf = requestAnimationFrame(() => {
+    pendingRevealRaf = 0;
     const button = document.querySelector<HTMLElement>('[data-testid="files-view-root"] button[data-selected="true"]');
     button?.scrollIntoView({ block: "nearest" });
   });
@@ -240,5 +243,6 @@ onMounted(async () => {
 
 onUnmounted(() => {
   abortContent();
+  if (pendingRevealRaf !== 0) cancelAnimationFrame(pendingRevealRaf);
 });
 </script>
