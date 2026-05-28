@@ -140,13 +140,11 @@
                 <span v-else-if="field.type === 'ref' && field.to && typeof item[key] === 'string' && item[key]" class="block truncate">
                   <router-link
                     :to="{ path: `/collections/${field.to}`, query: { selected: String(item[key]) } }"
-                    class="inline-flex items-center gap-0.5 text-indigo-600 hover:text-indigo-800 hover:underline font-semibold"
+                    class="text-indigo-600 hover:text-indigo-800 hover:underline font-semibold"
                     :data-testid="`collections-ref-link-${key}-${item[key]}`"
                     @click.stop
+                    >{{ refDisplay(field.to, String(item[key])) }}</router-link
                   >
-                    <span>{{ refDisplay(field.to, String(item[key])) }}</span>
-                    <span class="material-icons text-[10px]">launch</span>
-                  </router-link>
                 </span>
 
                 <!-- Enum badges -->
@@ -563,12 +561,10 @@
                 <router-link
                   v-else-if="field.type === 'ref' && field.to && typeof viewing[key] === 'string' && viewing[key]"
                   :to="{ path: `/collections/${field.to}`, query: { selected: String(viewing[key]) } }"
-                  class="inline-flex items-center gap-0.5 text-indigo-600 hover:text-indigo-800 font-bold hover:underline"
+                  class="text-indigo-600 hover:text-indigo-800 font-bold hover:underline"
                   :data-testid="`collections-detail-ref-${key}`"
+                  >{{ refDisplay(field.to, String(viewing[key])) }}</router-link
                 >
-                  <span>{{ refDisplay(field.to, String(viewing[key])) }}</span>
-                  <span class="material-icons text-xs">launch</span>
-                </router-link>
 
                 <!-- Money format -->
                 <span v-else-if="field.type === 'money'" class="font-semibold text-slate-900 tabular-nums text-sm">{{
