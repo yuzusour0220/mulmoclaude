@@ -13,6 +13,7 @@ import { REGISTRATION as manageSkillsRegistration } from "../manageSkills";
 import { REGISTRATION as manageSourceRegistration } from "../manageSource";
 import { REGISTRATION as markdownRegistration } from "../markdown";
 import { REGISTRATION as photoLocationsRegistration } from "../photoLocations";
+import { REGISTRATION as presentCollectionRegistration } from "../presentCollection";
 import { REGISTRATION as presentFormRegistration } from "../presentForm";
 import { REGISTRATION as presentHtmlRegistration } from "../presentHtml";
 import { REGISTRATION as presentMulmoScriptRegistration } from "../presentMulmoScript";
@@ -38,6 +39,7 @@ export const GENERATED_PLUGIN_REGISTRATIONS: readonly PluginRegistration[] = [
   manageSourceRegistration,
   markdownRegistration,
   photoLocationsRegistration,
+  presentCollectionRegistration,
   presentFormRegistration,
   presentHtmlRegistration,
   presentMulmoScriptRegistration,

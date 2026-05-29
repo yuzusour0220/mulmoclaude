@@ -990,6 +990,11 @@ const zhMessages = {
     submit: "提交",
     progress: "已填写 {filled} / {total} 个必填字段",
   },
+  pluginPresentCollection: {
+    fallbackTitle: "集合",
+    itemLabel: "项目：{id}",
+    listLabel: "全部记录",
+  },
   pluginPresentHtml: {
     saveAsPdf: "另存为 PDF(打开打印对话框)",
     pdf: "PDF",
@@ -1341,7 +1346,6 @@ const zhMessages = {
     clearSearch: "清除搜索",
     openCollection: "打开 {title}",
     createTitle: "新增",
-    editTitle: "编辑记录",
     derivedLabel: "派生",
     embedMissingTitle: "缺少嵌入引用",
     chat: "对话",

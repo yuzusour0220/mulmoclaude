@@ -999,6 +999,11 @@ const enMessages = {
     submit: "Submit",
     progress: "{filled} of {total} required fields completed",
   },
+  pluginPresentCollection: {
+    fallbackTitle: "Collection",
+    itemLabel: "Item: {id}",
+    listLabel: "All records",
+  },
   pluginPresentHtml: {
     saveAsPdf: "Save as PDF (opens print dialog)",
     pdf: "PDF",
@@ -1351,7 +1356,6 @@ const enMessages = {
     clearSearch: "Clear search",
     openCollection: "Open {title}",
     createTitle: "Add new",
-    editTitle: "Edit record",
     derivedLabel: "Derived",
     embedMissingTitle: "Embedded reference missing",
     chat: "Chat",

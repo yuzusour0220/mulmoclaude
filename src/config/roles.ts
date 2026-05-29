@@ -58,6 +58,7 @@ export const ROLES: Role[] = [
     availablePlugins: [
       TOOL_NAMES.presentDocument,
       TOOL_NAMES.presentForm,
+      TOOL_NAMES.presentCollection,
       TOOL_NAMES.presentMulmoScript,
       TOOL_NAMES.generateImage,
       TOOL_NAMES.presentHtml,
@@ -92,6 +93,7 @@ export const ROLES: Role[] = [
       TOOL_NAMES.notify,
       TOOL_NAMES.presentDocument,
       TOOL_NAMES.presentForm,
+      TOOL_NAMES.presentCollection,
       // Preset runtime plugins (server/plugins/preset-list.ts).
       // Runtime plugins are gated by `availablePlugins` like the
       // static-GUI / static-MCP entries above; listed here so the

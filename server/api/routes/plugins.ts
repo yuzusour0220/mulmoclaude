@@ -3,6 +3,7 @@ import { executeMindMap } from "@gui-chat-plugin/mindmap";
 import { executeSpreadsheet, type SpreadsheetArgs } from "../../../src/plugins/spreadsheet/definition.js";
 import { executeQuiz } from "@mulmochat-plugin/quiz";
 import { executeForm } from "../../../src/plugins/presentForm/plugin.js";
+import { executePresentCollection } from "../../../src/plugins/presentCollection/plugin.js";
 import { executeOpenCanvas } from "../../../src/plugins/canvas/definition.js";
 import { executePresent3D } from "@gui-chat-plugin/present3d";
 import { executeMapControl } from "@gui-chat-plugin/google-map";
@@ -243,6 +244,15 @@ bindRoute(
   router,
   API_ROUTES.form.dispatch,
   wrapPluginExecute((req) => executeForm(null as never, req.body)),
+);
+
+// presentCollection — render a collection (or one item) as an inline,
+// editable chat card. The View mounts CollectionView, which fetches +
+// mutates live workspace state via the existing /api/collections routes.
+bindRoute(
+  router,
+  API_ROUTES.presentCollection.dispatch,
+  wrapPluginExecute((req) => executePresentCollection(null as never, req.body)),
 );
 
 // 1×1 transparent PNG. Used as a placeholder so the canvas tool

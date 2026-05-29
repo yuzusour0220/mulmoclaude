@@ -14,6 +14,7 @@ import { META as manageSkillsMeta } from "../manageSkills/meta";
 import { META as manageSourceMeta } from "../manageSource/meta";
 import { META as markdownMeta } from "../markdown/meta";
 import { META as photoLocationsMeta } from "../photoLocations/meta";
+import { META as presentCollectionMeta } from "../presentCollection/meta";
 import { META as presentFormMeta } from "../presentForm/meta";
 import { META as presentHtmlMeta } from "../presentHtml/meta";
 import { META as presentMulmoScriptMeta } from "../presentMulmoScript/meta";
@@ -37,6 +38,7 @@ export const GENERATED_PLUGIN_METAS = [
   manageSourceMeta,
   markdownMeta,
   photoLocationsMeta,
+  presentCollectionMeta,
   presentFormMeta,
   presentHtmlMeta,
   presentMulmoScriptMeta,

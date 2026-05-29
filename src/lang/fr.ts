@@ -1008,6 +1008,11 @@ const frMessages = {
     submit: "Envoyer",
     progress: "{filled} sur {total} champs obligatoires remplis",
   },
+  pluginPresentCollection: {
+    fallbackTitle: "Collection",
+    itemLabel: "Élément : {id}",
+    listLabel: "Tous les enregistrements",
+  },
   pluginPresentHtml: {
     saveAsPdf: "Enregistrer en PDF (ouvre la boîte de dialogue d'impression)",
     pdf: "PDF",
@@ -1359,7 +1364,6 @@ const frMessages = {
     clearSearch: "Effacer la recherche",
     openCollection: "Ouvrir {title}",
     createTitle: "Ajouter",
-    editTitle: "Modifier l'enregistrement",
     derivedLabel: "Calculé",
     embedMissingTitle: "Référence intégrée manquante",
     chat: "Discussion",

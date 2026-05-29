@@ -1000,6 +1000,11 @@ const koMessages = {
     submit: "제출",
     progress: "필수 항목 {total}개 중 {filled}개 입력됨",
   },
+  pluginPresentCollection: {
+    fallbackTitle: "컬렉션",
+    itemLabel: "항목: {id}",
+    listLabel: "모든 레코드",
+  },
   pluginPresentHtml: {
     saveAsPdf: "PDF 로 저장 (인쇄 대화 상자 열기)",
     pdf: "PDF",
@@ -1351,7 +1356,6 @@ const koMessages = {
     clearSearch: "검색 지우기",
     openCollection: "{title} 열기",
     createTitle: "새로 추가",
-    editTitle: "레코드 편집",
     derivedLabel: "파생",
     embedMissingTitle: "임베드된 참조 없음",
     chat: "채팅",

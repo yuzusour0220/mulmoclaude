@@ -999,6 +999,11 @@ const jaMessages = {
     submit: "送信",
     progress: "必須項目 {total} 件中 {filled} 件入力済み",
   },
+  pluginPresentCollection: {
+    fallbackTitle: "コレクション",
+    itemLabel: "項目: {id}",
+    listLabel: "すべてのレコード",
+  },
   pluginPresentHtml: {
     saveAsPdf: "PDF として保存（印刷ダイアログを開きます）",
     pdf: "PDF",
@@ -1348,7 +1353,6 @@ const jaMessages = {
     clearSearch: "検索をクリア",
     openCollection: "{title} を開く",
     createTitle: "新規追加",
-    editTitle: "レコードを編集",
     derivedLabel: "計算値",
     embedMissingTitle: "埋め込み参照が見つかりません",
     chat: "チャット",
