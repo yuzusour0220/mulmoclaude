@@ -892,6 +892,7 @@ const enMessages = {
   },
   todoExplorer: {
     heading: "Todo",
+    deleteConfirm: 'Delete "{text}"?',
     doneRatio: "{done}/{total} done",
     addButton: "+ Add",
     addColumnButton: "+ Column",

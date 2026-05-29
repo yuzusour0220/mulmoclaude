@@ -905,6 +905,7 @@ const esMessages = {
   },
   todoExplorer: {
     heading: "Tareas",
+    deleteConfirm: '¿Eliminar "{text}"?',
     doneRatio: "{done}/{total} hechas",
     addButton: "+ Añadir",
     addColumnButton: "+ Columna",

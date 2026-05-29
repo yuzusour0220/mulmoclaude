@@ -883,6 +883,7 @@ const zhMessages = {
   },
   todoExplorer: {
     heading: "待办",
+    deleteConfirm: "删除「{text}」？",
     doneRatio: "{done}/{total} 完成",
     addButton: "+ 添加",
     addColumnButton: "+ 列",

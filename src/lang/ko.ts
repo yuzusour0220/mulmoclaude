@@ -893,6 +893,7 @@ const koMessages = {
   },
   todoExplorer: {
     heading: "할 일",
+    deleteConfirm: '"{text}"을(를) 삭제하시겠습니까?',
     doneRatio: "{done}/{total} 완료",
     addButton: "+ 추가",
     addColumnButton: "+ 칼럼",

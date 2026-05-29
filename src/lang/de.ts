@@ -910,6 +910,7 @@ const deMessages = {
   },
   todoExplorer: {
     heading: "To-do",
+    deleteConfirm: "„{text}“ löschen?",
     doneRatio: "{done}/{total} erledigt",
     addButton: "+ Hinzufügen",
     addColumnButton: "+ Spalte",

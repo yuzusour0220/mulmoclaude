@@ -897,6 +897,7 @@ const ptBRMessages = {
   },
   todoExplorer: {
     heading: "Tarefas",
+    deleteConfirm: 'Excluir "{text}"?',
     doneRatio: "{done}/{total} feitas",
     addButton: "+ Adicionar",
     addColumnButton: "+ Coluna",

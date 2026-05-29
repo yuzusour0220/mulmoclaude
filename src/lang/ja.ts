@@ -892,6 +892,7 @@ const jaMessages = {
   },
   todoExplorer: {
     heading: "Todo",
+    deleteConfirm: "「{text}」を削除しますか？",
     doneRatio: "{done}/{total} 完了",
     addButton: "+ 追加",
     addColumnButton: "+ 列",

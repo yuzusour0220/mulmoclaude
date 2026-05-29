@@ -339,7 +339,7 @@ function onPatchItem(itemId: string, input: PatchItemInput): void {
 function confirmAndDelete(itemId: string): boolean {
   const item = items.value.find((i) => i.id === itemId);
   if (!item) return false;
-  if (!confirmItemDelete(`Delete "${item.text}"?`)) return false;
+  if (!confirmItemDelete(t("todoExplorer.deleteConfirm", { text: item.text }))) return false;
   void deleteItem(itemId);
   return true;
 }

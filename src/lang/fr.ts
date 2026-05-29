@@ -901,6 +901,7 @@ const frMessages = {
   },
   todoExplorer: {
     heading: "Tâches",
+    deleteConfirm: "Supprimer « {text} » ?",
     doneRatio: "{done}/{total} faites",
     addButton: "+ Ajouter",
     addColumnButton: "+ Colonne",
