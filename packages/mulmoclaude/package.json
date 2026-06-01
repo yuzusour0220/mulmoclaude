@@ -29,7 +29,7 @@
     "@mulmobridge/chat-service": "^0.1.2",
     "@mulmobridge/client": "^0.1.4",
     "@mulmobridge/protocol": "^0.1.4",
-    "@mulmocast/types": "^2.6.17",
+    "@mulmocast/types": "^2.6.18",
     "@mulmochat-plugin/quiz": "0.4.3",
     "@mulmochat-plugin/ui-image": "^0.4.0",
     "@mulmoclaude/spotify-plugin": "^0.1.0",
