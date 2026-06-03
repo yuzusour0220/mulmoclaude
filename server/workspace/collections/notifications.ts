@@ -39,10 +39,11 @@ import {
 import { clear as notifierClear, listAll, publish as notifierPublish } from "../../notifier/engine.js";
 import { log } from "../../system/logger/index.js";
 import { errorMessage } from "../../utils/errors.js";
+import { whenMatches } from "../../../src/utils/collections/actionVisible.js";
 import { loadCollection, type DiscoveryOptions } from "./discovery.js";
 import { listItems, readItem, type IoOptions } from "./io.js";
 import { isTriggerDue, maybeSpawnSuccessor } from "./spawn.js";
-import type { CollectionItem, CollectionSchema, CollectionWhen } from "./types.js";
+import type { CollectionItem, CollectionSchema } from "./types.js";
 
 /** The legacy-id prefix every collection-completion bell entry carries.
  *  Used both to build new ids and to filter sweep candidates from the
@@ -69,15 +70,9 @@ function parseCompletionLegacyId(legacyId: string): { slug: string; itemId: stri
   return { slug: body.slice(0, colon), itemId: body.slice(colon + 1) };
 }
 
-/** Evaluate a `notifyWhen` predicate against a record — the server-side twin
- *  of the frontend `whenMatches` (`src/utils/collections/actionVisible.ts`).
- *  Absent predicate ⇒ always true; a missing/null field ⇒ no match. */
-function predicateMatches(when: CollectionWhen | undefined, item: CollectionItem): boolean {
-  if (!when) return true;
-  const raw = item[when.field];
-  if (raw === undefined || raw === null) return false;
-  return when.in.includes(String(raw));
-}
+// `notifyWhen` is evaluated with the SAME `whenMatches` the frontend uses for
+// field/action visibility (`src/utils/collections/actionVisible.ts`) — one
+// predicate implementation, so client and server can't drift.
 
 /** The human-readable label shown in a completion notification's
  *  title. Uses the schema's `displayField` value when declared and
@@ -281,7 +276,7 @@ export async function reconcileItem(
   // Condition gate: when the schema declares `notifyWhen`, only bell records
   // matching the predicate (e.g. high-priority todos). Convergent like the
   // gates above — a record that stops matching has its bell cleared.
-  if (!predicateMatches(schema.notifyWhen, item)) {
+  if (!whenMatches(schema.notifyWhen, item)) {
     await clearItemNotification(slug, itemId);
     return;
   }
@@ -348,7 +343,7 @@ export async function sweepStaleActiveEntries(opts: DiscoveryOptions = {}): Prom
         continue;
       }
       const item = await readItem(collection.dataDir, itemId, opts);
-      if (item === null || itemIsDone(collection.schema, item) || !predicateMatches(collection.schema.notifyWhen, item)) {
+      if (item === null || itemIsDone(collection.schema, item) || !whenMatches(collection.schema.notifyWhen, item)) {
         await notifierClear(entry.id);
       }
     } catch (err) {

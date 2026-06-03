@@ -1163,6 +1163,11 @@ describe("discoverCollections — toggle field validation", () => {
     writeSkill("test-toggle-bad-value", toggleSchema({ field: "status", onValue: "Finished", offValue: "Todo" }));
     assert.equal((await listCollections()).length, 0);
   });
+
+  it("rejects a toggle whose offValue is not one of the enum's values", async () => {
+    writeSkill("test-toggle-bad-off-value", toggleSchema({ field: "status", onValue: "Done", offValue: "Finished" }));
+    assert.equal((await listCollections()).length, 0);
+  });
 });
 
 describe("discoverCollections — notifyWhen validation", () => {
