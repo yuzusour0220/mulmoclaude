@@ -61,9 +61,11 @@
       </button>
     </header>
 
-    <!-- Search Toolbar -->
-    <div v-if="collection && items.length > 0" class="px-6 py-3 bg-white border-b border-slate-100 flex items-center justify-between gap-4">
-      <div class="relative flex-1 max-w-md">
+    <!-- Search Toolbar. Shown when there are items to search OR when the
+         calendar toggle is available — the toggle must reach an empty
+         date-bearing collection so its empty-day create affordance works. -->
+    <div v-if="collection && (items.length > 0 || hasCalendar)" class="px-6 py-3 bg-white border-b border-slate-100 flex items-center justify-between gap-4">
+      <div v-if="items.length > 0" class="relative flex-1 max-w-md">
         <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400 pointer-events-none">
           <span class="material-icons text-lg">search</span>
         </span>
@@ -122,7 +124,7 @@
         >
           <option v-for="key in dateFields" :key="key" :value="key">{{ collection?.schema.fields[key]?.label ?? key }}</option>
         </select>
-        <div class="text-[10px] text-slate-400 font-bold uppercase tracking-wider select-none">
+        <div v-if="items.length > 0" class="text-[10px] text-slate-400 font-bold uppercase tracking-wider select-none">
           {{ t("collectionsView.searchSummary", { shown: filteredItems.length, total: items.length }) }}
         </div>
       </div>

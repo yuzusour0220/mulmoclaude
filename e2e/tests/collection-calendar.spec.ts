@@ -39,6 +39,13 @@ const EVENTS = {
   ],
 };
 
+// A date-bearing collection with ZERO records — the toggle must still
+// appear so the empty-day create affordance is reachable.
+const EVENTS_EMPTY = {
+  collection: { ...EVENTS.collection, slug: "events-empty", schema: { ...EVENTS.collection.schema, dataPath: "data/events-empty/items" } },
+  items: [],
+};
+
 // A collection with NO date field — must never show the calendar toggle.
 const CONTACTS = {
   collection: {
@@ -64,6 +71,10 @@ async function mockCollections(page: Page): Promise<void> {
   await page.route(
     (url) => url.pathname === "/api/collections/events",
     (route) => route.fulfill({ json: EVENTS }),
+  );
+  await page.route(
+    (url) => url.pathname === "/api/collections/events-empty",
+    (route) => route.fulfill({ json: EVENTS_EMPTY }),
   );
   await page.route(
     (url) => url.pathname === "/api/collections/contacts",
@@ -116,6 +127,19 @@ test.describe("collection calendar view", () => {
     await page.getByTestId(`collection-calendar-day-${empty}`).click();
     await expect(page.getByTestId("collections-create")).toBeVisible();
     await expect(page.getByTestId("collections-input-on")).toHaveValue(empty);
+  });
+
+  test("shows the toggle and a working calendar for an empty date-bearing collection", async ({ page }) => {
+    await page.goto("/collections/events-empty");
+    // Toggle is reachable even with zero records…
+    await expect(page.getByTestId("collection-view-toggle-calendar")).toBeVisible();
+    await page.getByTestId("collection-view-toggle-calendar").click();
+    await expect(page.getByTestId("collection-calendar")).toBeVisible();
+    // …and the empty-day create affordance works to bootstrap the first record.
+    const day = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-10`;
+    await page.getByTestId(`collection-calendar-day-${day}`).click();
+    await expect(page.getByTestId("collections-create")).toBeVisible();
+    await expect(page.getByTestId("collections-input-on")).toHaveValue(day);
   });
 
   test("shows no calendar toggle for a date-less collection", async ({ page }) => {
