@@ -119,7 +119,10 @@ test.describe("collection inline cell editing", () => {
     await mockItemPut(page, false);
     await page.goto("/collections/daily-routine");
     const checkbox = page.getByTestId("collections-inline-bool-yoga-jun-03");
-    await checkbox.check();
+    // `.click()`, not `.check()`: the failed PUT rolls the cell back to
+    // unchecked, so `.check()` (which asserts a final checked state) would
+    // race the rollback. A single click + explicit assertions is stable.
+    await checkbox.click();
     await expect(page.getByTestId("collections-inline-error")).toBeVisible();
     await expect(checkbox).not.toBeChecked();
   });
