@@ -38,6 +38,7 @@
           :placeholder="placeholderText"
           :aria-label="t('fileTree.newFileInputAria')"
           data-testid="file-tree-new-file-input"
+          @keydown="onAnyKeydown"
           @keydown.enter.prevent="onNewFileSubmit"
           @keydown.esc.prevent="cancelCreate"
           @blur="onInputBlur"
@@ -215,6 +216,8 @@ const newFileInputRef = ref<HTMLInputElement | null>(null);
 let suppressBlur = false;
 
 function onFolderContextMenu(event: MouseEvent): void {
+  // eslint-disable-next-line no-console -- temporary diagnostic for #1598
+  console.log("[new-file] right-click", { folder: props.node.path, hasPolicy: !!createPolicy.value });
   if (!createPolicy.value) return;
   event.preventDefault();
   menuX.value = event.clientX;
@@ -227,6 +230,8 @@ function closeMenu(): void {
 }
 
 function onContextNewFile(): void {
+  // eslint-disable-next-line no-console -- temporary diagnostic for #1598
+  console.log("[new-file] context-menu New file clicked", { folder: props.node.path });
   closeMenu();
   if (!createPolicy.value) return;
   // Make sure the folder is open so the inline input is visible.
@@ -253,6 +258,11 @@ function onInputBlur(): void {
   // Cancel on blur — matches Finder/VSCode's "click away to discard"
   // behaviour. Submit still happens on Enter explicitly.
   cancelCreate();
+}
+
+function onAnyKeydown(event: KeyboardEvent): void {
+  // eslint-disable-next-line no-console -- temporary diagnostic for #1598
+  console.log("[new-file] keydown", { key: event.key, code: event.code, isComposing: event.isComposing, folder: props.node.path });
 }
 
 function onNewFileSubmit(): void {
