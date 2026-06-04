@@ -56,6 +56,7 @@ See [Wiki](config/helps/wiki.md) for details on how it works.
 - [Todo list collection](config/helps/todo-collection.md) — the canonical recipe for building or migrating a todo / task list: full schema (status enum + `done` toggle + priority bells), `SKILL.md`, and legacy `todo-plugin` migration steps
 - [Clients + Worklog](config/helps/billing-clients-worklog.md) — recipe for a client database and a per-client timesheet (Bundle A of the billing suite); set this up before invoicing
 - [Invoicing](config/helps/billing-invoice.md) — recipe for an invoice ledger + business profile with line items, host-computed totals, and PDF / bookkeeping action buttons (Bundle B; references the clients + worklog from Bundle A)
+- [Portfolio tracker](config/helps/portfolio-tracker.md) — recipe for a paired stock-quotes watchlist + holdings portfolio whose price/value are computed live from the quotes via a cross-collection derived ref
 
 ## Workspace Layout
 
