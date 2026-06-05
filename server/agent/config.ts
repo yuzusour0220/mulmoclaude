@@ -24,6 +24,29 @@ export const CONTAINER_WORKSPACE_PATH = "/home/node/mulmoclaude";
 // plans/done/fix-skill-tool-allowlist.md.
 const BASE_ALLOWED_TOOLS = ["Bash", "Read", "Write", "Edit", "Glob", "Grep", "WebFetch", "WebSearch", "Skill"];
 
+// Pre-allow every tool published by Anthropic's claude.ai account-
+// level connectors so the agent can call them without firing a
+// per-tool "Claude requested permission to use ..." prompt mid-turn
+// inside MulmoClaude. The user still controls connector enable /
+// disable via `claude` interactive `/mcp`; this list is purely a
+// permission-prompt suppressor.
+//
+// Format: per-server shorthand `mcp__<server>`. The CLI expands it
+// to every tool that server publishes. We avoid `~/.claude.json`
+// reads (Docker-fragile, invasive) and avoid the
+// `mcp__claude_ai_*` cross-server glob (not a documented
+// --allowedTools shape — undefined behaviour even if CLI accepts the
+// syntax).
+//
+// Maintenance: when the user enables a new Anthropic connector that
+// MulmoClaude should pre-allow (GitHub / Notion / Linear / Atlassian
+// / Sentry / Cloudflare / etc. — Anthropic keeps adding), append a
+// `mcp__claude_ai_<DisplayName>` entry here. The server-id mapping
+// is `display name with [\s.] → _` (e.g. `claude.ai Google Drive` →
+// `mcp__claude_ai_Google_Drive`). Confirm the live spelling via
+// `claude mcp list` before adding.
+const CLAUDE_AI_CONNECTOR_SERVERS = ["mcp__claude_ai_Gmail", "mcp__claude_ai_Google_Calendar", "mcp__claude_ai_Google_Drive", "mcp__claude_ai_Slack"];
+
 /** Tool names the agent is allowed to call this session. Drives
  *  `PLUGIN_NAMES` env (the MCP child's filter) and the CLI's
  *  `--allowedTools` arg. Static GUI / MCP plugins are gated by
@@ -283,7 +306,7 @@ export function buildCliArgs(params: CliArgsParams): string[] {
   // Claude's tool registry seems to require wildcard for runtime
   // discovery; specific names alone register permissions but not
   // the tool's existence.
-  const allowedTools = [...BASE_ALLOWED_TOOLS, ...extraAllowedTools, "mcp__mulmoclaude", ...mcpToolNames];
+  const allowedTools = [...BASE_ALLOWED_TOOLS, ...extraAllowedTools, "mcp__mulmoclaude", ...CLAUDE_AI_CONNECTOR_SERVERS, ...mcpToolNames];
 
   // stream-json input mode: the user message is streamed through
   // stdin (see `writeUserMessage` in server/agent.ts) rather than
@@ -312,16 +335,21 @@ export function buildCliArgs(params: CliArgsParams): string[] {
 
   if (mcpConfigPath) {
     args.push("--mcp-config", mcpConfigPath);
-    // Without `--strict-mcp-config`, Claude Code 2.1.x merges in
-    // claude.ai account-level integrations (Canva / Gmail / Drive
-    // / Calendar) AND our local `--mcp-config` — and observed in
-    // practice (#1043 C-2 follow-up debug session) the merge silently
-    // drops the local mulmoclaude server entirely, so its tools
-    // never reach the agent's registry. With `--strict`, the local
-    // file is the only source — exactly what the parent server
-    // intends, since mulmoclaude itself is the broker for all the
-    // GUI plugin tools.
-    args.push("--strict-mcp-config");
+    // We DELIBERATELY do NOT pass `--strict-mcp-config`. The flag is
+    // additive by default ("Load MCP servers from JSON files"); the
+    // strict variant restricts the session to only our file and
+    // hides any claude.ai connectors (Gmail / Calendar / Drive /
+    // Slack) the user has wired up via `claude` interactive `/mcp`.
+    //
+    // We previously DID pass `--strict` as a workaround for a
+    // #1043 C-2 finding that the merge silently dropped the local
+    // mulmoclaude broker. Re-verified on CLI 2.1.163 (#1617): both
+    // layers now coexist in the session's `init.mcp_servers` array
+    // and the local broker's full 12-tool surface remains callable.
+    // Removing the workaround unlocks the user's already-authorised
+    // claude.ai connectors inside MulmoClaude for free, no per-
+    // connector mcp.json hand-rolling required.
+    //
     // Permission hook for `behavior:"ask"` checks. Gated on
     // `mcpConfigPath` because the handler tool (`handlePermission`)
     // lives inside our MCP server — without `--mcp-config` the CLI
