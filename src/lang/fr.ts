@@ -75,6 +75,7 @@ const frMessages = {
     showMore: "Voir plus ({count})",
     showLess: "Réduire",
     openTarget: "Ouvrir",
+    expandDetails: "Afficher les détails",
   },
   pluginDiagnostics: {
     title: "Problème de configuration du plugin",

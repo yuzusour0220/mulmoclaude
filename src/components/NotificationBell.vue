@@ -94,7 +94,7 @@ watch(
 watch(open, (nowOpen: boolean) => {
   if (!nowOpen) {
     historyExpanded.value = false;
-    expandedHistoryIds.value = new Set();
+    expandedHistoryIds.value = new Set<string>();
   }
 });
 
@@ -435,7 +435,7 @@ async function clearAllFyi(): Promise<void> {
                 v-if="isHistoryExpandable(entry)"
                 type="button"
                 class="text-gray-300 hover:text-gray-500 shrink-0 mt-0.5"
-                :aria-label="localizeTitle(entry)"
+                :aria-label="t('notificationBell.expandDetails')"
                 :aria-expanded="isHistoryBodyExpanded(entry.id)"
                 data-testid="notification-history-expand"
                 @click.stop="toggleHistoryBody(entry.id)"

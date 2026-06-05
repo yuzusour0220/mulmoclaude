@@ -97,6 +97,7 @@ const enMessages = {
     showMore: "Show more ({count})",
     showLess: "Show less",
     openTarget: "Open",
+    expandDetails: "Expand details",
   },
   pluginDiagnostics: {
     title: "Plugin configuration issue",
