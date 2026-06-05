@@ -12,7 +12,7 @@ const X_API_BASE = "https://api.twitter.com/2";
 // headroom for a slow but real response while still bailing long
 // before the MCP client's tool-call timeout fires.
 const X_API_TIMEOUT_MS = 20 * ONE_SECOND_MS;
-const TWEET_FIELDS = "tweet.fields=created_at,author_id,public_metrics,entities";
+const TWEET_FIELDS = "tweet.fields=created_at,author_id,public_metrics,entities,note_tweet,article";
 const EXPANSIONS = "expansions=author_id";
 const USER_FIELDS = "user.fields=name,username";
 
@@ -27,6 +27,11 @@ interface XTweet {
   text: string;
   author_id?: string;
   created_at?: string;
+  // Long-form Post (>280 chars): full body lives here, not in `text`.
+  note_tweet?: { text: string };
+  // X Article (rich long-form, up to 100k chars): `text` only holds the t.co
+  // link, so the body must be read from `article.plain_text`.
+  article?: { title?: string; plain_text?: string };
   public_metrics?: {
     like_count: number;
     retweet_count: number;
@@ -65,6 +70,17 @@ async function fetchX(path: string): Promise<XApiResponse> {
   return response.json() as Promise<XApiResponse>;
 }
 
+// `text` caps at 280 chars; long-form Posts and Articles carry their real body
+// in `note_tweet` / `article`. Prefer those so the LLM sees the full content.
+function tweetBody(tweet: XTweet): string {
+  if (tweet.note_tweet?.text) return tweet.note_tweet.text;
+  const { article } = tweet;
+  if (article?.plain_text) {
+    return [article.title, article.plain_text].filter(Boolean).join("\n\n");
+  }
+  return tweet.text;
+}
+
 function formatTweet(tweet: XTweet, author?: XUser, url?: string): string {
   const date = tweet.created_at ? toUtcIsoDate(new Date(tweet.created_at)) : "";
   const dateSuffix = date ? ` · ${date}` : "";
@@ -73,7 +89,7 @@ function formatTweet(tweet: XTweet, author?: XUser, url?: string): string {
     ? `Likes: ${tweet.public_metrics.like_count} | Retweets: ${tweet.public_metrics.retweet_count} | Replies: ${tweet.public_metrics.reply_count}`
     : "";
   const link = url ?? "";
-  return [byline, "", tweet.text, "", metrics, link]
+  return [byline, "", tweetBody(tweet), "", metrics, link]
     .filter((line) => line !== undefined)
     .join("\n")
     .trimEnd();

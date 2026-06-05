@@ -19,8 +19,8 @@ A quick visual reference so chat instructions about UI ("the bell at the top rig
 │ │                                              ⚙ settings          │  │
 │ └──────────────────────────────────────────────────────────────────┘  │
 │ ┌─<PluginLauncher> [plugin-launcher]──────────────────────────────┐   │
-│ │ ✓Todos │📅Calendar │⏰Actions │📖Wiki │📡Sources │🧠Skills │🎭Roles│📁Files│   │
-│ │ [plugin-launcher-todos] [plugin-launcher-calendar] ...          │   │
+│ │ 📅Calendar │⏰Actions │📖Wiki │📡Sources │🧠Skills │🎭Roles│📁Files│   │
+│ │ [plugin-launcher-calendar] [plugin-launcher-automations] ...    │   │
 │ └─────────────────────────────────────────────────────────────────┘   │
 │ ┌─[main pane — route-specific]────┐ ┌─<SessionHistoryPanel>────────┐  │
 │ │                                 │ │ [session-history-side-panel] │  │
@@ -71,21 +71,27 @@ In **Stack layout** this sidebar isn't rendered; the same data flows through `<S
 
 ```
 🔔[notification-bell]──┐
-   🔴[notification-badge: "N"] (red dot, only when unread > 0)
-   │  ┌─[notification-panel] (opens on click)──────────────────┐
-   │  │ Notifications              [notification-mark-all-read]│
-   │  ├─────────────────────────────────────────────────────────┤
-   │  │ 🔵 Title (bold)                                       ✕ │  ← unread
-   │  │ ◯  body line                                            │  data-unread="true"
-   │  │ ◯  N min ago                                            │
-   │  ├─────────────────────────────────────────────────────────┤
-   │  │ ⚪ Title (regular)                                    ✕ │  ← read
-   │  │     body line                                            │  data-unread="false"
-   │  └─────────────────────────────────────────────────────────┘
-   └─ each row: [notification-item-<id>]; click → router.push(target)
+   🔴[notification-badge: "N"] (worst-severity color; shown when active > 0)
+   │  ┌─[notification-panel] (opens on click) ─────────────────┐
+   │  │ Notifications                                          │
+   │  ├─ Active (N) ──────────────── [notification-clear-all]  │ (fyi rows only)
+   │  │ 🔔 Active row title                  ✕ (action only)   │
+   │  │     N min ago · pluginPkg                              │
+   │  │ … [notification-item-<id>]                             │
+   │  ├─ History (N) ─────────────────────────────────────────┤
+   │  │ ✓ / ✗  History row title                              │
+   │  │        N min ago · cleared|cancelled · pluginPkg      │
+   │  │ … initial 5 rows; rest hidden behind toggle           │
+   │  ├──────────────────────────────────────────────────────┤
+   │  │ [notification-history-toggle]                          │
+   │  │   "Show more (N)" / "Show less" (only when > 5 items) │
+   │  └──────────────────────────────────────────────────────┘
+   └─ active rows: [notification-item-<id>]
+      history rows: [notification-history-<id>]
 ```
 
-Click on a row → `useNotifications.markRead(id)` → badge decrements. The 🔵/⚪ leading dot disappears once read; bold title fades to gray.
+- **Active** rows: fyi (body click clears + navigates) vs action (× cancels; body click navigates only).
+- **History** rows: read-only; navigate on click when `navigateTarget` is present. Capped at `HISTORY_CAP` (50) FIFO server-side; bell collapses to the first 5 with a toggle so repetitive entries (e.g. recurring "docker not running") don't bury the rest. Toggle state resets each time the popup closes.
 
 ## /chat — the chat page
 
@@ -134,17 +140,19 @@ Stable hooks for tests / chat references when a tool result is selected on the r
 ## /calendar — calendar of dated items
 
 ```
-┌─[<CalendarView> mounts <SchedulerView force-tab="calendar">]──────────┐
+┌─[<CalendarView> mounts <SchedulerView force-tab="calendar"> — [scheduler-view-root]]─┐
 │                                                                       │
 │  ┌─Header───────────────────────────────────────────────────────────┐ │
-│  │  📅 Calendar  N items     ◀ Today ▶   month ▼   week  list      │ │
+│  │  📅 Calendar  N items     ◀ Today ▶   [scheduler-view-mode-     │ │
+│  │                                         {month,week,list}]       │ │
 │  └──────────────────────────────────────────────────────────────────┘ │
 │                                                                       │
 │  ┌─Grid (month/week) or List───────────────────────────────────────┐ │
 │  │  Mo  Tu  We  Th  Fr  Sa  Su                                     │ │
 │  │  …                                                              │ │
-│  │  [scheduler-item-<id>]   "Team meeting" · 10:00                  │ │
-│  │                          (drag to move; click → edit form)      │ │
+│  │  [scheduler-event-item]  "Team meeting" · 10:00  ✕              │ │
+│  │   (list-view row; click → edit form;  ↑ [scheduler-item-        │ │
+│  │    delete-<id>] on hover)                                        │ │
 │  │  ...                                                             │ │
 │  └──────────────────────────────────────────────────────────────────┘ │
 │                                                                       │
@@ -185,7 +193,9 @@ Origin badges: `system` (bg-gray) / `user` (bg-blue) / `skill` (bg-purple). Disa
 
 ## /wiki — wiki pages and lint report
 
-Two layouts share `<WikiView>`: the **index** (page list) and a **single page** body.
+`<WikiView>` shares one header tab strip — Index / Log / Lint / [wiki-tab-graph] — across
+several layouts: the **index** (page list), a **single page** body, the activity **log**, the
+**lint report**, and the **graph**.
 
 ### Index
 
@@ -217,9 +227,24 @@ Two layouts share `<WikiView>`: the **index** (page list) and a **single page** 
 │ │ ![image](relative/path)  ← rewritten to /api/files/raw    │ │
 │ │ [[wiki-link]]            ← rewritten to /wiki/pages/<slug>│ │
 │ └───────────────────────────────────────────────────────────┘ │
+│ ┌─[wiki-linked-references] (pages whose [[links]] point here)┐ │
+│ │ • [wiki-linked-reference-<slug>] → /wiki/pages/<slug>     │ │
+│ └───────────────────────────────────────────────────────────┘ │
 │ Per-page chat composer:                                       │
 │   [wiki-page-chat-input]  [wiki-page-chat-send]               │
 └───────────────────────────────────────────────────────────────┘
+```
+
+### Graph (`/wiki/graph`)
+
+```text
+┌─[<WikiView> action="graph"]───────────────────────────────────┐
+│ [wiki-graph]                                                   │
+│ ┌─[wiki-graph-canvas] (echarts force layout)────────────────┐ │
+│ │   (•)Title ──→ (•)Title    click node → /wiki/pages/<slug>│ │
+│ │        \         /         empty → "No links to graph yet"│ │
+│ └───────────────────────────────────────────────────────────┘ │
+└────────────────────────────────────────────────────────────────┘
 ```
 
 ### page-edit (canvas timeline only — #963)
@@ -283,7 +308,7 @@ Clicking a list row marks it read (badge decrements). The "Mark all read" button
 ## /sources — registered news/RSS feeds
 
 ```
-┌─[<SourcesManager>]─────────────────────────────────────────────────┐
+┌─[<SourcesManager> — [sources-view-root]]───────────────────────────┐
 │ Top bar: [sources-add-btn] [sources-rebuild-btn]                   │
 │                                                                    │
 │ Add form (when adding) [sources-add-form]:                         │
@@ -316,32 +341,10 @@ Clicking a list row marks it read (badge decrements). The "Mark all read" button
 └────────────────────────────────────────────────────────────────────┘
 ```
 
-## /todos — Kanban / table / list of tasks
-
-```
-┌─[<TodoExplorer>]───────────────────────────────────────────────────┐
-│ Top bar:                                                           │
-│  [todo-search]   [todo-add-btn]   [todo-column-add-btn]            │
-│  view mode: [todo-view-kanban] [todo-view-table] [todo-view-list]  │
-│                                                                    │
-│ Kanban (default):                                                  │
-│ ┌─Backlog─────┐ ┌─Todo──────┐ ┌─In Progress─┐ ┌─Done────────┐      │
-│ │             │ │           │ │             │ │             │      │
-│ │ [todo-card- │ │           │ │             │ │             │      │
-│ │  <id>]      │ │           │ │             │ │             │      │
-│ │   Title     │ │           │ │             │ │             │      │
-│ │   #label    │ │           │ │             │ │             │      │
-│ │             │ │           │ │             │ │             │      │
-│ └─────────────┘ └───────────┘ └─────────────┘ └─────────────┘      │
-│                                                                    │
-│ Drag cards across columns to change state.                         │
-└────────────────────────────────────────────────────────────────────┘
-```
-
 ## /files — workspace file explorer
 
 ```
-┌─[<FilesView>]──────────────────────────────────────────────────────────┐
+┌─[<FilesView> — [files-view-root]]──────────────────────────────────────┐
 │ ┌─Tree pane──────────┐ ┌─Preview pane (route param: pathMatch)───────┐ │
 │ │ ▶ artifacts/       │ │                                             │ │
 │ │ ▼ config/          │ │ ┌─[system-file-banner] (#832, optional)───┐ │ │
@@ -354,7 +357,6 @@ Clicking a list row marks it read (badge decrements). The "Mark all read" button
 │ │   • foo.md   ←sel  │ │  │                                        │ │ │
 │ │   • bar.md         │ │  │  • markdown → marked + Vue             │ │ │
 │ │ ...                │ │  │  • images → <img>                      │ │ │
-│ │                    │ │  │  • todos JSON → <TodoExplorer>         │ │ │
 │ │                    │ │  │  • scheduler items.json → <CalendarView>│ │ │
 │ │                    │ │  │  • code → text                         │ │ │
 │ │                    │ │  └────────────────────────────────────────┘ │ │
@@ -363,6 +365,31 @@ Clicking a list row marks it read (badge decrements). The "Mark all read" button
 ```
 
 The preview pane reuses plugin views — clicking a `config/scheduler/items.json` mounts `<CalendarView>` via `toSchedulerResult`. System-managed files (`config/*.json`, `data/wiki/*.md`, `conversations/memory.md`, …) get a `[system-file-banner]` above the body explaining what the file is, who writes it, and whether hand-edits survive (descriptors live in `src/config/systemFileDescriptors.ts`; #832).
+
+## /collections — schema-driven record tables
+
+```
+┌─[<CollectionView> — /collections/:slug]────────────────────────────────┐
+│ Toolbar: [collection-view-toggle-table | -calendar | -kanban] · search  │
+│                                                                         │
+│ [collections-inline-error] (banner, only after a failed inline write)   │
+│ ┌─Table──────────────────────────────────────────────────────────────┐ │
+│ │ ID        │ Yoga                  │ Status                          │ │
+│ │ [collections-row-<id>] (whole row click → detail panel)            │ │
+│ │  jun-03   │ ☑ [collections-      │ ▾ [collections-                 │ │
+│ │           │   inline-bool-       │   inline-enum-                  │ │
+│ │           │   <key>-<id>]        │   <key>-<id>]                   │ │
+│ └────────────────────────────────────────────────────────────────────┘ │
+│                                                                         │
+│ Row click expands [collections-detail] (read-only → Edit → Save).       │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+`boolean` columns render an inline checkbox and `enum` columns an inline `<select>` directly in the table cell — changing one writes the value straight to the record (`PUT .../items/:id`, optimistic + rollback on failure) without opening the detail panel. The controls use `@click.stop` so the cell click never bubbles into the row's `openView`. All other field types (and the full edit form) still go through the row → `[collections-detail]` → Edit → Save flow.
+
+The **Calendar** toggle (`[collection-view-toggle-calendar]`) appears only when the schema has a `date` field; the **Kanban** toggle (`[collection-view-toggle-kanban]`) only when it has an `enum` field. `<CollectionKanbanView>` groups records into columns by the chosen enum field (declared `values` order + a trailing **Uncategorized** column for empty/unknown values — omitted when the chosen enum is declared `required`), with a `[collection-kanban-field]` selector when >1 enum field exists. Dragging a card (`[collection-kanban-card-<id>]`) between columns writes the group field via the same inline-edit PUT (no column drag, no within-column ordering); a card whose group field is hidden by a `when` predicate is omitted from the board. Card click opens the same detail panel below the board.
+
+A `toggle` field is a checkbox that **projects** an `enum` field (stores nothing itself): checked when the enum equals its `onValue`, toggling writes `onValue`/`offValue` back to that enum. It renders inline in the table (`[collections-inline-toggle-<key>-<id>]`) and on the kanban card (`[collection-kanban-toggle-<id>]`, shown when it projects the board's group field — checking it also moves the card). This is how a todo-style "done" checkbox fronts a kanban `status` while keeping the enum as the single source of truth.
 
 ## /skills — workspace skills list
 

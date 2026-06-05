@@ -108,6 +108,7 @@ This catalog only covers **cross-cutting** helpers — formatters, error helpers
 |---|---|---|
 | `src/composables/useContentDisplay.ts` | `useContentDisplay()` | Shared "show one of: loading / error / empty / data" state machine for plugin Views. |
 | `src/utils/dom/iframeHeightClamp.ts` | `iframeHeightClamp(...)` | iframe height autosize logic (used by html / spreadsheet preview surfaces). |
+| `src/utils/confirmDelete.ts` | `confirmItemDelete(message)` | "Are you sure?" gate before deleting a single item (todo card, calendar event, …). Single seam over `window.confirm` so the UI/wording can be swapped to a styled modal in one place. |
 
 ---
 

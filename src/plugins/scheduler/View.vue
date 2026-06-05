@@ -1,5 +1,5 @@
 <template>
-  <div class="h-full bg-white flex flex-col">
+  <div class="h-full bg-white flex flex-col" data-testid="scheduler-view-root">
     <!-- Surfaces POST /api/scheduler failures so silent no-ops are diagnosable. -->
     <div v-if="apiError" class="px-4 py-2 bg-red-50 border-b border-red-200 text-sm text-red-700" role="alert" data-testid="scheduler-api-error">
       {{ t("pluginScheduler.apiError", { error: apiError }) }}
@@ -66,6 +66,7 @@
               class="h-8 w-8 flex items-center justify-center"
               :class="viewMode === mode.key ? 'bg-blue-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'"
               :title="mode.label"
+              :data-testid="`scheduler-view-mode-${mode.key}`"
               @click="viewMode = mode.key"
             >
               <span class="material-icons text-sm">{{ mode.icon }}</span>
@@ -81,6 +82,7 @@
           <li
             v-for="item in items"
             :key="item.id"
+            data-testid="scheduler-event-item"
             class="flex items-start gap-3 p-3 rounded-lg border cursor-pointer group"
             :class="selectedId === item.id ? 'border-blue-400 bg-blue-50' : 'border-gray-200 hover:bg-gray-50'"
             @click="selectItem(item)"
@@ -103,6 +105,7 @@
             <button
               class="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 text-xs px-1 mt-0.5 shrink-0"
               :title="t('pluginScheduler.deleteItem')"
+              :data-testid="`scheduler-item-delete-${item.id}`"
               @click.stop="remove(item)"
             >
               ✕
@@ -256,6 +259,7 @@ import type { ToolResultComplete } from "gui-chat-protocol/vue";
 import type { SchedulerData, ScheduledItem } from "./index";
 import { useFreshPluginData } from "../../composables/useFreshPluginData";
 import { apiPost } from "../../utils/api";
+import { confirmItemDelete } from "../../utils/confirmDelete";
 import { pluginEndpoints } from "../api";
 import type { SchedulerEndpoints } from "./automationsDefinition";
 import TasksTab from "./TasksTab.vue";
@@ -589,6 +593,7 @@ async function callApi(body: Record<string, unknown>): Promise<boolean> {
 }
 
 async function remove(item: ScheduledItem): Promise<void> {
+  if (!confirmItemDelete(t("pluginScheduler.deleteConfirm", { title: item.title }))) return;
   if (selectedId.value === item.id) selectedId.value = null;
   await callApi({ action: "delete", id: item.id });
 }

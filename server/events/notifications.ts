@@ -180,8 +180,8 @@ function buildWikiTarget(target: Extract<NavigateTarget, { view: typeof NOTIFICA
 }
 
 function buildSingleSegmentTarget(view: string, segment: string | undefined): string {
-  // Helper for views with a single optional path component: todos
-  // (itemId), automations (taskId), sources (slug). Unsafe values
+  // Helper for views with a single optional path component:
+  // automations (taskId), sources (slug). Unsafe values
   // fall back to the view's index — a soft-fail since these views
   // all have a usable index page.
   if (segment && isSafePathComponent(segment)) return `/${view}/${encodeURIComponent(segment)}`;
@@ -192,8 +192,6 @@ function buildNavigateTarget(target: NavigateTarget): string | undefined {
   switch (target.view) {
     case NOTIFICATION_VIEWS.chat:
       return buildChatTarget(target);
-    case NOTIFICATION_VIEWS.todos:
-      return buildSingleSegmentTarget(PAGE_ROUTES.todos, target.itemId);
     case NOTIFICATION_VIEWS.calendar:
       return `/${PAGE_ROUTES.calendar}`;
     case NOTIFICATION_VIEWS.automations:
@@ -204,6 +202,18 @@ function buildNavigateTarget(target: NavigateTarget): string | undefined {
       return buildFilesTarget(target);
     case NOTIFICATION_VIEWS.wiki:
       return buildWikiTarget(target);
+    case NOTIFICATION_VIEWS.collections: {
+      // /collections/:slug?selected=<itemId> — the `?selected=` query
+      // param is the documented convention for deep-linking to a
+      // specific record (see `helps/collection-skills.md`). Dot-segment
+      // slug would normalize out of /collections, so fall back to the
+      // index; itemId is a query param so it doesn't participate in
+      // path normalization and doesn't need the same guard.
+      if (!isSafePathComponent(target.slug)) return `/${PAGE_ROUTES.collections}`;
+      const base = `/${PAGE_ROUTES.collections}/${encodeURIComponent(target.slug)}`;
+      if (!target.itemId) return base;
+      return `${base}?selected=${encodeURIComponent(target.itemId)}`;
+    }
     default:
       return undefined;
   }

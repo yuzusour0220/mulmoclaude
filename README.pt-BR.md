@@ -8,17 +8,11 @@
 
 [English](README.md) · [日本語](README.ja.md) · [简体中文](README.zh.md) · [한국어](README.ko.md) · [Español](README.es.md) · **Português (BR)** · [Français](README.fr.md) · [Deutsch](README.de.md)
 
-Chat GUI com Claude Code — memória de longo prazo, saída visual rica, execução em sandbox e acesso remoto de qualquer lugar.
+> **[How AI-Native Applications Should Be Built](MANIFEST.md)** — a tese de arquitetura, UX e protocolo por trás do MulmoClaude.
 
-**Memória de longo prazo**: um wiki pessoal integrado — inspirado na ideia de Andrej Karpathy de dar a um LLM um caderno que cresce com o tempo — dá ao Claude **conhecimento persistente** que se acumula a cada conversa.
+MulmoClaude é uma plataforma de aplicações AI-nativa, de código aberto, que roda localmente na sua máquina. Em vez de aplicativos isolados, as capacidades são construídas como plugins dentro de um único registro. As aplicações que rodam nela hoje incluem um sistema contábil completo (com lógica real de escrituração no lado do servidor), um wiki pessoal e um leitor de documentos da SEC (Edgar). O Claude atua como um controlador universal que compõe através desses plugins.
 
-Converse com o Claude Code e receba de volta não apenas texto, mas **saída visual interativa**: documentos, planilhas, mapas mentais, gráficos, imagens, formulários, cenas 3D e muito mais.
-
-**Execução em sandbox**: o Claude Code é executado dentro de um sandbox, protegendo seu sistema contra ataques de injeção de prompt.
-
-**Acesso de qualquer lugar**: conecte Telegram, Slack, LINE, Discord ou [10 outros aplicativos de mensagens](#messaging-bridges) para conversar com seu agente de IA pelo celular.
-
-**Tarefas agendadas**: delegue trabalhos recorrentes — resumos diários, verificações periódicas, lembretes programados — ao agendador integrado, que executa seu agente via cron.
+Você interage em linguagem natural, e o Claude invoca a GUI certa para a tarefa — respondendo em markdown, gráficos, formulários, wikis, planilhas ou cenas 3D. Todos os dados vivem como arquivos comuns no seu workspace.
 
 ## Início Rápido
 
@@ -510,13 +504,12 @@ O canvas (painel direito) suporta 8 modos de visualização, alternáveis via ba
 | `Cmd/Ctrl+1` | Single    | (default)         | Mostra o resultado da ferramenta selecionada |
 | `Cmd/Ctrl+2` | Stack     | `?view=stack`     | Todos os resultados empilhados verticalmente |
 | `Cmd/Ctrl+3` | Files     | `?view=files`     | Explorador de arquivos do workspace          |
-| `Cmd/Ctrl+4` | Todos     | `?view=todos`     | Quadro de tarefas Kanban / tabela / lista    |
 | `Cmd/Ctrl+5` | Scheduler | `?view=scheduler` | Calendário de tarefas agendadas              |
 | `Cmd/Ctrl+6` | Wiki      | `?view=wiki`      | Índice de páginas do wiki                    |
 | `Cmd/Ctrl+7` | Skills    | `?view=skills`    | Lista e editor de skills                     |
 | `Cmd/Ctrl+8` | Roles     | `?view=roles`     | Gerenciamento de papéis                      |
 
-Todo modo de visualização é orientado por URL: clicar em um botão do launcher atualiza `?view=`, e chegar em uma URL com `?view=todos` (por exemplo) restaura a visualização correspondente. A lista de modos de visualização é definida uma vez em `src/utils/canvas/viewMode.ts` — adicionar um novo modo é apenas adicionar um item ao array.
+Todo modo de visualização é orientado por URL: clicar em um botão do launcher atualiza `?view=`, e chegar em uma URL com `?view=wiki` (por exemplo) restaura a visualização correspondente. A lista de modos de visualização é definida uma vez em `src/utils/canvas/viewMode.ts` — adicionar um novo modo é apenas adicionar um item ao array.
 
 ## Workspace
 
@@ -534,25 +527,9 @@ Todos os dados são armazenados como arquivos simples no diretório do workspace
 
 Consulte [`docs/developer.md`](docs/developer.md#workspace-layout-mulmoclaude) para a referência completa.
 
-### Explorador de tarefas
+### Listas de tarefas
 
-O Explorador de Tarefas está acessível via `Cmd/Ctrl+4`, o botão do launcher Todos, ou selecionando `data/todos/todos.json` no explorador de arquivos. Ele fornece três sub-modos de visualização:
-
-- **Kanban** — colunas no estilo GitHub Projects. Arraste cartões entre
-  colunas para alterar o status. Cada coluna tem um menu para renomear, marcar como
-  concluída ou excluir. Novas colunas podem ser adicionadas a partir da barra de ferramentas.
-- **Table** — tabela classificável com colunas de status / prioridade / labels / data de
-  vencimento / criação. Clique em uma linha para editar inline.
-- **List** — checklist simples com o mesmo editor inline.
-
-As colunas de status são armazenadas em `data/todos/columns.json` e têm como padrão
-`Backlog / Todo / In Progress / Done`. Cada tarefa carrega campos opcionais
-`status`, `priority` (low / medium / high / urgent) e `dueDate`
-além dos campos originais text / note / labels / completed.
-
-A ferramenta MCP `manageTodoList` do chat mantém seu comportamento existente
-inalterado — ela pode ler e editar text / note / labels / completed
-de tarefas, e os campos extras do explorador são preservados durante as edições via MCP.
+As listas de tarefas são construídas como **coleções** orientadas por esquema, não como uma visualização dedicada. Peça ao Claude para "configurar uma lista de tarefas" e ele seguirá `config/helps/todo-collection.md` para criar uma coleção `todos` — com um enum de status (`Backlog / Todo / In Progress / Done`), um toggle `done` e campos opcionais de prioridade / data de vencimento, escolhendo automaticamente uma visualização kanban / tabela / calendário conforme o esquema.
 
 ### Agendador e agendamento de skills
 

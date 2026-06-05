@@ -38,4 +38,13 @@ describe("loadPresetPlugins", () => {
       assert.ok(typeof entry.definition.description === "string", `preset ${entry.name} TOOL_DEFINITION.description must be set`);
     }
   });
+
+  // Locks the publish boundary so a future entry doesn't accidentally
+  // end up classified on the wrong side. spotify is the only entry
+  // intended for npm publish; everything else stays dev-only until
+  // its mc-* skill replacement settles or distribution is decided.
+  it("publish boundary: exactly spotify is non-devOnly", () => {
+    const nonDevOnly = PRESET_PLUGINS.filter((entry) => !entry.devOnly).map((entry) => entry.packageName);
+    assert.deepEqual(nonDevOnly.sort(), ["@mulmoclaude/spotify-plugin"]);
+  });
 });

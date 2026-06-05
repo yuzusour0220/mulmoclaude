@@ -75,16 +75,6 @@ export const SYSTEM_FILE_DESCRIPTORS: readonly Entry[] = [
   },
   {
     kind: "exact",
-    path: "data/plugins/%40mulmoclaude%2Ftodo-plugin/todos.json",
-    descriptor: { id: "todosItems", schemaRef: "packages/plugins/todo-plugin/src/io.ts", editPolicy: "agent-managed-but-hand-editable" },
-  },
-  {
-    kind: "exact",
-    path: "data/plugins/%40mulmoclaude%2Ftodo-plugin/columns.json",
-    descriptor: { id: "todosColumns", schemaRef: "packages/plugins/todo-plugin/src/io.ts", editPolicy: "user-editable" },
-  },
-  {
-    kind: "exact",
     path: "data/wiki/index.md",
     descriptor: { id: "wikiIndex", editPolicy: "agent-managed" },
   },
@@ -153,6 +143,18 @@ export function descriptorForPath(filePath: string): SystemFileDescriptor | null
     if (entry.kind === "pattern" && entry.regex.test(filePath)) return entry.descriptor;
   }
   return null;
+}
+
+// editPolicy values for which the Files Explorer offers an inline
+// JSON editor (#833 Phase 1). A path with no descriptor is a plain
+// user-owned file → editable. `agent-managed` / `fragile-format` /
+// `ephemeral` are withheld: hand-edits there risk corrupting state the
+// agent or app owns, or a format too brittle for free-text editing.
+const JSON_EDITABLE_POLICIES: ReadonlySet<EditPolicy> = new Set<EditPolicy>(["user-editable", "agent-managed-but-hand-editable"]);
+
+export function jsonEditableByPolicy(filePath: string): boolean {
+  const descriptor = descriptorForPath(filePath);
+  return descriptor === null || JSON_EDITABLE_POLICIES.has(descriptor.editPolicy);
 }
 
 // Tailwind text colors used to tint a file-icon (or any single-color

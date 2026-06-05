@@ -8,6 +8,92 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 ## [Unreleased]
 
+### Changed
+- The **invoicing suite** (`clients`, `worklog`, `invoice`, `profile`) moved from bundled `mc-*` preset skills to on-demand **help-file recipes** (`config/helps/billing-clients-worklog.md` + `config/helps/billing-invoice.md`), discoverable via two Personal-role sample prompts ("Set up client and time tracking…", "Set up invoicing…"). New workspaces no longer carry the four presets in the skill catalog; the recipes scaffold bare-slug collections (`/collections/invoice`, etc.) over the same prefix-free `data/*/items` record folders. On launch, any lingering starred `mc-{clients,worklog,invoice,profile}` skill is **removed** from `.claude/skills/` (records under `data/*/items` are left untouched), and a one-time bell explains the change — re-running a recipe re-attaches to the same data, so existing records reappear. No data is ever deleted.
+
+### Removed
+- The **Todo plugin** (`@mulmoclaude/todo-plugin`, the `manageTodoList` tool, the `/todos` route, and the `TodoExplorer` kanban / table / list view) has been removed. Todo lists are now built as schema-driven collections via the `config/helps/todo-collection.md` recipe (status enum + `done` toggle + priority bells), which is the canonical replacement. Existing todo-plugin data (`data/plugins/%40mulmoclaude%2Ftodo-plugin/todos.json`) is left in place on disk and is **not** migrated automatically — re-author the list as a collection following the recipe.
+- The **Encore** built-in (recurring-obligation DSL, hourly tick, dashboard, `defineEncore` / `manageEncore` tools, `/encore` route) has been removed. Collections now covers recurring obligations via time-driven bells (`triggerField` / `triggerLeadDays`) and host-driven recurrence (`spawn`); the only Encore-unique capability left was graduated multi-phase severity escalation, which did not justify maintaining a second time-driven harness.
+
+---
+
+## [0.6.5] - 2026-05-26
+
+Fixes a production regression where `npx mulmoclaude@latest` failed to load the ToDo and Spotify runtime plugins (e.g. "ToDo の読み込みに失敗しました" on first launch) because the published tarball did not ship them. They now travel with `mulmoclaude` as regular npm dependencies, so a fresh `npx` install boots with ToDo and Spotify available out of the box. Other runtime plugins (`debug`, `edgar`) stay dev-only by design and no longer log misleading `preset package not resolvable` warns in production.
+
+### Fixed
+- `npx mulmoclaude` no longer fails to mount ToDo / Spotify on first launch — `@mulmoclaude/todo-plugin@^0.1.0` and `@mulmoclaude/spotify-plugin@^0.1.0` are now real npm dependencies of `mulmoclaude` (#1513, #1515).
+- Preset loader downgrades the missing-package log to `debug` for entries flagged `devOnly: true`, so legitimately dev-only presets stop scaring production users (#1513).
+
+### Added
+- Two new published npm packages backing the runtime plugins:
+  - [`@mulmoclaude/todo-plugin@0.1.0`](https://www.npmjs.com/package/@mulmoclaude/todo-plugin/v/0.1.0)
+  - [`@mulmoclaude/spotify-plugin@0.1.0`](https://www.npmjs.com/package/@mulmoclaude/spotify-plugin/v/0.1.0)
+
+---
+
+## [0.6.4] - 2026-05-20
+
+Four-day patch focused on a new **Encore** built-in (cycle-state planning + bell-reconciled todos), a **CodeMirror-based inline JSON editor** for workspace configs, **Docker-aware MCP catalog with stdio→HTTP shim** (so stdio-only MCP servers run inside the sandbox), and a **role split** that pulls personal-assistant workflows out of `General` into a dedicated `Personal` role. Plus the system-prompt build path was rearchitected (literals out to files, helps-injection deleted, topic-memory context index-only) and a handful of UI polish wins (srcset rewriter, app version in Settings, notification-history collapse, TODO kanban done-column menu).
+
+### Highlights
+
+#### Encore — cycle-state planning + bell-reconciled todos
+- New **`/encore` dashboard page** with an icon-only top-bar entry, backed by an Encore built-in plugin (#1427, #1443).
+- Split **structural `defineEncore`** (one-shot schema definition) from **operational `manageEncore`** (ongoing ticket ops) so the LLM can't confuse the two (#1437).
+- Single-reconciler bell-state model with **unsnooze**, timezone-correct triggers, directory hygiene, ticket-rename support, and ghost-ticket rescue (#1433, #1440, #1441).
+
+#### CodeMirror-based inline JSON editor (#833 Phase 1)
+- Workspace JSON configs now open in an in-page editor (Files view, #1418).
+- Lazy-loaded CodeMirror 6 backend with syntax-aware editing replaces the textarea (#1450, #1448).
+
+#### MCP catalog becomes transport-aware (#1421)
+- Docker-only stdio MCPs get a clear **"this won't run inside the sandbox"** note in the catalog; GitHub MCP now points at the HTTP transport (#1422).
+- Opt-in **stdio→HTTP shim** lets stdio-only MCP servers run inside the Docker sandbox via a side-process bridge — covers the previous gap (#1436).
+
+#### Role split — General + Personal (#1430)
+- `General` is split into a lean `General` (research / coding) and a new **`Personal`** role (memory, journal, calendar, TODO, photos). Encore's seed role is pinned to Personal.
+- Roles now rely directly on the per-role prompt files; the old `helps`-injection layer is deleted (#1431).
+
+#### Wiki / image / UI polish
+- `<img>` / `<source>` **`srcset` rewriter** in both wiki and PDF surfaces (#1407, closes #1275).
+- Wiki external/workspace markdown links restyled for clarity (#1453).
+- TODO kanban **done-column menu** with check icon and click-outside dismiss (#1452); plugin-seeded first turns render as a **skill-style card** (#1447).
+- Settings modal shows the **app version** (#1412, closes #1410).
+- NotificationBell **collapses history beyond 5 rows** behind a toggle (#1439); notifier gains an **update op + action-style priority alerts** for todos (#1451).
+
+#### Skill catalog UX
+- Add-repo flow now offers **fill-form suggestions**, repo link, and expandable description for each preset (#1415, closes #1413).
+
+### Added
+- **Encore** built-in: dashboard page, `defineEncore` / `manageEncore` tools, unified bell reconciler with unsnooze (#1427, #1437, #1433, #1443).
+- CodeMirror 6 JSON editor for workspace files (#1418, #1450).
+- MCP transport-aware catalog + stdio→HTTP shim (#1421 / #1422 / #1436).
+- New `Personal` role split off from `General` (#1430).
+- Skill add-repo suggestions UX (#1415, closes #1413).
+- `srcset` rewriting on `<img>` / `<source>` for wiki + PDF (#1407, closes #1275).
+- App version surfaced in Settings (#1412).
+- NotificationBell history collapse + notifier update op / priority alerts (#1439, #1451).
+- TODO kanban done-column menu polish (#1452).
+- Plugin-seeded text-response renders as a skill-style card (#1447).
+
+### Changed
+- System prompt internals refactored: static literals extracted to `server/prompts/`, `helps`-injection deleted, topic-memory context is index-only, dead readLegacyMemoryFile / buildWikiContext branches removed (#1425, #1431, #1434, #1435).
+- Wiki external-link styling distinguishes workspace vs external (#1453).
+- `Skill` tool added to the agent allowlist so user-installed `.claude/skills/` are invokable (#1445).
+- Built hook dispatcher relocated to `server/build/`, sourcemap dropped (#1449).
+
+### Fixed
+- `optionalDeps` notification title/body wording (#1429).
+- e2e-live `L-ERR` / `L-15b` flakiness on real-Claude runs (#1446).
+- `publish smoke` Puppeteer Chromium download + plugin-probe race (#1442, #1428).
+- Encore review P0s + form-schema validation LLM-trap (#1441).
+- Skill `flex-1` restored after StackView selector was scoped (#1408, follow-up to #1277).
+- Playwright browsers auto-installed via the test script chain (#1411).
+
+### Security
+- Opt-in stdio→HTTP shim (#1436) lets stdio MCP servers run inside the Docker sandbox via a bridged HTTP transport, closing a gap where catalog entries were silently host-only.
+
 ---
 
 ## [0.6.3] - 2026-05-16

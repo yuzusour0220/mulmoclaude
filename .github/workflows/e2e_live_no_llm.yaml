@@ -54,9 +54,12 @@ jobs:
           - mulmo-script-edit        # L-EDIT via plugin-dispatch
           - media                    # L-01 only (L-02..L-05 need real LLM / external tools)
           - error-banner             # L-ERR: forced error event → [Error] card
+          - happy-tour               # L-HAPPY-TOUR: capability sweep (chat turn skips on E2E_LIVE_NO_LLM=1, the other 15 steps run)
 
     steps:
       - uses: actions/checkout@v6
+        with:
+          persist-credentials: false  # no git push; zizmor artipacked
 
       - uses: actions/setup-node@v6
         with:
@@ -127,7 +130,7 @@ jobs:
 
       - name: Upload Playwright report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-report-${{ matrix.spec }}
           path: playwright-report-live/${{ matrix.spec }}/
@@ -136,7 +139,7 @@ jobs:
 
       - name: Upload dev server log
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: dev-server-log-${{ matrix.spec }}
           path: dev-server.log

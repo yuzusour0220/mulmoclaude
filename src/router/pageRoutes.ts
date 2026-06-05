@@ -10,7 +10,6 @@
 export const PAGE_ROUTES = {
   chat: "chat",
   files: "files",
-  todos: "todos",
   calendar: "calendar",
   automations: "automations",
   wiki: "wiki",
@@ -19,6 +18,7 @@ export const PAGE_ROUTES = {
   sources: "sources",
   news: "news",
   debug: "debug",
+  collections: "collections",
 } as const;
 
 export type PageRouteName = (typeof PAGE_ROUTES)[keyof typeof PAGE_ROUTES];

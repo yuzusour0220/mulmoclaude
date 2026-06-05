@@ -27,6 +27,17 @@ Two boot modes:
   used to verify the published artifact before a release. Override
   with `E2E_LIVE_BASE_URL=http://localhost:3001`.
 
+**Exception — fresh-user smoke specs.** `fresh-boot.spec.ts` (and
+future `L-FRESH-*` siblings) spawn their OWN isolated dev server via
+`spawnIsolatedDevServer` (`e2e-live/fixtures/isolated-dev-server.ts`).
+The shared `E2E_LIVE_BASE_URL` server stays untouched — the spec
+boots a separate `tsx server/index.ts` subprocess with `HOME` /
+`MULMOCLAUDE_WORKSPACE_PATH` / `PORT` / `MULMOCLAUDE_AUTH_TOKEN` all
+overridden, then drives Playwright at `http://127.0.0.1:<random>`.
+This is the only acceptable pattern for spec-controlled boot-path
+testing; do not extend it to scenarios that work fine against the
+shared dev server.
+
 Output knobs:
 
 - `HEADED=1` — flip to headed Chromium for QA scenarios.

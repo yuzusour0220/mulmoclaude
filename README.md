@@ -8,17 +8,11 @@
 
 **English** · [日本語](README.ja.md) · [简体中文](README.zh.md) · [한국어](README.ko.md) · [Español](README.es.md) · [Português (BR)](README.pt-BR.md) · [Français](README.fr.md) · [Deutsch](README.de.md)
 
-GUI-chat with Claude Code — long-term memory, rich visual output, sandboxed execution, and remote access from anywhere.
+> **[How AI-Native Applications Should Be Built](MANIFEST.md)** — the architecture, UX, and protocol thesis behind MulmoClaude.
 
-**Long-term memory**: a built-in personal wiki — inspired by Andrej Karpathy's idea of giving an LLM a notebook that grows over time — gives Claude **persistent knowledge** that builds with every conversation.
+MulmoClaude is an open-source, AI-native application platform that runs locally on your machine. Instead of siloed apps, capabilities are built as plugins within a single registry. Applications running on it today include a full accounting system (real server-side bookkeeping logic), a personal wiki, and an SEC-filings reader (Edgar). Claude acts as a universal controller that composes across these plugins.
 
-Chat with Claude Code and get back not just text but **interactive visual output**: documents, spreadsheets, mind maps, charts, images, forms, 3D scenes, and more.
-
-**Sandboxed execution**: Claude Code runs inside a sandbox, protecting your system against prompt injection attacks.
-
-**Access from anywhere**: connect Telegram, Slack, LINE, Discord, or [10 other messaging apps](#messaging-bridges) to talk to your AI agent from your phone.
-
-**Scheduled tasks**: hand off recurring work — daily summaries, periodic checks, timed reminders — to a built-in scheduler that runs your agent on a cron schedule.
+You interact in natural language, and Claude summons the right GUI for the task — replying in markdown, charts, forms, wikis, spreadsheets, or 3D scenes. All data lives as plain files in your workspace.
 
 ## Quick Start
 
@@ -55,7 +49,7 @@ Open [http://localhost:5173](http://localhost:5173). That's it — start chattin
 | "Write a project proposal"      | Rich markdown document in the canvas            |
 | "Chart last quarter's revenue"  | Interactive ECharts visualization               |
 | "Create a trip plan for Kyoto"  | Illustrated guide with images                   |
-| "Manage my todos"               | Kanban board with drag-and-drop                 |
+| "Set up a todo list"            | Schema-driven collection with a kanban board    |
 | "Ingest this article: URL"      | Wiki page with `[[links]]` for long-term memory |
 | "Schedule a daily news digest"  | Recurring task that runs automatically          |
 | "Generate an image of a sunset" | AI-generated image (Gemini)                     |
@@ -526,13 +520,12 @@ The canvas (right panel) supports 8 view modes, switchable via the launcher tool
 | `Cmd/Ctrl+1` | Single    | (default)         | Show the selected tool result    |
 | `Cmd/Ctrl+2` | Stack     | `?view=stack`     | All results stacked vertically   |
 | `Cmd/Ctrl+3` | Files     | `?view=files`     | Workspace file explorer          |
-| `Cmd/Ctrl+4` | Todos     | `?view=todos`     | Kanban / table / list todo board |
 | `Cmd/Ctrl+5` | Scheduler | `?view=scheduler` | Scheduled tasks calendar         |
 | `Cmd/Ctrl+6` | Wiki      | `?view=wiki`      | Wiki page index                  |
 | `Cmd/Ctrl+7` | Skills    | `?view=skills`    | Skills list and editor           |
 | `Cmd/Ctrl+8` | Roles     | `?view=roles`     | Role management                  |
 
-Every view mode is URL-driven: clicking a launcher button updates `?view=`, and landing on a URL with `?view=todos` (for example) restores the corresponding view. The view mode list is defined once in `src/utils/canvas/viewMode.ts` — adding a new mode is a single array append.
+Every view mode is URL-driven: clicking a launcher button updates `?view=`, and landing on a URL with `?view=wiki` (for example) restores the corresponding view. The view mode list is defined once in `src/utils/canvas/viewMode.ts` — adding a new mode is a single array append.
 
 ## Workspace
 
@@ -550,26 +543,14 @@ All data is stored as plain files in the workspace directory, grouped into four 
 
 See [`docs/developer.md`](docs/developer.md#workspace-layout-mulmoclaude) for the full reference.
 
-### Todo explorer
+### Todo lists
 
-The Todo Explorer is accessible via `Cmd/Ctrl+4`, the Todos launcher button, or by selecting `data/todos/todos.json` in the file explorer. It provides three sub-view modes:
-
-- **Kanban** — GitHub Projects-style columns. Drag cards between
-  columns to change status. Each column has a menu to rename, mark as
-  done, or delete. New columns can be added from the toolbar.
-- **Table** — sortable table with status / priority / labels / due
-  date / created columns. Click a row to inline-edit.
-- **List** — flat checklist with the same inline editor.
-
-Status columns are stored in `data/todos/columns.json` and default to
-`Backlog / Todo / In Progress / Done`. Each todo carries optional
-`status`, `priority` (low / medium / high / urgent), and `dueDate`
-fields in addition to the original text / note / labels / completed
-fields.
-
-The chat-side `manageTodoList` MCP tool keeps its existing behaviour
-unchanged — it can read and edit text / note / labels / completed
-todos, and the explorer's extra fields are preserved across MCP edits.
+Todo lists are built as schema-driven **collections** rather than a
+dedicated view. Ask Claude to "set up a todo list" and it follows
+`config/helps/todo-collection.md` to author a `todos` collection — a
+status enum (`Backlog / Todo / In Progress / Done`) with a `done`
+toggle, optional priority / due-date fields, and a kanban / table /
+calendar view picked automatically from the schema.
 
 ### Scheduler and skill scheduling
 

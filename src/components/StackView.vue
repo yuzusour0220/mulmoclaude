@@ -22,28 +22,46 @@
     <!-- Empty state pulled out of the scroll container so `h-full` +
          the container's `pb-4` padding can't combine into a stray
          scrollbar. A sibling `flex-1` slot centers cleanly. -->
-    <div v-if="toolResults.length === 0" class="flex-1 flex items-center justify-center text-gray-400 text-sm" data-testid="stack-empty">
-      {{ t("common.noResultsYet") }}
+    <!-- Mirror App.vue's single-layout empty state (role icon + name +
+         pill-shaped query suggestions) so switching canvas modes
+         doesn't change what a fresh chat looks like. -->
+    <div v-if="toolResults.length === 0" class="flex-1 flex flex-col items-center justify-center h-full px-6 text-center" data-testid="stack-empty">
+      <span v-if="sessionRoleIcon" class="material-icons text-5xl text-gray-400 mb-2" aria-hidden="true">{{ sessionRoleIcon }}</span>
+      <p v-if="sessionRoleName" class="text-lg font-medium text-gray-700 mb-4">{{ sessionRoleName }}</p>
+      <div v-if="queries && queries.length > 0 && sendTextMessage" class="flex flex-wrap gap-2 justify-center max-w-xl">
+        <button
+          v-for="(query, queryIdx) in queries"
+          :key="`${queryIdx}-${query}`"
+          type="button"
+          class="text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-full px-4 py-2 border border-gray-300 transition-colors"
+          data-testid="stack-empty-query"
+          @click="sendTextMessage(query)"
+        >
+          {{ query }}
+        </button>
+      </div>
+      <p v-else class="text-sm text-gray-500">{{ t("app.startConversation") }}</p>
     </div>
     <div v-else ref="containerRef" class="flex-1 min-h-0 overflow-y-auto px-4 pb-4 space-y-3" data-testid="stack-scroll">
       <div
-        v-for="result in toolResults"
-        :key="result.uuid"
-        :ref="(element) => setItemRef(result.uuid, element as HTMLElement | null)"
+        v-for="item in displayItems"
+        :key="item.key"
+        :ref="(element) => setItemRefForMembers(item.members, element as HTMLElement | null)"
         class="bg-white rounded-lg border transition-colors"
-        :class="result.uuid === selectedResultUuid ? 'border-blue-400 ring-2 ring-blue-200' : 'border-gray-200'"
+        :class="item.members.some((m) => m.uuid === selectedResultUuid) ? 'border-blue-400 ring-2 ring-blue-200' : 'border-gray-200'"
       >
         <button
           class="w-full flex items-center gap-2 px-3 py-2 border-b border-gray-100 text-left hover:bg-gray-50"
-          :title="result.title || result.toolName"
-          @click="emit('select', result.uuid)"
+          :title="item.head.title || item.head.toolName"
+          @click="emit('select', item.head.uuid)"
         >
-          <span class="material-icons text-sm text-gray-400">{{ iconFor(result.toolName) }}</span>
-          <span class="text-sm font-medium text-gray-800 truncate">{{ result.title || result.toolName }}</span>
-          <span v-if="resultTimestamps.get(result.uuid)" class="text-[10px] text-gray-400 shrink-0">{{
-            formatSmartTime(resultTimestamps.get(result.uuid)!)
+          <span class="material-icons text-sm text-gray-400">{{ iconFor(item.head.toolName) }}</span>
+          <span class="text-sm font-medium text-gray-800 truncate">{{ item.head.title || item.head.toolName }}</span>
+          <span v-if="item.isGroup && item.members.length > 1" class="text-[10px] text-gray-400 shrink-0">{{ `${item.members.length}×` }}</span>
+          <span v-if="resultTimestamps.get(item.head.uuid)" class="text-[10px] text-gray-400 shrink-0">{{
+            formatSmartTime(resultTimestamps.get(item.head.uuid)!)
           }}</span>
-          <span class="font-mono text-xs text-gray-400 shrink-0">{{ result.toolName }}</span>
+          <span class="font-mono text-xs text-gray-400 shrink-0">{{ item.head.toolName }}</span>
         </button>
         <!-- text-response: render the message as Markdown via the
            underlying plugin View. The .stack-text-response class below
@@ -56,8 +74,8 @@
            "open external links in a new tab" click handler. Attach
            the same handler here via @click.capture so cross-origin
            links in assistant Markdown don't navigate the SPA away. -->
-        <div v-if="isTextResponse(result)" class="stack-text-response" @click.capture="handleExternalLinkClick">
-          <TextResponseOriginalView :selected-result="result" />
+        <div v-if="isTextResponse(item.head)" class="stack-text-response" @click.capture="handleExternalLinkClick">
+          <TextResponseOriginalView :selected-result="item.head" />
         </div>
         <!-- Document-like plugins: let the content flow at its natural
            height by overriding the plugin's internal h-full / overflow
@@ -65,33 +83,36 @@
            plugins that embed iframes (e.g. presentHtml) we also size
            each iframe to its content after load. -->
         <div
-          v-else-if="isStackNatural(result.toolName)"
-          :ref="(element) => setNaturalWrapperRef(result.uuid, element as HTMLElement | null)"
+          v-else-if="isStackNatural(item.head.toolName)"
+          :ref="(element) => setNaturalWrapperRef(item.head.uuid, element as HTMLElement | null)"
           class="stack-natural"
         >
           <component
-            :is="getPlugin(result.toolName)?.viewComponent"
-            v-if="getPlugin(result.toolName)?.viewComponent"
-            :key="`${result.uuid}-${googleMapKeyFor(result.toolName) ?? ''}`"
-            :selected-result="result"
+            :is="getPlugin(item.head.toolName)?.viewComponent"
+            v-if="getPlugin(item.head.toolName)?.viewComponent"
+            :key="`${item.key}-${googleMapKeyFor(item.head.toolName) ?? ''}`"
+            :selected-result="item.head"
             :send-text-message="sendTextMessage"
-            :google-map-key="googleMapKeyFor(result.toolName)"
+            :google-map-key="googleMapKeyFor(item.head.toolName)"
             @update-result="(r: ToolResultComplete) => emit('updateResult', r)"
           />
         </div>
         <!-- Other plugins: fixed height wrapper so plugins that rely on
-           h-full continue to render properly. -->
-        <div v-else :style="{ height: PLUGIN_HEIGHT }">
+           h-full continue to render properly. Map groups pass the
+           ordered `results` so the View replays the whole group onto
+           one map; everything else uses the single `selected-result`. -->
+        <div v-else :style="{ height: pluginHeightFor(item.head.toolName) }">
           <component
-            :is="getPlugin(result.toolName)?.viewComponent"
-            v-if="getPlugin(result.toolName)?.viewComponent"
-            :key="`${result.uuid}-${googleMapKeyFor(result.toolName) ?? ''}`"
-            :selected-result="result"
+            :is="getPlugin(item.head.toolName)?.viewComponent"
+            v-if="getPlugin(item.head.toolName)?.viewComponent"
+            :key="`${item.key}-${googleMapKeyFor(item.head.toolName) ?? ''}`"
+            :selected-result="item.head"
+            :results="item.isGroup ? item.members : undefined"
             :send-text-message="sendTextMessage"
-            :google-map-key="googleMapKeyFor(result.toolName)"
+            :google-map-key="googleMapKeyFor(item.head.toolName)"
             @update-result="(r: ToolResultComplete) => emit('updateResult', r)"
           />
-          <pre v-else class="h-full overflow-auto p-4 text-xs text-gray-500 whitespace-pre-wrap">{{ JSON.stringify(result, null, 2) }}</pre>
+          <pre v-else class="h-full overflow-auto p-4 text-xs text-gray-500 whitespace-pre-wrap">{{ JSON.stringify(item.head, null, 2) }}</pre>
         </div>
       </div>
     </div>
@@ -102,7 +123,7 @@
 import { ref, computed, watch, nextTick, onMounted, onUnmounted } from "vue";
 import { useI18n } from "vue-i18n";
 import { getPlugin } from "../tools";
-import { TOOL_NAMES } from "../config/toolNames";
+import { TOOL_NAMES, type ToolName } from "../config/toolNames";
 import type { ToolResultComplete } from "gui-chat-protocol/vue";
 import { View as TextResponseOriginalView } from "../plugins/textResponse/index";
 import { handleExternalLinkClick } from "../utils/dom/externalLink";
@@ -110,6 +131,7 @@ import { clampIframeHeight } from "../utils/dom/iframeHeightClamp";
 import type { TextResponseData } from "../plugins/textResponse/types";
 import { formatSmartTime } from "../utils/format/date";
 import { isRecord } from "../utils/types";
+import { buildStackDisplayItems, pickActiveCardUuid, resolveLatestScrollTarget } from "../utils/canvas/stackGrouping";
 import CanvasViewToggle from "./CanvasViewToggle.vue";
 import CopyChatButton from "./CopyChatButton.vue";
 import type { LayoutMode } from "../utils/canvas/layoutMode";
@@ -119,7 +141,27 @@ const { t } = useI18n();
 // Most plugin viewComponents use h-full internally, so a defined parent
 // height is required for them to render. text-response and the
 // "stack-natural" plugins below are special-cased.
-const PLUGIN_HEIGHT = "min(60vh, 560px)";
+const DEFAULT_PLUGIN_HEIGHT = "min(60vh, 560px)";
+
+// Per-tool height overrides. presentMulmoScript's deck-editor renders
+// a 16:9 slide preview inside an iframe; at the default 560px cap, the
+// chrome above (header + toolbar + script-source summary) leaves the
+// preview shorter than what a 16:9 slide needs to fit, and the bottom
+// of the rendered slide ends up clipped. A taller cap lets the slide
+// render in full without letterboxing.
+// `satisfies Partial<Record<ToolName, string>>` keys this off the
+// canonical `TOOL_NAMES` union so a typo'd or stale tool name fails at
+// compile time instead of silently falling through to the default.
+const PLUGIN_HEIGHT_OVERRIDES = {
+  [TOOL_NAMES.presentMulmoScript]: "min(85vh, 820px)",
+} satisfies Partial<Record<ToolName, string>>;
+
+function pluginHeightFor(toolName: string): string {
+  // Indexed lookup is wide-string-keyed; the `satisfies` constraint
+  // above already ensures the literal's keys are valid `ToolName`s.
+  const overrides: Record<string, string | undefined> = PLUGIN_HEIGHT_OVERRIDES;
+  return overrides[toolName] ?? DEFAULT_PLUGIN_HEIGHT;
+}
 
 // How long to ignore scroll-spy after a programmatic scroll (sidebar
 // click, auto-scroll on new result). Keeps the spy from emitting a
@@ -156,6 +198,10 @@ const props = defineProps<{
   selectedResultUuid: string | null;
   resultTimestamps: Map<string, number>;
   sendTextMessage?: (text: string) => void;
+  /** Role's sample queries (already translated). Rendered as
+   *  click-to-send suggestions in the empty state so a fresh stack
+   *  chat matches the single-layout PageChatComposer experience. */
+  queries?: readonly string[];
   sessionRoleName?: string;
   sessionRoleIcon?: string;
   layoutMode: LayoutMode;
@@ -200,6 +246,27 @@ function setNaturalWrapperRef(uuid: string, element: HTMLElement | null): void {
   } else {
     naturalWrapperRefs.delete(uuid);
   }
+}
+
+// `mapControl` results carrying a `groupId` collapse into one card
+// (the View accumulates markers / routes). Grouping is session-wide,
+// so `displayItems` is the rendered card order — scroll-spy below
+// iterates THIS, not the flat `toolResults`. See stackGrouping.ts.
+function groupIdOf(result: ToolResultComplete): string | null {
+  if (result.toolName !== TOOL_NAMES.mapControl) return null;
+  const { data } = result;
+  if (!isRecord(data)) return null;
+  const { groupId } = data;
+  return typeof groupId === "string" && groupId.length > 0 ? groupId : null;
+}
+
+const displayItems = computed(() => buildStackDisplayItems(props.toolResults, groupIdOf, (result) => result.uuid));
+
+// Register the group card element under EVERY member uuid so the
+// scroll-spy and scroll-to-selection logic (which key on individual
+// result uuids) resolve any member to this one card.
+function setItemRefForMembers(members: ToolResultComplete[], element: HTMLElement | null): void {
+  for (const member of members) setItemRef(member.uuid, element);
 }
 
 // Sandboxed iframes inside stack-natural plugins (e.g. presentHtml)
@@ -368,18 +435,12 @@ function readPaddingTop(element: HTMLElement): number {
 function computeActiveUuidFromScroll(): string | null {
   if (!containerRef.value) return null;
   const container = containerRef.value;
-  const paddedTop = container.getBoundingClientRect().top + readPaddingTop(container);
-  let activeUuid: string | null = null;
-  for (const result of props.toolResults) {
-    const element = itemRefs.get(result.uuid);
-    if (!element) continue;
-    if (element.getBoundingClientRect().top <= paddedTop) {
-      activeUuid = result.uuid;
-    } else {
-      break;
-    }
-  }
-  return activeUuid;
+  const paddedTopPx = container.getBoundingClientRect().top + readPaddingTop(container);
+  const topOfCardPx = (headUuid: string): number | null => {
+    const element = itemRefs.get(headUuid);
+    return element ? element.getBoundingClientRect().top : null;
+  };
+  return pickActiveCardUuid(displayItems.value, (result) => result.uuid, topOfCardPx, paddedTopPx);
 }
 
 function onContainerScroll(): void {
@@ -431,7 +492,14 @@ watch(latestResultScrollKey, () => {
   nextTick(() => {
     if (containerRef.value) {
       beginSuppressScrollSync();
-      containerRef.value.scrollTop = containerRef.value.scrollHeight;
+      const newest = props.toolResults[props.toolResults.length - 1];
+      const target = resolveLatestScrollTarget(displayItems.value, newest, (result) => result.uuid);
+      if (target.kind === "bottom") {
+        containerRef.value.scrollTop = containerRef.value.scrollHeight;
+      } else if (target.kind === "card") {
+        const element = itemRefs.get(target.headUuid);
+        if (element) element.scrollIntoView({ block: "nearest", behavior: "auto" });
+      }
     }
     // New items may have brought in more iframes to size.
     for (const wrapper of naturalWrapperRefs.values()) {
@@ -440,10 +508,22 @@ watch(latestResultScrollKey, () => {
   });
 });
 
+// The scroll container lives in the `v-else` branch (rendered only once
+// `toolResults` is non-empty). Sessions mount empty — the transcript /
+// stream populates them after mount — so binding the scroll-spy listener
+// in `onMounted` would attach it to a null ref and never fire. Watch the
+// ref instead so the listener (re)binds whenever the container appears
+// or is replaced.
+watch(
+  containerRef,
+  (element, previous) => {
+    previous?.removeEventListener("scroll", onContainerScroll);
+    element?.addEventListener("scroll", onContainerScroll, { passive: true });
+  },
+  { immediate: true },
+);
+
 onMounted(() => {
-  containerRef.value?.addEventListener("scroll", onContainerScroll, {
-    passive: true,
-  });
   window.addEventListener("message", handleIframeHeightMessage);
   // Align the initial scroll position with the externally selected
   // item so the sidebar and stack start in sync on mount.

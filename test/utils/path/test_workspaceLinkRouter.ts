@@ -84,7 +84,132 @@ describe("classifyWorkspacePath", () => {
   // hrefs like "data/notes/%E3%83%86%E3%82%B9%E3%83%88...md".
   // We MUST decode once before handing the path to vue-router, or the
   // router's own encoding step turns "%E3..." into "%25E3..." (see
-  // plans/fix-workspace-link-double-encoding.md).
+  // plans/done/fix-workspace-link-double-encoding.md).
+
+  // ── SPA route links ───────────────────────────────────────
+  //
+  // Regression for the apps→collections rename PR: agent-emitted
+  // links like `[Microsoft](/collections/mc-clients)` were falling
+  // into the file fallback and routing to `/files/collections/mc-clients`
+  // (404). The classifier now recognizes top-level SPA routes.
+
+  describe("SPA route links", () => {
+    it("classifies /collections/<slug> as spa-route", () => {
+      const result = classifyWorkspacePath("/collections/mc-clients");
+      assert.deepEqual(result, { kind: "spa-route", path: "/collections/mc-clients" });
+    });
+
+    it("classifies collections without leading slash as spa-route", () => {
+      // marked.parse() can emit either form depending on the source
+      // markdown; both should classify the same way.
+      const result = classifyWorkspacePath("collections/mc-clients");
+      assert.deepEqual(result, { kind: "spa-route", path: "/collections/mc-clients" });
+    });
+
+    it("classifies bare /collections (no slug) as spa-route", () => {
+      const result = classifyWorkspacePath("/collections");
+      assert.deepEqual(result, { kind: "spa-route", path: "/collections" });
+    });
+
+    it("classifies /calendar as spa-route", () => {
+      const result = classifyWorkspacePath("/calendar");
+      assert.deepEqual(result, { kind: "spa-route", path: "/calendar" });
+    });
+
+    it("classifies /automations/<id> as spa-route", () => {
+      const result = classifyWorkspacePath("/automations/task-1");
+      assert.deepEqual(result, { kind: "spa-route", path: "/automations/task-1" });
+    });
+
+    it("classifies /skills and /roles as spa-route", () => {
+      assert.deepEqual(classifyWorkspacePath("/skills"), { kind: "spa-route", path: "/skills" });
+      assert.deepEqual(classifyWorkspacePath("/roles"), { kind: "spa-route", path: "/roles" });
+    });
+
+    it("does NOT classify /chat/<id> as spa-route (preserves session-load flow via conversations/chat/<id>.jsonl)", () => {
+      // /chat is intentionally excluded from SPA_ROUTE_NAMES so the
+      // existing handleSessionSelect path (mark-read, start-chat) is
+      // the only way agent links reach a chat session.
+      const result = classifyWorkspacePath("/chat/abc-123");
+      assert.ok(result);
+      assert.equal(result.kind, "file");
+    });
+
+    it("does NOT classify /files/<path> as spa-route (preserves per-segment URL encoding)", () => {
+      // /files is excluded so the catch-all pathMatch encoding in
+      // the file-fallback branch still applies.
+      const result = classifyWorkspacePath("/files/data/clients/items/microsoft.json");
+      assert.ok(result);
+      assert.equal(result.kind, "file");
+    });
+
+    it("wiki page pattern still wins over the spa-route catch-all", () => {
+      // `wiki` is in SPA_ROUTE_NAMES, but the more specific
+      // `data/wiki/pages/<slug>.md` wiki-page pattern is checked
+      // first and should still return kind: "wiki".
+      const result = classifyWorkspacePath("data/wiki/pages/my-page.md");
+      assert.deepEqual(result, { kind: "wiki", slug: "my-page" });
+    });
+
+    it("bare /wiki (no page slug) classifies as spa-route", () => {
+      // The wiki-page regex requires `pages/<slug>.md` — without
+      // that, the SPA-route branch picks it up so `/wiki` opens
+      // the wiki home instead of 404ing at `/files/wiki`.
+      const result = classifyWorkspacePath("/wiki");
+      assert.deepEqual(result, { kind: "spa-route", path: "/wiki" });
+    });
+
+    it("does not confuse a file path that happens to start with `data/`", () => {
+      // `data` is not a SPA route name, so paths under it stay in
+      // the file-fallback branch as expected.
+      const result = classifyWorkspacePath("data/clients/items/microsoft.json");
+      assert.ok(result);
+      assert.equal(result.kind, "file");
+      assert.equal((result as { kind: "file"; path: string }).path, "data/clients/items/microsoft.json");
+    });
+
+    // Codex P2 review on PR #1490: a file path whose leading
+    // segment matches a SPA route name (e.g. `skills/guide.md`,
+    // `news/archive.json`) must NOT get reclassified — the SPA
+    // route only matches the exact route shape, so pushing such a
+    // URL resolves away from the file view and hides the file.
+
+    it("does NOT reclassify `skills/guide.md` as spa-route (looks like a file)", () => {
+      const result = classifyWorkspacePath("skills/guide.md");
+      assert.ok(result);
+      assert.equal(result.kind, "file");
+      assert.equal((result as { kind: "file"; path: string }).path, "skills/guide.md");
+    });
+
+    it("does NOT reclassify `news/archive.json` as spa-route", () => {
+      const result = classifyWorkspacePath("news/archive.json");
+      assert.ok(result);
+      assert.equal(result.kind, "file");
+    });
+
+    it("does NOT reclassify `collections/clients.csv` as spa-route", () => {
+      const result = classifyWorkspacePath("collections/clients.csv");
+      assert.ok(result);
+      assert.equal(result.kind, "file");
+    });
+
+    it("still classifies dotless slugs (collections/mc-clients) as spa-route", () => {
+      // Sanity: the file-extension heuristic shouldn't false-positive
+      // on the common case the original change is meant to handle.
+      const result = classifyWorkspacePath("collections/mc-clients");
+      assert.deepEqual(result, { kind: "spa-route", path: "/collections/mc-clients" });
+    });
+
+    it("treats a slug with a trailing dotted suffix as a file (acceptable false positive)", () => {
+      // A slug like `mc-clients.v2` is unusual and would be
+      // misclassified as a file. We accept this — slugs with dots
+      // are not a real-world pattern and the alternative (slug-shape
+      // probe) would be much more complex.
+      const result = classifyWorkspacePath("collections/mc-clients.v2");
+      assert.ok(result);
+      assert.equal(result.kind, "file");
+    });
+  });
 
   describe("percent-encoded hrefs (from marked.parse output)", () => {
     it("decodes percent-encoded multibyte file path", () => {
@@ -107,6 +232,12 @@ describe("classifyWorkspacePath", () => {
     });
 
     it("decodes percent-encoded space in filename", () => {
+      // marked.parse() encodes literal spaces in href as `%20`, and
+      // the on-disk filename carries the literal space. This must
+      // round-trip via decodeURIComponent so the file API receives
+      // the disk-canonical form. Segments containing `%2F` are the
+      // sole exception (plugin-scope opaqueness) — `%20` outside such
+      // a segment is ordinary URL transport encoding.
       const result = classifyWorkspacePath("data/some/my%20file.txt");
       assert.deepEqual(result, { kind: "file", path: "data/some/my file.txt" });
     });
@@ -126,35 +257,77 @@ describe("classifyWorkspacePath", () => {
       assert.deepEqual(result, { kind: "file", path: raw });
     });
 
-    // Decoding before normalization means encoded structural tokens
-    // (`%2F` for `/`, `%2E%2E` for `..`) get reinterpreted as path
-    // structure rather than treated as literal filename bytes. The
-    // tests below pin that behaviour so a future "stop decoding"
-    // regression — or the inverse, decoding twice — is caught
-    // immediately. The same decode also runs through the
-    // normalizePath root-escape gate, so traversal attempts via
-    // encoded `..` still return null instead of broadening reach
-    // past the workspace root.
+    // safeDecode runs per `/`-separated segment. Segments containing
+    // `%2F` are kept opaque (plugin-scope disk convention); every
+    // other segment is decoded via decodeURIComponent. The tests
+    // below pin both halves of that contract.
 
-    it("decoded %2F splits into path segments (not a literal filename byte)", () => {
-      // After decode the href becomes "data/some/foo/bar.md" — the
-      // wiki regex rejects it (multi-segment under wiki/pages would
-      // not match `[^/]+`), but a generic file path is still routed.
+    it("preserves plugin-scoped %40<scope>%2F<name> as a single literal segment (#1473)", () => {
+      // Plugin convention: data/plugins/%40<scope>%2F<name>/ is a
+      // SINGLE directory whose name literally contains '%' '4' '0'
+      // '%' '2' 'F' characters — not two nested directories. The
+      // `%2F` in that segment is what marks it as a plugin-scope
+      // token so `safeDecode` leaves it opaque.
+      const result = classifyWorkspacePath("data/plugins/%40mulmoclaude%2Fworklog/committed/2026-05.jsonl");
+      assert.deepEqual(result, {
+        kind: "file",
+        path: "data/plugins/%40mulmoclaude%2Fworklog/committed/2026-05.jsonl",
+      });
+    });
+
+    it("preserves lowercase %2f in a plugin-scope segment (case-insensitive opacity)", () => {
+      // The opacity check accepts %2F and %2f interchangeably so both
+      // capitalisations round-trip to the disk-canonical name.
+      const result = classifyWorkspacePath("data/plugins/%40mulmoclaude%2fworklog/file.md");
+      assert.deepEqual(result, {
+        kind: "file",
+        path: "data/plugins/%40mulmoclaude%2fworklog/file.md",
+      });
+    });
+
+    it("decodes multibyte while preserving the plugin-scope segment opaque (#1473)", () => {
+      // Plugin scope dir name stays opaque, but a Japanese filename
+      // inside it gets decoded to its multibyte form so the file API
+      // (which receives disk-literal multibyte names) resolves.
+      const encoded = "data/plugins/%40mulmoclaude%2Fworklog/%E3%83%A1%E3%83%A2.md";
+      const result = classifyWorkspacePath(encoded);
+      assert.deepEqual(result, {
+        kind: "file",
+        path: "data/plugins/%40mulmoclaude%2Fworklog/メモ.md",
+      });
+    });
+
+    // The tests below pin the original behaviour for non-plugin
+    // segments — `safeDecode` falls back to per-segment
+    // `decodeURIComponent` when no `%2F` is present, so encoded
+    // structural tokens (`%2E%2E` → `..`) get reinterpreted as path
+    // structure and the same `normalizePath` root-escape gate applies.
+
+    it("preserves %2F in any segment (opacity rule applies universally)", () => {
+      // Synthetic case: a hand-encoded `foo%2Fbar.md` happens to
+      // satisfy the opacity rule (segment contains `%2F`), so it
+      // stays opaque rather than collapsing into two segments.
+      // marked.parse() never emits this shape for legitimate
+      // workspace links, so the behaviour is captured here only to
+      // make the contract explicit — opacity is segment-local and
+      // does not care whether the path is under `data/plugins/`.
       const result = classifyWorkspacePath("data/some/foo%2Fbar.md");
-      assert.deepEqual(result, { kind: "file", path: "data/some/foo/bar.md" });
+      assert.deepEqual(result, { kind: "file", path: "data/some/foo%2Fbar.md" });
     });
 
     it("decoded %2E%2E (..) is normalized away within workspace", () => {
-      // "data/wiki/pages/%2E%2E/sources/foo.md" → "data/wiki/pages/../sources/foo.md"
-      //   → normalizePath collapses to "data/wiki/sources/foo.md".
+      // "data/wiki/pages/%2E%2E/sources/foo.md" → per-segment decode
+      // turns the %2E%2E segment into ".." → normalizePath collapses
+      // to "data/wiki/sources/foo.md".
       const result = classifyWorkspacePath("data/wiki/pages/%2E%2E/sources/foo.md");
       assert.deepEqual(result, { kind: "file", path: "data/wiki/sources/foo.md" });
     });
 
     it("decoded %2E%2E that escapes workspace root still returns null", () => {
-      // "%2E%2E/%2E%2E/etc/passwd" → "../../etc/passwd" → normalizePath
-      // pops past root → null. Decoding does not widen the traversal
-      // surface beyond what a literal `..` href could already reach.
+      // "%2E%2E/%2E%2E/etc/passwd" → per-segment decode → "../../etc/passwd"
+      //   → normalizePath pops past root → null. Encoded `..` does
+      // not widen the traversal surface beyond what a literal `..`
+      // href could already reach.
       const result = classifyWorkspacePath("%2E%2E/%2E%2E/etc/passwd");
       assert.equal(result, null);
     });
@@ -240,6 +413,26 @@ describe("classifyWorkspacePath", () => {
     it("strips both fragment and query", () => {
       const result = classifyWorkspacePath("data/wiki/pages/foo.md?bar=1#baz");
       assert.deepEqual(result, { kind: "wiki", slug: "foo" });
+    });
+
+    it("preserves ?selected= query on a spa-route (collections deep link)", () => {
+      const result = classifyWorkspacePath("/collections/mc-invoice?selected=INV-2026-0001");
+      assert.deepEqual(result, { kind: "spa-route", path: "/collections/mc-invoice?selected=INV-2026-0001" });
+    });
+
+    it("preserves the query but drops the fragment on a spa-route", () => {
+      const result = classifyWorkspacePath("/collections/mc-clients?selected=acme#row");
+      assert.deepEqual(result, { kind: "spa-route", path: "/collections/mc-clients?selected=acme" });
+    });
+
+    it("a spa-route with no query stays query-free", () => {
+      const result = classifyWorkspacePath("/collections/mc-invoice");
+      assert.deepEqual(result, { kind: "spa-route", path: "/collections/mc-invoice" });
+    });
+
+    it("ignores a '?' that lives inside the fragment on a spa-route", () => {
+      const result = classifyWorkspacePath("/collections/mc-invoice#frag?notquery");
+      assert.deepEqual(result, { kind: "spa-route", path: "/collections/mc-invoice" });
     });
   });
 });

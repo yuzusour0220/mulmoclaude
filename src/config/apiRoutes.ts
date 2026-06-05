@@ -130,7 +130,7 @@ const HOST_API_ROUTES = {
 
   /** Notifier dispatch — single endpoint, body carries `{ action,
    *  ... }`. Matches the `manage*` tool pattern used elsewhere
-   *  (manageEncore / manageAccounting / manageSkills). */
+   *  (manageAccounting / manageSkills). */
   notifier: {
     dispatch: "/api/notifier",
   },
@@ -217,6 +217,22 @@ const HOST_API_ROUTES = {
     manage: "/api/roles/manage",
   },
 
+  // Schema-driven collections (see plans/done/feat-skill-driven-apps.md
+  // — historical name predates the rename). One "collection" is a
+  // skill that ships a `schema.json` alongside its `SKILL.md`; the
+  // host renders its records via `<CollectionView>`.
+  collections: {
+    list: "/api/collections",
+    /** GET → { collection, items } */
+    detail: "/api/collections/:slug",
+    /** POST → create one record (auto-id when primaryKey value omitted) */
+    items: "/api/collections/:slug/items",
+    /** PUT → upsert; DELETE → remove */
+    item: "/api/collections/:slug/items/:itemId",
+    /** POST → assemble a schema-declared action's seed prompt → { prompt, role } */
+    itemAction: "/api/collections/:slug/items/:itemId/actions/:actionId",
+  },
+
   // `scheduler` group migrated to META — see `src/plugins/scheduler/calendarMeta.ts`.
   // Auto-merged via `apiNamespace: "scheduler"`.
 
@@ -236,12 +252,6 @@ const HOST_API_ROUTES = {
     itemBody: "/api/news/items/:id/body",
     readState: "/api/news/read-state",
   },
-
-  // todos: removed — todo is now a runtime plugin
-  // (`@mulmoclaude/todo-plugin`, #1145 migration). The frontend
-  // calls into it via `runtime.dispatch({kind: ...})` from
-  // `useTodos` (`@mulmoclaude/todo-plugin/composables`); no
-  // host-managed routes remain.
 
   hooks: {
     /** Internal endpoint hit by the PostToolUse dispatcher

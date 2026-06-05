@@ -8,17 +8,11 @@
 
 [English](README.md) · [日本語](README.ja.md) · [简体中文](README.zh.md) · [한국어](README.ko.md) · **Español** · [Português (BR)](README.pt-BR.md) · [Français](README.fr.md) · [Deutsch](README.de.md)
 
-Chat GUI con Claude Code — memoria a largo plazo, salida visual rica, ejecución en sandbox y acceso remoto desde cualquier lugar.
+> **[How AI-Native Applications Should Be Built](MANIFEST.md)** — la tesis sobre arquitectura, UX y protocolo que hay detrás de MulmoClaude.
 
-**Memoria a largo plazo**: una wiki personal integrada — inspirada en la idea de Andrej Karpathy de darle a un LLM un cuaderno que crece con el tiempo — le da a Claude **conocimiento persistente** que se acumula con cada conversación.
+MulmoClaude es una plataforma de aplicaciones AI-nativa, de código abierto, que se ejecuta localmente en tu máquina. En lugar de aplicaciones aisladas, las capacidades se construyen como plugins dentro de un único registro. Las aplicaciones que se ejecutan en ella hoy incluyen un sistema contable completo (con lógica real de contabilidad del lado del servidor), una wiki personal y un lector de documentos de la SEC (Edgar). Claude actúa como un controlador universal que compone a través de estos plugins.
 
-Conversa con Claude Code y recibe no solo texto, sino **resultados visuales interactivos**: documentos, hojas de cálculo, mapas mentales, gráficos, imágenes, formularios, escenas 3D y mucho más.
-
-**Ejecución en sandbox**: Claude Code se ejecuta dentro de un sandbox, protegiendo tu sistema frente a ataques de inyección de prompts.
-
-**Accede desde cualquier lugar**: conecta Telegram, Slack, LINE, Discord u [otras 10 aplicaciones de mensajería](#puentes-de-mensajería) para hablar con tu agente de IA desde el teléfono.
-
-**Tareas programadas**: delega el trabajo recurrente — resúmenes diarios, comprobaciones periódicas, recordatorios programados — al planificador integrado, que ejecuta tu agente con cron.
+Interactúas en lenguaje natural, y Claude invoca la GUI adecuada para la tarea — respondiendo en markdown, gráficos, formularios, wikis, hojas de cálculo o escenas 3D. Todos los datos viven como archivos planos en tu workspace.
 
 ## Inicio rápido
 
@@ -506,13 +500,12 @@ El canvas (panel derecho) admite 8 modos de vista, intercambiables mediante la b
 | `Cmd/Ctrl+1` | Single    | (default)         | Muestra el resultado de la herramienta seleccionada |
 | `Cmd/Ctrl+2` | Stack     | `?view=stack`     | Todos los resultados apilados verticalmente         |
 | `Cmd/Ctrl+3` | Files     | `?view=files`     | Explorador de archivos del workspace                |
-| `Cmd/Ctrl+4` | Todos     | `?view=todos`     | Tablero de pendientes Kanban / tabla / lista        |
 | `Cmd/Ctrl+5` | Scheduler | `?view=scheduler` | Calendario de tareas programadas                    |
 | `Cmd/Ctrl+6` | Wiki      | `?view=wiki`      | Índice de páginas de la wiki                        |
 | `Cmd/Ctrl+7` | Skills    | `?view=skills`    | Lista y editor de skills                            |
 | `Cmd/Ctrl+8` | Roles     | `?view=roles`     | Gestión de roles                                    |
 
-Cada modo de vista está impulsado por la URL: hacer clic en un botón del lanzador actualiza `?view=`, y aterrizar en una URL con `?view=todos` (por ejemplo) restaura la vista correspondiente. La lista de modos de vista se define una sola vez en `src/utils/canvas/viewMode.ts` — añadir un nuevo modo es un simple append al array.
+Cada modo de vista está impulsado por la URL: hacer clic en un botón del lanzador actualiza `?view=`, y aterrizar en una URL con `?view=wiki` (por ejemplo) restaura la vista correspondiente. La lista de modos de vista se define una sola vez en `src/utils/canvas/viewMode.ts` — añadir un nuevo modo es un simple append al array.
 
 ## Workspace
 
@@ -530,25 +523,9 @@ Todos los datos se almacenan como archivos planos en el directorio del workspace
 
 Consulta [`docs/developer.md`](docs/developer.md#workspace-layout-mulmoclaude) para la referencia completa.
 
-### Explorador de pendientes
+### Listas de pendientes
 
-El Explorador de Pendientes es accesible mediante `Cmd/Ctrl+4`, el botón del lanzador de Todos, o seleccionando `data/todos/todos.json` en el explorador de archivos. Ofrece tres sub-modos de vista:
-
-- **Kanban** — columnas al estilo de GitHub Projects. Arrastra tarjetas entre
-  columnas para cambiar el estado. Cada columna tiene un menú para renombrar, marcar como
-  hecho o eliminar. Se pueden añadir nuevas columnas desde la barra de herramientas.
-- **Tabla** — tabla ordenable con columnas de estado / prioridad / etiquetas / fecha
-  de vencimiento / creación. Haz clic en una fila para editarla inline.
-- **Lista** — checklist plana con el mismo editor inline.
-
-Las columnas de estado se almacenan en `data/todos/columns.json` y por defecto son
-`Backlog / Todo / In Progress / Done`. Cada pendiente lleva campos opcionales de
-`status`, `priority` (low / medium / high / urgent) y `dueDate`
-además de los campos originales de texto / nota / etiquetas / completado.
-
-La herramienta MCP `manageTodoList` del lado del chat mantiene su comportamiento existente
-sin cambios — puede leer y editar texto / nota / etiquetas / pendientes completados,
-y los campos adicionales del explorador se preservan a través de las ediciones de MCP.
+Las listas de pendientes se construyen como **colecciones** basadas en esquema, no como una vista dedicada. Pídele a Claude que "configure una lista de pendientes" y seguirá `config/helps/todo-collection.md` para crear una colección `todos` — con un enum de estado (`Backlog / Todo / In Progress / Done`), un toggle `done`, y campos opcionales de prioridad / fecha de vencimiento, eligiendo automáticamente una vista kanban / tabla / calendario según el esquema.
 
 ### Programador y programación de skills
 

@@ -61,6 +61,28 @@ function onClick(event: MouseEvent) {
 .wiki-content :deep(.wiki-link:hover) {
   text-decoration-style: solid;
 }
+.wiki-content :deep(a) {
+  color: #2563eb;
+  text-decoration: underline;
+}
+/* Interaction + visited states for external / markdown-rendered
+   anchors. Scope with `:not(.wiki-link)` so the rules don't override
+   the dotted-underline / solid-on-hover styling that internal
+   cross-refs already carry above (Codex follow-up on #1466).
+   Order follows LVHA: visited before hover so a visited+hovered
+   link shows the hover color, not the visited one (Sourcery
+   follow-up on #1466). focus-visible is appended; it can stack
+   with any state to give keyboard users a visible outline. */
+.wiki-content :deep(a:not(.wiki-link):visited) {
+  color: #6d28d9;
+}
+.wiki-content :deep(a:not(.wiki-link):hover) {
+  color: #1d4ed8;
+}
+.wiki-content :deep(a:not(.wiki-link):focus-visible) {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
 .wiki-content :deep(h1) {
   font-size: 1.5rem;
   font-weight: 700;

@@ -24,19 +24,19 @@
 export interface PresetPlugin {
   /** npm package name (the directory under `node_modules`). */
   packageName: string;
+  /** True = NOT shipped in the published `mulmoclaude` tarball (only
+   *  resolvable via the yarn-workspaces symlink in a dev checkout).
+   *  Loader downgrades the "not resolvable" log to `debug` so a
+   *  production `npx mulmoclaude` install doesn't surface warns for
+   *  packages we knowingly excluded. */
+  devOnly?: boolean;
 }
 
 export const PRESET_PLUGINS: readonly PresetPlugin[] = [
-  // #1145 — runtime-plugin shape of the built-in todo plugin.
-  // Loaded as a preset (resolved via `node_modules/@mulmoclaude/todo-plugin/`
-  // through the yarn-workspaces symlink) so it boots on every fresh
-  // checkout. Owns `manageTodoList` end-to-end now that the static
-  // entry under `src/plugins/todo/` has been removed.
-  { packageName: "@mulmoclaude/todo-plugin" },
   // #1162 — Spotify integration (Liked Songs / playlists / recently
   // played). PR 1 ships OAuth + token persistence; PR 2 adds the
-  // listening-data kinds and the Vue View. Loaded the same way as
-  // todo-plugin via the workspace symlink at
+  // listening-data kinds and the Vue View. Loaded as a preset, resolved
+  // via the workspace symlink at
   // `node_modules/@mulmoclaude/spotify-plugin/`.
   { packageName: "@mulmoclaude/spotify-plugin" },
   // #1175 / #1286 — `recipe-book-plugin` removed from the preset
@@ -51,7 +51,7 @@ export const PRESET_PLUGINS: readonly PresetPlugin[] = [
   // Owns the standalone `/debug` page; the toolbar entry is gated on
   // `VITE_DEV_MODE=1` so production builds hide the launcher button
   // (the page itself is still reachable by typing the URL).
-  { packageName: "@mulmoclaude/debug-plugin" },
+  { packageName: "@mulmoclaude/debug-plugin", devOnly: true },
   // SEC EDGAR runtime plugin — wraps the public EDGAR API as one
   // tool with kind-discriminated dispatch. Server-only (no Vue).
   // Self-healing config flow: when the SEC-required contact info
@@ -59,5 +59,13 @@ export const PRESET_PLUGINS: readonly PresetPlugin[] = [
   // that instructs the LLM to ask the user, write the JSON file
   // at `~/mulmoclaude/config/plugins/<encoded-pkg>/config.json`,
   // and retry. Opt-in per role like every other runtime plugin.
-  { packageName: "@mulmoclaude/edgar-plugin" },
+  // Not published yet — kept dev-only until distribution is decided.
+  { packageName: "@mulmoclaude/edgar-plugin", devOnly: true },
+  // Generic IMAP/SMTP email runtime plugin (#1542). Gmail-default
+  // provider presets; App Password auth (no OAuth in v1). v1
+  // scaffold returns stubs for list/read/search/send so the
+  // config + send-confirmation flow can be exercised end-to-end;
+  // real IMAP/SMTP wiring lands in follow-up PRs. devOnly until
+  // the surface stabilises + we decide on npm publish.
+  { packageName: "@mulmoclaude/email-plugin", devOnly: true },
 ];

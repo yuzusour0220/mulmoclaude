@@ -3,7 +3,15 @@ import { randomUUID } from "node:crypto";
 import { type Page, expect, test } from "@playwright/test";
 
 import { ONE_MINUTE_MS } from "../../server/utils/time.ts";
-import { navigateToWikiIndex, navigateToWikiPage, placeWikiPage, removeWikiPage, replaceWikiIndex, restoreWikiIndex } from "../fixtures/live-chat.ts";
+import {
+  expectWikiPageBody,
+  navigateToWikiIndex,
+  navigateToWikiPage,
+  placeWikiPage,
+  removeWikiPage,
+  replaceWikiIndex,
+  restoreWikiIndex,
+} from "../fixtures/live-chat.ts";
 
 const L14_TIMEOUT_MS = ONE_MINUTE_MS;
 const L15_TIMEOUT_MS = ONE_MINUTE_MS;
@@ -24,12 +32,12 @@ const navigateToWikiLintReport = async (page: Page): Promise<void> => {
   await expect(page.getByTestId("wiki-page-body").getByRole("heading", { name: "Wiki Lint Report" })).toBeVisible();
 };
 
-// L-14 / L-15 each seed their own pair of wiki pages and never
-// touch the shared `data/wiki/index.md`, so they parallelise
-// freely. L-16 mutates the shared index file — keep it the only
-// index-writing test in this suite, and serialise alongside any
-// future index-mutating spec via `test.describe.serial` or by
-// putting them in a separate spec file.
+// L-14 / L-15 / the non-mutating L-WIKI-LINT-* tests each seed
+// their own pages and never touch the shared `data/wiki/index.md`,
+// so they parallelise freely. L-16 and L-WIKI-LINT-MISSING /
+// L-WIKI-LINT-TAG-DRIFT all mutate that single shared index file;
+// they share the inner `describe.serial` block below to keep one
+// test's restore from clobbering another's replace.
 test.describe.configure({ mode: "parallel" });
 
 test.describe("wiki navigation (real workspace)", () => {
@@ -73,11 +81,9 @@ test.describe("wiki navigation (real workspace)", () => {
       await placeWikiPage(targetSlug, [`# L-14 target`, ``, targetMarker, ``].join("\n"));
       await navigateToWikiPage(page, sourceSlug);
       await page.locator(`.wiki-link[data-page="${targetSlug}"]`).first().click();
-      await expect(page).toHaveURL(new RegExp(`/wiki/pages/${encodeURIComponent(targetSlug)}$`));
-      await expect(page.getByTestId("wiki-page-body")).toContainText(targetMarker);
-      // Negative guard: if the catch-all regression resurfaces, the
-      // SPA falls through to /chat (B-24's reported failure mode).
-      await expect(page).not.toHaveURL(/\/chat/);
+      // Three-in-one wiki landing assertion (URL + body marker +
+      // B-24 /chat sentinel) — see `expectWikiPageBody` docstring.
+      await expectWikiPageBody(page, targetSlug, targetMarker);
     } finally {
       await removeWikiPage(sourceSlug);
       await removeWikiPage(targetSlug);
@@ -114,13 +120,6 @@ test.describe("wiki navigation (real workspace)", () => {
     const targetSlug = `日本語タイトル-nonascii-target-${projectSlug}-${nonce}`;
     const sourceSlug = `e2e-live-l15-source-${projectSlug}-${nonce}`;
     const targetMarker = "L-15 target body marker (本文サンプル)";
-    // encodeURIComponent output is the percent-encoded path the
-    // browser actually sits on; reuse it both for the URL assertion
-    // regex and for documenting the encoded form. encodeURIComponent
-    // is regex-safe (no `.` `(` `)` `*` etc. in its output for our
-    // input), so we splice it into the RegExp source verbatim — same
-    // shape L-14 uses one screen up.
-    const encodedTargetSlug = encodeURIComponent(targetSlug);
     try {
       await placeWikiPage(sourceSlug, [`# L-15 source`, ``, `[[${targetSlug}]]`, ``].join("\n"));
       await placeWikiPage(targetSlug, [`# 日本語タイトル`, ``, targetMarker, ``].join("\n"));
@@ -128,13 +127,10 @@ test.describe("wiki navigation (real workspace)", () => {
       // (A) Direct URL routing — non-ASCII slug, no wikilink in the
       // path, just isSafeWikiSlug + resolvePagePath. If B-26 ever
       // regresses, the server returns "page not found" and the body
-      // marker assertion fails fast.
+      // marker assertion fails fast (B-24 /chat sentinel + URL +
+      // body marker are all in `expectWikiPageBody`).
       await navigateToWikiPage(page, targetSlug);
-      await expect(page.getByTestId("wiki-page-body")).toContainText(targetMarker);
-      await expect(page).toHaveURL(new RegExp(`/wiki/pages/${encodedTargetSlug}$`));
-      // Negative guard mirroring L-14 — the catch-all router must
-      // not swallow non-ASCII page slugs (B-24 regression shape).
-      await expect(page).not.toHaveURL(/\/chat/);
+      await expectWikiPageBody(page, targetSlug, targetMarker);
 
       // (B) Wikilink click — `[[日本語…]]` renders verbatim into a
       // `.wiki-link[data-page="…"]` span (renderWikiLinks does no
@@ -143,9 +139,7 @@ test.describe("wiki navigation (real workspace)", () => {
       // router-push pipeline honest for non-ASCII targets.
       await navigateToWikiPage(page, sourceSlug);
       await page.locator(`.wiki-link[data-page="${targetSlug}"]`).first().click();
-      await expect(page).toHaveURL(new RegExp(`/wiki/pages/${encodedTargetSlug}$`));
-      await expect(page.getByTestId("wiki-page-body")).toContainText(targetMarker);
-      await expect(page).not.toHaveURL(/\/chat/);
+      await expectWikiPageBody(page, targetSlug, targetMarker);
     } finally {
       await removeWikiPage(sourceSlug);
       await removeWikiPage(targetSlug);
@@ -153,17 +147,20 @@ test.describe("wiki navigation (real workspace)", () => {
   });
 
   test("L-15b: 非 ASCII slug fuzzy resolve が衝突候補から正しい target を決定的に選ぶ (#1194)", async ({ page }, testInfo) => {
-    // Expected-fail in fresh-workspace CI: the wiki POST returns
-    // "not found" for the multibyte target slug even though
-    // placeWikiPage wrote the file — likely a server-side quirk in
-    // `wikiSlugify` / `getPageIndex` when `data/wiki/index.md` has
-    // no entries yet, so the title-match fallback can't fire.
-    // Marked test.fail() so the job stays green AND the run
-    // actively probes: if root cause gets fixed, this case starts
-    // passing → playwright flags it as "unexpected pass" → forces a
-    // visit to remove the marker. Replaces an earlier `test.skip`
-    // which silently dropped #1194 coverage (codex review on #1364).
-    test.fail(process.env.CI === "true", "TODO: fresh-workspace fuzzy resolve fails in CI — see comment");
+    // Previously test.fail()'d on CI under the theory that the
+    // server-side resolver had a fresh-workspace quirk. The real
+    // root cause was in this spec: `testInfo.title.split(":")[0]`
+    // returns "L-15b" with an uppercase L, which then landed in the
+    // slug via `nonce`. Wiki filenames are conventionally all
+    // lowercase (every real page goes through `wikiSlugify` whose
+    // output is `[a-z0-9-]+`), so when the resolver did
+    // `wikiSlugify(target) = "...-l-15b-..."` and tried to fuzzy-
+    // match against the on-disk key `...-L-15b-...`, neither
+    // `slug.includes(key)` nor `key.includes(slug)` succeeded — the
+    // case mismatch killed the substring match. The fix below
+    // lowercases `testLabel` before splicing it into the slug, so
+    // the seeded filename matches the slug-form output of
+    // `wikiSlugify` and the resolver lands on the target page.
     // L-15 と同じ shape のテストなので timeout 定数も共用 (plan
     // file の方針)。
     test.setTimeout(L15_TIMEOUT_MS);
@@ -209,14 +206,16 @@ test.describe("wiki navigation (real workspace)", () => {
     // で「どのテストが書いた fixture か」が分かるため、parallel
     // 実行中の triage と stale 検出が楽になる。`.split(":")[0]` で
     // テスト名先頭の short id (例: "L-15b") だけ取り出して slug に
-    // 安全な ASCII プレフィックスに揃える。
-    const testLabel = testInfo.title.split(":")[0].trim();
+    // 安全な ASCII プレフィックスに揃える。`.toLowerCase()` は必須:
+    // wiki page filename の規約は `[a-z0-9-]+` (`wikiSlugify` 出力)
+    // で、大文字が混ざると resolver の `wikiSlugify(target)` と
+    // on-disk key の case mismatch で fuzzy match が全滅する。
+    const testLabel = testInfo.title.split(":")[0].trim().toLowerCase();
     const nonce = `${testLabel}-${Date.now()}-${randomUUID().slice(0, 6)}`;
     const targetSlug = `日本語タイトル-${projectSlug}-${nonce}`;
     const sourceSlug = `e2e-live-l15b-source-${projectSlug}-${nonce}`;
     const targetMarker = `L-15b target body marker ${nonce}`;
     const sourceMarker = `L-15b source body marker ${nonce}`;
-    const encodedTargetSlug = encodeURIComponent(targetSlug);
     try {
       // Seed source first — the original bug's repro relied on the
       // source page being readdir-first when both keys partial-
@@ -232,14 +231,16 @@ test.describe("wiki navigation (real workspace)", () => {
       // trace viewer renders (A) and (B) as separate, named nodes
       // and CI failures attribute to the correct route without
       // hunting through a flat assertion log (Sourcery review
-      // #1347). The four assertions inside each step are
-      // intentionally duplicated rather than extracted into a
-      // helper — collision repro semantics differ subtly between
-      // routes (e.g. the "click into a colliding wikilink" shape
-      // is route-(B)-only), and a helper would obscure that.
+      // #1347). The three generic checks (URL + body marker +
+      // B-24 /chat sentinel) collapse into `expectWikiPageBody`;
+      // the route-specific #1194 collision sentinel
+      // (`not.toContainText(sourceMarker)`) stays inline so its
+      // semantics — "the resolver did NOT return the colliding
+      // source page" — are obvious at the call site rather than
+      // hidden behind a helper signature.
       await test.step("(A) direct URL navigation to target slug", async () => {
         await navigateToWikiPage(page, targetSlug);
-        await expect(page.getByTestId("wiki-page-body"), "target page body must render (positive assertion)").toContainText(targetMarker);
+        await expectWikiPageBody(page, targetSlug, targetMarker);
         // Negative assertion = #1194 regression sentinel. If the
         // fuzzy resolver ever silently picks the source page again,
         // this is the line that fails.
@@ -247,10 +248,6 @@ test.describe("wiki navigation (real workspace)", () => {
           page.getByTestId("wiki-page-body"),
           "source marker must NOT appear — would indicate #1194 regression (fuzzy resolver returned colliding page)",
         ).not.toContainText(sourceMarker);
-        await expect(page).toHaveURL(new RegExp(`/wiki/pages/${encodedTargetSlug}$`));
-        // Negative guard mirroring L-14 / L-15 — catch-all router
-        // must not swallow non-ASCII page slugs (B-24 shape).
-        await expect(page).not.toHaveURL(/\/chat/);
       });
 
       await test.step("(B) wikilink click from source page → target", async () => {
@@ -261,100 +258,15 @@ test.describe("wiki navigation (real workspace)", () => {
         // and the target marker never appears.
         await navigateToWikiPage(page, sourceSlug);
         await page.locator(`.wiki-link[data-page="${targetSlug}"]`).first().click();
-        await expect(page).toHaveURL(new RegExp(`/wiki/pages/${encodedTargetSlug}$`));
-        await expect(page.getByTestId("wiki-page-body"), "target page body must render after wikilink click").toContainText(targetMarker);
+        await expectWikiPageBody(page, targetSlug, targetMarker);
         await expect(
           page.getByTestId("wiki-page-body"),
           "source marker must NOT appear after wikilink click — would indicate #1194 regression",
         ).not.toContainText(sourceMarker);
-        await expect(page).not.toHaveURL(/\/chat/);
       });
     } finally {
       await removeWikiPage(sourceSlug);
       await removeWikiPage(targetSlug);
-    }
-  });
-
-  test("L-16: /wiki index に並んだ entry をクリックすると各ページが 404 にならず開ける", async ({ page }, testInfo) => {
-    test.setTimeout(L16_TIMEOUT_MS);
-    // Covers B-23: the wiki index used to drop or mis-link entries
-    // because the parser disagreed with the page resolver about how
-    // to map index rows → on-disk slugs. Bullet links are the
-    // canonical index format, so we seed two entries that point at
-    // pages whose actual slugs match the href segment, then click
-    // each entry from /wiki and assert the page body actually
-    // hydrates (proves both the parser AND the resolver are happy).
-    //
-    // This is the only test in this spec that mutates the shared
-    // `data/wiki/index.md`. The describe block is parallel, so any
-    // future test that writes the index must move into its own
-    // serial block (or live in a separate file) — see the comment
-    // on `describe.configure({ mode: "parallel" })` above.
-    const projectSlug = testInfo.project.name;
-    const nonce = `${Date.now()}-${randomUUID().slice(0, 6)}`;
-    const slugA = `e2e-live-l16-alpha-${projectSlug}-${nonce}`;
-    const slugB = `e2e-live-l16-beta-${projectSlug}-${nonce}`;
-    const titleA = `L-16 alpha ${nonce}`;
-    const titleB = `L-16 beta ${nonce}`;
-    const markerA = `L-16 alpha body marker ${nonce}`;
-    const markerB = `L-16 beta body marker ${nonce}`;
-    // Bullet-link rows (`- [Title](pages/<slug>.md) — description`)
-    // are the format `parseBulletLinkRow` resolves slug-from-href —
-    // important so non-ASCII or unusually shaped titles do not
-    // collapse via `wikiSlugify`. Keep the index minimal: just the
-    // two test entries, replacing whatever the user has on disk so
-    // the rendered list contains exactly the entries we expect to
-    // click. The original content is restored in `finally`.
-    const newIndex = ["# Wiki Index", "", `- [${titleA}](pages/${slugA}.md) — alpha`, `- [${titleB}](pages/${slugB}.md) — beta`, ""].join("\n");
-    // Two-state cleanup gate (codex iter-2 fix): `replaceWikiIndex`
-    // returns `string | null`, where `null` is a meaningful "the
-    // file did not exist before — `restoreWikiIndex(null)` should
-    // delete it" signal. A previous gate of `if (originalIndex !==
-    // null)` would skip cleanup in exactly that case and leave the
-    // synthetic index on disk. Track replacement separately so the
-    // null payload is forwarded verbatim.
-    let originalIndex: string | null = null;
-    let replacedIndex = false;
-    try {
-      await placeWikiPage(slugA, [`# ${titleA}`, ``, markerA, ``].join("\n"));
-      await placeWikiPage(slugB, [`# ${titleB}`, ``, markerB, ``].join("\n"));
-      originalIndex = await replaceWikiIndex(newIndex);
-      replacedIndex = true;
-      await navigateToWikiIndex(page);
-
-      // Both entries must render in the index list as testid'd rows.
-      // Visibility is the strong signal the parser found the bullet
-      // and the View hydrated `pageEntries` from the API response.
-      await expect(page.getByTestId(`wiki-page-entry-${slugA}`), "alpha entry must appear in the index list").toBeVisible();
-      await expect(page.getByTestId(`wiki-page-entry-${slugB}`), "beta entry must appear in the index list").toBeVisible();
-
-      // Click entry A — expect /wiki/pages/<slugA> + body marker.
-      // encodeURIComponent matches the L-14 / L-15 assertion shape
-      // (a no-op for ASCII slugs, but explicit about intent and
-      // silences static analysis flags on raw template-string regex).
-      await page.getByTestId(`wiki-page-entry-${slugA}`).click();
-      await expect(page).toHaveURL(new RegExp(`/wiki/pages/${encodeURIComponent(slugA)}$`));
-      await expect(page.getByTestId("wiki-page-body"), "alpha page body must hydrate after clicking the index entry").toContainText(markerA);
-      // Negative guard mirroring L-14: if the catch-all router ever
-      // swallows wiki page navigations again (B-24 regression), the
-      // URL would land on /chat — fail loud here so the diagnostic
-      // points at the right bug.
-      await expect(page).not.toHaveURL(/\/chat/);
-
-      // Back to the index, click entry B — same shape, different
-      // page. Two clicks, not one, because B-23 historically
-      // affected only some bullet rows, not all (e.g. when the
-      // index had mixed link styles), so a single click could
-      // false-pass.
-      await navigateToWikiIndex(page);
-      await page.getByTestId(`wiki-page-entry-${slugB}`).click();
-      await expect(page).toHaveURL(new RegExp(`/wiki/pages/${encodeURIComponent(slugB)}$`));
-      await expect(page.getByTestId("wiki-page-body"), "beta page body must hydrate after clicking the index entry").toContainText(markerB);
-      await expect(page).not.toHaveURL(/\/chat/);
-    } finally {
-      if (replacedIndex) await restoreWikiIndex(originalIndex);
-      await removeWikiPage(slugA);
-      await removeWikiPage(slugB);
     }
   });
 
@@ -411,14 +323,12 @@ test.describe("wiki navigation (real workspace)", () => {
       await expect(page.locator(`.wiki-link[data-page*="|"]`), "no wiki-link's data-page should contain a literal pipe").toHaveCount(0);
 
       await pipeLink.first().click();
-      // Strict URL assertion — path must end with the target slug
-      // exactly, no `|` (or its `%7C` percent-encoding) anywhere.
-      await expect(page).toHaveURL(new RegExp(`/wiki/pages/${encodeURIComponent(targetSlug)}$`));
+      // `expectWikiPageBody` covers URL ends with target slug + body
+      // hydrates + B-24 /chat sentinel. The %7C-leak sentinel is
+      // #1297-specific (route owns it, helper doesn't), so it stays
+      // inline.
+      await expectWikiPageBody(page, targetSlug, targetMarker);
       await expect(page, "URL must not contain a percent-encoded pipe (regression sentinel for %7C alias leak)").not.toHaveURL(/%7C/);
-      // Negative guard mirroring L-14/L-15/L-16 — the catch-all
-      // router must not swallow the click into /chat.
-      await expect(page).not.toHaveURL(/\/chat/);
-      await expect(page.getByTestId("wiki-page-body"), "target page must hydrate after click").toContainText(targetMarker);
     } finally {
       await removeWikiPage(sourceSlug);
       await removeWikiPage(targetSlug);
@@ -547,5 +457,238 @@ test.describe("wiki navigation (real workspace)", () => {
     } finally {
       await removeWikiPage(sourceSlug);
     }
+  });
+
+  test("L-WIKI-LINT-ORPHAN: lint レポート画面で index.md にない page が orphan 診断に出る", async ({ page }, testInfo) => {
+    test.setTimeout(ONE_MINUTE_MS);
+    // Covers `findOrphanPages` end-to-end. Any `<slug>.md` on disk
+    // that the index does not reference must surface as the
+    // dedicated "Orphan page" diagnostic — pre-fix this was merged
+    // with the broken-link line and operators could not filter the
+    // two cases apart.
+    //
+    // No index mutation is needed: the user's existing
+    // `data/wiki/index.md` will not reference our nonce-stamped
+    // slug, so seeding just the page file produces a deterministic
+    // orphan. That keeps this test parallel-safe and lets it run
+    // alongside the other non-mutating L-WIKI-LINT-* tests above.
+    //
+    // The lint report aggregates every orphan on disk, so other
+    // parallel tests' transiently-seeded source pages (L-WIKI-PIPE
+    // et al.) may also surface here while they run. That is fine:
+    // the assertion is scoped to our unique slug via `:has-text`,
+    // not to a total orphan count.
+    const testLabel = testInfo.title.split(":")[0].trim().toLowerCase();
+    const nonce = `${testLabel}-${Date.now()}-${randomUUID().slice(0, 6)}`;
+    const orphanSlug = `e2e-live-wiki-lint-orphan-${testInfo.project.name}-${nonce}`;
+    try {
+      await placeWikiPage(orphanSlug, [`# wiki-lint-orphan ${nonce}`, ``, `orphan body ${nonce}`, ``].join("\n"));
+      await navigateToWikiLintReport(page);
+      // Diagnostic shape: `**Orphan page**: \`<slug>.md\` exists
+      // but is missing from index.md`. Anchor on all three tokens
+      // (slug + "Orphan page" + "missing from index.md") so the
+      // assertion only matches the dedicated diagnostic and not,
+      // e.g., a future "<slug>.md not found" line that happened
+      // to mention the same slug.
+      await expect(
+        page.locator(`li:has-text("${orphanSlug}.md"):has-text("Orphan page"):has-text("missing from index.md")`),
+        "lint must report the seeded page as an orphan diagnostic",
+      ).toHaveCount(1);
+    } finally {
+      await removeWikiPage(orphanSlug);
+    }
+  });
+
+  // The three diagnostics below all replace `data/wiki/index.md`
+  // for the duration of the test. The shared `replaceWikiIndex`
+  // helper has no internal locking, so they MUST run serially with
+  // respect to each other; without this fence one test's
+  // `restoreWikiIndex` would race against a sibling's
+  // `replaceWikiIndex`, leaving the workspace in a hybrid state.
+  // The outer describe stays parallel — the L-14 / L-15 / L-15b /
+  // L-WIKI-PIPE / L-WIKI-LINT-PIPE-CLEAN / L-WIKI-LINT-EMPTY-TARGET
+  // / L-WIKI-LINT-BROKEN / L-WIKI-LINT-ORPHAN tests above do not
+  // touch index.md and can run alongside this block without
+  // contention. Any future test that mutates index.md MUST move
+  // inside this block (or a sibling serial block).
+  test.describe.serial("wiki index-mutating diagnostics", () => {
+    test("L-16: /wiki index に並んだ entry をクリックすると各ページが 404 にならず開ける", async ({ page }, testInfo) => {
+      test.setTimeout(L16_TIMEOUT_MS);
+      // Covers B-23: the wiki index used to drop or mis-link entries
+      // because the parser disagreed with the page resolver about how
+      // to map index rows → on-disk slugs. Bullet links are the
+      // canonical index format, so we seed two entries that point at
+      // pages whose actual slugs match the href segment, then click
+      // each entry from /wiki and assert the page body actually
+      // hydrates (proves both the parser AND the resolver are happy).
+      const projectSlug = testInfo.project.name;
+      const nonce = `${Date.now()}-${randomUUID().slice(0, 6)}`;
+      const slugA = `e2e-live-l16-alpha-${projectSlug}-${nonce}`;
+      const slugB = `e2e-live-l16-beta-${projectSlug}-${nonce}`;
+      const titleA = `L-16 alpha ${nonce}`;
+      const titleB = `L-16 beta ${nonce}`;
+      const markerA = `L-16 alpha body marker ${nonce}`;
+      const markerB = `L-16 beta body marker ${nonce}`;
+      // Bullet-link rows (`- [Title](pages/<slug>.md) — description`)
+      // are the format `parseBulletLinkRow` resolves slug-from-href —
+      // important so non-ASCII or unusually shaped titles do not
+      // collapse via `wikiSlugify`. Keep the index minimal: just the
+      // two test entries, replacing whatever the user has on disk so
+      // the rendered list contains exactly the entries we expect to
+      // click. The original content is restored in `finally`.
+      const newIndex = ["# Wiki Index", "", `- [${titleA}](pages/${slugA}.md) — alpha`, `- [${titleB}](pages/${slugB}.md) — beta`, ""].join("\n");
+      // Two-state cleanup gate (codex iter-2 fix): `replaceWikiIndex`
+      // returns `string | null`, where `null` is a meaningful "the
+      // file did not exist before — `restoreWikiIndex(null)` should
+      // delete it" signal. A previous gate of `if (originalIndex !==
+      // null)` would skip cleanup in exactly that case and leave the
+      // synthetic index on disk. Track replacement separately so the
+      // null payload is forwarded verbatim.
+      let originalIndex: string | null = null;
+      let replacedIndex = false;
+      try {
+        await placeWikiPage(slugA, [`# ${titleA}`, ``, markerA, ``].join("\n"));
+        await placeWikiPage(slugB, [`# ${titleB}`, ``, markerB, ``].join("\n"));
+        originalIndex = await replaceWikiIndex(newIndex);
+        replacedIndex = true;
+        await navigateToWikiIndex(page);
+
+        // Both entries must render in the index list as testid'd rows.
+        // Visibility is the strong signal the parser found the bullet
+        // and the View hydrated `pageEntries` from the API response.
+        await expect(page.getByTestId(`wiki-page-entry-${slugA}`), "alpha entry must appear in the index list").toBeVisible();
+        await expect(page.getByTestId(`wiki-page-entry-${slugB}`), "beta entry must appear in the index list").toBeVisible();
+
+        // Click entry A — expect URL + body marker + B-24 /chat
+        // sentinel, all via `expectWikiPageBody`.
+        await page.getByTestId(`wiki-page-entry-${slugA}`).click();
+        await expectWikiPageBody(page, slugA, markerA);
+
+        // Back to the index, click entry B — same shape, different
+        // page. Two clicks, not one, because B-23 historically
+        // affected only some bullet rows, not all (e.g. when the
+        // index had mixed link styles), so a single click could
+        // false-pass.
+        await navigateToWikiIndex(page);
+        await page.getByTestId(`wiki-page-entry-${slugB}`).click();
+        await expectWikiPageBody(page, slugB, markerB);
+      } finally {
+        if (replacedIndex) await restoreWikiIndex(originalIndex);
+        await removeWikiPage(slugA);
+        await removeWikiPage(slugB);
+      }
+    });
+
+    test("L-WIKI-LINT-MISSING: lint レポート画面で index.md が参照する未存在 file が missing 診断に出る", async ({ page }, testInfo) => {
+      test.setTimeout(ONE_MINUTE_MS);
+      // Covers `findMissingFiles` end-to-end. An index.md row that
+      // references a slug whose `<slug>.md` does not exist on disk
+      // must surface as "Missing file". This is the symmetric
+      // partner to "Orphan page" — together they let operators
+      // reconcile the index vs. the pages directory.
+      //
+      // We replace `data/wiki/index.md` with a synthetic row that
+      // points at a nonce-stamped slug we never seed. Restoration
+      // happens in `finally` via the standard `replaceWikiIndex` →
+      // `restoreWikiIndex` round trip (see L-16's iter-2 fix for
+      // the null-vs-empty restore semantics this inherits).
+      const testLabel = testInfo.title.split(":")[0].trim().toLowerCase();
+      const nonce = `${testLabel}-${Date.now()}-${randomUUID().slice(0, 6)}`;
+      const bogusSlug = `e2e-live-wiki-lint-missing-${testInfo.project.name}-${nonce}`;
+      // Sentinel page so `pages/` is non-empty when the lint route
+      // runs. `collectLintIssues` (server/api/routes/wiki.ts) short-
+      // circuits with a single "Wiki `pages/` directory does not
+      // exist yet" message when `slugs.size === 0` — bypassing
+      // `findMissingFiles` entirely. Locally this never fires
+      // because the developer workspace usually has user-owned wiki
+      // pages, but CI starts from a fresh workspace; by the time
+      // this serial-block test runs, the parallel block's
+      // transient pages have all been cleaned up and L-16's seeded
+      // pair is also already removed, so pages/ is empty. Seeding a
+      // single sentinel here keeps the guard off the critical path.
+      // The sentinel itself shows up as an Orphan-page diagnostic
+      // (it's not in our synthetic index), which does not collide
+      // with the Missing-file assertion below (different slug,
+      // different diagnostic phrase).
+      const sentinelSlug = `e2e-live-wiki-lint-missing-sentinel-${testInfo.project.name}-${nonce}`;
+      // Bullet-link form is what `parseBulletLinkRow` reads to
+      // recover entry.slug from the href — same shape L-16 uses.
+      const newIndex = ["# Wiki Index", "", `- [${bogusSlug} title](pages/${bogusSlug}.md) — missing-file canary`, ""].join("\n");
+      let originalIndex: string | null = null;
+      let replacedIndex = false;
+      try {
+        await placeWikiPage(sentinelSlug, [`# sentinel ${nonce}`, ``, `keeps data/wiki/pages/ non-empty`, ``].join("\n"));
+        originalIndex = await replaceWikiIndex(newIndex);
+        replacedIndex = true;
+        await navigateToWikiLintReport(page);
+        // Diagnostic shape: `**Missing file**: index.md references
+        // \`<slug>\` but the file does not exist`. Anchor on slug
+        // + "Missing file" + "does not exist" so the assertion is
+        // narrowly scoped to our seeded entry, even if the
+        // workspace has unrelated missing-file diagnostics.
+        await expect(
+          page.locator(`li:has-text("${bogusSlug}"):has-text("Missing file"):has-text("does not exist")`),
+          "lint must report the seeded index row as a missing-file diagnostic",
+        ).toHaveCount(1);
+      } finally {
+        if (replacedIndex) await restoreWikiIndex(originalIndex);
+        await removeWikiPage(sentinelSlug);
+      }
+    });
+
+    test("L-WIKI-LINT-TAG-DRIFT: lint レポート画面で frontmatter tag と index tag の drift が診断に出る", async ({ page }, testInfo) => {
+      test.setTimeout(ONE_MINUTE_MS);
+      // Covers `findTagDrift` end-to-end. A page whose YAML
+      // frontmatter `tags:` differs from the matching index row's
+      // hashtag set must surface as "Tag drift" — pre-fix it
+      // surfaced as a generic warning that operators could not
+      // filter. The page exists (no Missing file noise) AND is in
+      // the index (no Orphan page noise) so the assertion can
+      // anchor narrowly on the drift diagnostic itself.
+      //
+      // Both the page body and the index row need to be seeded.
+      // The shared `data/wiki/index.md` is mutated → serial block.
+      const testLabel = testInfo.title.split(":")[0].trim().toLowerCase();
+      const nonce = `${testLabel}-${Date.now()}-${randomUUID().slice(0, 6)}`;
+      const slug = `e2e-live-wiki-lint-drift-${testInfo.project.name}-${nonce}`;
+      // Tag tokens use only lowercase ASCII + hyphens + digits so
+      // both `parseFrontmatterTags` (post-`cleanTagToken`) and
+      // `extractHashTags` (whose regex allows `\p{L}\p{N}_-`) keep
+      // them verbatim. Distinct tags on each side so the drift
+      // condition is unambiguous (set inequality).
+      const pageTag = `pageonly-${nonce}`;
+      const indexTag = `indexonly-${nonce}`;
+      // YAML block-list frontmatter — js-yaml parses both flow
+      // (`tags: [a, b]`) and block forms, but the block form is
+      // unambiguous and survives a future parseFrontmatter rewrite
+      // that drops flow support.
+      const pageBody = ["---", `tags:`, `  - ${pageTag}`, "---", "", `# ${slug}`, "", `drift body ${nonce}`, ""].join("\n");
+      // Bullet-link row with the index-side tag tucked into the
+      // description via `#<tag>` (extractHashTags reads it from
+      // the description line). Keep the slug in the href so
+      // `parseBulletLinkRow` recovers entry.slug = slug.
+      const newIndex = ["# Wiki Index", "", `- [${slug} title](pages/${slug}.md) — drift canary #${indexTag}`, ""].join("\n");
+      let originalIndex: string | null = null;
+      let replacedIndex = false;
+      try {
+        await placeWikiPage(slug, pageBody);
+        originalIndex = await replaceWikiIndex(newIndex);
+        replacedIndex = true;
+        await navigateToWikiLintReport(page);
+        // Diagnostic shape: `**Tag drift**: \`<slug>.md\`
+        // frontmatter has [pageonly...] but index.md has
+        // [indexonly...]`. Both tag tokens are nonce-stamped so
+        // the same <li> can be uniquely identified by joining the
+        // slug + "Tag drift" + both tokens — no risk of a partial
+        // match landing on an unrelated diagnostic.
+        await expect(
+          page.locator(`li:has-text("${slug}.md"):has-text("Tag drift"):has-text("${pageTag}"):has-text("${indexTag}")`),
+          "lint must report the seeded slug as a tag-drift diagnostic",
+        ).toHaveCount(1);
+      } finally {
+        if (replacedIndex) await restoreWikiIndex(originalIndex);
+        await removeWikiPage(slug);
+      }
+    });
   });
 });

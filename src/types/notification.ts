@@ -47,12 +47,12 @@ export type NotificationActionType = (typeof NOTIFICATION_ACTION_TYPES)[keyof ty
 // after the #758 split; Automations is where scheduled tasks live.
 export const NOTIFICATION_VIEWS = {
   chat: "chat",
-  todos: "todos",
   calendar: "calendar",
   automations: "automations",
   sources: "sources",
   files: "files",
   wiki: "wiki",
+  collections: "collections",
 } as const;
 
 export type NotificationView = (typeof NOTIFICATION_VIEWS)[keyof typeof NOTIFICATION_VIEWS];
@@ -70,12 +70,12 @@ export type NotificationPriority = (typeof NOTIFICATION_PRIORITIES)[keyof typeof
 // the identifier lands on the feature's index view.
 export type NotificationTarget =
   | { view: typeof NOTIFICATION_VIEWS.chat; sessionId: string }
-  | { view: typeof NOTIFICATION_VIEWS.todos; itemId?: string }
   | { view: typeof NOTIFICATION_VIEWS.calendar }
   | { view: typeof NOTIFICATION_VIEWS.automations; taskId?: string }
   | { view: typeof NOTIFICATION_VIEWS.sources; slug?: string }
   | { view: typeof NOTIFICATION_VIEWS.files; path?: string }
-  | { view: typeof NOTIFICATION_VIEWS.wiki; slug?: string; anchor?: string };
+  | { view: typeof NOTIFICATION_VIEWS.wiki; slug?: string; anchor?: string }
+  | { view: typeof NOTIFICATION_VIEWS.collections; slug: string; itemId?: string };
 
 export type NotificationAction =
   | {
@@ -96,6 +96,7 @@ export type NotificationAction =
  *  client is on. Other notification kinds may opt in later. */
 export interface NotificationI18n {
   titleKey: string;
+  titleParams?: Readonly<Record<string, string | number | readonly string[]>>;
   bodyKey?: string;
   bodyParams?: Readonly<Record<string, string | number | readonly string[]>>;
 }

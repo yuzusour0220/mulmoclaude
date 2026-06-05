@@ -5,6 +5,7 @@ import { type Page, expect, test } from "@playwright/test";
 import { ONE_MINUTE_MS } from "../../server/utils/time.ts";
 import {
   SESSION_URL_PATTERN,
+  copyPresetCatalogToActive,
   deleteProjectSkillViaUi,
   deleteSession,
   getCurrentSessionId,
@@ -26,12 +27,51 @@ const L21_TIMEOUT_MS = 3 * ONE_MINUTE_MS;
 const L22_TIMEOUT_MS = 3 * ONE_MINUTE_MS;
 const L31_TIMEOUT_MS = 3 * ONE_MINUTE_MS;
 const L32_TIMEOUT_MS = 3 * ONE_MINUTE_MS;
+const L33_TIMEOUT_MS = 3 * ONE_MINUTE_MS;
+const L33B_TIMEOUT_MS = 2 * ONE_MINUTE_MS;
 
-// All four scenarios talk to the live LLM (L-21: chart tool dispatch,
-// L-22: skill execution, L-31: mc-manage-skills bridge dispatch
-// canary, L-32: end-to-end skill landing canary). They share no
-// state — run in parallel to cut wall time, mirroring the other
-// category specs.
+// L-33B target: a launcher preset that's reliably NOT auto-starred
+// in normal user workspaces. `mc-library` is bundled (lives in
+// `server/workspace/skills-preset/mc-library/`) so its catalog row
+// always renders, but it's a niche workflow rarely starred by
+// default — minimising the chance that an L-33B run collides with
+// a user who's actively relying on the preset between runs. The
+// test fs-removes any existing star before exercising the UI and
+// fs-removes again in `finally`, so the workspace ends in the same
+// "unstarred" state regardless of where it started.
+// (Was `mc-invoice` until the billing suite moved to help-file
+// recipes; any surviving non-auto-starred preset works here.)
+const L33B_PRESET_SLUG = "mc-library";
+
+// L-33: launcher preset slug + a signature line from its bundled
+// `SKILL.md`. Treated as pinned literals because the canary's whole
+// premise is that this exact preset, with this exact wording, lands
+// in the user's workspace after `syncPresetSkills`. A rename (e.g.
+// `mc-cooking-coach` → `mc-recipe-keeper`) or a body rewrite that
+// drops the signature line must trip the test loudly so the discovery
+// chain — `server/workspace/skills-preset/<slug>/SKILL.md` →
+// `data/skills/catalog/preset/<slug>/` → `.claude/skills/<slug>/` —
+// stays observable end-to-end.
+const L33_PRESET_SLUG = "mc-cooking-coach";
+const L33_BODY_SIGNATURE = "bundled MulmoClaude preset skill";
+// First-turn agent response after `/mc-cooking-coach` slash dispatch.
+// The preset body opens with "Be the user's cooking-loving friend"
+// and the workflows revolve around `recipe` / `レシピ` / `料理`. A
+// faithful first turn references at least one. **`cook` is
+// deliberately excluded** even though the body uses it: the token
+// also appears in the slug `mc-cooking-coach` itself, so an agent
+// that NEVER loaded the body could still echo "cooking" parsed from
+// the slash command and false-pass the canary (Codex iter-1 review).
+// `recipe` / `料理` / `レシピ` are body-specific and absent from the
+// slash command, so a hit there is a stronger signal that the
+// SKILL.md body actually conditioned the response.
+const L33_COOKING_VOCAB_PATTERN = /recipe|料理|レシピ/i;
+
+// Five LLM-dependent scenarios (L-21 chart dispatch, L-22 skill
+// execution, L-31 bridge dispatch, L-32 end-to-end landing, L-33
+// preset chain) + one UI-only canary (L-33B catalog→Star rail). They
+// share no state — run in parallel to cut wall time, mirroring the
+// other category specs.
 test.describe.configure({ mode: "parallel" });
 
 test.describe("skills (real LLM / static)", () => {
@@ -390,7 +430,276 @@ test.describe("skills (real LLM / static)", () => {
       }
     }
   });
+
+  test("L-33: mc-cooking-coach preset が catalog → /skills → Run の chain で agent に届く (#1287 preset chain canary)", async ({ page }) => {
+    // The slash command `/mc-cooking-coach` reaches the agent and the
+    // bundled SKILL.md body conditions the first turn — neither half
+    // is fakeable by fake-echo, which has no skill resolver.
+    test.skip(process.env.E2E_LIVE_NO_LLM === "1", "E2E_LIVE_NO_LLM=1 — needs slash dispatch + agent reasoning over a preset body");
+    test.setTimeout(L33_TIMEOUT_MS);
+    // End-to-end canary for the **launcher-bundled preset** chain
+    // (#1287 split `cookingCoach` role → `mc-cooking-coach` preset
+    // skill). L-22 covers a synthetic skill seeded directly via
+    // `placeProjectSkill`, and L-32 covers an agent-authored skill
+    // landed through the #1298 bridge. Neither exercises the
+    // **launcher → catalog → active** rail, which is what gets
+    // shipped to every fresh user via `syncPresetSkills`:
+    //   `server/workspace/skills-preset/<slug>/SKILL.md`  (launcher tarball, read-only)
+    //   → `<workspace>/data/skills/catalog/preset/<slug>/SKILL.md`  (boot-time copy by syncPresetSkills)
+    //   → `<workspace>/.claude/skills/<slug>/SKILL.md`              (per-user star via syncActivePresetSkills / catalog UI)
+    //   → `/<slug>` slash dispatch loads body into agent context
+    //   → agent first-turn response references the body's persona/workflow
+    //
+    // A regression that drops the preset from the launcher tarball,
+    // mangles `syncPresetSkills`'s tree copy (sibling assets path),
+    // breaks the catalog→active star path, or shears the slash-command
+    // resolver collapses one of these signals: missing catalog row,
+    // missing project-skill row, missing signature line in the
+    // rendered body, or a generic non-cooking first-turn response.
+    //
+    // Side-effect policy: `mc-cooking-coach` is a launcher preset
+    // whose canonical state is "starred" (every shipped preset is
+    // designed to be active by default in a fresh user's workspace).
+    // If the user already has it starred we use the existing active
+    // copy directly; if not, we star it via the catalog UI as a
+    // one-time setup and **do not unstar** in finally — unstarring
+    // would create user-visible state churn for no win, and the next
+    // boot's `syncActivePresetSkills` would re-mirror the body
+    // anyway. Only the Run-time chat session is reaped.
+    const sessionsToCleanup: string[] = [];
+    try {
+      await page.goto("/skills");
+      await ensurePresetStarred(page, L33_PRESET_SLUG);
+      await verifyPresetBody(page, L33_PRESET_SLUG, L33_BODY_SIGNATURE);
+      const sessionId = await runPresetAndCaptureSessionId(page);
+      sessionsToCleanup.push(sessionId);
+      await waitForAssistantResponseComplete(page, 2 * ONE_MINUTE_MS);
+
+      // Body conditioned the first turn: the cooking-coach persona +
+      // workflow vocabulary surfaces in the assistant's reply. The
+      // assertion runs against `text-response-assistant-body.last()`
+      // mirroring L-22/L-32 so sidebar/history pane noise is excluded
+      // by construction. A regression that broke skill-body loading
+      // (e.g. the resolver dropped the `mc-*` namespace) would land
+      // on a generic acknowledgement that misses the entire pattern.
+      await expect(
+        page.getByTestId("text-response-assistant-body").last(),
+        `assistant first turn after /${L33_PRESET_SLUG} must reference cooking vocabulary — proves SKILL.md body reached the agent context (preset chain canary, #1287)`,
+      ).toContainText(L33_COOKING_VOCAB_PATTERN, { timeout: 2 * ONE_MINUTE_MS });
+    } finally {
+      for (const sid of sessionsToCleanup) {
+        await deleteSession(page, sid);
+      }
+    }
+  });
+
+  test("L-33B: catalog → ☆ Star → /skills active row 出現 (catalog→active UI rail canary)", async ({ page }) => {
+    test.setTimeout(L33B_TIMEOUT_MS);
+    // L-33 verifies the FULL preset chain end-to-end (catalog → active
+    // → /skills → /<slug> dispatch → LLM-conditioned response). But
+    // L-33's `starPresetViaCatalog` path runs ONLY when the target
+    // preset isn't already starred — and in normal dev / CI
+    // environments `mc-cooking-coach` is starred from a previous
+    // boot, so L-33 takes the disk-snapshot fast path every time and
+    // the catalog→active UI is never actually clicked.
+    //
+    // L-33B is a smaller dedicated canary that ALWAYS exercises the
+    // catalog→active UI rail:
+    //   (a) fs-unstar the target preset (idempotent — no-op when the
+    //       slot is already absent)
+    //   (b) navigate /skills → catalog row visible + project-skill
+    //       row count === 0 (pre-state assertion)
+    //   (c) click the catalog row → click ☆ Star
+    //   (d) wait for `skill-item-<slug>` to surface in /skills
+    //       (proves starCatalogEntry copied `data/skills/catalog/preset/<slug>/`
+    //       → `.claude/skills/<slug>/` AND the subsequent registry
+    //       refresh picked it up)
+    //   (e) finally: restore to the EXACT original starred state
+    //       (snapshot at test start), so a user who actually uses
+    //       mc-library doesn't lose their existing star
+    //
+    // No LLM dispatch / no agent turn — pure UI + filesystem chain.
+    // That keeps it fast and lets the CI matrix run it without
+    // `E2E_LIVE_NO_LLM` skipping; the regression net it adds is
+    // independent of fake-echo's reach. mc-library is picked because
+    // it's a launcher preset (catalog row guaranteed) that's rarely
+    // starred by default.
+    //
+    // Symmetric state restoration (Codex iter-5 review): snapshot
+    // the original starred state BEFORE touching disk. If the user /
+    // CI had `mc-library` starred (they actually use it), `finally`
+    // leaves it starred. If unstarred, `finally` fs-unstars whatever
+    // the test added. Either way the workspace ends in the same
+    // state it started — no silent destruction of a real user's
+    // existing star.
+    //
+    // Concurrency note: L-33B mutates a shared, fixed slug. No other
+    // e2e-live test currently touches mc-library and Playwright runs
+    // each test once per file, so there's no actual race today. The
+    // defensive `.or()` on Star vs "Starred" inside
+    // `clickStarOnCatalogDetail` (Codex iter-5 review) is
+    // forward-compat for a future webkit project / sibling spec that
+    // also mutates catalog state.
+    const wasOriginallyStarred = (await snapshotProjectSkillSlugs()).has(L33B_PRESET_SLUG);
+    try {
+      if (wasOriginallyStarred) {
+        await removeProjectSkill(L33B_PRESET_SLUG);
+      }
+      await page.goto("/skills");
+      await expectCatalogRowVisible(page, L33B_PRESET_SLUG);
+      const skillRow = page.getByTestId(`skill-item-${L33B_PRESET_SLUG}`);
+      await expect(skillRow, `${L33B_PRESET_SLUG} project-skill row must be absent before star — pre-test fs-unstar must have taken effect`).toHaveCount(0);
+      // Reuse the L-33 helper: same defensive Star vs "Starred" .or()
+      // pattern, same final `skill-item-<slug>` visibility assertion
+      // (proves catalog→active rail wiring). Sharing the helper keeps
+      // both canaries in lockstep — a future refactor to the star
+      // UI testids only needs updating one site.
+      await starPresetViaCatalog(page, L33B_PRESET_SLUG);
+    } finally {
+      // Reconcile to the EXACT original starred state by looking at
+      // current disk (not just the original snapshot). The naive
+      // "if !wasOriginallyStarred → unstar" pattern was destructive
+      // in the edge case where the test threw between the up-front
+      // fs-unstar and a successful UI star: an originally-starred
+      // preset would be left unstarred (Codex GHA + CodeRabbit on
+      // iter-1 PR review). The 4-cell reconcile table handles every
+      // start/end combination:
+      //   (orig=T, now=T): no-op (the click succeeded, fs already correct)
+      //   (orig=T, now=F): re-star via fs cp from catalog (test threw
+      //                    after our fs-unstar but before / during click)
+      //   (orig=F, now=T): unstar (we starred via UI, clean up)
+      //   (orig=F, now=F): no-op (either the early assert blocked our
+      //                    own fs-unstar, or the test threw before click)
+      // Both fs ops are idempotent so a transient failure between the
+      // snapshot and the reconcile cannot corrupt the result.
+      //
+      // try/catch around the whole reconcile so a transient fs error
+      // (catalog source missing, ENOSPC, IO hiccup) does NOT overwrite
+      // an in-flight assertion failure from the `try` block. Playwright
+      // surfaces only the last thrown error otherwise, masking the
+      // real regression signal (Codex iter-2 review). Mirrors the
+      // L-21B / L-32 cleanup pattern in this file.
+      try {
+        const isCurrentlyStarred = (await snapshotProjectSkillSlugs()).has(L33B_PRESET_SLUG);
+        if (wasOriginallyStarred && !isCurrentlyStarred) {
+          await copyPresetCatalogToActive(L33B_PRESET_SLUG);
+        } else if (!wasOriginallyStarred && isCurrentlyStarred) {
+          await removeProjectSkill(L33B_PRESET_SLUG);
+        }
+      } catch (err) {
+        console.warn(`L-33B finally: state reconciliation failed for ${L33B_PRESET_SLUG}, original test error (if any) preserved`, err);
+      }
+    }
+  });
 });
+
+/**
+ * L-33 setup step: make sure `<slug>` is in `.claude/skills/` before
+ * the spec opens the active-skill detail pane. The primary decision
+ * uses {@link snapshotProjectSkillSlugs} (disk-authoritative) rather
+ * than a `/skills` DOM count, which has its own load race — the
+ * project-skill row often hasn't hydrated yet right after
+ * `page.goto("/skills")`, so a DOM-count check would falsely report
+ * "not starred" and then collide with a "Starred" badge in the
+ * catalog detail pane. The Star path itself is defensive against the
+ * Codex iter-1 race (a parallel worker stars between this snapshot
+ * and the click) — see {@link starPresetViaCatalog}. Always asserts
+ * the catalog row is present so a preset that's already starred from
+ * a previous boot can't mask a fresh launcher→catalog regression.
+ */
+async function ensurePresetStarred(page: Page, slug: string): Promise<void> {
+  await expectCatalogRowVisible(page, slug);
+  const projectSlugs = await snapshotProjectSkillSlugs();
+  if (projectSlugs.has(slug)) return;
+  await starPresetViaCatalog(page, slug);
+}
+
+/**
+ * Shared catalog-row visibility assertion. Used both by
+ * {@link ensurePresetStarred} (L-33 setup) and L-33B (where the row
+ * must surface even though the test goes on to fs-unstar + UI-star
+ * from scratch). Extracted because the assertion shape AND the
+ * "what does a failure here mean?" message are byte-identical at
+ * both call sites — keeping them in sync via one helper avoids the
+ * silent drift that prompted the catalog of shared helpers
+ * (CLAUDE.md "Shared utilities" rule). Also satisfies the
+ * code-style rule 1/4 (DRY: helper extraction when the same
+ * pattern appears at 2+ sites).
+ */
+async function expectCatalogRowVisible(page: Page, slug: string): Promise<void> {
+  await expect(
+    page.getByTestId(`skill-catalog-item-${slug}`),
+    `catalog list must include ${slug} — proves syncPresetSkills landed the launcher preset under data/skills/catalog/preset/`,
+  ).toBeVisible({ timeout: ONE_MINUTE_MS });
+}
+
+/**
+ * Drive the catalog UI through the star path a user takes (select
+ * catalog row → click ☆ Star → wait for the active row to appear).
+ * Defensive against the iter-1 race where a parallel worker stars
+ * the preset between {@link ensurePresetStarred}'s disk snapshot and
+ * this function: the detail pane could surface EITHER the ☆ Star
+ * button (still un-starred) OR the disabled "Starred" indicator
+ * (already starred by the other worker). Both are acceptable
+ * outcomes — only click Star when it's the one actually rendered.
+ * Each helper stays under CLAUDE.md's 20-line cap; a regression
+ * that hangs the star path (#1335 PR-B follow-ups) trips the
+ * closing visibility wait either way.
+ */
+async function starPresetViaCatalog(page: Page, slug: string): Promise<void> {
+  await page.getByTestId(`skill-catalog-item-${slug}`).click();
+  const starBtn = page.getByTestId("skill-catalog-detail-star-btn");
+  const starredIndicator = page.getByTestId("skill-catalog-detail-starred");
+  await expect(starBtn.or(starredIndicator), `catalog detail must surface either ☆ Star or "Starred" for ${slug}`).toBeVisible({ timeout: ONE_MINUTE_MS });
+  // `isVisible()` (not `count() > 0`) so a future v-show refactor
+  // that keeps both elements in the DOM but hides one cannot flip
+  // this branch silently — current Vue v-if/v-else makes them
+  // mutually exclusive in the DOM, but the visibility check stays
+  // correct under either rendering strategy (Codex iter-2 review).
+  if (!(await starredIndicator.isVisible())) {
+    await starBtn.click();
+  }
+  await expect(
+    page.getByTestId(`skill-item-${slug}`),
+    `${slug} must surface in /skills after starring — proves catalog→active rail (.claude/skills/) is wired`,
+  ).toBeVisible({ timeout: ONE_MINUTE_MS });
+}
+
+/**
+ * Open the active-skill detail pane and assert the rendered body
+ * contains the launcher signature line. Catches a sync regression
+ * that corrupted the body (e.g. truncated copy, encoding mismatch)
+ * but left the directory + filename intact — a passing
+ * `skill-item-*` visibility check alone would not flag that.
+ */
+async function verifyPresetBody(page: Page, slug: string, signature: string): Promise<void> {
+  const skillRow = page.getByTestId(`skill-item-${slug}`);
+  await expect(skillRow, `${slug} project-skill row must be visible before opening detail pane`).toBeVisible({ timeout: ONE_MINUTE_MS });
+  await skillRow.click();
+  const bodyView = page.getByTestId("skill-body-rendered");
+  await expect(bodyView, "preset body must hydrate (detail API + markdown render path)").toBeVisible({ timeout: ONE_MINUTE_MS });
+  await expect(
+    bodyView,
+    `rendered body must echo the launcher signature ${JSON.stringify(signature)} — proves catalog→active copy preserved the SKILL.md text`,
+  ).toContainText(signature, { timeout: ONE_MINUTE_MS });
+}
+
+/**
+ * Click the active-skill Run button. The handler issues
+ * `appApi.startNewChat('/<slug>')` which routes to /chat/<id> with
+ * the slash command as the first user message. Capture the new
+ * session id immediately for the spec's `finally` cleanup so a
+ * downstream assertion timeout still reaps the chat.
+ */
+async function runPresetAndCaptureSessionId(page: Page): Promise<string> {
+  await page.getByTestId("skill-run-btn").click();
+  await page.waitForURL(SESSION_URL_PATTERN);
+  const sessionId = getCurrentSessionId(page);
+  if (sessionId === null) {
+    throw new Error("runPresetAndCaptureSessionId: getCurrentSessionId returned null after waitForURL — SESSION_URL_PATTERN likely drifted");
+  }
+  return sessionId;
+}
 
 // Composite cleanup: prefer the user-facing UI delete (keeps the
 // server registry / `/skills` listing in sync) but always finish

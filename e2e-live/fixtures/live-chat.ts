@@ -3,7 +3,8 @@
 // install any API mocks — the real Claude API runs end-to-end. Use
 // these helpers from specs in `e2e-live/tests/`.
 
-import { copyFile, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { cp, copyFile, lstat, mkdir, readdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -15,6 +16,7 @@ import { readSessionJsonl } from "../../server/utils/files/session-io.ts";
 import { readTextUnder } from "../../server/utils/files/workspace-io.ts";
 import { isValidSlug } from "../../server/utils/slug.ts";
 import { isErrorWithCode, isRecord } from "../../server/utils/types.ts";
+import type { NotifierEntry } from "../../server/notifier/types.ts";
 import { API_ROUTES } from "../../src/config/apiRoutes.ts";
 
 /**
@@ -244,6 +246,80 @@ export async function removeProjectSkill(slug: string): Promise<void> {
 }
 
 /**
+ * fs-restore a launcher preset's `.claude/skills/<slug>/` from its
+ * canonical `data/skills/catalog/preset/<slug>/` source. The catalog
+ * subdir is launcher-managed (overwritten on every boot by
+ * `syncPresetSkills`), so copying from it produces the same content
+ * that {@link starPresetViaCatalog | starring via the UI} would
+ * deposit. Used by L-33B's `finally` to restore an originally-
+ * starred preset when the test threw before the UI star path
+ * completed (otherwise the up-front fs-unstar would leave the
+ * workspace in a destroyed state). `cp` is recursive + force so
+ * the helper is idempotent and won't error on a slot that's already
+ * populated. Slug must satisfy `isValidSlug` to keep this from
+ * accepting `..`-style traversal even though both endpoints are
+ * inside the workspace.
+ *
+ * NOTE: this restores the launcher-canonical content. A user with
+ * unsaved local edits to `.claude/skills/<slug>/SKILL.md` would
+ * lose them — same destructive shape as `syncActivePresetSkills`
+ * at boot, so the trade-off matches normal preset lifecycle.
+ */
+export async function copyPresetCatalogToActive(slug: string): Promise<void> {
+  assertValidSkillSlug(slug);
+  // `path.join` for cross-platform safety per CLAUDE.md
+  // ("Build paths with node:path; never concatenate with '/'").
+  // Other helpers in this file predate the rule and still use
+  // template literals; a sweep is out of scope here (CodeRabbit
+  // iter-2).
+  const src = resolveWorkspacePath(path.join("data", "skills", "catalog", "preset", slug));
+  const dst = resolveWorkspacePath(path.join(".claude", "skills", slug));
+  await cp(src, dst, { recursive: true, force: true });
+}
+
+/**
+ * Seed a project-skill slot whose entry is a symlink pointing at a
+ * non-existent path. The discovery loop in
+ * `server/workspace/skills/discovery.ts:collectSkillsFromDir` calls
+ * `stat()` (not `lstat`) on every entry so a real symlink is
+ * transparently followed; when the target is missing `stat()` throws
+ * ENOENT and the entry is skipped. L-30 (B-08) drives that branch
+ * end-to-end to prove a dangling symlink (e.g. a host-relative
+ * `~/ss/llm/skills/...` link that disappears inside the sandbox)
+ * cannot crash discovery for the sibling skills sitting alongside it.
+ *
+ * Caller picks `target` (no implicit `/tmp` use) so the test can
+ * choose a path that's guaranteed missing even with parallel runs
+ * (e.g. nonce-stamped under `os.tmpdir()`). Slug must satisfy
+ * `isValidSlug` for the same reasons as {@link placeProjectSkill}.
+ */
+export async function placeBrokenSymlinkSkill(slug: string, target: string): Promise<void> {
+  assertValidSkillSlug(slug);
+  const linkPath = resolveWorkspacePath(`.claude/skills/${slug}`);
+  await mkdir(path.dirname(linkPath), { recursive: true });
+  await symlink(target, linkPath);
+}
+
+/**
+ * Best-effort delete for {@link placeBrokenSymlinkSkill}. Uses `lstat`
+ * to confirm the slot is still a symlink before `rm`-ing it — guards
+ * against an unlikely race where a parallel run replaced the link with
+ * a real dir we shouldn't touch. Silent no-op when the slot is gone.
+ */
+export async function removeBrokenSymlinkSkill(slug: string): Promise<void> {
+  assertValidSkillSlug(slug);
+  const linkPath = resolveWorkspacePath(`.claude/skills/${slug}`);
+  try {
+    const stat = await lstat(linkPath);
+    if (!stat.isSymbolicLink()) return;
+  } catch (err) {
+    if (isErrorWithCode(err) && err.code === "ENOENT") return;
+    throw err;
+  }
+  await rm(linkPath, { force: true });
+}
+
+/**
  * Delete a project-scope skill via the user-facing UI flow:
  * navigate to `/skills`, click the row, click the delete button,
  * accept the native `confirm()`, and wait for the row to disappear
@@ -371,15 +447,19 @@ export function stagingSkillSlugFromWriteCall(call: ToolCallTraceRecord): string
  * One `tool_call` record as persisted by `server/workspace/tool-trace`.
  * Specs filter on `toolName` and pull selected fields from `args`
  * (`file_path`, ...) — the trace shape is wider than this slice but
- * the spec only needs the dispatch-level info.
+ * the spec only needs the dispatch-level info. `toolUseId` carries the
+ * per-invocation key so callers can pair a `tool_call` with the
+ * matching `tool_call_result` returned by `readSessionToolResults`.
  */
 export interface ToolCallTraceRecord {
+  toolUseId: string;
   toolName: string;
   args: unknown;
 }
 
 interface ToolCallJsonlLine {
   type?: unknown;
+  toolUseId?: unknown;
   toolName?: unknown;
   args?: unknown;
 }
@@ -393,8 +473,9 @@ function parseToolCallLine(line: string): ToolCallTraceRecord | null {
     return null;
   }
   if (parsed.type !== "tool_call") return null;
+  if (typeof parsed.toolUseId !== "string") return null;
   if (typeof parsed.toolName !== "string") return null;
-  return { toolName: parsed.toolName, args: parsed.args };
+  return { toolUseId: parsed.toolUseId, toolName: parsed.toolName, args: parsed.args };
 }
 
 /**
@@ -421,6 +502,77 @@ export async function readSessionToolCalls(sessionId: string): Promise<ToolCallT
     if (record !== null) calls.push(record);
   }
   return calls;
+}
+
+/**
+ * One `tool_call_result` record as persisted alongside `tool_call`
+ * events (see `server/workspace/tool-trace/index.ts:handleToolCallResult`).
+ * Pair with the originating call via {@link ToolCallTraceRecord.toolUseId}.
+ *
+ * The server classifier writes either `content` (inline, ≤ 4096 chars
+ * per `MAX_INLINE_CONTENT_CHARS`) or `contentRef` (pointer to a file
+ * on disk for larger / special results) — never both. `content` is
+ * `null` when the result was spilled to a file and `contentRef`
+ * carries the path; specs that need the body for assertions should
+ * `expect(content).not.toBeNull()` to fail loudly if a future tool
+ * starts producing oversized output that breaks their assumption.
+ */
+export interface ToolCallResultRecord {
+  toolUseId: string;
+  toolName: string;
+  /** Inline body when the result fit under the inline threshold. */
+  content: string | null;
+  /** Pointer to a workspace-relative path when the result was spilled out-of-band. */
+  contentRef: string | null;
+}
+
+interface ToolCallResultJsonlLine {
+  type?: unknown;
+  toolUseId?: unknown;
+  toolName?: unknown;
+  content?: unknown;
+  contentRef?: unknown;
+}
+
+function parseToolCallResultLine(line: string): ToolCallResultRecord | null {
+  if (line.length === 0) return null;
+  let parsed: ToolCallResultJsonlLine;
+  try {
+    parsed = JSON.parse(line);
+  } catch {
+    return null;
+  }
+  if (parsed.type !== "tool_call_result") return null;
+  if (typeof parsed.toolUseId !== "string") return null;
+  if (typeof parsed.toolName !== "string") return null;
+  const content = typeof parsed.content === "string" ? parsed.content : null;
+  const contentRef = typeof parsed.contentRef === "string" ? parsed.contentRef : null;
+  // Server contract from `server/workspace/tool-trace/index.ts`
+  // writes exactly one of `content` / `contentRef` per row. Reject
+  // rows that carry both or neither so a future schema drift can't
+  // pose as a valid result downstream (CodeRabbit review on PR #1462).
+  if ((content === null) === (contentRef === null)) return null;
+  return { toolUseId: parsed.toolUseId, toolName: parsed.toolName, content, contentRef };
+}
+
+/**
+ * Read every `tool_call_result` record from the per-session jsonl in
+ * write order. Specs use this together with {@link readSessionToolCalls}
+ * to assert not just that a tool was dispatched but that the result
+ * carries the expected payload — L-28 (PR #1462 Codex iter-2) anchors
+ * the gh-auth success/failure decision on the real `Bash` result body
+ * so the LLM cannot hallucinate "Logged in to github.com" into the
+ * assistant body after a failed credential bridge.
+ */
+export async function readSessionToolResults(sessionId: string): Promise<ToolCallResultRecord[]> {
+  const raw = await readSessionJsonl(sessionId, workspaceRoot());
+  if (raw === null) return [];
+  const results: ToolCallResultRecord[] = [];
+  for (const line of raw.split("\n")) {
+    const record = parseToolCallResultLine(line);
+    if (record !== null) results.push(record);
+  }
+  return results;
 }
 
 /**
@@ -481,6 +633,38 @@ const WIKI_PAGE_BODY_SELECTOR = '[data-testid="wiki-page-body"]';
  */
 export async function navigateToWikiPage(page: Page, slug: string): Promise<void> {
   await page.goto(`/wiki/pages/${encodeURIComponent(slug)}`);
+}
+
+/**
+ * Generic "the SPA landed on the wiki page for `slug` and the body
+ * hydrated with `marker`" assertion. Collapses the three boilerplate
+ * checks every wiki-navigation spec repeats:
+ *
+ *   1. URL pathname ends with `/wiki/pages/<encoded-slug>` — the SPA
+ *      router pushed the expected path. The predicate compares the
+ *      encoded suffix as a literal string, side-stepping the
+ *      `encodeURIComponent` regex-safety pitfall (encodeURIComponent
+ *      preserves `.`, `(`, `)`, `*`, all of which are regex
+ *      metacharacters — splicing the encoded slug into a `RegExp`
+ *      would silently overmatch for any caller whose slug includes
+ *      those chars).
+ *   2. `WIKI_PAGE_BODY_SELECTOR` contains `marker` — the page body
+ *      actually rendered (vs. an empty shell or a 404 view).
+ *   3. URL does NOT match `/chat` — sentinel for the B-23 / B-24
+ *      regression shape where the catch-all router swallowed
+ *      `/wiki/pages/<slug>` and bounced to the chat surface.
+ *
+ * Per-test sentinels that are NOT generic (e.g. L-15b's #1194
+ * collision negative `not.toContainText(sourceMarker)`, L-WIKI-PIPE's
+ * `not.toHaveURL(/%7C/)` alias-leak guard) stay inline at the call
+ * site so the spec narrative around those bugs is readable — this
+ * helper only owns the three checks every wiki landing test shares.
+ */
+export async function expectWikiPageBody(page: Page, slug: string, marker: string): Promise<void> {
+  const expectedPathSuffix = `/wiki/pages/${encodeURIComponent(slug)}`;
+  await expect(page).toHaveURL((url) => url.pathname.endsWith(expectedPathSuffix));
+  await expect(page.locator(WIKI_PAGE_BODY_SELECTOR)).toContainText(marker);
+  await expect(page).not.toHaveURL(/\/chat/);
 }
 
 /**
@@ -606,16 +790,25 @@ const SESSION_IDLE_PER_ATTEMPT_TIMEOUT_MS = 5 * ONE_SECOND_MS;
 // use raw numbers` rule).
 const SESSION_IDLE_RETRY_INTERVALS_MS = [ONE_SECOND_MS / 5, ONE_SECOND_MS / 2, ONE_SECOND_MS];
 
-// Probe shape returned by the in-page evaluate. We carry both the
-// HTTP outcome and the session-running flag so the polling site can
-// distinguish "API healthy + session still busy" (retry quietly)
-// from "API failed" (surface as a real assertion failure inside
-// `toPass`, with the offending status / error message in the
-// log). Without this split, a 401/5xx or a network blip silently
-// looks like "session is still running" and the poller waits the
-// full timeout before falling through to the swallowed UI cleanup
-// — exactly the silent failure the original wait was added to fix.
-type SessionIdleProbe = { ok: true; stillRunning: boolean } | { ok: false; reason: string };
+// Probe shape returned by the in-page evaluate. We carry the HTTP
+// outcome, the session-running flag, AND whether the session row
+// was found in the list so the polling site can distinguish:
+//
+//   - "API healthy + session still busy"        → retry quietly
+//   - "API healthy + session missing from list" → retry quietly
+//     (the agent run might have only just been kicked off; the
+//     sessions index updates after the first persist tick — without
+//     this state, `.find()` returning undefined silently looked
+//     like `stillRunning=false=idle` and let the caller proceed
+//     before the server-side run had even started. CodeRabbit
+//     review on PR #1508 caught this for the bridge-origin L-17
+//     path, where the gap between `/api/agent` 202 and the session
+//     becoming list-visible is wide enough to false-pass.)
+//   - "API healthy + session done"              → exit the wait
+//   - "API failed"                              → real assertion
+//     failure inside `toPass`, with the offending status / error
+//     message in the log
+type SessionIdleProbe = { ok: true; found: boolean; stillRunning: boolean } | { ok: false; reason: string };
 
 // In-page probe body — runs inside `page.evaluate`, so this function
 // must be self-contained (no closure imports). Reads the bearer
@@ -650,7 +843,8 @@ async function probeSessionIdle(args: { sid: string; listUrl: string; perAttempt
     // (the old broad `isRunning` could stay true through movie /
     // image post-processing even though DELETE was already safe).
     const session = data.sessions.find((row) => row.id === sid);
-    return { ok: true as const, stillRunning: session?.liveIsRunning === true };
+    if (session === undefined) return { ok: true as const, found: false, stillRunning: false };
+    return { ok: true as const, found: true, stillRunning: session.liveIsRunning === true };
   } catch (err) {
     // Network drop / AbortSignal timeout / JSON parse throw — anything
     // that would otherwise surface as an opaque page.evaluate failure
@@ -668,11 +862,17 @@ async function probeSessionIdle(args: { sid: string; listUrl: string; perAttempt
 function assertSessionProbeIdle(probe: SessionIdleProbe, sessionId: string): void {
   expect(probe.ok, probe.ok ? "session probe ok" : `session probe failed for ${sessionId}: ${probe.reason}`).toBe(true);
   if (probe.ok) {
+    // Both `found=false` (session not yet visible in the list) and
+    // `stillRunning=true` (session in flight) keep us in the toPass
+    // retry loop. Only when the session is BOTH visible AND idle do
+    // we exit — that's the only state in which the run has actually
+    // completed end-to-end. CodeRabbit review on PR #1508.
+    expect(probe.found, `session ${sessionId} not yet visible in /api/sessions list — retrying`).toBe(true);
     expect(probe.stillRunning, `session ${sessionId} should report isRunning=false before delete`).toBe(false);
   }
 }
 
-async function waitForSessionIdle(page: Page, sessionId: string, timeoutMs: number = SESSION_IDLE_TIMEOUT_MS): Promise<void> {
+export async function waitForSessionIdle(page: Page, sessionId: string, timeoutMs: number = SESSION_IDLE_TIMEOUT_MS): Promise<void> {
   // Resolve the sessions-list URL once on the test process side via
   // the canonical `API_ROUTES.sessions.list` constant
   // (src/config/apiRoutes.ts) so this helper stays coupled to the
@@ -890,6 +1090,51 @@ export async function sendChatMessage(page: Page, text: string): Promise<void> {
 export async function selectRole(page: Page, roleId: string): Promise<void> {
   await page.getByTestId("role-selector-btn").click();
   await page.getByTestId(`role-option-${roleId}`).click();
+}
+
+/**
+ * Start a fresh General-role session, switch to `roleId` (which the
+ * chat page handles by spawning a second session — see
+ * App.vue#onRoleChange). Only the role-switched session id is pushed
+ * onto the caller's cleanup array. Returns the role-switched session
+ * id (the one the spec sends prompts at).
+ *
+ * Uses `startGuaranteedNewSession` rather than `startNewSession` +
+ * `waitForURL(SESSION_URL_PATTERN)` to close the stale-session race
+ * documented at {@link startGuaranteedNewSession}: in a populated
+ * workspace the SPA's bootstrap can resume into `/chat/<existing>`,
+ * and treating that id as a fresh baseline would let a subsequent
+ * `selectRole` short-circuit (same role → no new session spawned).
+ * The role-switched id is still fresh-by-construction (selectRole
+ * always spawns a new chat on the chat page), but the General-side
+ * baseline must be the one we just created — never a resumed
+ * pre-test session.
+ *
+ * The General-side baseline session is intentionally NOT pushed onto
+ * the cleanup array: no chat turn is ever sent against it, so the
+ * server never flushes a jsonl record and `/api/sessions` never
+ * lists it. `deleteSession` against an unlisted id stalls inside
+ * `waitForSessionIdle` until the 30s `toPass` budget expires and
+ * emits a "not yet visible in /api/sessions list — retrying" warn
+ * for every spec that uses this helper. Skipping the push removes
+ * that noise without changing any on-disk state.
+ *
+ * Lifted from `skills.spec.ts` (L-21B) when `plugin-dispatch.spec.ts`
+ * needed the same dance for 7 plugin canaries; keeping it in
+ * live-chat.ts prevents the duplication mentioned in CLAUDE.md
+ * "shared utilities — check before reinventing".
+ */
+export async function setupRoleSession(page: Page, roleId: string, sessionsToCleanup: string[]): Promise<string> {
+  const generalSessionId = await startGuaranteedNewSession(page);
+  await selectRole(page, roleId);
+  await page.waitForURL((url) => SESSION_URL_PATTERN.test(url.pathname) && !url.pathname.endsWith(generalSessionId));
+  const roleSessionId = getCurrentSessionId(page);
+  if (roleSessionId === null) {
+    throw new Error(`setupRoleSession: getCurrentSessionId returned null after selectRole(${roleId}) — URL pattern likely drifted`);
+  }
+  sessionsToCleanup.push(roleSessionId);
+  await expect(page.getByTestId("role-selector-btn"), `role chip must reflect ${roleId} after switch`).toHaveAttribute("data-role", roleId);
+  return roleSessionId;
 }
 
 /**
@@ -1124,4 +1369,341 @@ export async function readMovieDownload(download: Download): Promise<Buffer> {
     throw new Error(`Downloaded file is not an MP4 (expected 'ftyp' at offset 4, got hex: ${head})`);
   }
   return buf;
+}
+
+// ── Shared in-page authed JSON fetch ────────────────────────────────
+
+/**
+ * Discriminated probe result for an `<meta name="mulmoclaude-auth">`
+ * authed GET. Carrying the failure reason on the `ok: false` branch
+ * lets the caller format a single self-describing error message
+ * without an additional layer of branching. Body is `unknown` so each
+ * caller validates / narrows it via its own parser — keeps this
+ * helper a transport-only primitive.
+ */
+export type AuthedJsonProbe = { ok: true; body: unknown } | { ok: false; reason: string };
+
+/**
+ * Run an authed JSON GET inside the page context and return the
+ * decoded body. Shared by every helper that hits an internal API the
+ * SPA itself proxies — `getSandboxStatus`, `getMcpToolsList`, etc.
+ * (CodeRabbit + Sourcery review on PR #1462). Each wrapper stays a
+ * thin route + parser; the probe orchestration lives here once.
+ *
+ * Returns a discriminated union so transport / non-2xx / decode
+ * failures surface as `ok: false` with a descriptive reason rather
+ * than masked as a missing body — the caller decides whether to
+ * throw, skip, or retry.
+ */
+export async function fetchAuthedJsonViaPage(page: Page, url: string): Promise<AuthedJsonProbe> {
+  return await page.evaluate(async (target): Promise<AuthedJsonProbe> => {
+    const meta = document.querySelector('meta[name="mulmoclaude-auth"]');
+    const token = meta?.getAttribute("content") ?? "";
+    try {
+      const res = await fetch(target, { headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) return { ok: false, reason: `GET ${target} returned HTTP ${res.status} ${res.statusText}` };
+      const body = (await res.json()) as unknown;
+      return { ok: true, body };
+    } catch (err) {
+      return { ok: false, reason: `GET ${target} threw: ${err instanceof Error ? err.message : String(err)}` };
+    }
+  }, url);
+}
+
+/**
+ * Authed JSON POST counterpart to {@link fetchAuthedJsonViaPage}. Runs
+ * inside the page context so it reuses the SPA's bearer token (the
+ * `<meta name="mulmoclaude-auth">` tag) and same-origin base URL — for
+ * specs that drive a host mutation endpoint the UI itself proxies
+ * (e.g. POST /api/roles/manage) as deterministic setup / teardown
+ * instead of through a brittle multi-field form.
+ */
+export async function postAuthedJsonViaPage(page: Page, url: string, body: unknown): Promise<AuthedJsonProbe> {
+  return await page.evaluate(
+    async ({ target, payload }): Promise<AuthedJsonProbe> => {
+      const meta = document.querySelector('meta[name="mulmoclaude-auth"]');
+      const token = meta?.getAttribute("content") ?? "";
+      try {
+        const res = await fetch(target, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) return { ok: false, reason: `POST ${target} returned HTTP ${res.status} ${res.statusText}` };
+        const decoded = (await res.json()) as unknown;
+        return { ok: true, body: decoded };
+      } catch (err) {
+        return { ok: false, reason: `POST ${target} threw: ${err instanceof Error ? err.message : String(err)}` };
+      }
+    },
+    { target: url, payload: body },
+  );
+}
+
+// ── Docker sandbox state probes ─────────────────────────────────────
+
+/**
+ * Snapshot of GET /api/sandbox. The server returns `{}` when the
+ * Docker sandbox is disabled (`DISABLE_SANDBOX=1` or Docker not
+ * reachable), and `{ sshAgent, mounts }` when enabled — see
+ * `server/api/sandboxStatus.ts`. `getSandboxStatus` returns `null` for
+ * the disabled case so docker-only specs can branch with a single
+ * equality check.
+ */
+export interface SandboxStatusSnapshot {
+  /** True iff the host SSH agent socket is forwarded into the container. */
+  sshAgent: boolean;
+  /** Allowlisted config mount names that successfully attached (e.g. `["gh"]`). */
+  mounts: string[];
+}
+
+/**
+ * Fetch the sandbox-auth snapshot the SPA's LockStatusPopup consumes.
+ * Returns `null` when the server reports the sandbox is disabled (body
+ * is the empty object `{}`), letting docker-only specs `test.skip` on
+ * a single nullish check. Throws on transport / decode failures rather
+ * than masking them as "disabled" — a network blip should fail the
+ * test loudly, not silently send it down the skip path.
+ */
+export async function getSandboxStatus(page: Page): Promise<SandboxStatusSnapshot | null> {
+  const probe = await fetchAuthedJsonViaPage(page, API_ROUTES.sandbox);
+  if (!probe.ok) throw new Error(`getSandboxStatus: ${probe.reason}`);
+  if (!isRecord(probe.body)) throw new Error(`getSandboxStatus: unexpected payload ${JSON.stringify(probe.body)}`);
+  return parseSandboxBody(probe.body);
+}
+
+function parseSandboxBody(body: Record<string, unknown>): SandboxStatusSnapshot | null {
+  // Server contract: `{}` ⇒ disabled, `{ sshAgent, mounts }` ⇒ enabled.
+  // Treat any body lacking BOTH fields as the disabled signal, but a
+  // body carrying ONE of them malformed is an unexpected payload we
+  // surface loudly so a future server-side schema change can't silently
+  // false-pass the skip gate.
+  const hasSsh = "sshAgent" in body;
+  const hasMounts = "mounts" in body;
+  if (!hasSsh && !hasMounts) return null;
+  const { sshAgent, mounts } = body;
+  if (typeof sshAgent !== "boolean" || !Array.isArray(mounts)) {
+    throw new Error(`getSandboxStatus: unexpected payload ${JSON.stringify(body)}`);
+  }
+  const cleanMounts: string[] = [];
+  for (const item of mounts) {
+    if (typeof item !== "string") throw new Error(`getSandboxStatus: mounts contains non-string ${JSON.stringify(item)}`);
+    cleanMounts.push(item);
+  }
+  return { sshAgent, mounts: cleanMounts };
+}
+
+// ── MCP tool catalog probes ─────────────────────────────────────────
+
+/**
+ * One row from GET /api/mcp-tools — the catalog the SPA settings panel
+ * uses to surface which built-in MCP tools (`readXPost`, `searchX`,
+ * `notify`) are wired up. `enabled` reflects host-side `requiredEnv`
+ * presence (see `isMcpToolEnabled` in `server/agent/mcp-tools/index.ts`).
+ */
+export interface McpToolSnapshot {
+  name: string;
+  enabled: boolean;
+  requiredEnv: string[];
+}
+
+/**
+ * Fetch the live MCP tool catalog with `enabled` flags. L-23 uses this
+ * to confirm the X bridge tools surface as enabled when the user has
+ * `X_BEARER_TOKEN` set — that's the host-side env reachability check
+ * (B-01's modern incarnation, now that MCP tools run in-process on the
+ * host server rather than inside the Docker container).
+ */
+export async function getMcpToolsList(page: Page): Promise<McpToolSnapshot[]> {
+  const probe = await fetchAuthedJsonViaPage(page, API_ROUTES.mcpTools.list);
+  if (!probe.ok) throw new Error(`getMcpToolsList: ${probe.reason}`);
+  if (!Array.isArray(probe.body)) throw new Error(`getMcpToolsList: ${API_ROUTES.mcpTools.list} returned non-array payload`);
+  return probe.body.map((row, idx) => parseMcpToolRow(row, idx));
+}
+
+/**
+ * One row in the `/api/skills` listing. Specs only need the name to
+ * test for presence / absence (L-30 dangling-symlink resilience uses
+ * this), so the helper keeps the parsed shape minimal — `description`
+ * and `source` come back as `string | null` rather than the strict
+ * server type so a future schema add-on doesn't bite the spec.
+ */
+export interface SkillListEntry {
+  name: string;
+}
+
+/**
+ * Fetch the server's view of `/api/skills` directly, bypassing the
+ * SPA's `/skills` listing route. Used by L-30 (B-08 discovery
+ * resilience) to pin the server contract before falling through to
+ * the UI assertion — proves the discovery loop itself surfaced the
+ * sibling and skipped the dangling slot, independent of any rendering
+ * idiosyncrasies in `manageSkills/View.vue`.
+ */
+export async function listSkillsViaApi(page: Page): Promise<SkillListEntry[]> {
+  const probe = await fetchAuthedJsonViaPage(page, API_ROUTES.skills.list.url);
+  if (!probe.ok) throw new Error(`listSkillsViaApi: ${probe.reason}`);
+  if (!isRecord(probe.body)) throw new Error(`listSkillsViaApi: unexpected payload ${JSON.stringify(probe.body)}`);
+  const { skills } = probe.body;
+  if (!Array.isArray(skills)) throw new Error(`listSkillsViaApi: skills field is not an array (got ${JSON.stringify(skills)})`);
+  return skills.map((row, idx) => parseSkillListRow(row, idx));
+}
+
+/**
+ * Pure parser for one `/api/skills` row. Exported so unit tests can
+ * exercise the validation contract directly (CodeRabbit iter-1 review
+ * — keeps "pure logic in exported helpers for testability" per
+ * CLAUDE.md, without routing through Playwright / page plumbing).
+ */
+export function parseSkillListRow(row: unknown, idx: number): SkillListEntry {
+  if (!isRecord(row)) throw new Error(`skillsList[${idx}] is not an object`);
+  const { name } = row;
+  if (typeof name !== "string") throw new Error(`skillsList[${idx}].name is not a string`);
+  return { name };
+}
+
+function parseMcpToolRow(row: unknown, idx: number): McpToolSnapshot {
+  if (!isRecord(row)) throw new Error(`mcpToolsList[${idx}] is not an object`);
+  const { name, enabled, requiredEnv } = row;
+  if (typeof name !== "string") throw new Error(`mcpToolsList[${idx}].name is not a string`);
+  if (typeof enabled !== "boolean") throw new Error(`mcpToolsList[${idx}].enabled is not a boolean`);
+  if (!Array.isArray(requiredEnv)) throw new Error(`mcpToolsList[${idx}].requiredEnv is not an array`);
+  const cleanRequiredEnv: string[] = [];
+  for (const item of requiredEnv) {
+    if (typeof item !== "string") throw new Error(`mcpToolsList[${idx}].requiredEnv contains non-string ${JSON.stringify(item)}`);
+    cleanRequiredEnv.push(item);
+  }
+  return { name, enabled, requiredEnv: cleanRequiredEnv };
+}
+
+// ── Tool call arg extractors ────────────────────────────────────────
+
+/**
+ * Extract the `command` arg from a `Bash` tool call's args. Returns
+ * `null` when the call isn't a Bash dispatch or the args don't carry
+ * a string command — L-28 uses this to assert the agent actually ran
+ * `gh auth status` rather than synthesizing the "Logged in to
+ * github.com" string from prior knowledge (Codex iter-1 review on
+ * PR #1462: the model can produce plausible CLI output without ever
+ * invoking the tool, so anchoring the assertion to a real `Bash`
+ * tool_call closes that false-pass path).
+ */
+export function bashCommandFromCall(call: ToolCallTraceRecord): string | null {
+  if (call.toolName !== "Bash") return null;
+  if (!isRecord(call.args)) return null;
+  const { command } = call.args;
+  return typeof command === "string" ? command : null;
+}
+
+// ── Notifier list probe (used by the L-17 bell-count canary) ────────
+
+type NotifierListProbe = { ok: true; entries: NotifierEntry[] } | { ok: false; reason: string };
+
+/**
+ * Snapshot the active notifier entries via the always-on
+ * `{ action: "list" }` dispatch. L-17 calls this twice — once before
+ * triggering a bridge-origin agent run, once after — to assert the
+ * bell entry count is unchanged. Filtering by entry id avoids being
+ * fooled by background publishers (ghost-bell recovery, todo
+ * action-lifecycle bells) that the dev server may emit during the test window.
+ */
+export async function listNotifierEntries(page: Page): Promise<NotifierEntry[]> {
+  const probe: NotifierListProbe = await page.evaluate(async (url): Promise<NotifierListProbe> => {
+    const meta = document.querySelector('meta[name="mulmoclaude-auth"]');
+    const token = meta?.getAttribute("content") ?? "";
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "list" }),
+      });
+      if (!res.ok) return { ok: false, reason: `list returned HTTP ${res.status}` };
+      const body = (await res.json()) as { entries?: NotifierEntry[] };
+      if (!Array.isArray(body.entries)) return { ok: false, reason: `list missing entries[]: ${JSON.stringify(body)}` };
+      return { ok: true, entries: body.entries };
+    } catch (err) {
+      return { ok: false, reason: `list threw: ${err instanceof Error ? err.message : String(err)}` };
+    }
+  }, API_ROUTES.notifier.dispatch);
+  if (!probe.ok) throw new Error(`listNotifierEntries: ${probe.reason}`);
+  return probe.entries;
+}
+
+/**
+ * Clear a notifier entry by id via the always-on `{ action: "clear" }`
+ * dispatch. Used by the L-17 cleanup path: if the B-50 regression
+ * ever fires (bell ticks unexpectedly during a bridge-origin run),
+ * the spurious entry would otherwise survive across runs in
+ * `~/mulmoclaude/data/notifier/active.json` and pollute the bell.
+ */
+export async function clearNotifierEntry(page: Page, entryId: string): Promise<void> {
+  const result = await page.evaluate(
+    async ({ url, targetId }) => {
+      const meta = document.querySelector('meta[name="mulmoclaude-auth"]');
+      const token = meta?.getAttribute("content") ?? "";
+      try {
+        const res = await fetch(url, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "clear", id: targetId }),
+        });
+        if (!res.ok) return { ok: false as const, reason: `clear ${targetId} returned HTTP ${res.status}` };
+        return { ok: true as const };
+      } catch (err) {
+        return { ok: false as const, reason: `clear ${targetId} threw: ${err instanceof Error ? err.message : String(err)}` };
+      }
+    },
+    { url: API_ROUTES.notifier.dispatch, targetId: entryId },
+  );
+  if (!result.ok) throw new Error(`clearNotifierEntry: ${result.reason}`);
+}
+
+// ── Bridge-origin agent run (used by the L-17 B-50 canary) ─────────
+
+type StartAgentProbe = { ok: true; chatSessionId: string } | { ok: false; reason: string };
+
+/**
+ * Kick off an agent run with `origin: "bridge"` by POSTing directly
+ * to `/api/agent` via the in-page bearer token. Returns the
+ * `chatSessionId` the server assigned. Unlike `startNewSession +
+ * sendChatMessage` (which mirror the UI button flow and always
+ * produce `origin: "human"`), this helper is the *only* way to drive
+ * a non-human-origin agent run from a Playwright browser without a
+ * real bridge WebSocket connection. /api/agent already accepts
+ * `origin` in its body (server/api/routes/agent.ts line 121, 219) —
+ * the typed `AgentBody` omits it for the UI's sake, but Express
+ * passes the full JSON body through, and `startChat` validates and
+ * propagates `origin` via `isSessionOrigin`.
+ *
+ * L-17 uses this to reach the agent.ts finally block that gates
+ * `publishNotification(...)` on `origin !== SESSION_ORIGINS.human` —
+ * the exact code path PR #818 commented out for B-50. A future
+ * regression that re-enables that block would tick the bell on this
+ * bridge-origin run; the L-17 assertion catches it.
+ */
+export async function startBridgeOriginAgentRun(page: Page, message: string, roleId: string): Promise<string> {
+  const chatSessionId = randomUUID();
+  const probe: StartAgentProbe = await page.evaluate(
+    async ({ url, body }): Promise<StartAgentProbe> => {
+      const meta = document.querySelector('meta[name="mulmoclaude-auth"]');
+      const token = meta?.getAttribute("content") ?? "";
+      try {
+        const res = await fetch(url, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const text = await res.text();
+        if (!res.ok) return { ok: false, reason: `POST ${url} returned HTTP ${res.status}: ${text.slice(0, 200)}` };
+        const parsed = JSON.parse(text) as { chatSessionId?: unknown };
+        if (typeof parsed.chatSessionId !== "string") return { ok: false, reason: `unexpected /api/agent response: ${text}` };
+        return { ok: true, chatSessionId: parsed.chatSessionId };
+      } catch (err) {
+        return { ok: false, reason: `POST ${url} threw: ${err instanceof Error ? err.message : String(err)}` };
+      }
+    },
+    { url: API_ROUTES.agent.run, body: { chatSessionId, message, roleId, origin: "bridge" } },
+  );
+  if (!probe.ok) throw new Error(`startBridgeOriginAgentRun: ${probe.reason}`);
+  return probe.chatSessionId;
 }

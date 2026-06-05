@@ -23,7 +23,7 @@ describe("buildMcpConfig", () => {
     const config = buildMcpConfig({
       chatSessionId: "s1",
       port: 3001,
-      activePlugins: ["manageTodoList", "presentDocument"],
+      activePlugins: ["manageBookmarks", "presentDocument"],
     }) as Record<string, unknown>;
 
     assert.ok(config.mcpServers);
@@ -37,7 +37,7 @@ describe("buildMcpConfig", () => {
     const env = server.env as Record<string, string>;
     assert.equal(env.SESSION_ID, "s1");
     assert.equal(env.PORT, "3001");
-    assert.equal(env.PLUGIN_NAMES, "manageTodoList,presentDocument");
+    assert.equal(env.PLUGIN_NAMES, "manageBookmarks,presentDocument");
   });
 
   it("handles empty plugins", async () => {
@@ -90,15 +90,25 @@ describe("buildCliArgs", () => {
   it("includes MCP tool names in allowedTools", async () => {
     const args = buildCliArgs({
       systemPrompt: "test",
-      activePlugins: ["manageTodoList"],
+      activePlugins: ["manageBookmarks"],
     });
 
     const allowedIdx = args.indexOf("--allowedTools");
     assert.ok(allowedIdx >= 0, "--allowedTools flag must exist");
     const allowedStr = args[allowedIdx + 1];
     assert.equal(typeof allowedStr, "string");
-    assert.ok(allowedStr.includes("mcp__mulmoclaude__manageTodoList"));
+    assert.ok(allowedStr.includes("mcp__mulmoclaude__manageBookmarks"));
     assert.ok(allowedStr.includes("Bash"));
+  });
+
+  it("permits the Skill tool so .claude/skills/ skills are invokable", async () => {
+    // Regression guard: a strict --allowedTools that omits `Skill`
+    // permission-denies every Skill({skill:"…"}) call (Execute skill
+    // error + Glob fallback). See plans/done/fix-skill-tool-allowlist.md.
+    const args = buildCliArgs({ systemPrompt: "test", activePlugins: [] });
+    const allowedStr = args[args.indexOf("--allowedTools") + 1];
+    const tools = allowedStr.split(",");
+    assert.ok(tools.includes("Skill"), `--allowedTools must list "Skill" (got: ${allowedStr})`);
   });
 
   it("includes --resume when claudeSessionId provided", async () => {
@@ -141,6 +151,19 @@ describe("buildCliArgs", () => {
     });
 
     assert.ok(!args.includes("--mcp-config"));
+  });
+
+  it("includes --permission-prompt-tool only when MCP is wired (#1499 / #1560)", async () => {
+    // The handler tool lives inside our MCP server. With no
+    // --mcp-config the CLI can't resolve it and refuses to start;
+    // gate the flag together with --mcp-config.
+    const withMcp = buildCliArgs({ systemPrompt: "x", activePlugins: ["foo"], mcpConfigPath: "/tmp/mcp.json" });
+    const withMcpIdx = withMcp.indexOf("--permission-prompt-tool");
+    assert.ok(withMcpIdx >= 0, "must pass --permission-prompt-tool when MCP is configured");
+    assert.equal(withMcp[withMcpIdx + 1], "mcp__mulmoclaude__handlePermission");
+
+    const withoutMcp = buildCliArgs({ systemPrompt: "x", activePlugins: [] });
+    assert.ok(!withoutMcp.includes("--permission-prompt-tool"), "must NOT pass --permission-prompt-tool in no-MCP sessions");
   });
 
   it("includes --effort when effortLevel is set", async () => {
@@ -193,6 +216,20 @@ describe("resolveMcpConfigPaths", () => {
       useDocker: true,
     });
     assert.notEqual(paths.hostPath, paths.argPath);
+  });
+
+  it("sanitizes path-injecting sessionId (CodeQL js/path-injection)", async () => {
+    const evil = "../../etc/pwn";
+    for (const useDocker of [true, false]) {
+      const paths = resolveMcpConfigPaths({ workspacePath: "/ws", sessionId: evil, useDocker });
+      // basename collapses the traversal to "pwn"; nothing of the
+      // crafted prefix survives into either derived path.
+      for (const derivedPath of [paths.hostPath, paths.argPath]) {
+        assert.ok(!derivedPath.includes(".."), `traversal leaked into ${derivedPath}`);
+        assert.ok(!derivedPath.includes("etc"), `path component leaked into ${derivedPath}`);
+        assert.ok(derivedPath.includes("mcp-pwn.json"), `expected sanitized segment, got ${derivedPath}`);
+      }
+    }
   });
 });
 
@@ -390,7 +427,7 @@ describe("prepareUserServers", () => {
         enabled: false,
       },
     };
-    const out = prepareUserServers(servers, false, hostWs);
+    const { servers: out } = await prepareUserServers(servers, false, hostWs);
     assert.deepEqual(Object.keys(out), ["on"]);
   });
 
@@ -398,7 +435,7 @@ describe("prepareUserServers", () => {
     const servers: Record<string, McpServerSpec> = {
       api: { type: "http", url: "http://localhost:8080/mcp" },
     };
-    const out = prepareUserServers(servers, true, hostWs);
+    const { servers: out } = await prepareUserServers(servers, true, hostWs);
     const { api } = out;
     assert.ok(api && api.type === "http");
     assert.equal(api.url, "http://host.docker.internal:8080/mcp");
@@ -415,7 +452,7 @@ describe("prepareUserServers", () => {
         args: ["-y", "@modelcontextprotocol/server-filesystem", `${hostWs}/docs`],
       },
     };
-    const out = prepareUserServers(servers, false, hostWs);
+    const { servers: out } = await prepareUserServers(servers, false, hostWs);
     const fsSpec = out.fs;
     assert.ok(fsSpec && fsSpec.type === "stdio");
     // Non-docker mode doesn't rewrite the workspace prefix — the
@@ -442,7 +479,7 @@ describe("prepareUserServers", () => {
         args: ["-y", "@modelcontextprotocol/server-memory"],
       },
     };
-    const out = prepareUserServers(servers, true, hostWs);
+    const { servers: out } = await prepareUserServers(servers, true, hostWs);
     assert.deepEqual(Object.keys(out), ["api"]);
   });
 
@@ -457,8 +494,31 @@ describe("prepareUserServers", () => {
         args: ["-y", "@modelcontextprotocol/server-filesystem"],
       },
     };
-    const out = prepareUserServers(servers, true, hostWs);
+    const { servers: out } = await prepareUserServers(servers, true, hostWs);
     assert.deepEqual(out, {});
+  });
+
+  it("stdio with hostExecInDocker !== true is still dropped in docker (safe default unchanged, #1421 Phase B)", async () => {
+    // The opt-in escape hatch must be explicit. An entry without
+    // the flag — or with it explicitly false — keeps the pre-#1421
+    // behavior: dropped under Docker, no host process spawned.
+    const servers: Record<string, McpServerSpec> = {
+      api: { type: "http", url: "https://api.example/mcp" },
+      memOff: {
+        type: "stdio",
+        command: "npx",
+        args: ["-y", "@modelcontextprotocol/server-memory"],
+        hostExecInDocker: false,
+      },
+      memUnset: {
+        type: "stdio",
+        command: "npx",
+        args: ["-y", "@modelcontextprotocol/server-memory"],
+      },
+    };
+    const { servers: out, shims } = await prepareUserServers(servers, true, hostWs);
+    assert.deepEqual(Object.keys(out), ["api"], "only the http server survives; both stdio entries dropped");
+    assert.equal(shims.length, 0, "no host-exec shim spawned without an explicit opt-in");
   });
 
   it("disabled stdio entries are dropped before the docker filter even sees them", async () => {
@@ -473,8 +533,8 @@ describe("prepareUserServers", () => {
         enabled: false,
       },
     };
-    assert.deepEqual(prepareUserServers(servers, false, hostWs), {});
-    assert.deepEqual(prepareUserServers(servers, true, hostWs), {});
+    assert.deepEqual((await prepareUserServers(servers, false, hostWs)).servers, {});
+    assert.deepEqual((await prepareUserServers(servers, true, hostWs)).servers, {});
   });
 });
 
@@ -490,7 +550,7 @@ describe("userServerAllowedToolNames", () => {
         enabled: false,
       },
     };
-    const prepared = prepareUserServers(servers, false, hostWs);
+    const { servers: prepared } = await prepareUserServers(servers, false, hostWs);
     assert.deepEqual(userServerAllowedToolNames(prepared, false), ["mcp__gmail"]);
   });
 
@@ -502,7 +562,7 @@ describe("userServerAllowedToolNames", () => {
         args: ["-y", "@modelcontextprotocol/server-filesystem", hostWs],
       },
     };
-    const prepared = prepareUserServers(servers, false, hostWs);
+    const { servers: prepared } = await prepareUserServers(servers, false, hostWs);
     assert.deepEqual(userServerAllowedToolNames(prepared, false), ["mcp__fs"]);
   });
 
@@ -515,7 +575,7 @@ describe("userServerAllowedToolNames", () => {
         args: ["-y", "@modelcontextprotocol/server-filesystem", hostWs],
       },
     };
-    const prepared = prepareUserServers(servers, true, hostWs);
+    const { servers: prepared } = await prepareUserServers(servers, true, hostWs);
     assert.deepEqual(userServerAllowedToolNames(prepared, true), ["mcp__gmail"]);
   });
 });
@@ -525,7 +585,7 @@ describe("buildMcpConfig — user servers", () => {
     const cfg = buildMcpConfig({
       chatSessionId: "s1",
       port: 3001,
-      activePlugins: ["manageTodoList"],
+      activePlugins: ["manageBookmarks"],
       userServers: {
         gmail: {
           type: "http",
@@ -542,7 +602,7 @@ describe("buildMcpConfig — user servers", () => {
     const cfg = buildMcpConfig({
       chatSessionId: "s1",
       port: 3001,
-      activePlugins: ["manageTodoList"],
+      activePlugins: ["manageBookmarks"],
       userServers: {
         mulmoclaude: {
           type: "http",
