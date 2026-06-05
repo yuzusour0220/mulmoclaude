@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { isAbortCausedExit } from "../../server/agent/backend/claude-code.js";
+import { isAbortCausedExit, buildExitErrorEvent } from "../../server/agent/backend/claude-code.js";
 
 // Regression coverage for the stop-button false-error fix (#1625).
 // readAgentEvents only suppresses the exit-error event when
@@ -34,4 +34,23 @@ test("aborted but exit is NOT signal-shaped: real error still surfaces", () => {
   assert.equal(isAbortCausedExit(1, null, aborted()), false);
   assert.equal(isAbortCausedExit(2, null, aborted()), false);
   assert.equal(isAbortCausedExit(null, "SIGSEGV", aborted()), false);
+});
+
+test("buildExitErrorEvent: clean exit and deliberate abort produce no event", () => {
+  assert.equal(buildExitErrorEvent(0, null, undefined, ""), null);
+  assert.equal(buildExitErrorEvent(143, null, aborted(), ""), null);
+});
+
+test("buildExitErrorEvent: real failure surfaces an error event", () => {
+  const fromCode = buildExitErrorEvent(1, null, undefined, "");
+  assert.equal(fromCode?.type, "error");
+  assert.equal(fromCode?.message, "claude exited with code 1");
+  // stderr, when present, takes precedence over the synthetic summary.
+  assert.equal(buildExitErrorEvent(1, null, undefined, "boom")?.message, "boom");
+});
+
+test("buildExitErrorEvent: signal-only exit names the signal, never 'code null'", () => {
+  const errEvent = buildExitErrorEvent(null, "SIGSEGV", undefined, "");
+  assert.equal(errEvent?.message, "claude terminated by signal SIGSEGV");
+  assert.equal(buildExitErrorEvent(null, null, undefined, "")?.message, "claude terminated by signal unknown");
 });
