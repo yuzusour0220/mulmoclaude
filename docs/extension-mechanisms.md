@@ -63,7 +63,7 @@ canvas 上で結果を可視化したい場合の第一選択。
 - `src/plugins/accounting/` — 仕訳入力、損益、貸借
 - `src/plugins/presentHtml/` — その場 HTML プレビュー
 - `src/plugins/chart/`, `src/plugins/spreadsheet/`, `src/plugins/markdown/`
-- `src/plugins/manageRoles/`, `src/plugins/manageSkills/`, `src/plugins/manageSource/`
+- `src/plugins/manageRoles/`, `src/plugins/manageSkills/`
 
 **追加方法**:
 

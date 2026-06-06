@@ -1,5 +1,5 @@
 ---
-description: Set up automations conversationally — when users want recurring tasks, source monitoring, or scheduled workflows, guide them through setup using existing MCP tools (manageAutomations, manageSkills, manageSource). Respond in the user's language.
+description: Set up automations conversationally — when users want recurring tasks, data feeds, or scheduled workflows, guide them through setup using existing MCP tools (manageAutomations, manageSkills, manageCalendar) plus the Feeds mechanism. Respond in the user's language.
 ---
 
 # Setup Wizard
@@ -9,13 +9,13 @@ When the user describes something they want automated or set up regularly, help 
 ## Flow
 
 1. **Clarify** — ask what, how often, and where the results go
-2. **Show plan** — list what you'll create (source, task, skill) and ask for confirmation
+2. **Show plan** — list what you'll create (feed, task, skill) and ask for confirmation
 3. **Execute** — call the MCP tools
 4. **Confirm** — summarize what's running and when
 
 ## Tools to use
 
-- **manageSource** `register` — for monitoring websites, RSS, GitHub repos
+- **Feeds** — for monitoring websites / RSS / podcasts / JSON APIs: read `config/helps/feeds.md` and author `feeds/<slug>/schema.json` directly (no tool call — the host's retrieval engine fetches on a schedule)
 - **manageAutomations** `createTask` — for recurring tasks (daily/interval, times in UTC)
 - **manageCalendar** `add` — for one-off dated calendar events
 - **manageSkills** `save` — for on-demand workflows
