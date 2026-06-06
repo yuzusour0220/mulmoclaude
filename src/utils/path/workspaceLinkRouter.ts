@@ -41,6 +41,15 @@ const CHAT_LOG_PREFIX = "conversations/";
 //     (see App.vue navigateToWorkspacePath#file).
 const SPA_ROUTE_NAMES: ReadonlySet<string> = new Set(Object.values(PAGE_ROUTES).filter((name) => name !== PAGE_ROUTES.chat && name !== PAGE_ROUTES.files));
 
+// Legacy redirect-only routes: NOT in `PAGE_ROUTES` (so absent from
+// `SPA_ROUTE_NAMES`) but `src/router/index.ts` still maps each to a
+// current page via redirect (`/calendar` → `/automations`,
+// `/scheduler` → `/automations`). Classify them as SPA routes so
+// historical agent / wiki Markdown links follow the redirect instead
+// of falling through to `/files/<name>` (which 404s). Keep this in
+// sync with the redirect entries in the router.
+const LEGACY_SPA_ROUTE_ALIASES: ReadonlySet<string> = new Set(["calendar", "scheduler"]);
+
 /**
  * Given a raw href attribute from agent Markdown, return a typed
  * navigation target, or null if the link is external, anchor-only,
@@ -104,7 +113,7 @@ export function classifyWorkspacePath(href: string): WorkspaceLinkTarget | null 
   // path is treated as a file, not a route. Slugs don't normally
   // carry dots; file extensions almost always do.
   const [firstSegment, ...restSegments] = normalized.split("/");
-  if (SPA_ROUTE_NAMES.has(firstSegment) && !restSegments.some(looksLikeFileSegment)) {
+  if ((SPA_ROUTE_NAMES.has(firstSegment) || LEGACY_SPA_ROUTE_ALIASES.has(firstSegment)) && !restSegments.some(looksLikeFileSegment)) {
     // Preserve the query string (e.g. `?selected=<id>`) so deep
     // links like `/collections/mc-invoice?selected=INV-2026-0001`
     // reach the target view's query handler — `router.push(string)`
