@@ -1286,7 +1286,7 @@ const frMessages = {
     addFeedTitle: "Ajouter un flux",
     addFeedHint: "Collez l'URL d'un flux ou d'une API ; je la récupère et déduis le titre et les champs pour vous.",
     addFeedPrompt:
-      "Ajoute un nouveau flux de source de données depuis cette URL : {url}\n\nLis d'abord `config/helps/feeds.md` et suis-le exactement. Récupère cette URL toi-même, inspecte la réponse pour déduire un titre pertinent et les champs, puis crée `feeds/<slug>/schema.json` comme l'explique l'aide. Ne me pose AUCUNE question — déduis tout à partir des données. L'hôte le récupère selon sa planification ; quand tu as terminé, dis-moi que le flux est enregistré.",
+      "Ajoute un nouveau flux de source de données depuis cette URL : {url}\n\nLis d'abord `config/helps/feeds.md` et suis-le exactement. Récupère cette URL toi-même, inspecte la réponse pour déduire un titre pertinent et les champs, puis crée `feeds/<slug>/schema.json` comme l'explique l'aide. Ne me pose AUCUNE question — déduis tout à partir des données. À l'ouverture du flux, ses éléments se chargent automatiquement ; quand tu as terminé, dis-moi qu'il est enregistré (inutile de mentionner Refresh).",
     title: "Collections",
     backToIndex: "Retour aux collections",
     indexEmpty: "Aucune collection installée. Mettez une étoile sur une compétence avec un schema depuis la page Skills pour la voir ici.",

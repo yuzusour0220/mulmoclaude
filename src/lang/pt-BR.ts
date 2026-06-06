@@ -1281,7 +1281,7 @@ const ptBRMessages = {
     addFeedTitle: "Adicionar um feed",
     addFeedHint: "Cole a URL de um feed ou API; vou buscá-la e deduzir o título e os campos para você.",
     addFeedPrompt:
-      "Adicione um novo feed de fonte de dados a partir desta URL: {url}\n\nPrimeiro leia `config/helps/feeds.md` e siga-o exatamente. Busque essa URL você mesmo, inspecione a resposta para deduzir um título adequado e os campos, e então crie `feeds/<slug>/schema.json` como a ajuda descreve. NÃO me faça perguntas: deduza tudo a partir dos dados. O host o busca conforme a programação; quando terminar, diga-me que o feed está registrado.",
+      "Adicione um novo feed de fonte de dados a partir desta URL: {url}\n\nPrimeiro leia `config/helps/feeds.md` e siga-o exatamente. Busque essa URL você mesmo, inspecione a resposta para deduzir um título adequado e os campos, e então crie `feeds/<slug>/schema.json` como a ajuda descreve. NÃO me faça perguntas: deduza tudo a partir dos dados. Ao abrir o feed os itens são carregados automaticamente; quando terminar, diga-me que está registrado (não precisa mencionar Refresh).",
     title: "Coleções",
     backToIndex: "Voltar para coleções",
     indexEmpty: "Nenhuma coleção instalada. Marque com estrela uma skill que inclua um schema na página Skills para vê-la aqui.",

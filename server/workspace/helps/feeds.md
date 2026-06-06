@@ -12,8 +12,9 @@ data/feeds/<slug>/<id>.json  ← the host writes these (one per item)
 
 It is NOT a skill (no `SKILL.md`, nothing under `.claude/skills/`), so it never
 enters the prompt. You don't call any tool to fetch — the host's retrieval
-engine does that on an hourly schedule and when the user clicks **Refresh feed**.
-Records render in the standard collection view at `/feeds/<slug>`.
+engine does that automatically: the first time the feed's view is opened, on an
+hourly schedule thereafter, and when the user clicks **Refresh feed**. Records
+render in the standard collection view at `/feeds/<slug>`.
 
 This is the project philosophy: *the workspace is the database; you are the
 intelligent interface.* Adding a feed = **fetch the URL, look at its real
@@ -26,8 +27,9 @@ fields, and write one `schema.json`.**
    the user design questions; infer everything from the data.
 2. **Write `feeds/<slug>/schema.json`** (see the shape below). Pick a short
    `slug` (lowercase letters/digits/hyphens).
-3. Tell the user it's registered and will fetch on the next refresh (or they can
-   click **Refresh feed** on `/feeds/<slug>` now).
+3. Tell the user the feed is registered and that opening `/feeds/<slug>` will
+   load its items (the host fetches automatically on first open). Do NOT tell
+   them to click Refresh — that's not needed for a new feed.
 
 To **remove** a feed completely, delete BOTH its `feeds/<slug>/` directory
 (schema + state) and its records under `data/feeds/<slug>/`. The `/feeds` page
