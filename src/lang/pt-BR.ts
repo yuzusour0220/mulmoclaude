@@ -312,6 +312,11 @@ const ptBRMessages = {
     feeds: { label: "Feeds" },
     files: { label: "Arquivos" },
   },
+  shortcuts: {
+    pin: "Fixar no iniciador",
+    unpin: "Desafixar do iniciador",
+    zoneAriaLabel: "Atalhos fixados",
+  },
   fileContentHeader: {
     showRendered: "Mostrar Markdown renderizado",
     showRaw: "Mostrar código-fonte",

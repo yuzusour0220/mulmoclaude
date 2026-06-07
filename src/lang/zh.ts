@@ -309,6 +309,11 @@ const zhMessages = {
     feeds: { label: "订阅源" },
     files: { label: "文件" },
   },
+  shortcuts: {
+    pin: "固定到启动栏",
+    unpin: "从启动栏取消固定",
+    zoneAriaLabel: "已固定的快捷方式",
+  },
   fileContentHeader: {
     showRendered: "显示渲染后的 Markdown",
     showRaw: "显示原始源代码",

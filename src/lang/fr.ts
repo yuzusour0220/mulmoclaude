@@ -313,6 +313,11 @@ const frMessages = {
     feeds: { label: "Flux" },
     files: { label: "Fichiers" },
   },
+  shortcuts: {
+    pin: "Épingler au lanceur",
+    unpin: "Détacher du lanceur",
+    zoneAriaLabel: "Raccourcis épinglés",
+  },
   fileContentHeader: {
     showRendered: "Afficher le Markdown rendu",
     showRaw: "Afficher la source brute",
