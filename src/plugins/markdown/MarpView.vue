@@ -101,8 +101,9 @@ function buildSrcDoc(html: string, css: string): string {
 html,body { margin:0; padding:16px; background:transparent; }
 ${css}
 div.marpit > svg[data-marpit-svg] {
-  width: 100% !important;
-  height: auto !important;
+  width: calc(100vw - ${FRAME_PADDING_PX}px) !important;
+  height: calc((100vw - ${FRAME_PADDING_PX}px) * 9 / 16) !important;
+  overflow: hidden !important;
   display: block !important;
   margin: 0 auto ${SLIDE_GAP_PX}px !important;
   box-shadow: 0 2px 8px rgba(0,0,0,0.12);
@@ -113,8 +114,6 @@ div.marpit > svg[data-marpit-svg] {
 }
 
 function countSlides(html: string): number {
-  const svgMatches = html.match(/<svg[\s>]/g);
-  if (svgMatches) return svgMatches.length;
   const sectionMatches = html.match(/<section[\s>]/g);
   return sectionMatches ? sectionMatches.length : 0;
 }
