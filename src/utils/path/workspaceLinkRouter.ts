@@ -13,7 +13,7 @@ export type WorkspaceLinkTarget =
   | { kind: "file"; path: string }
   | { kind: "session"; sessionId: string }
   /** A top-level SPA route like `/collections/mc-clients`,
-   *  `/calendar`, `/automations/<id>`. `path` includes the leading slash
+   *  `/automations/<id>`. `path` includes the leading slash
    *  so callers can pass it directly to `router.push(string)`. */
   | { kind: "spa-route"; path: string };
 
@@ -26,7 +26,7 @@ const CHAT_LOG_PREFIX = "conversations/";
 // Top-level SPA route names whose leading-segment match should
 // short-circuit the files-view fallback. Without this set, an
 // agent-emitted link like `[Microsoft](/collections/mc-clients)` or
-// `[my calendar](/calendar)` falls into the `kind: "file"` default
+// `[automations](/automations)` falls into the `kind: "file"` default
 // and gets routed to `/files/collections/mc-clients`, which 404s
 // because that path doesn't exist on disk.
 //
@@ -40,6 +40,15 @@ const CHAT_LOG_PREFIX = "conversations/";
 //     keeps the per-segment URL encoding the catch-all route does
 //     (see App.vue navigateToWorkspacePath#file).
 const SPA_ROUTE_NAMES: ReadonlySet<string> = new Set(Object.values(PAGE_ROUTES).filter((name) => name !== PAGE_ROUTES.chat && name !== PAGE_ROUTES.files));
+
+// Legacy redirect-only routes: NOT in `PAGE_ROUTES` (so absent from
+// `SPA_ROUTE_NAMES`) but `src/router/index.ts` still maps each to a
+// current page via redirect (`/calendar` → `/automations`,
+// `/scheduler` → `/automations`). Classify them as SPA routes so
+// historical agent / wiki Markdown links follow the redirect instead
+// of falling through to `/files/<name>` (which 404s). Keep this in
+// sync with the redirect entries in the router.
+const LEGACY_SPA_ROUTE_ALIASES: ReadonlySet<string> = new Set(["calendar", "scheduler"]);
 
 /**
  * Given a raw href attribute from agent Markdown, return a typed
@@ -89,7 +98,7 @@ export function classifyWorkspacePath(href: string): WorkspaceLinkTarget | null 
   }
 
   // Top-level SPA route: leading segment names one of the host's
-  // pages (collections, calendar, automations, skills, …).
+  // pages (collections, automations, wiki, skills, …).
   // Without this branch, those links would be routed to the Files
   // view (with `files/` prepended) and 404 — the trigger for this
   // generalization was `[X](/collections/mc-clients)` from the
@@ -104,7 +113,7 @@ export function classifyWorkspacePath(href: string): WorkspaceLinkTarget | null 
   // path is treated as a file, not a route. Slugs don't normally
   // carry dots; file extensions almost always do.
   const [firstSegment, ...restSegments] = normalized.split("/");
-  if (SPA_ROUTE_NAMES.has(firstSegment) && !restSegments.some(looksLikeFileSegment)) {
+  if ((SPA_ROUTE_NAMES.has(firstSegment) || LEGACY_SPA_ROUTE_ALIASES.has(firstSegment)) && !restSegments.some(looksLikeFileSegment)) {
     // Preserve the query string (e.g. `?selected=<id>`) so deep
     // links like `/collections/mc-invoice?selected=INV-2026-0001`
     // reach the target view's query handler — `router.push(string)`

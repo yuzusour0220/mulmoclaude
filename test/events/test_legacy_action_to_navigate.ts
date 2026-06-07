@@ -49,15 +49,6 @@ describe("legacyActionToNavigateTarget — automations / sources", () => {
       "/automations/task-1",
     );
   });
-  it("/calendar (no identifier)", () => {
-    assert.equal(
-      legacyActionToNavigateTarget({
-        type: NOTIFICATION_ACTION_TYPES.navigate,
-        target: { view: NOTIFICATION_VIEWS.calendar },
-      }),
-      "/calendar",
-    );
-  });
 });
 
 describe("legacyActionToNavigateTarget — files", () => {
@@ -247,7 +238,6 @@ describe("legacyActionToNavigateTarget — engine constraints", () => {
   it("every emitted target starts with a single '/' (no scheme, no '//')", () => {
     const targets: { view: string; expected: string }[] = [
       { view: "chat", expected: "/chat" },
-      { view: "calendar", expected: "/calendar" },
       { view: "automations", expected: "/automations" },
       { view: "files", expected: "/files" },
       { view: "wiki", expected: "/wiki" },

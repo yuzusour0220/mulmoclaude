@@ -43,11 +43,10 @@ export const NOTIFICATION_ACTION_TYPES = {
 export type NotificationActionType = (typeof NOTIFICATION_ACTION_TYPES)[keyof typeof NOTIFICATION_ACTION_TYPES];
 
 // Views a notification can target. Kept in sync with `PAGE_ROUTES`
-// in src/router/index.ts — Calendar and Automations are peer pages
-// after the #758 split; Automations is where scheduled tasks live.
+// in src/router/index.ts. Automations is where scheduled tasks live
+// (the Calendar view was removed).
 export const NOTIFICATION_VIEWS = {
   chat: "chat",
-  calendar: "calendar",
   automations: "automations",
   files: "files",
   wiki: "wiki",
@@ -69,7 +68,6 @@ export type NotificationPriority = (typeof NOTIFICATION_PRIORITIES)[keyof typeof
 // the identifier lands on the feature's index view.
 export type NotificationTarget =
   | { view: typeof NOTIFICATION_VIEWS.chat; sessionId: string }
-  | { view: typeof NOTIFICATION_VIEWS.calendar }
   | { view: typeof NOTIFICATION_VIEWS.automations; taskId?: string }
   | { view: typeof NOTIFICATION_VIEWS.files; path?: string }
   | { view: typeof NOTIFICATION_VIEWS.wiki; slug?: string; anchor?: string }

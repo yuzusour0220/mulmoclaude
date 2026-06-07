@@ -68,7 +68,7 @@ function buildEntry(entryId: string, title: string, navigateTarget: string): Not
       legacyId: entryId,
       kind: "push",
       priority: "normal",
-      action: { type: "navigate", target: { view: "calendar" } },
+      action: { type: "navigate", target: { view: "automations" } },
     },
     createdAt: "2026-04-25T06:00:00.000Z",
   };
@@ -84,11 +84,6 @@ const SCENARIOS: readonly Scenario[] = [
     description: "automations target with taskId",
     entry: buildEntry("notif-auto-1", "Scheduled task fired", "/automations/finance-daily-briefing"),
     expectedUrl: "/automations/finance-daily-briefing",
-  },
-  {
-    description: "calendar index (no identifier)",
-    entry: buildEntry("notif-cal-1", "Event reminder", "/calendar"),
-    expectedUrl: "/calendar",
   },
   {
     description: "files target with nested path",
@@ -196,7 +191,7 @@ test.describe("notification bell — dismiss", () => {
     // the debug popup's two-tier UX). Build an action entry directly
     // since `buildEntry` defaults to fyi.
     const entry: NotifierEntryFixture = {
-      ...buildEntry("notif-dismiss-1", "Will be cancelled", "/calendar"),
+      ...buildEntry("notif-dismiss-1", "Will be cancelled", "/automations"),
       lifecycle: "action",
       severity: "nudge",
     };

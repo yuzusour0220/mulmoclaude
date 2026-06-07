@@ -53,10 +53,10 @@ Abre [http://localhost:5173](http://localhost:5173). Y listo — empieza a chate
 | "Ingiere este artículo: URL"                | Página de wiki con `[[enlaces]]` para memoria a largo plazo |
 | "Programa un resumen diario de noticias"    | Tarea recurrente que se ejecuta automáticamente             |
 | "Genera una imagen de un atardecer"         | Imagen generada por IA (Gemini)                             |
-| "Suscríbete a este feed RSS"                | Fuente registrada en `/sources`, recogida por programación  |
-| "¿Qué hay nuevo en mis fuentes?"            | Bandeja de no leídos en `/news` con chat por artículo       |
+| "Suscríbete a este feed RSS"                | Feed de datos en `/feeds`, recogido por programación        |
+| "¿Qué hay nuevo en mis fuentes?"            | Elementos del feed reunidos en `/feeds`                     |
 
-> **Páginas a las que puedes acceder directamente**: `/wiki` (explorar + Lint), `/news` (bandeja de no leídos), `/sources` (gestión de fuentes), `/automations` (tareas recurrentes), `/calendar`, `/files`, `/skills`, `/roles`. Cada una incluye un compositor de chat propio que arranca una conversación nueva ya consciente del contexto de la página.
+> **Páginas a las que puedes acceder directamente**: `/wiki` (explorar + Lint), `/feeds` (feeds de datos), `/collections` (apps de datos), `/automations` (tareas recurrentes), `/files`, `/skills`, `/roles`. Cada una incluye un compositor de chat propio que arranca una conversación nueva ya consciente del contexto de la página.
 
 > **¿Quieres hackear MulmoClaude?** Consulta [`docs/developer.md`](docs/developer.md) para variables de entorno, scripts y arquitectura.
 
@@ -594,7 +594,7 @@ La documentación completa vive en [`docs/`](docs/README.md). Aquí están los p
 | Guide                                                                                                      | Description                                                                      |
 | ---------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
 | [MulmoBridge Guide](docs/mulmobridge-guide.en.md) / [日本語](docs/mulmobridge-guide.md)                    | Conecta aplicaciones de mensajería (Telegram, Slack, LINE, etc.) a tu PC de casa |
-| [Scheduler Guide](docs/scheduler-guide.en.md) / [日本語](docs/scheduler-guide.md)                          | Calendario y tareas recurrentes                                                  |
+| [Scheduler Guide](docs/scheduler-guide.en.md) / [日本語](docs/scheduler-guide.md)                          | Tareas automáticas recurrentes                                                   |
 | [Obsidian Integration](docs/tips/obsidian.en.md) / [日本語](docs/tips/obsidian.md)                         | Usa Obsidian para navegar la wiki y los documentos de MulmoClaude                |
 | [Telegram Setup](docs/message_apps/telegram/README.md) / [日本語](docs/message_apps/telegram/README.ja.md) | Configuración paso a paso de un bot de Telegram                                  |
 | [LINE Setup](docs/message_apps/line/README.md) / [日本語](docs/message_apps/line/README.ja.md)             | Configuración paso a paso de un bot de LINE                                      |

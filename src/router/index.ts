@@ -1,10 +1,10 @@
 // Vue-router setup (history mode — clean URLs without #).
 //
-// Each page has its own route: /chat, /files, /calendar,
-// /automations, /wiki, /skills, /roles, /sources. Layout preference
+// Each page has its own route: /chat, /files, /automations, /wiki,
+// /skills, /roles, /feeds, /collections. Layout preference
 // (single vs. stack) is a separate concern persisted in localStorage
 // — it is not part of the URL. Several pages accept an optional
-// identifier (automations :taskId, sources :slug) so
+// identifier (automations :taskId, feeds/collections :slug) so
 // notifications and external links can deep-link to a specific item.
 //
 // History mode requires the server to serve index.html for any path
@@ -40,13 +40,13 @@ const routes: RouteRecordRaw[] = [
   // (`/files`) yields an empty array, which we treat as "no file
   // selected". See plans/done/feat-files-path-url.md.
   { path: "/files/:pathMatch(.*)*", name: PAGE_ROUTES.files, component: Stub },
-  { path: "/calendar", name: PAGE_ROUTES.calendar, component: Stub },
-  // Automations accepts an optional `:taskId` for the same reason —
-  // scheduled-task notifications deep-link to a specific task row.
+  // Automations accepts an optional `:taskId` — scheduled-task
+  // notifications deep-link to a specific task row.
   { path: "/automations/:taskId?", name: PAGE_ROUTES.automations, component: Stub },
-  // Legacy Scheduler URL — split into Calendar + Automations (#758).
-  // Redirect preserves bookmarks; delete once telemetry shows no hits.
-  { path: "/scheduler", redirect: "/calendar" },
+  // Legacy Scheduler / Calendar URLs — the Calendar view was removed;
+  // both redirect to Automations to preserve old bookmarks.
+  { path: "/scheduler", redirect: "/automations" },
+  { path: "/calendar", redirect: "/automations" },
   // Wiki sub-views live on the path rather than in query params so
   // URLs mirror the filesystem layout (`data/wiki/pages/<slug>.md`)
   // and stay sibling-safe (no query-key bleed from other routes).

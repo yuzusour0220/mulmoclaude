@@ -708,13 +708,13 @@ Plugin code is also bound by ESLint's plugin import rule (#1144): under `src/plu
 A plugin's `View` / `Preview` components mount in two distinct trees, and both must provide the plugin runtime so descendant `useRuntime()` calls resolve:
 
 1. **Chat canvas** (tool-result rendering). The `wrapWithScope(scope, View)` helper in `src/plugins/scope.ts` produces a component that mounts `<PluginScopedRoot pkg-name :endpoints>` around the inner View. Used by `BUILT_IN_PLUGINS` entries.
-2. **Standalone routes / file previews** (`/calendar`, `FileContentRenderer` showing `data/scheduler/items.json`, etc.). These mount the View directly, outside the plugin registry, so the host wraps them at the call site:
+2. **Standalone routes** (`/automations`, `/wiki`, etc.). These mount the View directly, outside the plugin registry, so the host wraps them at the call site:
    ```vue
    <PluginScopedRoot pkg-name="scheduler" :endpoints="API_ROUTES.scheduler">
-     <CalendarView />
+     <AutomationsView />
    </PluginScopedRoot>
    ```
-   `App.vue` and `FileContentRenderer.vue` carry these wrappers for the routed page and file-preview surfaces respectively. A new standalone route for a plugin needs the same wrapping pattern, or `useRuntime()` will throw at first render.
+   `App.vue` carries these wrappers for the routed page surfaces. A new standalone route for a plugin needs the same wrapping pattern, or `useRuntime()` will throw at first render.
 
 `PluginScopedRoot` doubles as a per-plugin **error boundary** (#1147): a Vue `errorCaptured` hook catches uncaught throws from the plugin subtree's render / setup / lifecycle and renders an in-place fallback panel ("Plugin X crashed", optional stack via Show details, Retry). The retry remounts the slotted subtree with a fresh setup so transient bugs (stale ref, momentary endpoint outage) clear without a full page reload. Errors are logged to the console with a `[plugin/<pkg>]` prefix; the boundary does NOT forward to the bell to keep its coupling minimal.
 

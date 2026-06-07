@@ -53,10 +53,10 @@ Open [http://localhost:5173](http://localhost:5173). That's it — start chattin
 | "Ingest this article: URL"      | Wiki page with `[[links]]` for long-term memory |
 | "Schedule a daily news digest"  | Recurring task that runs automatically          |
 | "Generate an image of a sunset" | AI-generated image (Gemini)                     |
-| "Subscribe to this RSS feed"    | Source on `/sources`, fetched on a schedule     |
-| "What's new in my feeds?"       | Unread inbox at `/news` with per-article chat   |
+| "Subscribe to this RSS feed"    | Data feed on `/feeds`, fetched on a schedule    |
+| "What's new in my feeds?"       | Feed items collected at `/feeds`                |
 
-> **Pages you can visit directly**: `/wiki` (browse + lint), `/news` (unread inbox), `/sources` (manage feeds), `/automations` (recurring tasks), `/calendar`, `/files`, `/skills`, `/roles`. Each has its own scoped chat composer that spawns a fresh chat already aware of the page context.
+> **Pages you can visit directly**: `/wiki` (browse + lint), `/feeds` (data feeds), `/collections` (data apps), `/automations` (recurring tasks), `/files`, `/skills`, `/roles`. Each has its own scoped chat composer that spawns a fresh chat already aware of the page context.
 
 > **Hacking on MulmoClaude?** See [`docs/developer.md`](docs/developer.md) for environment variables, scripts, and architecture.
 
@@ -619,7 +619,7 @@ Full documentation lives in [`docs/`](docs/README.md). Here are the key entry po
 | Guide                                                                                                      | Description                                                          |
 | ---------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
 | [MulmoBridge Guide](docs/mulmobridge-guide.en.md) / [日本語](docs/mulmobridge-guide.md)                    | Connect messaging apps (Telegram, Slack, LINE, etc.) to your home PC |
-| [Scheduler Guide](docs/scheduler-guide.en.md) / [日本語](docs/scheduler-guide.md)                          | Calendar and recurring tasks                                         |
+| [Scheduler Guide](docs/scheduler-guide.en.md) / [日本語](docs/scheduler-guide.md)                          | Recurring automated tasks                                            |
 | [Obsidian Integration](docs/tips/obsidian.en.md) / [日本語](docs/tips/obsidian.md)                         | Use Obsidian to browse MulmoClaude's wiki and documents              |
 | [Telegram Setup](docs/message_apps/telegram/README.md) / [日本語](docs/message_apps/telegram/README.ja.md) | Step-by-step Telegram Bot setup                                      |
 | [LINE Setup](docs/message_apps/line/README.md) / [日本語](docs/message_apps/line/README.ja.md)             | Step-by-step LINE Bot setup                                          |

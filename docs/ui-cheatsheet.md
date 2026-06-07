@@ -19,9 +19,9 @@ A quick visual reference so chat instructions about UI ("the bell at the top rig
 │ │                                              ⚙ settings          │  │
 │ └──────────────────────────────────────────────────────────────────┘  │
 │ ┌─<PluginLauncher> [plugin-launcher]──────────────────────────────────┐│
-│ │ 📅Calendar│⏰Actions│📖Wiki│▦Collections│📡Feeds ‖ 🧠Skills│🎭Roles│📁Files ││
-│ │ [plugin-launcher-calendar] … [plugin-launcher-feeds] …  (‖ = separator)││
-│ │ data plugins (0–4) │ separator │ management (Skills/Roles/Files)       ││
+│ │ ⏰Actions│📖Wiki│▦Collections│📡Feeds ‖ 🧠Skills│🎭Roles│📁Files       ││
+│ │ [plugin-launcher-automations] … [plugin-launcher-feeds] … (‖ = separator)││
+│ │ data plugins (0–3) │ separator │ management (Skills/Roles/Files)       ││
 │ └─────────────────────────────────────────────────────────────────────┘│
 │ ┌─[main pane — route-specific]────┐ ┌─<SessionHistoryPanel>────────┐  │
 │ │                                 │ │ [session-history-side-panel] │  │
@@ -101,7 +101,7 @@ In **Stack layout** this sidebar isn't rendered; the same data flows through `<S
 │ ┌─[chat column — left, single layout]──┐ ┌─[canvas column — right]──┐  │
 │ │                                       │ │                          │  │
 │ │  scrollback transcript (text-results, │ │ Selected tool result UI: │  │
-│ │  tool-call cards, agent responses)    │ │  • <CalendarView>        │  │
+│ │  tool-call cards, agent responses)    │ │  • <AutomationsView>     │  │
 │ │                                       │ │  • <MarkdownView>        │  │
 │ │  • text-response (user) ──────────╮   │ │  • <SpreadsheetView>     │  │
 │ │  • text-response (assistant) ─────╯   │ │  • <ChartView>           │  │
@@ -138,36 +138,12 @@ Stable hooks for tests / chat references when a tool result is selected on the r
 | `textResponse` | `[text-response-pdf-button]` | The "PDF" button on an assistant text response (`usePdfDownload` → `/api/pdf/markdown`) |
 | `textResponse` | `[text-response-edit]` / `[text-response-edit-summary]` / `[text-response-edit-textarea]` / `[text-response-apply-btn]` | The collapsible source editor on an assistant text response |
 
-(Other plugin views — `<CalendarView>`, `<MarkdownView>`, `<SpreadsheetView>`, `<ChartView>`, etc. — are documented in their own sections below or are direct components without a stable testid yet.)
+(Other plugin views — `<AutomationsView>`, `<MarkdownView>`, `<SpreadsheetView>`, `<ChartView>`, etc. — are documented in their own sections below or are direct components without a stable testid yet.)
 
-## /calendar — calendar of dated items
-
-```
-┌─[<CalendarView> mounts <SchedulerView force-tab="calendar"> — [scheduler-view-root]]─┐
-│                                                                       │
-│  ┌─Header───────────────────────────────────────────────────────────┐ │
-│  │  📅 Calendar  N items     ◀ Today ▶   [scheduler-view-mode-     │ │
-│  │                                         {month,week,list}]       │ │
-│  └──────────────────────────────────────────────────────────────────┘ │
-│                                                                       │
-│  ┌─Grid (month/week) or List───────────────────────────────────────┐ │
-│  │  Mo  Tu  We  Th  Fr  Sa  Su                                     │ │
-│  │  …                                                              │ │
-│  │  [scheduler-event-item]  "Team meeting" · 10:00  ✕              │ │
-│  │   (list-view row; click → edit form;  ↑ [scheduler-item-        │ │
-│  │    delete-<id>] on hover)                                        │ │
-│  │  ...                                                             │ │
-│  └──────────────────────────────────────────────────────────────────┘ │
-│                                                                       │
-│  Edit form (when an item is selected):                                │
-│  ┌───────────────────────────────────────────────────────────────┐   │
-│  │  YAML editor: title + props.{date,time,location,notes,...}    │   │
-│  │  [Apply Changes] [Cancel]                                     │   │
-│  └───────────────────────────────────────────────────────────────┘   │
-└───────────────────────────────────────────────────────────────────────┘
-```
-
-In chat, when the agent calls `manageCalendar`, the same `<CalendarView>` mounts inside the right canvas with `selectedResult` populated.
+> The standalone Calendar view + `manageCalendar` tool were removed. Dated
+> items now live in `calendarField` collections (see `<CollectionCalendarView>`
+> under /collections below). `/calendar` and `/scheduler` redirect to
+> `/automations`.
 
 ## /automations — scheduled tasks
 
@@ -293,14 +269,14 @@ this is a moment-in-time view, not the live page.
 │ │   • foo.md   ←sel  │ │  │                                        │ │ │
 │ │   • bar.md         │ │  │  • markdown → marked + Vue             │ │ │
 │ │ ...                │ │  │  • images → <img>                      │ │ │
-│ │                    │ │  │  • scheduler items.json → <CalendarView>│ │ │
+│ │                    │ │  │  • json/jsonl → syntax-highlighted     │ │ │
 │ │                    │ │  │  • code → text                         │ │ │
 │ │                    │ │  └────────────────────────────────────────┘ │ │
 │ └────────────────────┘ └─────────────────────────────────────────────┘ │
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
-The preview pane reuses plugin views — clicking a `config/scheduler/items.json` mounts `<CalendarView>` via `toSchedulerResult`. System-managed files (`config/*.json`, `data/wiki/*.md`, `conversations/memory.md`, …) get a `[system-file-banner]` above the body explaining what the file is, who writes it, and whether hand-edits survive (descriptors live in `src/config/systemFileDescriptors.ts`; #832).
+The preview pane renders by file type (markdown, images, JSON/JSONL syntax highlight, Marp slides, …). System-managed files (`config/*.json`, `data/wiki/*.md`, `conversations/memory.md`, …) get a `[system-file-banner]` above the body explaining what the file is, who writes it, and whether hand-edits survive (descriptors live in `src/config/systemFileDescriptors.ts`; #832).
 
 ## /collections — schema-driven record tables
 

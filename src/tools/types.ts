@@ -56,10 +56,11 @@ export interface PluginEntry {
  * through the registration automatically — no central map to keep
  * in sync.
  *
- * Plugins serving multiple tool names (today: scheduler exports
- * both `manageCalendar` and `manageAutomations`) export
+ * Plugins serving multiple tool names from one module export
  * `REGISTRATIONS: PluginRegistration[]` instead of the singular
- * `REGISTRATION`; the barrel splats the array.
+ * `REGISTRATION`; the barrel splats the array. (The scheduler module
+ * uses this form — it historically served `manageCalendar` +
+ * `manageAutomations`; today only `manageAutomations` remains.)
  */
 export interface PluginRegistration {
   /** Tool name string the LLM and JSONL files use. Read from

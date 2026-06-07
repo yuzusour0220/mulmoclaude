@@ -1,6 +1,6 @@
 // Plugin launcher buttons that sit above the canvas. All buttons
-// navigate to a dedicated page (/wiki, /calendar, etc.) — the URL path
-// reflects which page is active, and landing on that URL restores it.
+// navigate to a dedicated page (/wiki, /automations, etc.) — the URL
+// path reflects which page is active, and landing on that URL restores it.
 
 import { test, expect, type Page } from "@playwright/test";
 import { mockAllApis } from "../fixtures/api";
@@ -20,10 +20,6 @@ async function clickLauncherAndAssertPath(page: Page, key: string, expectedPath:
 }
 
 test.describe("plugin launcher — navigation path", () => {
-  test("Calendar button navigates to /calendar", async ({ page }) => {
-    await clickLauncherAndAssertPath(page, "calendar", "/calendar");
-  });
-
   test("Actions button navigates to /automations", async ({ page }) => {
     await clickLauncherAndAssertPath(page, "automations", "/automations");
   });

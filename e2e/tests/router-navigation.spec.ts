@@ -116,22 +116,22 @@ test.describe("page routing", () => {
     expect(new URL(page.url()).pathname).toBe("/files");
   });
 
-  test("/calendar loads the calendar page", async ({ page }) => {
-    await page.goto("/calendar");
-    await expect(page.getByText("MulmoClaude")).toBeVisible();
-    expect(new URL(page.url()).pathname).toBe("/calendar");
-  });
-
   test("/automations loads the automations page", async ({ page }) => {
     await page.goto("/automations");
     await expect(page.getByText("MulmoClaude")).toBeVisible();
     expect(new URL(page.url()).pathname).toBe("/automations");
   });
 
-  test("/scheduler redirects to /calendar (bookmark preservation for #758)", async ({ page }) => {
+  test("/calendar redirects to /automations (Calendar view removed)", async ({ page }) => {
+    await page.goto("/calendar");
+    await page.waitForURL(/\/automations(?:$|\?)/);
+    expect(new URL(page.url()).pathname).toBe("/automations");
+  });
+
+  test("/scheduler redirects to /automations (bookmark preservation for #758)", async ({ page }) => {
     await page.goto("/scheduler");
-    await page.waitForURL(/\/calendar(?:$|\?)/);
-    expect(new URL(page.url()).pathname).toBe("/calendar");
+    await page.waitForURL(/\/automations(?:$|\?)/);
+    expect(new URL(page.url()).pathname).toBe("/automations");
   });
 
   test("/wiki loads the wiki page", async ({ page }) => {

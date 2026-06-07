@@ -102,28 +102,6 @@ test.describe("L-JOURNEY-* (real LLM add → View reflection → lifecycle)", ()
     "these journeys assert on a real LLM turn (MCP dispatch / skill file-write / custom-role agent run) — fake-echo can't produce them",
   );
 
-  test("L-JOURNEY-CAL: chat で予定を add → /calendar に反映 → UI から delete", async ({ page }) => {
-    test.setTimeout(JOURNEY_TIMEOUT_MS);
-    const marker = makeMarker("L-JOURNEY-CAL");
-    const sessions: string[] = [];
-    try {
-      await setupRoleSession(page, "personal", sessions);
-      await sendChatMessage(page, calendarAddPrompt(marker));
-      await waitForAssistantTurn(page);
-
-      await openCalendarList(page);
-      const event = calendarEventByMarker(page, marker);
-      await expect(event, "the LLM-added event must reflect in the calendar list view").toBeVisible({ timeout: VIEW_REFLECT_TIMEOUT_MS });
-
-      await deleteCalendarEventViaUi(page, event);
-      await expect(calendarEventByMarker(page, marker), "the UI delete must remove the event from the list").toHaveCount(0, {
-        timeout: VIEW_REFLECT_TIMEOUT_MS,
-      });
-    } finally {
-      for (const sid of sessions) await deleteSession(page, sid);
-    }
-  });
-
   test("L-JOURNEY-ACCT: chat で帳簿を作成して開く → switcher に反映 → chat で delete → DB から消える", async ({ page }) => {
     test.setTimeout(JOURNEY_TIMEOUT_MS);
     const marker = makeMarker("L-JOURNEY-ACCT");
@@ -227,43 +205,6 @@ test.describe("L-JOURNEY-* (real LLM add → View reflection → lifecycle)", ()
     }
   });
 });
-
-// ---------------------------------------------------------------------------
-// calendar (manageCalendar — Personal role)
-// ---------------------------------------------------------------------------
-
-function calendarAddPrompt(marker: string): string {
-  return [
-    `Use the \`manageCalendar\` tool with action='add' to add a calendar event whose title is EXACTLY '${marker}' (verbatim) on 2099-12-31.`,
-    "Do not use show / update / any other action. Do not use any other tool. Do not narrate the result.",
-  ].join(" ");
-}
-
-// List view (not month) so a far-future event is in scope: the list
-// renders every item regardless of date, whereas month/week only show
-// the visible period.
-async function openCalendarList(page: Page): Promise<void> {
-  await page.goto("/calendar");
-  await expect(page.getByTestId("scheduler-view-root"), "/calendar must mount the scheduler view").toBeVisible({ timeout: VIEW_REFLECT_TIMEOUT_MS });
-  await page.getByTestId("scheduler-view-mode-list").click();
-}
-
-function calendarEventByMarker(page: Page, marker: string): Locator {
-  return page.getByTestId("scheduler-event-item").filter({ hasText: marker });
-}
-
-async function deleteCalendarEventViaUi(page: Page, event: Locator): Promise<void> {
-  // The per-row delete (✕) button reveals on hover (opacity-0 →
-  // group-hover) and fires a window.confirm before it dispatches the
-  // delete. Install the dialog acceptor BEFORE the click — confirm()
-  // resolves synchronously, so a late listener misses the prompt and
-  // hangs the click.
-  page.once("dialog", (dialog) => {
-    dialog.accept().catch(() => undefined);
-  });
-  await event.hover();
-  await event.locator('[data-testid^="scheduler-item-delete-"]').click();
-}
 
 // ---------------------------------------------------------------------------
 // accounting (manageAccounting — Accounting role)

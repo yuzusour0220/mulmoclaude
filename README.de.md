@@ -53,10 +53,10 @@ yarn dev
 | „Nimm diesen Artikel auf: URL"                            | Wiki-Seite mit `[[links]]` für das Langzeitgedächtnis |
 | „Plane eine tägliche Nachrichtenübersicht"                | Wiederkehrende Aufgabe, die automatisch läuft         |
 | „Erzeuge ein Bild eines Sonnenuntergangs"                 | KI-generiertes Bild (Gemini)                          |
-| „Abonniere diesen RSS-Feed"                               | Quelle in `/sources` registriert, geplante Abrufe     |
-| „Was gibt es Neues in meinen Feeds?"                      | Ungelesen-Inbox unter `/news` mit Chat pro Artikel    |
+| „Abonniere diesen RSS-Feed"                               | Daten-Feed unter `/feeds`, geplante Abrufe            |
+| „Was gibt es Neues in meinen Feeds?"                      | Feed-Einträge gesammelt unter `/feeds`                |
 
-> **Direkt erreichbare Seiten**: `/wiki` (Durchsuchen + Lint), `/news` (Ungelesen-Inbox), `/sources` (Feed-Verwaltung), `/automations` (wiederkehrende Aufgaben), `/calendar`, `/files`, `/skills`, `/roles`. Jede Seite hat einen eigenen Chat-Composer, der einen neuen Chat startet, der den Seitenkontext bereits kennt.
+> **Direkt erreichbare Seiten**: `/wiki` (Durchsuchen + Lint), `/feeds` (Daten-Feeds), `/collections` (Daten-Apps), `/automations` (wiederkehrende Aufgaben), `/files`, `/skills`, `/roles`. Jede Seite hat einen eigenen Chat-Composer, der einen neuen Chat startet, der den Seitenkontext bereits kennt.
 
 > **Sie arbeiten an MulmoClaude?** Siehe [`docs/developer.md`](docs/developer.md) für Umgebungsvariablen, Skripte und Architektur.
 
@@ -596,7 +596,7 @@ Die vollständige Dokumentation befindet sich unter [`docs/`](docs/README.md). H
 | Anleitung                                                                                                        | Beschreibung                                                                |
 | ---------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
 | [MulmoBridge-Anleitung](docs/mulmobridge-guide.en.md) / [日本語](docs/mulmobridge-guide.md)                      | Verbinden Sie Messaging-Apps (Telegram, Slack, LINE usw.) mit Ihrem Heim-PC |
-| [Scheduler-Anleitung](docs/scheduler-guide.en.md) / [日本語](docs/scheduler-guide.md)                            | Kalender und wiederkehrende Aufgaben                                        |
+| [Scheduler-Anleitung](docs/scheduler-guide.en.md) / [日本語](docs/scheduler-guide.md)                            | Wiederkehrende automatische Aufgaben                                        |
 | [Obsidian-Integration](docs/tips/obsidian.en.md) / [日本語](docs/tips/obsidian.md)                               | Verwenden Sie Obsidian, um MulmoClaudes Wiki und Dokumente zu durchsuchen   |
 | [Telegram-Einrichtung](docs/message_apps/telegram/README.md) / [日本語](docs/message_apps/telegram/README.ja.md) | Schritt-für-Schritt-Einrichtung des Telegram-Bots                           |
 | [LINE-Einrichtung](docs/message_apps/line/README.md) / [日本語](docs/message_apps/line/README.ja.md)             | Schritt-für-Schritt-Einrichtung des LINE-Bots                               |

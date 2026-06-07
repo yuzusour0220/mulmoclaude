@@ -370,33 +370,10 @@ async function runDispatchCase(page: Page, kase: PluginDispatchCase): Promise<vo
 }
 
 // Workspace DB paths the cleanup verification reads back.
-const CALENDAR_DB_REL = "data/scheduler/items.json";
 const ACCOUNTING_CONFIG_REL = "data/accounting/config.json";
 
 test.describe("plugin dispatch (real LLM, one-turn canaries)", () => {
   test.skip(process.env.E2E_LIVE_NO_LLM === "1", "needs real LLM dispatch (fake-echo backend cannot route MCP tool calls)");
-
-  test("L-DISPATCH-CAL: Personal role + manageCalendar が一ターンで dispatch される", async ({ page }) => {
-    const marker = makeMarker("L-DISPATCH-CAL");
-    await runDispatchCase(page, {
-      testId: "L-DISPATCH-CAL",
-      role: "personal",
-      toolName: "manageCalendar",
-      marker,
-      prompt: [
-        `Use the \`manageCalendar\` tool with action='add' to add a calendar event whose title is EXACTLY '${marker}' (verbatim) on 2099-12-31.`,
-        "Do not use show / update / any other action. Do not use any other tool. Do not narrate the result.",
-      ].join(" "),
-      expectedAddAction: "add",
-      cleanupPrompt: [
-        `Now delete every calendar event whose title equals EXACTLY '${marker}'.`,
-        "Use the manageCalendar tool with action='delete'.",
-        "Do not narrate the result.",
-      ].join(" "),
-      expectedCleanupAction: "delete",
-      markerScopedFile: { workspaceRel: CALENDAR_DB_REL, matchField: "title" },
-    });
-  });
 
   test("L-DISPATCH-MD: General role + presentDocument が一ターンで dispatch される", async ({ page }) => {
     const marker = makeMarker("L-DISPATCH-MD");

@@ -205,9 +205,6 @@
                same `pkg-name + endpoints` pair so the `useRuntime()`
                call resolves. -->
           <FilesView v-else-if="currentPage === 'files'" :refresh-token="filesRefreshToken" @load-session="handleSessionSelect" />
-          <PluginScopedRoot v-else-if="currentPage === 'calendar'" pkg-name="scheduler" :endpoints="API_ROUTES.scheduler">
-            <CalendarView />
-          </PluginScopedRoot>
           <PluginScopedRoot v-else-if="currentPage === 'automations'" pkg-name="scheduler" :endpoints="API_ROUTES.scheduler">
             <AutomationsView />
           </PluginScopedRoot>
@@ -319,7 +316,6 @@ import ThinkingIndicator from "./components/ThinkingIndicator.vue";
 import PluginLauncher from "./components/PluginLauncher.vue";
 import StackView from "./components/StackView.vue";
 import FilesView from "./components/FilesView.vue";
-import CalendarView from "./plugins/scheduler/CalendarView.vue";
 import AutomationsView from "./plugins/scheduler/AutomationsView.vue";
 import WikiView from "./plugins/wiki/View.vue";
 import { buildWikiRouteParams } from "./plugins/wiki/route";

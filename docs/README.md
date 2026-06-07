@@ -8,8 +8,8 @@ Guides for using MulmoClaude. No programming knowledge required.
 | ----------------------------------------------------------- | -------- | ------------------------------------------------------- |
 | [MulmoBridge ガイド](mulmobridge-guide.md)                  | 日本語   | メッセージアプリから自宅PCのAIと話す方法                |
 | [MulmoBridge Guide](mulmobridge-guide.en.md)                | English  | Connect messaging apps to your home PC's AI agent       |
-| [スケジューラー ガイド](scheduler-guide.md)                 | 日本語   | カレンダーと定期タスクの使い方                          |
-| [Scheduler Guide](scheduler-guide.en.md)                    | English  | Calendar and recurring tasks                            |
+| [スケジューラー ガイド](scheduler-guide.md)                 | 日本語   | 定期実行される自動タスクの使い方                        |
+| [Scheduler Guide](scheduler-guide.en.md)                    | English  | Recurring automated tasks                               |
 | [Telegram Setup](message_apps/telegram/README.md)           | English  | Create and connect a Telegram Bot                       |
 | [Telegram セットアップ](message_apps/telegram/README.ja.md) | 日本語   | Telegram Bot の作成と接続手順                           |
 | [LINE Setup](message_apps/line/README.md)                   | English  | Create and connect a LINE bot (requires ngrok)          |

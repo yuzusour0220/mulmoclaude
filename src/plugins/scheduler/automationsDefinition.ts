@@ -1,17 +1,15 @@
 import type { ToolDefinition } from "gui-chat-protocol";
 import { SCHEDULER_ACTIONS } from "./actions";
-import { META as calendarMeta } from "./calendarMeta";
+import { META as automationsMeta } from "./automationsMeta";
 import type { ResolvedRoute } from "../meta-types";
 
 export const TOOL_NAME = "manageAutomations";
 
-/** Endpoint contract for the scheduler plugin (shared by calendar +
- *  automations definitions — both dispatch to the same `/api/scheduler`
- *  via the action enum). Routes are owned by the calendar META; the
- *  automations META is toolName-only because the binding row in
- *  `BUILT_IN_SERVER_BINDINGS` points the automations tool at the
- *  same dispatch URL. */
-export type SchedulerEndpoints = { readonly [K in keyof typeof calendarMeta.apiRoutes]: ResolvedRoute };
+/** Endpoint contract for the scheduler plugin. Automations owns the
+ *  `/api/scheduler` namespace (the routes were relocated here when the
+ *  calendar surface was removed); TasksTab / the preview resolve their
+ *  URLs from this map. */
+export type SchedulerEndpoints = { readonly [K in keyof typeof automationsMeta.apiRoutes]: ResolvedRoute };
 
 const AUTOMATION_ACTIONS = [SCHEDULER_ACTIONS.createTask, SCHEDULER_ACTIONS.listTasks, SCHEDULER_ACTIONS.deleteTask, SCHEDULER_ACTIONS.runTask] as const;
 
@@ -22,8 +20,7 @@ const toolDefinition: ToolDefinition = {
     "When users want a recurring automated task — something the agent runs on a schedule, not a single calendar event — use manageAutomations. " +
     "Examples: '毎朝8時にニュースまとめて', 'remind me every day', 'run this prompt hourly'. " +
     "Use createTask to register, listTasks to show, deleteTask to remove, runTask to trigger immediately. " +
-    "Schedule format: { type: 'interval', intervalMs: 3600000 } for hourly, { type: 'daily', time: 'HH:MM' } for daily (UTC). " +
-    "For one-off dated calendar events use manageCalendar instead.",
+    "Schedule format: { type: 'interval', intervalMs: 3600000 } for hourly, { type: 'daily', time: 'HH:MM' } for daily (UTC).",
   description:
     "Manage automated recurring tasks the agent runs on a schedule. " +
     "Create / list / delete / run tasks. Each task has a name, a prompt the agent receives at fire time, a schedule, and an optional roleId.",

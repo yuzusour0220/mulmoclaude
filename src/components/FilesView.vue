@@ -30,7 +30,6 @@
         :content="content"
         :content-error="contentError"
         :content-loading="contentLoading"
-        :scheduler-result="schedulerResult"
         :is-markdown="isMarkdown"
         :is-html="isHtml"
         :is-json="isJson"
@@ -77,7 +76,6 @@ import { useContentDisplay } from "../composables/useContentDisplay";
 import { useMarkdownLinkHandler } from "../composables/useMarkdownLinkHandler";
 import { apiPost, apiPut } from "../utils/api";
 import { API_ROUTES } from "../config/apiRoutes";
-import { toSchedulerResult } from "../utils/filesPreview/schedulerPreview";
 
 const RECENT_THRESHOLD_MS = 60 * 1000;
 
@@ -190,8 +188,6 @@ async function handleCreateFile(args: { folder: string; filename: string; resolv
   // bar + ancestor expansion via the existing watcher.
   selectFile(result.data.path);
 }
-
-const schedulerResult = computed(() => toSchedulerResult(selectedPath.value, content.value?.kind === "text" ? content.value.content : null));
 
 const recentPaths = computed(() => {
   const set = new Set<string>();

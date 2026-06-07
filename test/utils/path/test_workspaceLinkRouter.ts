@@ -111,14 +111,27 @@ describe("classifyWorkspacePath", () => {
       assert.deepEqual(result, { kind: "spa-route", path: "/collections" });
     });
 
-    it("classifies /calendar as spa-route", () => {
-      const result = classifyWorkspacePath("/calendar");
-      assert.deepEqual(result, { kind: "spa-route", path: "/calendar" });
+    it("classifies /wiki as spa-route", () => {
+      const result = classifyWorkspacePath("/wiki");
+      assert.deepEqual(result, { kind: "spa-route", path: "/wiki" });
     });
 
     it("classifies /automations/<id> as spa-route", () => {
       const result = classifyWorkspacePath("/automations/task-1");
       assert.deepEqual(result, { kind: "spa-route", path: "/automations/task-1" });
+    });
+
+    // Legacy redirect-only routes (not in PAGE_ROUTES). The router
+    // redirects `/calendar` and `/scheduler` to `/automations`, so a
+    // historical Markdown link must still classify as an SPA route
+    // (and follow the redirect) rather than fall through to
+    // `/files/calendar`. See LEGACY_SPA_ROUTE_ALIASES.
+    it("classifies legacy /calendar as spa-route (redirects to /automations)", () => {
+      assert.deepEqual(classifyWorkspacePath("/calendar"), { kind: "spa-route", path: "/calendar" });
+    });
+
+    it("classifies legacy /scheduler as spa-route (redirects to /automations)", () => {
+      assert.deepEqual(classifyWorkspacePath("/scheduler"), { kind: "spa-route", path: "/scheduler" });
     });
 
     it("classifies /skills and /roles as spa-route", () => {

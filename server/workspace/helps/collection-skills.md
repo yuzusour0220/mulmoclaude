@@ -485,8 +485,9 @@ Notes:
 - The calendar is purely a **rendering** of the records: it adds no storage and
   fires nothing. It composes with `triggerField` / `spawn` (which drive bells and
   recurrence) but is independent of them.
-- This is a generic collection view — distinct from the scheduler's calendar
-  (`manageCalendar`), which is a separate built-in.
+- This is the collection-native calendar — the way to give the user a
+  calendar of dated records. (The old standalone Calendar view +
+  `manageCalendar` tool were removed; `calendarField` is its replacement.)
 
 ### Kanban view
 

@@ -240,7 +240,7 @@ const HOST_API_ROUTES = {
     refresh: "/api/collections/:slug/refresh",
   },
 
-  // `scheduler` group migrated to META — see `src/plugins/scheduler/calendarMeta.ts`.
+  // `scheduler` group migrated to META — see `src/plugins/scheduler/automationsMeta.ts`.
   // Auto-merged via `apiNamespace: "scheduler"`.
 
   sessions: {

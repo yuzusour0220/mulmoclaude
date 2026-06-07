@@ -11,29 +11,12 @@
            it, and whether hand-editing is safe (#832). -->
       <SystemFileBanner v-if="systemDescriptor && selectedPath" :descriptor="systemDescriptor" :path="selectedPath" />
       <template v-if="content.kind === 'text'">
-        <!-- Scheduler items.json holds calendar items only — task /
-             automation entries live in config/scheduler/tasks.json
-             with a different shape, so the file preview routes
-             through CalendarView (force-tab="calendar") to keep the
-             dual-tab bar from showing an empty Tasks panel (#828
-             follow-up). -->
-        <!-- Plugin-owned views require a `<PluginScopedRoot>` ancestor
-             so descendants' `useRuntime()` calls resolve. The plugin
-             registry's `wrapWithScope` covers the chat-mounted variants;
-             this renderer is a separate mount path (file preview), so
-             the wrappers go here. PluginScopedRoot renders a fragment
-             via <slot/>, so the styling div must be inside. -->
-        <div v-if="schedulerResult" class="h-full">
-          <PluginScopedRoot pkg-name="scheduler" :endpoints="API_ROUTES.scheduler">
-            <CalendarView :selected-result="schedulerResult" />
-          </PluginScopedRoot>
-        </div>
         <!-- Marp slides: detected via `marp: true` frontmatter; replaces
              the default markdown render with the slide-stack canvas
              component. Frontmatter envelope is fed to Marp verbatim
              because marp-core consumes its own directives (theme,
              paginate, size, …) from the YAML header. -->
-        <div v-else-if="isMarkdown && !mdRawMode && marpMode" class="h-full flex flex-col overflow-auto">
+        <div v-if="isMarkdown && !mdRawMode && marpMode" class="h-full flex flex-col overflow-auto">
           <MarpView :markdown="content.content" :pdf-filename="marpPdfFilename" :base-dir="marpBaseDir" />
         </div>
         <!-- Markdown rendered: frontmatter panel + body -->
@@ -198,13 +181,10 @@
 import { computed, defineAsyncComponent, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import TextResponseView from "../plugins/textResponse/View.vue";
-import CalendarView from "../plugins/scheduler/CalendarView.vue";
-import PluginScopedRoot from "./PluginScopedRoot.vue";
 import SystemFileBanner from "./SystemFileBanner.vue";
 import type { FileContent } from "../composables/useFileSelection";
 import type { ToolResultComplete } from "gui-chat-protocol/vue";
 import type { TextResponseData } from "../plugins/textResponse/types";
-import type { SchedulerData } from "../plugins/scheduler/index";
 import { JSON_TOKEN_CLASS } from "../utils/format/jsonSyntax";
 import type { JsonToken, JsonlLine } from "../utils/format/jsonSyntax";
 import { formatScalarField, type MarkdownDocView } from "../composables/useMarkdownDoc";
@@ -225,7 +205,6 @@ const props = defineProps<{
   content: FileContent | null;
   contentError: string | null;
   contentLoading: boolean;
-  schedulerResult: ToolResultComplete<SchedulerData> | null;
   isMarkdown: boolean;
   isHtml: boolean;
   isJson: boolean;

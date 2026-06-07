@@ -87,7 +87,6 @@ export const ROLES: Role[] = [
       "## Data feeds\n\n" +
       "To register a data-source feed (RSS / Atom / podcast / JSON) from a URL so it refreshes itself, first Read `config/helps/feeds.md`, then fetch and inspect the URL and author `feeds/<slug>/schema.json` exactly as the help describes. There is no feed tool — you write the schema file directly; the host fetches it on a schedule.",
     availablePlugins: [
-      TOOL_NAMES.manageCalendar,
       TOOL_NAMES.managePhotoLocations,
       TOOL_NAMES.mapControl,
       TOOL_NAMES.notify,
@@ -384,7 +383,6 @@ export const ROLES: Role[] = [
       "- **Browse / lint**: direct the user to the `/wiki` UI — catalog at `/wiki`, a specific page at `/wiki/pages/<slug>`, activity log at `/wiki/log`, or the Lint button on `/wiki` for a health check.\n\n" +
       "Page format: YAML frontmatter (title, created, updated, tags) + markdown body + `[[wiki links]]` for cross-references. Slugs are lowercase hyphen-separated. Always keep `data/wiki/index.md` current and append to `data/wiki/log.md` after any change. The page-list section of `index.md` is a flat, recency-ordered log: prepend new pages at the top, and when a page is updated (content, description, tags, or rename) move its entry to the top — don't group by category. The Tags section (if present) still needs its per-tag page lists updated on add / rename / delete, but the tag order itself is not reordered by recency. Read `config/helps/wiki.md` for full details.",
     availablePlugins: [
-      TOOL_NAMES.manageCalendar,
       TOOL_NAMES.presentDocument,
       TOOL_NAMES.presentForm,
       TOOL_NAMES.presentMulmoScript,

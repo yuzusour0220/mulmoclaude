@@ -80,19 +80,18 @@ interface RouteSweepEntry {
 // - `/skills` uses `skill-section-catalog` (always-rendered accordion
 //   header) — happy-tour does NOT assert any specific preset row, L-33
 //   / L-33B already cover that.
-// - `/calendar` and `/automations` share `scheduler-view-root` —
-//   SchedulerView is mounted under both routes with a different
-//   `force-tab`. happy-tour only checks "view mounted at all";
-//   tab-switch internals are scheduler-spec territory.
+// - `/automations` mounts `scheduler-view-root` (the standalone
+//   AutomationsView). happy-tour only checks "view mounted at all".
+//   (The Calendar view + `/calendar` route were removed; `/calendar`
+//   now redirects to `/automations`.)
 const LAUNCHER_ROUTE_SWEEP: readonly RouteSweepEntry[] = [
-  { stepTitle: "7. /calendar が mount", path: "/calendar", rootTestId: "scheduler-view-root", errorBannerTestId: "scheduler-api-error" },
+  { stepTitle: "7. /automations が mount", path: "/automations", rootTestId: "scheduler-view-root", errorBannerTestId: "scheduler-task-error" },
   { stepTitle: "8. /wiki が mount", path: "/wiki", rootTestId: "wiki-lint-chat-button" },
   { stepTitle: "9. /files が mount", path: "/files", rootTestId: "files-view-root" },
   { stepTitle: "10. /skills が mount + catalog セクション visible", path: "/skills", rootTestId: "skill-section-catalog" },
-  { stepTitle: "11. /automations が mount", path: "/automations", rootTestId: "scheduler-view-root", errorBannerTestId: "scheduler-api-error" },
-  { stepTitle: "12. /roles が mount", path: "/roles", rootTestId: "roles-view-root" },
-  { stepTitle: "13. /collections が mount", path: "/collections", rootTestId: "collections-view-root" },
-  { stepTitle: "14. /feeds が mount", path: "/feeds", rootTestId: "feeds-view-root" },
+  { stepTitle: "11. /roles が mount", path: "/roles", rootTestId: "roles-view-root" },
+  { stepTitle: "12. /collections が mount", path: "/collections", rootTestId: "collections-view-root" },
+  { stepTitle: "13. /feeds が mount", path: "/feeds", rootTestId: "feeds-view-root" },
 ];
 
 test.describe("happy-tour (capability sweep)", () => {

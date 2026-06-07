@@ -191,8 +191,6 @@ function buildNavigateTarget(target: NavigateTarget): string | undefined {
   switch (target.view) {
     case NOTIFICATION_VIEWS.chat:
       return buildChatTarget(target);
-    case NOTIFICATION_VIEWS.calendar:
-      return `/${PAGE_ROUTES.calendar}`;
     case NOTIFICATION_VIEWS.automations:
       return buildSingleSegmentTarget(PAGE_ROUTES.automations, target.taskId);
     case NOTIFICATION_VIEWS.files:

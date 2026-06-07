@@ -26,7 +26,6 @@ const HOST_TOOL_NAMES = {
   textResponse: "text-response",
 
   // Management plugins (not yet migrated to META)
-  // manageCalendar migrated — see `src/plugins/scheduler/calendarMeta.ts`.
   // manageAutomations migrated — see `src/plugins/scheduler/automationsMeta.ts`.
   // manageSkills migrated — see `src/plugins/manageSkills/meta.ts`.
   // manageWiki migrated — see `src/plugins/wiki/meta.ts`. Plugin is
