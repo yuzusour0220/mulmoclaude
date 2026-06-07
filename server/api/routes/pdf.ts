@@ -265,13 +265,15 @@ async function renderMarpPdf(markdown: string, baseDir?: string): Promise<Buffer
 <html><head><meta charset="utf-8"><style>
 html,body { margin:0; padding:0; background:white; }
 ${css}
-/* Match MarpView's preview rule: constrain inline images to the
-   section bounds so an oversized inline image doesn't get silently
-   clipped at the bottom by Marp's overflow:hidden default.
-   Background-image render paths are unaffected (different DOM). */
+/* Match MarpView's preview rule. Cap inline images at 60cqh (60% of
+   the section's container-query height) so an image-plus-text slide
+   doesn't push the text past the section's overflow:hidden boundary.
+   Marp background-image render paths are unaffected (different DOM).
+   Authors who want different sizing should use Marp directives
+   (![w:N h:N], ![fit], ![bg]). */
 div.marpit > svg > foreignObject > section img:not([data-marp-twemoji]) {
   max-width: 100%;
-  max-height: 100%;
+  max-height: 60cqh;
   object-fit: contain;
 }
 </style></head><body>${inlinedHtml}</body></html>`;

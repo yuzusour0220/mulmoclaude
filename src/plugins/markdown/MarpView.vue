@@ -109,16 +109,22 @@ div.marpit > svg[data-marpit-svg] {
   border-radius: 6px;
   background: white;
 }
-/* Constrain inline images to the slide bounds — Marp sections are
-   1280×720 with overflow:hidden, so a 1024×1024 image inserted as
-   plain markdown gets visually clipped at the bottom. Default to
-   "fit within the section" so plain-markdown image embedding does
-   the obvious thing. Marp background images and advanced
-   backgrounds use a different render path (figure / div with
-   data-marpit-advanced-background) so they're unaffected. */
+/* Constrain inline images so they leave room for surrounding text.
+   Sections are 1280x720 with overflow:hidden and a plain markdown
+   image is a block-level element in the normal flow, so an image
+   clamped at max-height:100% would by itself fill the slide and
+   push every surrounding heading / paragraph / list off the bottom.
+   Cap at 60cqh (60% of the section container-query height — Marp
+   sets container-type:size on the section so cqh resolves to 60%
+   of 720px = 432px), leaving ~40% for text. Authors can opt out
+   per-image via Marp directives — w:N h:N for explicit size, the
+   fit keyword for fit-to-content, or the bg keyword for full-slide
+   backgrounds (which live in a different DOM and so are unaffected
+   by this rule). Twemoji glyphs have a data-marp-twemoji attribute
+   and must NOT be scaled to fill the slide. */
 div.marpit > svg > foreignObject > section img:not([data-marp-twemoji]) {
   max-width: 100%;
-  max-height: 100%;
+  max-height: 60cqh;
   object-fit: contain;
 }
 </style></head><body>${html}</body></html>`;
