@@ -875,7 +875,9 @@ function jsonSyntaxError(relPath: string, content: string): string | null {
 //     reconstruct the final path under the resolved real ancestor.
 //     A symlinked workspace subtree pointing outside `workspaceReal`
 //     therefore can't route create writes outside the workspace.
-async function resolveNewFilePath(relPathRaw: string): Promise<{ ok: true; absPath: string } | { ok: false; status: 400; message: string }> {
+async function resolveNewFilePath(
+  relPathRaw: string,
+): Promise<{ ok: true; absPath: string; workspaceRoot: string } | { ok: false; status: 400; message: string }> {
   const normalised = path.normalize(relPathRaw);
   if (path.isAbsolute(normalised)) return { ok: false, status: 400, message: "Path must be workspace-relative" };
   const candidate = path.resolve(workspaceReal, normalised);
@@ -921,7 +923,7 @@ async function resolveNewFilePath(relPathRaw: string): Promise<{ ok: true; absPa
   if (relFromReal === ".." || relFromReal.startsWith(`..${path.sep}`) || path.isAbsolute(relFromReal)) {
     return { ok: false, status: 400, message: "Path outside workspace" };
   }
-  return { ok: true, absPath: finalAbs };
+  return { ok: true, absPath: finalAbs, workspaceRoot: rootAsync };
 }
 
 // Create a new text file. Refuses to overwrite — that's PUT's job and
@@ -956,9 +958,14 @@ router.post(API_ROUTES.files.create, async (req: Request<object, unknown, WriteC
   // `writeWikiPage` with `exclusive: true` so the same exclusive
   // primitive applies after the frontmatter stamp.
   try {
-    const wikiClass = classifyAsWikiPage(resolved.absPath, { workspaceRoot: workspaceReal });
+    // `resolved.workspaceRoot` is the async-realpath form, matching
+    // `resolved.absPath`'s form. Passing the sync-form `workspaceReal`
+    // would make `classifyAsWikiPage` fail to match the prefix on
+    // Windows (8.3 short-name vs. long-name) — we'd fall into the
+    // plain-file branch and skip the wiki frontmatter stamp.
+    const wikiClass = classifyAsWikiPage(resolved.absPath, { workspaceRoot: resolved.workspaceRoot });
     if (wikiClass.wiki) {
-      await writeWikiPage(wikiClass.slug, content, { editor: "user" }, { workspaceRoot: workspaceReal, exclusive: true });
+      await writeWikiPage(wikiClass.slug, content, { editor: "user" }, { workspaceRoot: resolved.workspaceRoot, exclusive: true });
     } else {
       await mkdir(path.dirname(resolved.absPath), { recursive: true });
       await writeFile(resolved.absPath, content, { flag: "wx" });
