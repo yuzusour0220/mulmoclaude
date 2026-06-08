@@ -231,7 +231,10 @@ async function onExportPdf(): Promise<void> {
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: #f8fafc;
+  /* Transparent — the canvas behind us is already white, so leaving
+     this transparent makes the area below the last slide blend in
+     instead of painting a tall light-grey rectangle. */
+  background: transparent;
 }
 
 .marp-frame-wrapper {
