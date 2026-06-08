@@ -968,15 +968,29 @@ function closeChat(): void {
   chatOpen.value = false;
 }
 
-/** Start a new general-role chat seeded with the collection's skill
- *  command, so e.g. "I want to create an item" on `mc_worklog` becomes
- *  `/mc_worklog I want to create an item`. */
+/** Build the chat seed text for the current view.
+ *
+ *  A collection IS a skill, so its slug doubles as a slash command:
+ *  "I want to create an item" on `mc_worklog` becomes
+ *  `/mc_worklog I want to create an item`.
+ *
+ *  A feed is data-only — it has NO skill, so `/<slug>` would resolve to
+ *  nothing. Instead, point the agent at the feed's schema + records
+ *  (`feeds/<slug>/schema.json` and `<dataPath>/`) and let it act on the
+ *  request directly. */
+function buildChatSeed(slug: string, message: string): string {
+  if (!isFeed.value) return `/${slug} ${message}`;
+  const dataPath = collection.value?.schema.dataPath ?? `data/feeds/${slug}`;
+  return t("collectionsView.feedChatSeed", { slug, dataPath, message });
+}
+
+/** Start a new general-role chat seeded from the current view. */
 function submitChat(): void {
   if (!collection.value) return;
   const message = chatMessage.value.trim();
   if (!message) return;
   closeChat();
-  const text = `/${collection.value.slug} ${message}`;
+  const text = buildChatSeed(collection.value.slug, message);
   // Chat card → send into the current session; standalone → new chat.
   if (props.sendTextMessage) {
     props.sendTextMessage(text);
