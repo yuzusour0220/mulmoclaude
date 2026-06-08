@@ -979,8 +979,12 @@ function closeChat(): void {
  *  (`feeds/<slug>/schema.json` and `<dataPath>/`) and let it act on the
  *  request directly. */
 function buildChatSeed(slug: string, message: string): string {
-  if (!isFeed.value) return `/${slug} ${message}`;
-  const dataPath = collection.value?.schema.dataPath ?? `data/feeds/${slug}`;
+  const schema = collection.value?.schema;
+  // A feed carries an `ingest` block; a plain collection does not. Checked
+  // here (rather than via the `isFeed` computed, defined further down) to
+  // keep this helper self-contained and avoid a use-before-define.
+  if (!schema?.ingest) return `/${slug} ${message}`;
+  const dataPath = schema.dataPath ?? `data/feeds/${slug}`;
   return t("collectionsView.feedChatSeed", { slug, dataPath, message });
 }
 
