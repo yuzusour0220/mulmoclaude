@@ -13,7 +13,7 @@
       <div v-if="loadError" class="load-error-banner shrink-0" role="alert">
         {{ t("pluginMarkdown.refreshFailed", { error: loadError }) }}
       </div>
-      <div class="flex-1 min-h-0">
+      <div class="flex-1 min-h-0 overflow-y-auto">
         <MarpView :markdown="markdownContent" :pdf-filename="marpPdfFilename" :base-dir="marpBaseDir" />
       </div>
     </template>

@@ -228,19 +228,22 @@ async function onExportPdf(): Promise<void> {
 <style scoped>
 .marp-container {
   width: 100%;
-  height: 100%;
+  /* Content-height (not `height: 100%`) so the slide stack ends
+     exactly at the last slide instead of allocating the full canvas
+     and showing empty space below. Vertical scrolling for tall decks
+     is the parent slot's job (the `<div class="flex-1 min-h-0
+     overflow-y-auto">` wrapper in View.vue / FileContentRenderer.vue,
+     or the stack-view's natural-height flow). */
   display: flex;
   flex-direction: column;
-  /* Transparent — the canvas behind us is already white, so leaving
-     this transparent makes the area below the last slide blend in
-     instead of painting a tall light-grey rectangle. */
   background: transparent;
 }
 
 .marp-frame-wrapper {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
+  /* No `flex: 1` — let the wrapper shrink to the iframe's exact
+     pixel height (computed from slide count × aspect) so nothing
+     padded space lingers below. No `overflow-y: auto` either — the
+     iframe IS the content, and the parent slot owns scroll. */
   padding: 8px;
 }
 
