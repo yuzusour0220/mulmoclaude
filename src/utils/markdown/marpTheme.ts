@@ -77,17 +77,26 @@ export interface SanitizeResult {
   reason?: string;
 }
 
+// External URL fingerprint: `url(...)` or bare-string `@import "..."`
+// pointing at `http(s)://` OR a protocol-relative `//host/...`.
+//
+// The protocol-relative form (`//attacker.example/x.css`) was a real
+// bypass in the first cut — the preview iframe's CSP still blocked
+// it, but the PDF route runs in puppeteer without that CSP, so
+// `@import url(//attacker/...)` would happily fetch (CodeRabbit +
+// Codex review on #1653).
+// Bounded whitespace (`\s{0,8}`) instead of `\s*` so the regex
+// engine can't enter pathological backtracking on adversarial input
+// (sonarjs/slow-regex). Two separate patterns instead of one
+// alternation so each is a straight-line match.
+const EXTERNAL_URL_FN_RE = /url\s{0,8}\(\s{0,8}["']?\s{0,8}(?:https?:|\/\/)/i;
+const EXTERNAL_IMPORT_STR_RE = /@import\s{1,8}["']\s{0,8}(?:https?:|\/\/)/i;
+
 /** Reject CSS that would pull external resources at render time.
- *  Allows `data:` URIs (inline fonts) and same-origin refs. */
+ *  Allows `data:` URIs (inline fonts) and same-origin / relative refs. */
 export function sanitizeMarpThemeCss(css: string): SanitizeResult {
-  if (/@import\s+url\s*\(\s*['"]?https?:/i.test(css)) {
-    return { ok: false, reason: "external @import url(http...) is not allowed" };
-  }
-  if (/@import\s+['"]https?:/i.test(css)) {
-    return { ok: false, reason: "external @import 'http://...' is not allowed" };
-  }
-  if (/url\s*\(\s*['"]?https?:/i.test(css)) {
-    return { ok: false, reason: "external url(http://...) is not allowed" };
+  if (EXTERNAL_URL_FN_RE.test(css) || EXTERNAL_IMPORT_STR_RE.test(css)) {
+    return { ok: false, reason: "external url() / @import is not allowed" };
   }
   return { ok: true };
 }

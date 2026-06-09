@@ -76,7 +76,9 @@ function deleteItemFile(itemId: string): void {
   unlinkSync(path.join(dataDir, `${itemId}.json`));
 }
 
-async function activeCompletionEntries(): Promise<{ id: string; legacyId: string; navigateTarget: string | undefined; title: string }[]> {
+async function activeCompletionEntries(): Promise<
+  { id: string; legacyId: string; navigateTarget: string | undefined; title: string; severity: string; priority: unknown }[]
+> {
   const entries = await listAll();
   return entries
     .filter((entry) => {
@@ -88,6 +90,8 @@ async function activeCompletionEntries(): Promise<{ id: string; legacyId: string
       legacyId: (entry.pluginData as Record<string, unknown>).legacyId as string,
       navigateTarget: entry.navigateTarget,
       title: entry.title,
+      severity: entry.severity,
+      priority: (entry.pluginData as Record<string, unknown>).priority,
     }));
 }
 
@@ -524,5 +528,56 @@ describe("reconcileItem — notifyWhen (condition gate)", () => {
     writeItem("a", { priority: "low", status: "Todo" });
     await sweepStaleActiveEntries({ workspaceRoot: workdir, userSkillsDir: userDir });
     assert.equal((await activeCompletionEntries()).length, 0);
+  });
+});
+
+describe("reconcileItem — notifyWhen severity", () => {
+  // `in` order is most-urgent-first: the first flagged value reads `urgent`
+  // (red), the rest `nudge` (amber); mirrors the UI's resolveEnumColor.
+  function severitySchema(): CollectionSchema {
+    return {
+      title: "Todos",
+      icon: "check_circle",
+      dataPath: `data/${SLUG}/items`,
+      primaryKey: "id",
+      fields: {
+        id: { type: "string", label: "ID", primary: true, required: true },
+        priority: { type: "enum", values: ["urgent", "high", "medium", "low"], label: "Priority" },
+        status: { type: "enum", values: ["Todo", "Done"], label: "Status", required: true },
+      },
+      completionField: "status",
+      completionDoneValues: ["Done"],
+      notifyWhen: { field: "priority", in: ["urgent", "high"] },
+    };
+  }
+
+  it("maps the first flagged value to urgent (red) and the rest to nudge (amber)", async () => {
+    const schema = severitySchema();
+    writeItem("a", { priority: "urgent", status: "Todo" });
+    writeItem("b", { priority: "high", status: "Todo" });
+    await reconcileItem(SLUG, schema, dataDir, "a", { workspaceRoot: workdir });
+    await reconcileItem(SLUG, schema, dataDir, "b", { workspaceRoot: workdir });
+    const bySlug = new Map((await activeCompletionEntries()).map((entry) => [entry.legacyId, entry.severity]));
+    assert.equal(bySlug.get(`collection-completion:${SLUG}:a`), "urgent");
+    assert.equal(bySlug.get(`collection-completion:${SLUG}:b`), "nudge");
+  });
+
+  it("updates a pending entry's severity in place when its flagged priority changes", async () => {
+    const schema = severitySchema();
+    writeItem("a", { priority: "urgent", status: "Todo" });
+    await reconcileItem(SLUG, schema, dataDir, "a", { workspaceRoot: workdir });
+    const before = await activeCompletionEntries();
+    assert.equal(before.length, 1);
+    assert.equal(before[0].severity, "urgent");
+
+    // urgent → high: still flagged, so the entry persists but must re-colour
+    // to amber — and keep the SAME id (in-place update, not clear+republish).
+    writeItem("a", { priority: "high", status: "Todo" });
+    await reconcileItem(SLUG, schema, dataDir, "a", { workspaceRoot: workdir });
+    const after = await activeCompletionEntries();
+    assert.equal(after.length, 1);
+    assert.equal(after[0].severity, "nudge");
+    assert.equal(after[0].priority, "normal");
+    assert.equal(after[0].id, before[0].id);
   });
 });

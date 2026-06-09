@@ -28,6 +28,7 @@ import {
   NOTIFICATION_PRIORITIES,
   NOTIFICATION_VIEWS,
   type NotificationAction,
+  type NotificationPriority,
 } from "../../../src/types/notification.js";
 import {
   isLegacyNotifierPluginData,
@@ -36,7 +37,8 @@ import {
   legacyPriorityToSeverity,
   type LegacyNotifierPluginData,
 } from "../../events/notifications.js";
-import { clear as notifierClear, listAll, publish as notifierPublish } from "../../notifier/engine.js";
+import { clear as notifierClear, listAll, publish as notifierPublish, updateForPlugin as notifierUpdate } from "../../notifier/engine.js";
+import type { NotifierEntry } from "../../notifier/types.js";
 import { log } from "../../system/logger/index.js";
 import { errorMessage } from "../../utils/errors.js";
 import { whenMatches } from "../../../src/utils/collections/actionVisible.js";
@@ -104,10 +106,14 @@ export function itemIsDone(schema: CollectionSchema, item: CollectionItem): bool
  *  watcher.ts + awaiting publish below) historically produced
  *  duplicate entries, and the clear path needs to drain them all.
  *  Scans `listAll()` — cheap because the active set is bounded. */
-async function findActiveEntryIds(slug: string, itemId: string): Promise<string[]> {
+async function findActiveEntries(slug: string, itemId: string): Promise<NotifierEntry[]> {
   const legacyId = completionLegacyId(slug, itemId);
   const entries = await listAll();
-  return entries.filter((entry) => isLegacyNotifierPluginData(entry.pluginData) && entry.pluginData.legacyId === legacyId).map((entry) => entry.id);
+  return entries.filter((entry) => isLegacyNotifierPluginData(entry.pluginData) && entry.pluginData.legacyId === legacyId);
+}
+
+async function findActiveEntryIds(slug: string, itemId: string): Promise<string[]> {
+  return (await findActiveEntries(slug, itemId)).map((entry) => entry.id);
 }
 
 /** Per-legacyId in-flight lock. Serializes concurrent
@@ -147,7 +153,25 @@ const ensureLocks = new Map<string, EnsureLock>();
  *  The `pluginData` shape matches what the wrapper would have built
  *  (`LegacyNotifierPluginData`), so the bell preserves icon / dedup
  *  semantics and `findActiveEntryIds` keeps working. */
-async function ensureItemNotification(slug: string, schema: CollectionSchema, itemId: string, displayLabel: string): Promise<void> {
+/** Bell severity for a record on the notification enum, mirroring the UI's
+ *  `resolveEnumColor`: the FIRST flagged value in `notifyWhen.in` (the most
+ *  urgent) reads `high` → `urgent` (red), every other flagged value `normal`
+ *  → `nudge` (amber). Collections with no `notifyWhen` (notify for every open
+ *  record) have no severity signal and stay `normal`. */
+function notifyPriorityForItem(schema: CollectionSchema, item: CollectionItem): NotificationPriority {
+  const spec = schema.notifyWhen;
+  if (!spec) return NOTIFICATION_PRIORITIES.normal;
+  const value = item[spec.field] === undefined || item[spec.field] === null ? "" : String(item[spec.field]);
+  return spec.in.indexOf(value) === 0 ? NOTIFICATION_PRIORITIES.high : NOTIFICATION_PRIORITIES.normal;
+}
+
+async function ensureItemNotification(
+  slug: string,
+  schema: CollectionSchema,
+  itemId: string,
+  displayLabel: string,
+  priority: NotificationPriority,
+): Promise<void> {
   const legacyId = completionLegacyId(slug, itemId);
   // Drain any in-flight publish for this key BEFORE our check + set.
   // The drain + claim runs synchronously between the loop's
@@ -158,7 +182,7 @@ async function ensureItemNotification(slug: string, schema: CollectionSchema, it
     if (!inflight) break;
     await inflight.promise;
   }
-  const lock: EnsureLock = { promise: doEnsureItemNotification(slug, schema, itemId, legacyId, displayLabel) };
+  const lock: EnsureLock = { promise: doEnsureItemNotification(slug, schema, itemId, legacyId, displayLabel, priority) };
   ensureLocks.set(legacyId, lock);
   try {
     await lock.promise;
@@ -171,10 +195,37 @@ async function ensureItemNotification(slug: string, schema: CollectionSchema, it
   }
 }
 
-async function doEnsureItemNotification(slug: string, schema: CollectionSchema, itemId: string, legacyId: string, displayLabel: string): Promise<void> {
+/** Converge any already-present bell entries to `priority`, updating in place
+ *  (preserving id / position / createdAt) so a record whose flagged value
+ *  changed while it stayed pending — e.g. `urgent` → `high`, red → amber —
+ *  re-colours the bell without a clear+republish flicker. A no-op when the
+ *  entry's stored priority already matches. */
+async function reconcileEntrySeverity(entries: NotifierEntry[], priority: NotificationPriority): Promise<void> {
+  const pluginPkg = legacyKindToPluginPkg(NOTIFICATION_KINDS.todo);
+  for (const entry of entries) {
+    const data = entry.pluginData;
+    if (!isLegacyNotifierPluginData(data) || data.priority === priority) continue;
+    await notifierUpdate<LegacyNotifierPluginData>(pluginPkg, entry.id, {
+      severity: legacyPriorityToSeverity(priority),
+      pluginData: { ...data, priority },
+    });
+  }
+}
+
+async function doEnsureItemNotification(
+  slug: string,
+  schema: CollectionSchema,
+  itemId: string,
+  legacyId: string,
+  displayLabel: string,
+  priority: NotificationPriority,
+): Promise<void> {
   try {
-    const existing = await findActiveEntryIds(slug, itemId);
-    if (existing.length > 0) return;
+    const existing = await findActiveEntries(slug, itemId);
+    if (existing.length > 0) {
+      await reconcileEntrySeverity(existing, priority);
+      return;
+    }
     const action: NotificationAction = {
       type: NOTIFICATION_ACTION_TYPES.navigate,
       target: { view: NOTIFICATION_VIEWS.collections, slug, itemId },
@@ -183,7 +234,7 @@ async function doEnsureItemNotification(slug: string, schema: CollectionSchema, 
       legacy: true,
       legacyId,
       kind: NOTIFICATION_KINDS.todo,
-      priority: NOTIFICATION_PRIORITIES.normal,
+      priority,
       action,
     };
     // `lifecycle: "action"` — these are state-of-the-world entries
@@ -191,11 +242,11 @@ async function doEnsureItemNotification(slug: string, schema: CollectionSchema, 
     // transient pings. The bell surfaces action entries more
     // prominently and they stay until the obligation resolves, which
     // is exactly the contract our reconciler enforces. Validation
-    // requires a non-info severity (we use "nudge") and a non-empty
-    // `navigateTarget` (the slug + itemId deep-link below satisfies it).
+    // requires a non-info severity (`urgent` or `nudge`, both satisfy it) and
+    // a non-empty `navigateTarget` (the slug + itemId deep-link below).
     await notifierPublish({
       pluginPkg: legacyKindToPluginPkg(NOTIFICATION_KINDS.todo),
-      severity: legacyPriorityToSeverity(NOTIFICATION_PRIORITIES.normal),
+      severity: legacyPriorityToSeverity(priority),
       lifecycle: "action",
       title: `${schema.title}: ${displayLabel}`,
       navigateTarget: legacyActionToNavigateTarget(action),
@@ -280,7 +331,7 @@ export async function reconcileItem(
     await clearItemNotification(slug, itemId);
     return;
   }
-  await ensureItemNotification(slug, schema, itemId, resolveDisplayLabel(schema, item, itemId));
+  await ensureItemNotification(slug, schema, itemId, resolveDisplayLabel(schema, item, itemId), notifyPriorityForItem(schema, item));
 }
 
 /** Boot-time reconcile: walk every record under `dataDir` once and

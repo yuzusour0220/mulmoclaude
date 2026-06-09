@@ -86,7 +86,8 @@
             :id="`collections-field-${key}`"
             v-model="editing.text[key]"
             :required="isFieldRequiredInUi(field)"
-            class="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs bg-slate-50 hover:bg-slate-50/50 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none transition-all cursor-pointer font-medium text-slate-700"
+            class="w-full rounded-xl border px-3 py-2 text-xs focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none transition-all cursor-pointer font-medium"
+            :class="enumControlClass(String(key), editing.text[key])"
             :data-testid="`collections-input-${key}`"
           >
             <option value="">{{ t("collectionsView.selectPlaceholder") }}</option>
@@ -447,6 +448,7 @@ import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import CollectionEmbedView from "./CollectionEmbedView.vue";
 import { fieldVisible } from "../utils/collections/actionVisible";
+import { resolveEnumColor } from "../utils/collections/enumColors";
 import { emptyRow } from "../utils/collections/draft";
 import { resolveImageSrc } from "../utils/image/resolve";
 import type { CollectionRendering } from "../composables/collections/useCollectionRendering";
@@ -500,6 +502,14 @@ function isFieldRequiredInUi(field: FieldSpec): boolean {
   if (!field.required) return false;
   if (editing.value?.mode === "create" && field.primary === true) return false;
   return true;
+}
+
+/** Tailwind fill/text/border classes tinting an enum `<select>` by its current
+ *  value's colour (palette, or notification red/amber/grey when the field is
+ *  the schema's notifyWhen target). */
+function enumControlClass(fieldKey: string, value: unknown): string {
+  const cls = resolveEnumColor(props.collection.schema, fieldKey, value);
+  return `${cls.badge} ${cls.border}`;
 }
 
 // The edit-draft mutators write the model's nested reactive state — the same
