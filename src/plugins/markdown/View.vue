@@ -38,7 +38,13 @@
             <button class="cancel-btn" @click="cancelMarpSplitEdit">{{ t("pluginMarkdown.cancel") }}</button>
           </div>
           <p v-if="saveError" class="save-error mx-2 mt-1" role="alert">{{ t("pluginMarkdown.saveError", { error: saveError }) }}</p>
-          <textarea v-model="editableMarkdown" class="marp-split-editor" style="flex: 1 1 0; min-height: 0" spellcheck="false"></textarea>
+          <textarea
+            v-model="editableMarkdown"
+            class="marp-split-editor"
+            style="flex: 1 1 0; min-height: 0"
+            spellcheck="false"
+            :aria-label="t('pluginMarkdown.marpSplitEditorLabel')"
+          ></textarea>
         </div>
         <!-- Right pane: scroll container for the deck. No vertical
              centering — the editor view starts slides at the top so
