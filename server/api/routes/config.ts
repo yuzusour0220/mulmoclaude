@@ -1,4 +1,5 @@
 import { Router, type Request, type Response } from "express";
+import { execFile } from "node:child_process";
 import {
   fromMcpEntries,
   isAppSettings,
@@ -28,6 +29,7 @@ import { loadReferenceDirs, saveReferenceDirs, validateReferenceDirs, type Refer
 import { loadSchedulerOverrides, saveSchedulerOverrides, UTC_HH_MM_RE, type ScheduleOverrides } from "../../utils/files/scheduler-overrides-io.js";
 import { applyScheduleOverride } from "../../events/scheduler-adapter.js";
 import { SCHEDULE_TYPES } from "@receptron/task-scheduler";
+import { SUBPROCESS_PROBE_TIMEOUT_MS } from "../../utils/time.js";
 
 // Public surface of /api/config. GET returns the full config tree so
 // the client can render every section in one request. PUT surfaces are
@@ -298,6 +300,48 @@ router.put(
       res.json({ overrides: loadSchedulerOverrides() });
     },
   ),
+);
+
+// ── Connectors (read-only) ──────────────────────────────────────
+
+export interface ConnectorEntry {
+  name: string;
+  connected: boolean;
+}
+
+const CLAUDE_AI_PREFIX = "claude.ai ";
+const CONNECTED_MARKER = "✓ Connected";
+
+function parseConnectors(stdout: string): ConnectorEntry[] {
+  return stdout
+    .split("\n")
+    .filter((line) => line.startsWith(CLAUDE_AI_PREFIX))
+    .map((line) => ({
+      name: line.slice(CLAUDE_AI_PREFIX.length, line.indexOf(":")),
+      connected: line.includes(CONNECTED_MARKER),
+    }));
+}
+
+function listClaudeMcpServers(): Promise<string> {
+  return new Promise((resolve, reject) => {
+    execFile("claude", ["mcp", "list"], { timeout: SUBPROCESS_PROBE_TIMEOUT_MS }, (err, stdout) => {
+      if (err) return reject(err);
+      return resolve(stdout);
+    });
+  });
+}
+
+router.get(
+  API_ROUTES.config.connectors,
+  asyncHandler("config", "failed to list connectors", async (_req: Request, res: Response) => {
+    try {
+      const stdout = await listClaudeMcpServers();
+      res.json({ connectors: parseConnectors(stdout) });
+    } catch (err) {
+      log.warn("config", "claude mcp list failed — returning empty connectors", { error: errorMessage(err) });
+      res.json({ connectors: [] });
+    }
+  }),
 );
 
 export default router;
