@@ -208,7 +208,9 @@ function emitClampedFiles(valid: PastedFile[]): void {
   }
 }
 
-function addFiles(files: File[]): void {
+let fileQueue = Promise.resolve();
+
+async function processFiles(files: File[]): Promise<void> {
   fileError.value = null;
   const accepted = clampToSlots(files);
   if (accepted.length === 0) return;
@@ -225,14 +227,19 @@ function addFiles(files: File[]): void {
     return { dataUrl, name: file.name, mime: file.type } satisfies PastedFile;
   });
 
-  Promise.all(pending)
-    .then((results) => {
-      const valid = results.filter((result): result is PastedFile => result !== null);
-      if (valid.length > 0) emitClampedFiles(valid);
-    })
-    .catch(() => {
-      fileError.value = t("chatInput.unsupportedFileType");
-    });
+  try {
+    const results = await Promise.all(pending);
+    const valid = results.filter((result): result is PastedFile => result !== null);
+    if (valid.length > 0) emitClampedFiles(valid);
+  } catch {
+    fileError.value = t("chatInput.unsupportedFileType");
+  }
+
+  await nextTick();
+}
+
+function addFiles(files: File[]): void {
+  fileQueue = fileQueue.then(() => processFiles(files));
 }
 
 function removeFileAt(index: number): void {
