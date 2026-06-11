@@ -61,9 +61,10 @@ const HOST_TOOL_NAMES = {
   readXPost: "readXPost",
   searchX: "searchX",
   notify: "notify",
-  // Generic host primitive — always active for every role (not gated
+  // Generic host primitives — always active for every role (not gated
   // by `availablePlugins`). See `McpTool.alwaysActive`.
   spawnBackgroundChat: "spawnBackgroundChat",
+  manageCollection: "manageCollection",
 
   // Preset runtime plugins (`server/plugins/preset-list.ts`).
   // Their `toolName` comes from the plugin package's

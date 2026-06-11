@@ -94,7 +94,7 @@ call, then maps the shared `deriveAll` over the requested items.
 ### `putItems`
 
 ```ts
-{ action: "putItems", slug, items: object[], mode?: "upsert" | "create" }
+{ action: "putItems", slug, items: object[], mode?: "upsert" | "create" | "merge" }
 ```
 
 - Per-row validation **before** any write, reusing the existing per-record
@@ -107,7 +107,12 @@ call, then maps the shared `deriveAll` over the requested items.
   remove it"; toggle → "write enum field 'status' instead").
 - Writes go through `writeItem` (atomic, id-sanitized, containment-checked —
   no new I/O path). `mode: "create"` maps to `refuseOverwrite: true`;
-  default `upsert`.
+  default `upsert` replaces the record whole; `mode: "merge"` shallow-merges
+  the row over the existing record and validates the merged result — the
+  recommended mode for partial updates, since a partial upsert that carries
+  all required fields would silently erase the optional fields it omits.
+  Merge rejects unknown ids (a merged-over-nothing partial record is the
+  data shape the mode exists to prevent).
 - **Per-row results, not all-or-nothing**: valid rows are written, invalid
   rows are rejected individually —
   `{ written: string[], rejected: [{ id, problem }] }` — because the

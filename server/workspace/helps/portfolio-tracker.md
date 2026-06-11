@@ -79,7 +79,7 @@ row renders `price`/`value` as `—` (fail-soft) until the quote exists.
 ```markdown
 ---
 name: stock-quotes
-description: A simple stock-quote watchlist. Use whenever the user asks to add, list, update, or remove a stock quote, or to look up the latest price / PE ratio / dividend yield for a ticker. Records live at `data/stock-quotes/items/<ticker>.json` (one JSON per ticker, lowercase id); the user views them at `/collections/stock-quotes`, rendered from `schema.json` by the host. All I/O via Read / Write / Edit on the JSON files. Price data comes from Yahoo Finance (15-minute delayed).
+description: A simple stock-quote watchlist. Use whenever the user asks to add, list, update, or remove a stock quote, or to look up the latest price / PE ratio / dividend yield for a ticker. Records live at `data/stock-quotes/items/<ticker>.json` (one JSON per ticker, lowercase id); the user views them at `/collections/stock-quotes`, rendered from `schema.json` by the host. Record I/O via the `manageCollection` tool (getItems / putItems; raw Read / Write / Edit on the JSON files is the escape hatch). Price data comes from Yahoo Finance (15-minute delayed).
 ---
 
 # Stock Quotes (schema-driven collection)
@@ -102,13 +102,13 @@ Omit fields the user didn't supply or that Yahoo Finance didn't return — don't
 
 ## What to do
 
-**Add / refresh**: Fetch from Yahoo Finance (`https://query1.finance.yahoo.com/v7/finance/quote?symbols=<SYM>` or `quoteSummary` with `summaryDetail,price,defaultKeyStatistics`). Build the record, Write to `data/stock-quotes/items/<lowercased-ticker>.json`. Overwriting an existing file is the intended way to refresh a quote.
+**Add / refresh**: Fetch from Yahoo Finance (`https://query1.finance.yahoo.com/v7/finance/quote?symbols=<SYM>` or `quoteSummary` with `summaryDetail,price,defaultKeyStatistics`). Build the records and store them in one call — `manageCollection` `putItems` with `slug: "stock-quotes"` validates each row against the schema before writing; fix any `rejected` row using its `problem` text and retry just those. Upserting an existing id is the intended way to refresh a quote.
 
-**List**: Read `data/stock-quotes/items/` and answer from there. Don't dump every record into chat — link to `/collections/stock-quotes`.
+**List**: `manageCollection` `getItems` with `slug: "stock-quotes"` (use `fields` to keep it small). Don't dump every record into chat — link to `/collections/stock-quotes`.
 
-**Update**: Read, merge, Write. Preserve fields the user didn't ask to change. Always update `asOf`.
+**Update**: `putItems` with `mode: "merge"` and a partial row (`{ id, <changed fields> }`) — it keeps every field the row omits. Always update `asOf`.
 
-**Delete**: Confirm once if ambiguous, then remove the file.
+**Delete**: Confirm once if ambiguous, then remove the file (`data/stock-quotes/items/<id>.json`).
 
 ## Linking from chat
 
@@ -153,7 +153,7 @@ Always tell the user when the price was fetched and that it's typically 15-minut
 ```markdown
 ---
 name: portfolio
-description: A personal stock portfolio. Use whenever the user asks to add, list, edit, or remove a holding, or to see the value of their portfolio. Each record is one holding (ticker + share count); the latest price is pulled live from the `stock-quotes` collection via a derived ref, so the holding's value updates whenever the quote is refreshed. Records live at `data/portfolio/items/<id>.json`; the user views them at `/collections/portfolio`, rendered from `schema.json` by the host. All I/O via Read / Write / Edit on the JSON files.
+description: A personal stock portfolio. Use whenever the user asks to add, list, edit, or remove a holding, or to see the value of their portfolio. Each record is one holding (ticker + share count); the latest price is pulled live from the `stock-quotes` collection via a derived ref, so the holding's value updates whenever the quote is refreshed. Records live at `data/portfolio/items/<id>.json`; the user views them at `/collections/portfolio`, rendered from `schema.json` by the host. Record I/O via the `manageCollection` tool — its getItems is the ONLY way to read the computed `price` / `value` columns (the stored JSON never contains them).
 ---
 
 # My Portfolio (schema-driven collection)
@@ -173,15 +173,15 @@ Omit fields the user didn't supply — don't write empty strings. Never write `p
 
 ## What to do
 
-**Add a holding**: confirm the ticker has a row in `/collections/stock-quotes`; if not, add it first via the `stock-quotes` skill (so `ticker.price` resolves). Then Write `data/portfolio/items/<lowercased-ticker>.json` with `id`, `ticker`, `shares` (and optional `notes`).
+**Add a holding**: confirm the ticker has a row in `/collections/stock-quotes`; if not, add it first via the `stock-quotes` skill (so `ticker.price` resolves). Then `manageCollection` `putItems` with `slug: "portfolio"` and a row carrying `id`, `ticker`, `shares` (and optional `notes`) — never `price` / `value`; putItems rejects computed keys.
 
-**List**: Read `data/portfolio/items/` and answer from there. Don't dump every record into chat — link to `/collections/portfolio`.
+**List / value the portfolio**: `manageCollection` `getItems` with `slug: "portfolio"` — the returned records INCLUDE the host-computed `price` and `value`, so total the `value` column from there (reading the raw JSON files would show neither). Don't dump every record into chat — link to `/collections/portfolio`.
 
-**Update shares**: Read, change `shares`, Write back. Preserve other fields.
+**Update shares**: `putItems` with `mode: "merge"` and `{ "id": "<id>", "shares": <n> }` — merge keeps the fields the row omits.
 
 **Refresh prices**: don't touch the portfolio records — go refresh the matching row in `stock-quotes` instead. The portfolio's `price` and `value` columns update on the next render.
 
-**Delete**: Confirm once if ambiguous, then remove the file.
+**Delete**: Confirm once if ambiguous, then remove the file (`data/portfolio/items/<id>.json`).
 
 ## Linking from chat
 

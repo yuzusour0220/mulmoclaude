@@ -65,8 +65,9 @@ name: recipes
 description: A personal recipe box. Use whenever the user asks to add, list,
   edit, or remove a recipe. Records live at `data/recipes/items/<id>.json`
   (one JSON per recipe); the user views them at `/collections/recipes`,
-  rendered from `schema.json` by the host. You do all I/O via Read / Write /
-  Edit on the JSON files.
+  rendered from `schema.json` by the host. Record I/O via the
+  `manageCollection` tool (raw Read / Write / Edit on the JSON files is the
+  escape hatch).
 ---
 
 # Recipes (schema-driven collection)
@@ -77,8 +78,16 @@ description: A personal recipe box. Use whenever the user asks to add, list,
 - ... (one bullet per field; note which are host-computed and must NOT be written)
 
 ## What to do
-**Add / List / Update / Delete** — derive an id, Read/Write/Edit the JSON.
-List the directory first and pick a fresh slug rather than overwriting.
+**Add / Update** — `manageCollection` putItems: each row is validated against
+the schema BEFORE the write; fix any `rejected` row from its `problem` text
+and retry just those. Use `mode: "create"` when adding so an id collision is
+rejected instead of silently overwritten, and `mode: "merge"` with a partial
+row (`{ id, <changed fields> }`) when updating — the default upsert replaces
+the WHOLE record and would erase every optional field the row omits.
+**List / Read** — `manageCollection` getItems: the only way to see
+host-computed `derived` / `toggle` / `embed` values (the stored JSON never
+contains them); pass `ids` / `fields` on large collections.
+**Delete** — remove the record file.
 Don't recite the whole table in chat. After adding or updating a record,
 call `presentCollection` (with the collection slug and the record's id) to
 show it inline; for a plain "show/list" request, call `presentCollection`

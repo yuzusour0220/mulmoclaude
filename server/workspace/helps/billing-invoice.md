@@ -93,7 +93,8 @@ name: profile
 description: The user's own business profile — the issuer ("bill-from") identity
   used on invoices. A singleton collection with exactly one record, id `me`. The
   record lives at `data/profile/items/me.json`; the user views and edits it at
-  `/collections/profile`. You do all I/O via Read / Write / Edit on the JSON file.
+  `/collections/profile`. Record I/O via the `manageCollection` tool (raw
+  Read / Write / Edit on the JSON file is the escape hatch).
 ---
 
 # Business Profile (schema-driven collection)

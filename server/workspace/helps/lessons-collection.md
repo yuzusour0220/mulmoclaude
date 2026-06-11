@@ -258,9 +258,10 @@ Rules for the worker:
   its `objective`** (full `<!DOCTYPE html>`, inline CSS/JS or an allowed CDN — see
   `config/helps/presenthtml.md`); **`Write`** it to
   `artifacts/html/lessons-<topic>/<id>.html`; set that path as the record's `lesson`
-  field; do **NOT** call `presentHtml` and do **NOT** present anything — just write
-  the files and stop. (No one is viewing the worker's canvas, so presenting there is
-  wasted.)
+  field with `manageCollection` putItems `mode: "merge"` (`{ id, lesson }` — merge
+  keeps every other field); do **NOT** call `presentHtml` and do **NOT** present
+  anything — just write the files and stop. (No one is viewing the worker's canvas,
+  so presenting there is wasted.)
 - **One lesson per call**, and don't spawn a fleet — the host caps concurrent hidden
   workers and a worker can't spawn further workers.
 
@@ -334,9 +335,12 @@ collection. Keep it short — the schema and templates do the heavy lifting. Cov
     moment you present the current one** (not after running it) — and only once
     everything is `mastered`, append the next batch of `planned` lessons (paragraph
     `objective` each, HTML authored lazily later).
-- **Operations** — all I/O is plain Read / Write / Edit on
-  `data/lessons-<topic>/items/<id>.json`, one record per file (Add / List /
-  Update status / Edit / Delete). Rather than dumping the whole course into chat,
+- **Operations** — record I/O via `manageCollection` (`getItems` to read;
+  `putItems` for schema-validated writes — `mode: "create"` for new lessons,
+  `mode: "merge"` with a partial row for status/notes/lesson updates so the
+  fields you omit survive; Delete removes the file at
+  `data/lessons-<topic>/items/<id>.json`; raw Read / Write / Edit is the
+  escape hatch). Rather than dumping the whole course into chat,
   point the user at `/collections/lessons-<topic>`.
 - **When to call `presentCollection`** — when the **course itself** changes: after
   creating the collection or adding/extending lessons (it also surfaces malformed

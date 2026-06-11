@@ -12,7 +12,7 @@ import { apiGet } from "../../utils/api";
 import { API_ROUTES } from "../../config/apiRoutes";
 import { htmlPreviewUrlFor, svgPreviewUrlFor } from "../useContentDisplay";
 import { isValidFilePath } from "../useFileSelection";
-import { evaluateDerived, type FormulaContext } from "../../utils/collections/derivedFormula";
+import { deriveAll } from "../../utils/collections/deriveAll";
 import type { EmbedRow, EmbedView } from "../../components/collectionEmbed";
 import type {
   CollectionDetail,
@@ -280,34 +280,11 @@ export function useCollectionRendering(collection: Ref<CollectionDetail | null>,
     return "text";
   }
 
-  function resolveRowRefs(schema: CollectionSchema, record: CollectionItem, refRecords: RefRecordCache): NonNullable<FormulaContext["refs"]> {
-    const refs: NonNullable<FormulaContext["refs"]> = {};
-    for (const [key, field] of Object.entries(schema.fields)) {
-      if (field.type !== "ref" || !field.to) continue;
-      const slug = record[key];
-      refs[key] = typeof slug === "string" ? (refRecords[field.to]?.[slug] ?? null) : null;
-    }
-    return refs;
-  }
-
-  function deriveAll(schema: CollectionSchema, base: CollectionItem, refRecords: RefRecordCache): CollectionItem {
-    const enriched: CollectionItem = { ...base };
-    const refs = resolveRowRefs(schema, base, refRecords);
-    const maxPasses = Object.values(schema.fields).filter((field) => field.type === "derived").length;
-    for (let pass = 0; pass < maxPasses; pass++) {
-      let mutated = false;
-      for (const [key, field] of Object.entries(schema.fields)) {
-        if (field.type !== "derived" || !field.formula) continue;
-        const next = evaluateDerived(field.formula, { record: enriched, refs });
-        if (next !== null && enriched[key] !== next) {
-          enriched[key] = next;
-          mutated = true;
-        }
-      }
-      if (!mutated) break;
-    }
-    return enriched;
-  }
+  // The derive loop itself lives in `utils/collections/deriveAll.ts`,
+  // shared with the server's manageCollection enrichment so both sides
+  // compute identical values. This composable re-exposes it (typed with
+  // the richer client types via structural assignability) plus the
+  // collection-bound convenience wrappers below.
 
   function evaluateDerivedAgainstItem(field: FieldSpec, fieldKey: string, item: CollectionItem): number | null {
     if (!field.formula || !collection.value) return null;

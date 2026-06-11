@@ -76,6 +76,12 @@ This catalog only covers **cross-cutting** helpers — formatters, error helpers
 | `server/utils/markdown.ts` | server-side helpers | Server-side markdown utilities (not for Vue). |
 | `src/utils/dom/externalLink.ts` | `handleExternalLinkClick(event)` | Single source of truth for v-html link delegation. Every `v-html` consumer routes external links through this so OS-vs-in-app navigation is consistent. |
 
+## Collections
+
+| Path | Helper | When to use |
+|---|---|---|
+| `src/utils/collections/deriveAll.ts` | `deriveAll(schema, record, refRecords)` / `resolveRowRefs(...)` | Evaluate every `derived` field on a collection record (saturating, cycle-safe, ref-deref via a preloaded target cache). The ONE derive implementation — used by the client rendering layer and the server's `manageCollection` enrichment; never reimplement the loop. |
+
 ## Plugin Infrastructure
 
 > The plugin META aggregator pattern is the canonical way to extend host barrels (api routes, tool names, workspace dirs, pub-sub channels). **Edit the plugin's `meta.ts`, not the host barrel.**

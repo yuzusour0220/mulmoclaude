@@ -189,6 +189,8 @@ The schema defines the relationship.
 
 The host computes the result.
 
+Computed values are part of the runtime's view, not just the screen's: the `manageCollection` tool returns records with derived fields evaluated, so Claude acts on the same numbers the user sees.
+
 ---
 
 ## Business Logic as Language

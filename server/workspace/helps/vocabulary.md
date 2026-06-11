@@ -69,13 +69,16 @@ collection. Keep it short — the schema does the heavy lifting. It should cover
 - **Record shape** — point at the schema; note `id` is the filename
   (`word-<slug>` or `word-<unix-ms>`), `proficiency` starts at `"new"`, and
   `mastered` is host-computed (never write it directly).
-- **Operations** — all I/O is plain Read / Write / Edit on
-  `data/vocabulary/items/<id>.json`, one record per file:
-  - **Add** — generate an id, set `proficiency` to `"new"`, Write the JSON.
-  - **List** — read the items dir; rather than dumping every word into chat,
-    point the user at `/collections/vocabulary`.
-  - **Update proficiency** — Read → change `proficiency` → Write.
-  - **Edit** — Read → change → Write (preserve the other fields).
+- **Operations** — record I/O via `manageCollection` (raw Read / Write / Edit
+  on `data/vocabulary/items/<id>.json` is the escape hatch):
+  - **Add** — generate an id, set `proficiency` to `"new"`, putItems with
+    `mode: "create"`.
+  - **List** — getItems (it includes the host-computed `mastered` value);
+    rather than dumping every word into chat, point the user at
+    `/collections/vocabulary`.
+  - **Update proficiency** — putItems with `mode: "merge"` and
+    `{ id, proficiency }` (merge keeps the fields the row omits).
+  - **Edit** — same: putItems `mode: "merge"` with just the changed fields.
   - **Delete** — remove the JSON file.
 - After any change, call `presentCollection` with slug `vocabulary` (and the
   record id) to render the result inline.

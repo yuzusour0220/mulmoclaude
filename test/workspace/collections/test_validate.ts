@@ -10,7 +10,7 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { validateCollectionRecords } from "../../../server/workspace/collections/validate.js";
+import { validateCollectionRecords, validateRecordObject } from "../../../server/workspace/collections/validate.js";
 import type { LoadedCollection } from "../../../server/workspace/collections/index.js";
 import type { CollectionSchema } from "../../../server/workspace/collections/types.js";
 
@@ -107,5 +107,40 @@ describe("validateCollectionRecords", () => {
     writeFileSync(path.join(outside, "secret.json"), "42");
     assert.deepEqual(await validate(outside), []);
     rmSync(outside, { recursive: true, force: true });
+  });
+});
+
+describe("validateRecordObject — the write-gate variant", () => {
+  const check = (record: Record<string, unknown>, itemId: string) => validateRecordObject(record, itemId, schema);
+
+  it("accepts a record matching the schema", () => {
+    assert.equal(check({ id: "a", title: "A", status: "planned" }, "a"), null);
+  });
+
+  it("reports the same problems the file scan reports (parity)", async () => {
+    write("m.json", JSON.stringify({ id: "m", status: "planned" }));
+    const [scanIssue] = await validate();
+    assert.equal(check({ id: "m", status: "planned" }, "m"), scanIssue?.problem);
+  });
+
+  it("flags primaryKey ≠ itemId, missing required, bad enum", () => {
+    assert.match(check({ id: "other", title: "T", status: "done" }, "a") ?? "", /must equal the filename/);
+    assert.match(check({ id: "a", status: "done" }, "a") ?? "", /missing required field 'title'/);
+    assert.match(check({ id: "a", title: "T", status: "nope" }, "a") ?? "", /not one of/);
+  });
+
+  it("skips computed field types entirely (derived, embed, toggle)", () => {
+    // All three COMPUTED_TYPES marked required: a record carrying none
+    // of them must still validate — they're host-computed, never stored.
+    const withComputed = {
+      ...schema,
+      fields: {
+        ...schema.fields,
+        total: { type: "derived", label: "Total", formula: "1 + 1", required: true },
+        owner: { type: "embed", label: "Owner", to: "profile", id: "me", required: true },
+        done: { type: "toggle", label: "Done", field: "status", onValue: "done", offValue: "planned", required: true },
+      },
+    } as unknown as CollectionSchema;
+    assert.equal(validateRecordObject({ id: "a", title: "T", status: "done" }, "a", withComputed), null);
   });
 });

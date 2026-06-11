@@ -1,5 +1,6 @@
 export { discoverCollections, loadCollection, toSummary, toDetail, CollectionSchemaZ, type LoadedCollection } from "./discovery.js";
-export { validateCollectionRecords, type RecordIssue } from "./validate.js";
+export { validateCollectionRecords, validateRecordObject, COMPUTED_TYPES, type RecordIssue } from "./validate.js";
+export { enrichItems } from "./derive.js";
 export { deleteCollection, deleteCollectionRefusalMessage, type DeleteCollectionResult } from "./delete.js";
 export {
   listItems,

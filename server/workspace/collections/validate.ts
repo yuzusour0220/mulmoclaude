@@ -25,7 +25,7 @@ export interface RecordIssue {
 const MAX_ISSUES = 25;
 // derived/embed/toggle are host-computed or projected — never written to
 // the record JSON, so required / value checks must not apply to them.
-const COMPUTED_TYPES = new Set(["derived", "embed", "toggle"]);
+export const COMPUTED_TYPES: ReadonlySet<string> = new Set(["derived", "embed", "toggle"]);
 
 /** Read every `<id>.json` under the collection's dataDir and report the
  *  ones that won't load or violate the schema. An empty list means every
@@ -90,28 +90,28 @@ async function inspectRecord(fullPath: string, name: string, schema: CollectionS
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
     return { file: name, problem: "not a JSON object — skipped, won't appear" };
   }
-  return schemaViolation(parsed as CollectionItem, name, schema);
+  const problem = validateRecordObject(parsed as CollectionItem, name.replace(/\.json$/, ""), schema);
+  return problem ? { file: name, problem } : null;
 }
 
-/** First schema problem on a parseable record (id↔filename, missing
- *  required, bad enum value), or null. One issue per record keeps the
- *  report short and the fix obvious. */
-function schemaViolation(record: CollectionItem, name: string, schema: CollectionSchema): RecordIssue | null {
-  const stem = name.replace(/\.json$/, "");
+/** First schema problem on an in-memory record (primaryKey↔id mismatch,
+ *  missing required, bad enum value), or null when it's fine. One issue
+ *  per record keeps the report short and the fix obvious. Pure +
+ *  exported so write paths (manageCollection putItems) can gate on the
+ *  SAME rules the post-hoc file scan reports — `itemId` is the id the
+ *  record is (or would be) stored under. */
+export function validateRecordObject(record: CollectionItem, itemId: string, schema: CollectionSchema): string | null {
   const idValue = record[schema.primaryKey];
-  if (typeof idValue !== "string" || idValue !== stem) {
-    return {
-      file: name,
-      problem: `'${schema.primaryKey}' is '${String(idValue ?? "")}' but must equal the filename ('${stem}'), or the record can't be opened`,
-    };
+  if (typeof idValue !== "string" || idValue !== itemId) {
+    return `'${schema.primaryKey}' is '${String(idValue ?? "")}' but must equal the filename ('${itemId}'), or the record can't be opened`;
   }
   for (const [field, spec] of Object.entries(schema.fields)) {
     if (COMPUTED_TYPES.has(spec.type)) continue;
     const value = record[field];
     const empty = value === undefined || value === null || value === "";
-    if (spec.required && empty) return { file: name, problem: `missing required field '${field}'` };
+    if (spec.required && empty) return `missing required field '${field}'`;
     if (!empty && spec.type === "enum" && spec.values && !spec.values.includes(String(value))) {
-      return { file: name, problem: `'${field}' = '${String(value)}' is not one of [${spec.values.join(", ")}]` };
+      return `'${field}' = '${String(value)}' is not one of [${spec.values.join(", ")}]`;
     }
   }
   return null;
