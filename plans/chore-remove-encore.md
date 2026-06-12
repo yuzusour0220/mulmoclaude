@@ -45,7 +45,7 @@ harness for. Decision: remove Encore entirely; Collections stays as-is.
 ### Docs
 - `README.md` + 7 locale READMEs — drop the Encore intro mention
 - `docs/developer.md` — remove the "canonical worked example" section (l.693-705, points at deleted files)
-- `docs/dsl-as-harness.md` — Encore worked examples rewritten to Collections (recurrence facet: `triggerField`/`triggerLeadDays`/`spawn`); the two intro sections merged
+- `docs/papers/dsl-as-harness.md` — Encore worked examples rewritten to Collections (recurrence facet: `triggerField`/`triggerLeadDays`/`spawn`); the two intro sections merged
 - `MANIFEST.md` — Pattern B ("NL → DSL → engine") rewritten from Encore to Collections; example mentions + runtime-plugin count fixed
 - `docs/CHANGELOG.md` — add a removal entry
 

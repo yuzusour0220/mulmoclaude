@@ -8,7 +8,7 @@ Today that's expressible only as a `manageAutomations` task whose free-form prom
 happens to mention the collection — the schedule lives in
 `config/scheduler/tasks.json`, detached from the schema. It doesn't travel when
 the skill directory is copied, it drifts when the schema changes, and it
-contradicts the Collections thesis (`docs/collections-architecture.md`): *the
+contradicts the Collections thesis (`docs/papers/collections-architecture.md`): *the
 schema is the application definition*.
 
 The host already has both halves of the mechanism; they just don't meet:
@@ -252,7 +252,7 @@ agent refresh" is generic; the stock-quotes logic is prose in the template.
   section each pointing at `ingest.kind: "agent"` for collections whose
   refresh needs judgment (auth, per-record requests) instead of a declarative
   `map`.
-- **`docs/collections-architecture.md`** — the portfolio example
+- **`docs/papers/collections-architecture.md`** — the portfolio example
   (`shares * ticker.price`) can now claim its daily revaluation honestly: add
   a short "Scheduled ingest" paragraph under the workflow section.
 

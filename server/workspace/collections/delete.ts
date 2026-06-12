@@ -1,6 +1,6 @@
 // Delete a user-authored collection, archiving a full restorable copy
 // first. A collection spans three on-disk locations (see
-// docs/collections-architecture.md "Deleting a collection"):
+// docs/papers/collections-architecture.md "Deleting a collection"):
 //
 //   1. data/skills/<slug>/    staging — the canonical skill source
 //   2. .claude/skills/<slug>/ active mirror — what discovery scans

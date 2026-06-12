@@ -195,7 +195,7 @@ const HOST_WORKSPACE_DIRS = {
   // Restorable backups written before a destructive delete. A
   // collection-delete drops `archive/<date>-<uuid>/` holding one skill
   // copy + the records + an LLM-readable RESTORE.md (see
-  // docs/collections-architecture.md "Deleting a collection").
+  // docs/papers/collections-architecture.md "Deleting a collection").
   archive: "archive",
   // Nested subdirs inside a top-level grouping. Kept here (rather
   // than module-local constants) when multiple modules need to

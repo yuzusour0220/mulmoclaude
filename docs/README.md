@@ -36,12 +36,21 @@ Guides for using MulmoClaude. No programming knowledge required.
 
 | Document                                                          | Language | Description                                                                                                        |
 | ----------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------ |
-| [Collections — an AI-native database](collections-architecture.md) | English  | `schema.json` as a DSL defining a whole app (data model + relations + UI + actions); zero domain-specific host code; the host/LLM validation boundary |
 | [Memory](memory.md)                                               | English  | Topic-based memory store under `conversations/memory/` — schema, agent read/write contract, atomic→topic migration |
 | [Bridge Session Design](bridge-session-design.md)                 | English  | Session identification, caching, and multi-user scaling plan                                                       |
 | [Image-path Routing — Research](image-path-routing.md)            | English  | Read-only audit of how the LLM's image references become browser-loadable URLs                                     |
 | [Image-path Routing — 設計議論](discussion-image-path-routing.md) | 日本語   | 画像パスのルーティング再設計の議論メモと段階的実装計画                                                             |
 | [Wiki / HTML 表示サーフェス](wiki-html-render-surfaces.md)        | 日本語   | Wiki / HTML / Markdown が表示される複数箇所の差異 (権限・画像パス解決) を整理                                      |
+
+## Papers
+
+Longer-form essays on the architecture's design philosophy. Each is a standalone argument; read them in roughly this order.
+
+| Document                                                          | Language | Description                                                                                                        |
+| ----------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------ |
+| [DSLs as Harnesses](papers/dsl-as-harness.md)                     | English  | Why a deliberately limited language is a powerful agent harness; concrete walkthroughs of MulmoScript and the Collection DSL |
+| [Collections — Applications as Data](papers/collections-architecture.md) | English  | `schema.json` as a DSL defining a whole app (data model + relations + UI + actions); zero domain-specific host code; the host/LLM validation boundary |
+| [The Workspace Is the Self-Improving Agent](papers/workspace-is-the-agent.md) | English  | Code (not just data) lives in the workspace, so the workspace *is* the agent; a collection skill is a real application the agent builds into itself → a self-improving agent |
 
 ## Extension Mechanisms
 

@@ -13,7 +13,7 @@ JSON files. That has two structural gaps:
    `data/portfolio/items/*.json` never sees `price`/`value`, and an action
    worker recording a payment never sees the invoice's computed total. For an
    architecture whose thesis is "Claude is the runtime"
-   (`docs/collections-architecture.md`), the runtime can't read the one thing
+   (`docs/papers/collections-architecture.md`), the runtime can't read the one thing
    the host computes.
 2. **Validation is advisory, not a gate.** `validateCollectionRecords`
    (`server/workspace/collections/validate.ts`) runs *after* writes — the
@@ -217,7 +217,7 @@ when it outperforms the agent" cuts both ways. Future actions extend the
   "prefer `manageCollection` (validated writes, computed values in reads);
   raw file I/O is the escape hatch". The portfolio recipe's read examples
   switch to getItems so `price`/`value` are real values, not "—".
-- **`docs/collections-architecture.md`** — the "host computes the result"
+- **`docs/papers/collections-architecture.md`** — the "host computes the result"
   claim becomes server-side true; one sentence noting computed values are
   readable by the runtime via `manageCollection`.
 

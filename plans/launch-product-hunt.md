@@ -211,8 +211,8 @@ collections are the structured half. So the loop closes: ask → an app
 appears → the app is memory → the agent uses it → what you can do
 compounds. Every other Claude client starts from zero; this one builds
 on itself. All plain Markdown/JSON in ~/mulmoclaude/ — git-friendly,
-yours. (Written up in docs/collections-architecture.md and
-docs/dsl-as-harness.md — applications as data, Claude as runtime.)
+yours. (Written up in docs/papers/collections-architecture.md and
+docs/papers/dsl-as-harness.md — applications as data, Claude as runtime.)
 
 **3. Claude is the controller; chat summons the GUI.** One chat
 composes across the whole plugin registry in a single turn —
@@ -316,7 +316,7 @@ Clean `~/mulmoclaude/`; 1920×1080 min, H.264 8 Mbps; pre-compose all prompts in
 
 ### T-3 (~June 20) — Warm-up
 
-- [ ] Publish the thesis blog post: *"A schema is a harness, and Claude is the runtime — letting users build apps by asking."* Source from `docs/dsl-as-harness.md` + `docs/collections-architecture.md`; tie to Karpathy (wiki = unstructured memory; collections = the structured rung past it). The intellectual anchor.
+- [ ] Publish the thesis blog post: *"A schema is a harness, and Claude is the runtime — letting users build apps by asking."* Source from `docs/papers/dsl-as-harness.md` + `docs/papers/collections-architecture.md`; tie to Karpathy (wiki = unstructured memory; collections = the structured rung past it). The intellectual anchor.
 - [ ] Stage the PH listing in Maker Studio (do **not** publish)
 - [ ] DM ~10 Claude power users for a launch-morning try + honest feedback
 
@@ -353,7 +353,7 @@ Newsletter sends (dev.to, Hacker Newsletter, TLDR Dev); a "day after — what we
 ### Hacker News *(only if relaunching)*
 
 **Title:** `Show HN: MulmoClaude – a platform you extend by asking; a schema is the harness, Claude is the runtime`
-**Opening:** *"You extend the app by asking — 'build me an invoicing system' produces a working app with no code. The schema is the application; Claude is the runtime; the host has zero domain code."* Walk the DSL-as-harness thesis (`docs/dsl-as-harness.md` + `docs/collections-architecture.md`); tie to Karpathy; state plainly *this runs the Claude Code CLI directly, not the API.* The prior HN run got little traction — only relaunch with the sharper extend-by-asking angle, not the old framing.
+**Opening:** *"You extend the app by asking — 'build me an invoicing system' produces a working app with no code. The schema is the application; Claude is the runtime; the host has zero domain code."* Walk the DSL-as-harness thesis (`docs/papers/dsl-as-harness.md` + `docs/papers/collections-architecture.md`); tie to Karpathy; state plainly *this runs the Claude Code CLI directly, not the API.* The prior HN run got little traction — only relaunch with the sharper extend-by-asking angle, not the old framing.
 
 ### Reddit (r/ClaudeAI, r/LocalLLaMA, r/selfhosted)
 
@@ -428,7 +428,7 @@ Two legs hold up the deeper frame (for HN, long-form, and anyone asking where th
 
 **Leg one — every AI agent today is homeless.** No persistent filesystem, no schedule, no compounding memory. Summoned, work, gone — that's a function call, not an agent. MulmoClaude gives the agent a home: `~/mulmoclaude/`. A bookshelf (the wiki), filing cabinets (documents), a workshop where the user builds new tools (collections), a calendar (the scheduler), phones (the bridges). Because it has a home it accumulates; because it accumulates it gets smarter; because it gets smarter it earns more autonomy. Memory → compounding → trust → delegation.
 
-**Leg two — the user designs the environment, not the code.** The lesson of 2025–2026 agentic engineering: the *harness* matters more than the model, and a deliberately-limited DSL is one of the best harnesses — a small, legible, validatable surface the agent can't drift outside of. MulmoClaude runs on two: **MulmoScript** (the agent writes a script; a deterministic renderer makes the video) and **Collections** (the *user* declares a schema; Claude is the runtime). The radical move is the second: harness design, historically an engineer's job, handed to the end user. A non-programmer declaring a collection schema is — without the word — designing the environment an agent operates in. Applications stop being code engineers write and become *data users author*. Developed at length in [`docs/dsl-as-harness.md`](../docs/dsl-as-harness.md) and [`docs/collections-architecture.md`](../docs/collections-architecture.md).
+**Leg two — the user designs the environment, not the code.** The lesson of 2025–2026 agentic engineering: the *harness* matters more than the model, and a deliberately-limited DSL is one of the best harnesses — a small, legible, validatable surface the agent can't drift outside of. MulmoClaude runs on two: **MulmoScript** (the agent writes a script; a deterministic renderer makes the video) and **Collections** (the *user* declares a schema; Claude is the runtime). The radical move is the second: harness design, historically an engineer's job, handed to the end user. A non-programmer declaring a collection schema is — without the word — designing the environment an agent operates in. Applications stop being code engineers write and become *data users author*. Developed at length in [`docs/papers/dsl-as-harness.md`](../docs/papers/dsl-as-harness.md) and [`docs/papers/collections-architecture.md`](../docs/papers/collections-architecture.md).
 
 This is the first visible surface of a bigger thesis: **computing is being re-platformed on AI agents, and the shell that platform needs doesn't exist yet.** Claude Code is the kernel; MulmoClaude is the first draft of the shell, and the shell's user-facing form is one folder every input flows into and every output comes out of. In 1975 the home directory held your files; in 2026 it holds your files, research, conversations, scheduled work, and the knowledge extracted from all of them — maintained by an AI that knows what to remember, what to file, and eventually what to schedule on its own. Both memory and scheduling should become autonomous: the endgame is an agent that decides for itself what to repeat and summarize, the way it already decides what to write into the wiki.
 

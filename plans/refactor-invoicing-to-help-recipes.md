@@ -204,7 +204,7 @@ is clean) but lets the **recipe** — not the host — recreate them on demand.
 
 - `docs/CHANGELOG.md` — entry: invoicing suite moved from preset skills to help
   recipes; existing starred installs keep working; new installs use bare slugs.
-- `docs/dsl-as-harness.md` (l.323-371) — uses `mc-profile`/`mc-clients` as
+- `docs/papers/dsl-as-harness.md` (l.323-371) — uses `mc-profile`/`mc-clients` as
   *illustrative* DSL examples (not live-file pointers). Optional: align to bare
   slugs for consistency. Low priority — not required for correctness.
 

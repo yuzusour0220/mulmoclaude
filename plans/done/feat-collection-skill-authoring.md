@@ -193,7 +193,7 @@ Any other basename / path shape stays staging-side, exactly as today.
 - User-scope (`~/.claude/skills/`) collection authoring — project scope only,
   same boundary the writer already enforces.
 - Schema migration of existing records when a schema changes (documented
-  deferred item in `docs/collections-architecture.md`).
+  deferred item in `docs/papers/collections-architecture.md`).
 - **Removing the `manageSkills` plugin.** Its MCP write tool is now redundant
   (the agent authors via `data/skills/` + bridge), but the `/api/skills` route
   + Skills catalog UI on the same plugin are still live. Excision is deferred
