@@ -143,6 +143,19 @@ export default defineConfig({
   },
   server: {
     host: true,
+    // Disable Vite's dev CORS middleware. The app itself is same-origin in dev
+    // (the page and the proxied `/api` both live on :5173), so it needs no CORS
+    // headers from Vite. The one cross-origin consumer is a custom collection
+    // view: it renders in a sandboxed (opaque-origin) iframe whose fetch to
+    // `/api/collections/:slug/view-data` is cross-origin and preflighted. With
+    // Vite's CORS enabled, Vite answers that OPTIONS itself WITHOUT an
+    // `Access-Control-Allow-Origin` (it rejects the "null" origin) and the
+    // preflight fails before reaching the backend. Disabling it lets the
+    // preflight (and the request) flow through the proxy to Express, which sets
+    // the correct CORS headers (`viewDataCors` in
+    // server/api/routes/collections.ts). Production has no Vite proxy — the
+    // iframe hits Express directly — so this is dev-only.
+    cors: false,
     proxy: {
       '/api': {
         target: 'http://localhost:3001',

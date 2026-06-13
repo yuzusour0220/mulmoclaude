@@ -8,7 +8,7 @@
 //   PUT    /api/collections/:slug/items/:itemId   → { item, itemId }
 //   DELETE /api/collections/:slug/items/:itemId   → { deleted: true }
 
-import { Router, Request, Response } from "express";
+import { Router, Request, Response, NextFunction } from "express";
 import { API_ROUTES } from "../../../src/config/apiRoutes.js";
 import { actionVisible } from "../../../src/utils/collections/actionVisible.js";
 import {
@@ -21,6 +21,7 @@ import {
   loadCollection,
   readItem,
   readSkillTemplate,
+  readCustomViewHtml,
   buildActionSeedPrompt,
   buildCollectionActionSeedPrompt,
   resolveCreateItemId,
@@ -42,6 +43,8 @@ import { errorMessage } from "../../utils/errors.js";
 import { log } from "../../system/logger/index.js";
 import { workspacePath } from "../../workspace/workspace.js";
 import { refreshOne } from "../../workspace/feeds/index.js";
+import { manageCollection } from "../../agent/mcp-tools/manageCollection.js";
+import { clampCapabilities, mintViewToken, requireViewToken, type ViewCapability } from "../auth/viewToken.js";
 
 const router = Router();
 
@@ -376,6 +379,153 @@ router.post(API_ROUTES.collections.collectionAction, async (req: Request<{ slug:
     res.json(seed);
   } catch (err) {
     log.warn("collections", "collection action seed failed", { slug: collection.slug, actionId: req.params.actionId, error: errorMessage(err) });
+    serverError(res, errorMessage(err));
+  }
+});
+
+// --- Custom views: capability-token minting + scoped data plane ---
+//
+// The data plane reuses the `manageCollection` tool handler verbatim, so a
+// custom view can never do more than the agent itself (same getItems /
+// putItems actions, same validation, scoped to one slug). The handler
+// returns a JSON string on success and a bare diagnostic string on a guard
+// failure (unknown slug, over-limit unselective read, bad putItems shape) —
+// forward parsed JSON as 200, the bare string as a 400 `{ error }`.
+
+/** Parse a `read`/`write` capability list from a request body value. */
+function parseCapabilities(value: unknown): ViewCapability[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const caps = value.filter((entry): entry is ViewCapability => entry === "read" || entry === "write");
+  return caps.length > 0 ? caps : undefined;
+}
+
+/** Parse a comma-separated or repeated query param into a string list. */
+function parseListParam(value: unknown): string[] | undefined {
+  const parts = typeof value === "string" ? value.split(",") : Array.isArray(value) ? value.map(String) : [];
+  const cleaned = parts.map((entry) => entry.trim()).filter((entry) => entry.length > 0);
+  return cleaned.length > 0 ? cleaned : undefined;
+}
+
+function sendToolResult(res: Response, raw: string): void {
+  try {
+    res.json(JSON.parse(raw));
+  } catch {
+    res.status(400).json({ error: raw });
+  }
+}
+
+// The view-data fetch comes from a sandboxed (opaque-origin) iframe, so it is
+// a cross-origin request that the browser gates with CORS. `*` is safe here:
+// auth is the unguessable scoped token in the Authorization header (not a
+// cookie), so no ambient-credential leak — an origin without the token just
+// reads a 401. The custom Authorization header makes the request non-simple,
+// so the browser preflights; the OPTIONS handler below answers it.
+function viewDataCors(_req: Request, res: Response, next: NextFunction): void {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type");
+  res.setHeader("Access-Control-Allow-Methods", "GET, PUT, OPTIONS");
+  next();
+}
+
+router.options(API_ROUTES.collections.viewData, viewDataCors, (_req: Request, res: Response) => {
+  res.status(204).end();
+});
+
+// Serve a custom view's HTML file. Behind the global bearer (the parent
+// fetches it, then renders it sandboxed). Read from the data/skills staging
+// path — custom-view HTML is staging-only, never mirrored to .claude/skills
+// (rendering is host-side). Path-safe: slug + the schema-validated
+// `views/*.html` file, resolved with realpath containment.
+router.get(API_ROUTES.collections.viewFile, async (req: Request<{ slug: string }>, res: Response) => {
+  try {
+    const { slug } = req.params;
+    const viewId = typeof req.query.id === "string" ? req.query.id : "";
+    const collection = await loadCollection(slug);
+    if (!collection) {
+      notFound(res, `collection '${slug}' not found`);
+      return;
+    }
+    const view = (collection.schema.views ?? []).find((entry) => entry.id === viewId);
+    if (!view) {
+      notFound(res, `custom view '${viewId}' not found on collection '${slug}'`);
+      return;
+    }
+    // Path-safe, source-aware read through the collections domain layer (no raw
+    // fs / hardcoded subpaths in the route).
+    const html = await readCustomViewHtml(collection, view.file);
+    if (html === null) {
+      notFound(res, `view file '${view.file}' not found — author it at data/skills/<slug>/${view.file}`);
+      return;
+    }
+    res.type("text/html").send(html);
+  } catch (err) {
+    log.warn("collections", "view-file read failed", { slug: req.params.slug, error: errorMessage(err) });
+    serverError(res, errorMessage(err));
+  }
+});
+
+// Mint a scoped token for a custom view. Behind the global bearer (only the
+// real frontend can mint); clamps requested caps to what the view declared
+// so a `read`-only view can never obtain a `write` token.
+router.post(API_ROUTES.collections.viewToken, async (req: Request<{ slug: string }>, res: Response) => {
+  try {
+    const { slug } = req.params;
+    const body = (req.body ?? {}) as { viewId?: unknown; capabilities?: unknown };
+    const viewId = typeof body.viewId === "string" ? body.viewId.trim() : "";
+    if (!viewId) {
+      badRequest(res, "`viewId` is required");
+      return;
+    }
+    const collection = await loadCollection(slug);
+    if (!collection) {
+      notFound(res, `collection '${slug}' not found`);
+      return;
+    }
+    const view = (collection.schema.views ?? []).find((entry) => entry.id === viewId);
+    if (!view) {
+      notFound(res, `custom view '${viewId}' not found on collection '${slug}'`);
+      return;
+    }
+    const granted = clampCapabilities(view.capabilities, parseCapabilities(body.capabilities));
+    const minted = mintViewToken(slug, granted);
+    if (!minted) {
+      serverError(res, "view token unavailable (server not ready)");
+      return;
+    }
+    res.json({ token: minted.token, exp: minted.exp, dataUrl: API_ROUTES.collections.viewData.replace(":slug", slug), capabilities: granted });
+  } catch (err) {
+    log.warn("collections", "view-token mint failed", { slug: req.params.slug, error: errorMessage(err) });
+    serverError(res, errorMessage(err));
+  }
+});
+
+// Scoped read: enriched records (getItems). Guarded by the view token only
+// (exempt from global bearer + CSRF — see server/index.ts).
+router.get(API_ROUTES.collections.viewData, viewDataCors, requireViewToken("read"), async (req: Request<{ slug: string }>, res: Response) => {
+  try {
+    const ids = parseListParam(req.query.ids);
+    const fields = parseListParam(req.query.fields);
+    const raw = await manageCollection.handler({
+      action: "getItems",
+      slug: req.params.slug,
+      ...(ids ? { ids } : {}),
+      ...(fields ? { fields } : {}),
+    });
+    sendToolResult(res, raw);
+  } catch (err) {
+    log.warn("collections", "view-data read failed", { slug: req.params.slug, error: errorMessage(err) });
+    serverError(res, errorMessage(err));
+  }
+});
+
+// Scoped write: validated putItems. Requires the `write` capability.
+router.put(API_ROUTES.collections.viewData, viewDataCors, requireViewToken("write"), async (req: Request<{ slug: string }>, res: Response) => {
+  try {
+    const body = (req.body ?? {}) as { items?: unknown; mode?: unknown };
+    const raw = await manageCollection.handler({ action: "putItems", slug: req.params.slug, items: body.items, mode: body.mode });
+    sendToolResult(res, raw);
+  } catch (err) {
+    log.warn("collections", "view-data write failed", { slug: req.params.slug, error: errorMessage(err) });
     serverError(res, errorMessage(err));
   }
 });

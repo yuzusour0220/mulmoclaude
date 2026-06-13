@@ -10,8 +10,8 @@ specific collection: it just reads the DSL and renders a table / calendar /
 form / detail view, and serves a REST surface. No database, no migration tool, no ORM — a
 `schema.json` plus a folder of `<id>.json` records **is** the app.
 
-This is the project philosophy made concrete: *the workspace is the database;
-files are the source of truth; you are the intelligent interface.*
+This is the project philosophy made concrete: _the workspace is the database;
+files are the source of truth; you are the intelligent interface._
 
 ## Anatomy of a collection skill
 
@@ -56,7 +56,7 @@ data/<name>/items/             ← the records (separate from the skill dir)
 
 ## SKILL.md
 
-Standard skill front-matter plus prose teaching *future-you* how to maintain the
+Standard skill front-matter plus prose teaching _future-you_ how to maintain the
 records. Keep it short and operational:
 
 ```markdown
@@ -73,11 +73,13 @@ description: A personal recipe box. Use whenever the user asks to add, list,
 # Recipes (schema-driven collection)
 
 ## Record shape
+
 - `id` — kebab-case slug, primary key (the filename, no extension)
 - `title` — string, required
 - ... (one bullet per field; note which are host-computed and must NOT be written)
 
 ## What to do
+
 **Add / Update** — `manageCollection` putItems: each row is validated against
 the schema BEFORE the write; fix any `rejected` row from its `problem` text
 and retry just those. Use `mode: "create"` when adding so an id collision is
@@ -94,7 +96,7 @@ show it inline; for a plain "show/list" request, call `presentCollection`
 with just the slug.
 ```
 
-Write the `description` so it tells *you* (in a future session) exactly when to
+Write the `description` so it tells _you_ (in a future session) exactly when to
 reach for this skill and where the records live — that text is what gets matched
 when the user makes a request.
 
@@ -103,26 +105,27 @@ when the user makes a request.
 Top-level shape (validated on discovery; a malformed schema is logged and
 skipped, never crashes the host):
 
-| Key | Meaning |
-|---|---|
-| `title` | Human name shown in the sidebar / header. Required. |
-| `icon` | A **Material Symbols** name (`receipt_long`, `people`, `schedule`, `menu_book`). Required. |
-| `dataPath` | Workspace-relative records folder, e.g. `data/recipes/items`. Must stay under the workspace. Required. |
-| `primaryKey` | The field name whose value is the filename. That field MUST set `primary: true`. Required. |
-| `singleton` | Optional. When set, at most one record exists, pinned to this exact id (e.g. `me`). Host pre-fills + locks the create form and hides Add once it exists. |
-| `fields` | Ordered map of field-name → field spec. **Insertion order = column order** in the table. Required. |
-| `actions` | Optional array of per-record buttons (see below). |
-| `completionField` | Optional. Name of the field whose value marks an item as "done" — when set, item-create fires a bell notification that clears once the field reaches one of `completionDoneValues`. Must name a real field in `fields`. Paired with `completionDoneValues` (both set, or both omitted). |
-| `completionDoneValues` | Optional. Non-empty array of values that count as "done" for `completionField` (e.g. `["Done"]`, `["paid", "void"]`). Compared as strings. |
-| `notifyWhen` | Optional. A `when` predicate (`{ "field": "...", "in": [...] }`) that **gates** the completion bell: fire it only for records matching the predicate (e.g. `{ "field": "priority", "in": ["high", "urgent"] }`). Requires `completionField`; `field` must name a real field. Absent ⇒ notify for every open record. |
-| `displayField` | Optional. Name of a field whose value is shown as the human-readable label in the completion notification's title (e.g. `Contacts: Jane Doe` instead of the opaque primaryKey). Must name a real field in `fields`. Falls back to the primaryKey value when unset or when the record's value is empty. |
-| `triggerField` | Optional. Name of a `date` field that **delays** the completion bell until that date arrives (instead of firing on create). Requires `completionField` / `completionDoneValues` (the bell still clears via the done value). Must name a real `date` field. See "Time-gated bells" below. |
-| `triggerLeadDays` | Optional. Non-negative integer: fire the bell this many days **before** `triggerField` (e.g. `10` = "remind me 10 days early"). Requires `triggerField`. Default `0` (fire on the trigger date). |
-| `spawn` | Optional. Host-driven **recurrence**: when a record reaches a configured value (e.g. `status: paid`), the host auto-creates the next record with a forward-advanced `triggerField` date. Requires `triggerField`. See "Recurring obligations" below. |
-| `calendarField` | Optional. Name of a `date` (or `datetime`) field that anchors the **calendar view** (a month grid; each record lands on its date cell). When unset, the table↔calendar toggle still appears if the schema has any `date`/`datetime` field — the first one is used, switchable in-view. Set this to pin a specific anchor. Must name a real `date`/`datetime` field. See "Calendar view" below. |
-| `calendarEndField` | Optional. A second `date`/`datetime` field marking the END of a multi-day span on the calendar (the record renders across `calendarField` → this date). Requires `calendarField`. Must name a real `date`/`datetime` field. |
-| `calendarTimeField` | Optional. Name of a string field holding a free-form time or time-range (`"14:00-17:00"`, `"17:00-"`, `"16:30"`) used to place records on the calendar's **day (time-allocation) view**. Consulted only when the date fields are date-only — a `datetime` anchor/end pair carries its own clock and takes precedence. Requires `calendarField`. See "Calendar view" below. |
-| `kanbanField` | Optional. Name of an `enum` field that groups records into columns on the **Kanban board** (one column per declared value). When unset, the Kanban toggle still appears if the schema has any `enum` field — the first one is used, switchable in-view. Set this to pin a specific group field. Must name a real `enum` field. See "Kanban view" below. |
+| Key                    | Meaning                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `title`                | Human name shown in the sidebar / header. Required.                                                                                                                                                                                                                                                                                                                                                                           |
+| `icon`                 | A **Material Symbols** name (`receipt_long`, `people`, `schedule`, `menu_book`). Required.                                                                                                                                                                                                                                                                                                                                    |
+| `dataPath`             | Workspace-relative records folder, e.g. `data/recipes/items`. Must stay under the workspace. Required.                                                                                                                                                                                                                                                                                                                        |
+| `primaryKey`           | The field name whose value is the filename. That field MUST set `primary: true`. Required.                                                                                                                                                                                                                                                                                                                                    |
+| `singleton`            | Optional. When set, at most one record exists, pinned to this exact id (e.g. `me`). Host pre-fills + locks the create form and hides Add once it exists.                                                                                                                                                                                                                                                                      |
+| `fields`               | Ordered map of field-name → field spec. **Insertion order = column order** in the table. Required.                                                                                                                                                                                                                                                                                                                            |
+| `actions`              | Optional array of per-record buttons (see below).                                                                                                                                                                                                                                                                                                                                                                             |
+| `completionField`      | Optional. Name of the field whose value marks an item as "done" — when set, item-create fires a bell notification that clears once the field reaches one of `completionDoneValues`. Must name a real field in `fields`. Paired with `completionDoneValues` (both set, or both omitted).                                                                                                                                       |
+| `completionDoneValues` | Optional. Non-empty array of values that count as "done" for `completionField` (e.g. `["Done"]`, `["paid", "void"]`). Compared as strings.                                                                                                                                                                                                                                                                                    |
+| `notifyWhen`           | Optional. A `when` predicate (`{ "field": "...", "in": [...] }`) that **gates** the completion bell: fire it only for records matching the predicate (e.g. `{ "field": "priority", "in": ["high", "urgent"] }`). Requires `completionField`; `field` must name a real field. Absent ⇒ notify for every open record.                                                                                                           |
+| `displayField`         | Optional. Name of a field whose value is shown as the human-readable label in the completion notification's title (e.g. `Contacts: Jane Doe` instead of the opaque primaryKey). Must name a real field in `fields`. Falls back to the primaryKey value when unset or when the record's value is empty.                                                                                                                        |
+| `triggerField`         | Optional. Name of a `date` field that **delays** the completion bell until that date arrives (instead of firing on create). Requires `completionField` / `completionDoneValues` (the bell still clears via the done value). Must name a real `date` field. See "Time-gated bells" below.                                                                                                                                      |
+| `triggerLeadDays`      | Optional. Non-negative integer: fire the bell this many days **before** `triggerField` (e.g. `10` = "remind me 10 days early"). Requires `triggerField`. Default `0` (fire on the trigger date).                                                                                                                                                                                                                              |
+| `spawn`                | Optional. Host-driven **recurrence**: when a record reaches a configured value (e.g. `status: paid`), the host auto-creates the next record with a forward-advanced `triggerField` date. Requires `triggerField`. See "Recurring obligations" below.                                                                                                                                                                          |
+| `calendarField`        | Optional. Name of a `date` (or `datetime`) field that anchors the **calendar view** (a month grid; each record lands on its date cell). When unset, the table↔calendar toggle still appears if the schema has any `date`/`datetime` field — the first one is used, switchable in-view. Set this to pin a specific anchor. Must name a real `date`/`datetime` field. See "Calendar view" below.                                |
+| `calendarEndField`     | Optional. A second `date`/`datetime` field marking the END of a multi-day span on the calendar (the record renders across `calendarField` → this date). Requires `calendarField`. Must name a real `date`/`datetime` field.                                                                                                                                                                                                   |
+| `calendarTimeField`    | Optional. Name of a string field holding a free-form time or time-range (`"14:00-17:00"`, `"17:00-"`, `"16:30"`) used to place records on the calendar's **day (time-allocation) view**. Consulted only when the date fields are date-only — a `datetime` anchor/end pair carries its own clock and takes precedence. Requires `calendarField`. See "Calendar view" below.                                                    |
+| `kanbanField`          | Optional. Name of an `enum` field that groups records into columns on the **Kanban board** (one column per declared value). When unset, the Kanban toggle still appears if the schema has any `enum` field — the first one is used, switchable in-view. Set this to pin a specific group field. Must name a real `enum` field. See "Kanban view" below.                                                                       |
+| `views`                | Optional. Custom (LLM-authored) HTML views: `[{ id, label, icon?, file, capabilities? }]`. Each renders an HTML file under `views/*.html` in a sandboxed iframe over the records, for layouts the built-ins don't cover (year/quarter overview, Gantt, report). `capabilities` is `["read"]` (default) or `["read","write"]`. See "Custom views" below and **`config/helps/custom-view.md`** for the full authoring contract. |
 
 ### Field types
 
@@ -148,7 +151,7 @@ Every field spec needs a `type` and a `label`. Extra keys by type:
   A `derived` field on the same record can also **dereference** a `ref` to read
   a numeric column off the record it points at — see the cross-collection
   formula syntax below.
-- **`embed`** — `to: "<target-slug>"`, `id: "<record-id>"`. Pulls a *fixed*
+- **`embed`** — `to: "<target-slug>"`, `id: "<record-id>"`. Pulls a _fixed_
   record from another collection into the read-only detail view (display-only,
   **nothing is stored** on this record). Example: an invoice embedding the
   user's own profile: `{ "type": "embed", "to": "profile", "id": "me" }`.
@@ -261,7 +264,7 @@ Rules and limits:
   same as any other formula error.
 - The referenced column may itself be a **`derived`** field in the target
   collection (the host computes the target's own derived fields before the
-  lookup) — *as long as* that target formula is target-local. A target derived
+  lookup) — _as long as_ that target formula is target-local. A target derived
   field that in turn derefs a **third** collection won't resolve (only one hop
   is loaded) and reads as `—`.
 - The target collection is loaded **when the page opens**. If a value changes in
@@ -283,13 +286,13 @@ journals, drafting an email) gets delegated to natural language.
 
 ```json
 {
-  "id": "pdf",                      // unique within the schema
-  "label": "Generate PDF",          // button text (English)
-  "icon": "picture_as_pdf",         // Material Symbols name
+  "id": "pdf", // unique within the schema
+  "label": "Generate PDF", // button text (English)
+  "icon": "picture_as_pdf", // Material Symbols name
   "kind": "chat",
-  "role": "accounting",             // which role the new chat runs in
+  "role": "accounting", // which role the new chat runs in
   "template": "templates/invoice.md", // skill-relative; no `..`, no leading `/`
-  "when": { "field": "status", "in": ["paid"] }  // optional: show only when record.status ∈ {paid}
+  "when": { "field": "status", "in": ["paid"] } // optional: show only when record.status ∈ {paid}
 }
 ```
 
@@ -338,8 +341,8 @@ schema to wire a record's lifecycle into the bell:
   "dataPath": "data/todos/items",
   "primaryKey": "id",
   "fields": {
-    "id":     { "type": "string", "label": "ID", "primary": true, "required": true },
-    "title":  { "type": "string", "label": "Title", "required": true },
+    "id": { "type": "string", "label": "ID", "primary": true, "required": true },
+    "title": { "type": "string", "label": "Title", "required": true },
     "status": { "type": "enum", "values": ["Todo", "Doing", "Done"], "label": "Status", "required": true }
   },
   "completionField": "status",
@@ -398,9 +401,9 @@ completion bell — when `completionField` reaches a `completionDoneValues` valu
   "dataPath": "data/reminders/items",
   "primaryKey": "id",
   "fields": {
-    "id":     { "type": "string", "label": "ID", "primary": true, "required": true },
-    "what":   { "type": "string", "label": "What", "required": true },
-    "dueOn":  { "type": "date",   "label": "Remind on", "required": true },
+    "id": { "type": "string", "label": "ID", "primary": true, "required": true },
+    "what": { "type": "string", "label": "What", "required": true },
+    "dueOn": { "type": "date", "label": "Remind on", "required": true },
     "status": { "type": "enum", "values": ["pending", "done"], "label": "Status", "required": true }
   },
   "completionField": "status",
@@ -485,12 +488,12 @@ How it behaves (worth understanding so it doesn't surprise you):
   delete an already-created successor. And because spawning is convergent,
   deleting the successor while the source still matches `when` will **re-create
   it**. To genuinely **stop a recurrence**, move the source to a status that is
-  *not* in `spawn.when` (e.g. an `archived` value) — that's the supported "end
+  _not_ in `spawn.when` (e.g. an `archived` value) — that's the supported "end
   it" gesture.
 - `spawn` **requires** `triggerField` (the successor's date is `triggerField`
   advanced by `every`).
 
-This covers *periodic* obligations. It does **not** do escalating, multi-stage
+This covers _periodic_ obligations. It does **not** do escalating, multi-stage
 reminders over a long prep window (info → warning → urgent) — that is
 intentionally out of scope for collections.
 
@@ -511,10 +514,10 @@ prefilled to that day.
   "dataPath": "data/events/items",
   "primaryKey": "id",
   "fields": {
-    "id":    { "type": "string", "label": "ID", "primary": true, "required": true },
-    "name":  { "type": "string", "label": "Name", "required": true },
-    "on":    { "type": "date",   "label": "Date", "required": true },
-    "until": { "type": "date",   "label": "End" }
+    "id": { "type": "string", "label": "ID", "primary": true, "required": true },
+    "name": { "type": "string", "label": "Name", "required": true },
+    "on": { "type": "date", "label": "Date", "required": true },
+    "until": { "type": "date", "label": "End" }
   },
   "displayField": "name",
   "calendarField": "on",
@@ -525,7 +528,7 @@ prefilled to that day.
 Notes:
 
 - **No schema change is needed to get the toggle** — it appears whenever a `date`
-  field exists. The two keys only *tune* it: `calendarField` pins which date
+  field exists. The two keys only _tune_ it: `calendarField` pins which date
   anchors the grid (otherwise the first `date` field is used, and the user can
   switch in-view when there are several); `calendarEndField` makes a record span
   multiple days (`calendarField` → `calendarEndField`, inclusive).
@@ -550,11 +553,11 @@ showing how that day's records are allocated across the clock. Records need a
 - A `date` `calendarField` **plus** `calendarTimeField` naming a string field
   with a free-form time or range. Recognised shapes:
 
-| Time value | Day-view rendering |
-|---|---|
-| `"14:00-17:00"` (a range) | a proportional **time block** from 14:00 to 17:00 |
-| `"17:00-"` or `"16:30"` (start only) | a **single line** at that time (no known end) |
-| `"終日"`, blank, or unparseable | a chip in the **all-day strip** at the bottom |
+| Time value                           | Day-view rendering                                |
+| ------------------------------------ | ------------------------------------------------- |
+| `"14:00-17:00"` (a range)            | a proportional **time block** from 14:00 to 17:00 |
+| `"17:00-"` or `"16:30"` (start only) | a **single line** at that time (no known end)     |
+| `"終日"`, blank, or unparseable      | a chip in the **all-day strip** at the bottom     |
 
 Separators `-`, `–`, `—`, `~`, `〜`, `～` are all accepted. Overlapping blocks
 split into side-by-side lanes; a multi-day `datetime` span is clamped to each
@@ -568,10 +571,10 @@ column):
   "dataPath": "data/engagements/items",
   "primaryKey": "id",
   "fields": {
-    "id":    { "type": "string", "label": "ID", "primary": true, "required": true },
+    "id": { "type": "string", "label": "ID", "primary": true, "required": true },
     "title": { "type": "string", "label": "Title", "required": true },
-    "date":  { "type": "date",   "label": "Date", "required": true },
-    "time":  { "type": "string", "label": "Time" }
+    "date": { "type": "date", "label": "Date", "required": true },
+    "time": { "type": "string", "label": "Time" }
   },
   "displayField": "title",
   "calendarField": "date",
@@ -595,10 +598,10 @@ detail/edit panel.
   "dataPath": "data/tasks/items",
   "primaryKey": "id",
   "fields": {
-    "id":     { "type": "string", "label": "ID", "primary": true, "required": true },
-    "title":  { "type": "string", "label": "Title", "required": true },
-    "status": { "type": "enum",   "label": "Status", "values": ["Backlog", "Todo", "In Progress", "Done"] },
-    "done":   { "type": "toggle", "label": "Done", "field": "status", "onValue": "Done", "offValue": "Todo" }
+    "id": { "type": "string", "label": "ID", "primary": true, "required": true },
+    "title": { "type": "string", "label": "Title", "required": true },
+    "status": { "type": "enum", "label": "Status", "values": ["Backlog", "Todo", "In Progress", "Done"] },
+    "done": { "type": "toggle", "label": "Done", "field": "status", "onValue": "Done", "offValue": "Todo" }
   },
   "displayField": "title",
   "kanbanField": "status"
@@ -608,7 +611,7 @@ detail/edit panel.
 Notes:
 
 - **No schema change is needed to get the toggle** — it appears whenever an
-  `enum` field exists. `kanbanField` only *tunes* which enum groups the board
+  `enum` field exists. `kanbanField` only _tunes_ which enum groups the board
   (otherwise the first `enum` field is used, switchable in-view).
 - **The enum is the single source of truth.** For a todo-style "done" checkbox,
   use a `toggle` field projecting the status enum (above) — do NOT add a separate
@@ -623,6 +626,25 @@ Notes:
 - **Building a todo / task list?** Read `config/helps/todo-collection.md` — the
   complete, copy-pasteable recipe (status enum + `done` toggle + priority bells +
   calendar) plus the legacy-`todo-plugin` migration steps.
+
+### Custom views
+
+When the built-in views (table / calendar / kanban / dashboard) don't fit what
+the user wants to _see_ — a year/quarter overview, a Gantt bar, a printable
+report — author a **custom view**: an HTML file the host renders in a sandboxed
+iframe over the records. Register it in `views[]` (above); it becomes a button
+in the collection's view-mode selector.
+
+- The view reads (and, with `["read","write"]`, writes) records through a
+  scoped token injected as `window.__MC_VIEW` — it never touches files directly.
+- It is sandboxed: inline scripts + a CDN allowlist only, and `fetch` is
+  limited to the collection's own data endpoint (no third-party calls).
+- Least privilege: declare `["read"]` unless the view edits records.
+
+The host holds **zero** view-specific code — the view is data, like the rest of
+the collection. Full authoring contract (the `window.__MC_VIEW` shape, the
+read/write API, the sandbox rules, and two complete sample views):
+**`config/helps/custom-view.md`**. Read it before authoring a view.
 
 ### Worked example: a Todo list
 

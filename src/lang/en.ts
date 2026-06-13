@@ -1235,6 +1235,11 @@ const enMessages = {
     viewDashboard: "Dashboard",
     dashboardAlertHeading: "{label} — {count}",
     dashboardAllItems: "All items",
+    addView: "Add view",
+    customViewLoading: "Loading view…",
+    customViewError: "Couldn't load this view: {error}",
+    addViewPrompt:
+      'I want to add a custom view to the "{title}" collection. Ask me what I want to see or edit, then author the HTML view file at data/skills/{slug}/views/your-view.html and register it in the collection\'s schema.json under `views[]` (capabilities ["read"] for a read-only view, ["read","write"] if it edits records). Follow the custom-view help for the data contract.',
     repair: "Repair",
     dataIssuesDetected: "{count} record file(s) have data problems and may be missing from this view.",
     repairPrompt:

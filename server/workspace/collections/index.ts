@@ -10,6 +10,7 @@ export {
   generateItemId,
   resolveCreateItemId,
   readSkillTemplate,
+  readCustomViewHtml,
   buildActionSeedPrompt,
   buildCollectionActionSeedPrompt,
   type WriteItemResult,
@@ -18,6 +19,8 @@ export {
 export type {
   CollectionSchema,
   CollectionAction,
+  CollectionCustomView,
+  CollectionViewCapability,
   CollectionFieldSpec,
   CollectionFieldType,
   CollectionSummary,

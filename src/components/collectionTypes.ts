@@ -74,6 +74,20 @@ export interface CollectionAction {
   when?: { field: string; in: string[] };
 }
 
+/** What a custom view's capability token may do against the data endpoint.
+ *  Mirror of `CollectionViewCapability` in server collections types. */
+export type CollectionViewCapability = "read" | "write";
+
+/** A custom (LLM-authored) HTML view. Mirror of `CollectionCustomView` in
+ *  `server/workspace/collections/types.ts`. */
+export interface CollectionCustomView {
+  id: string;
+  label: string;
+  icon?: string;
+  file: string;
+  capabilities?: CollectionViewCapability[];
+}
+
 export interface CollectionSchema {
   title: string;
   icon: string;
@@ -110,6 +124,9 @@ export interface CollectionSchema {
   /** Optional predicate gating the completion bell (server-side); reuses
    *  the `when` shape. */
   notifyWhen?: { field: string; in: string[] };
+  /** Optional custom (LLM-authored) HTML views, each rendered in a
+   *  sandboxed iframe over the records. */
+  views?: CollectionCustomView[];
   /** Present only on "feed" collections (the <workspace>/feeds/ registry):
    *  declarative retrieval config the host uses to refill the records.
    *  When set, the view shows a Refresh control. */

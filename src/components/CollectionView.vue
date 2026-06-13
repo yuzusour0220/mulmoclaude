@@ -110,11 +110,12 @@
       </button>
     </header>
 
-    <!-- Search Toolbar. Shown when there are items to search OR when the
-         calendar toggle is available — the toggle must reach an empty
-         date-bearing collection so its empty-day create affordance works. -->
+    <!-- Search Toolbar. Shown when there are items to search OR when a view
+         toggle is available — the toggle must reach an empty date-bearing
+         collection (empty-day create) and a collection whose only views are
+         custom ones (so its buttons + the "+" stay reachable). -->
     <div
-      v-if="collection && (items.length > 0 || hasCalendar || hasKanban)"
+      v-if="collection && (items.length > 0 || hasCalendar || hasKanban || hasCustomViews || canAddCustomView)"
       class="px-6 py-3 bg-white border-b border-slate-100 flex items-center justify-between gap-4"
     >
       <div v-if="items.length > 0" class="relative flex-1 max-w-md">
@@ -142,7 +143,12 @@
         <!-- View toggle: table ↔ calendar ↔ kanban. Calendar shows only when
              the schema has a `date` field, kanban only with an `enum` field;
              local UI state, never persisted. -->
-        <div v-if="hasCalendar || hasKanban || hasDashboard" class="flex gap-0.5" role="group" :aria-label="t('collectionsView.viewToggle')">
+        <div
+          v-if="hasCalendar || hasKanban || hasDashboard || hasCustomViews || canAddCustomView"
+          class="flex gap-0.5"
+          role="group"
+          :aria-label="t('collectionsView.viewToggle')"
+        >
           <button
             type="button"
             class="h-8 px-2.5 flex items-center gap-1 rounded text-xs font-bold transition-colors"
@@ -189,6 +195,32 @@
           >
             <span class="material-icons text-sm">dashboard</span>
             <span>{{ t("collectionsView.viewDashboard") }}</span>
+          </button>
+          <!-- Custom (LLM-authored) views declared on the schema. -->
+          <button
+            v-for="cv in customViews"
+            :key="cv.id"
+            type="button"
+            class="h-8 px-2.5 flex items-center gap-1 rounded text-xs font-bold transition-colors"
+            :class="activeView === customViewKey(cv.id) ? 'bg-indigo-600 text-white' : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-50'"
+            :aria-pressed="activeView === customViewKey(cv.id)"
+            :data-testid="`collection-view-custom-${cv.id}`"
+            @click="setCustomView(cv.id)"
+          >
+            <span class="material-icons text-sm">{{ cv.icon || "dashboard_customize" }}</span>
+            <span>{{ cv.label }}</span>
+          </button>
+          <!-- "+" — ask Claude to author a new custom view for this collection. -->
+          <button
+            v-if="canAddCustomView"
+            type="button"
+            class="h-8 w-8 flex items-center justify-center rounded bg-white text-slate-500 border border-slate-200 hover:bg-slate-50"
+            :title="t('collectionsView.addView')"
+            :aria-label="t('collectionsView.addView')"
+            data-testid="collection-view-add"
+            @click="addCustomView"
+          >
+            <span class="material-icons text-sm">add</span>
           </button>
         </div>
         <!-- Which date field anchors the grid (only when >1 date field). -->
@@ -370,6 +402,13 @@
           :selected="viewing ? String(viewing[collection.schema.primaryKey] ?? '') : undefined"
           @select="onCalendarSelect"
         />
+      </div>
+
+      <!-- Custom (LLM-authored) HTML view, rendered in a sandboxed iframe over
+           the collection's records. Placed before the empty states so it shows
+           even for an empty collection (e.g. a still-empty year grid). -->
+      <div v-else-if="activeCustomView" class="h-full" data-testid="collection-custom-view-body">
+        <CollectionCustomView :slug="collection.slug" :view="activeCustomView" />
       </div>
 
       <div v-else-if="items.length === 0 && editing?.mode !== 'create'" class="flex flex-col items-center justify-center py-20 text-sm text-slate-400 gap-2">
@@ -696,13 +735,21 @@ import CollectionCalendarView from "./CollectionCalendarView.vue";
 import CollectionDashboardView from "./CollectionDashboardView.vue";
 import CollectionDayView from "./CollectionDayView.vue";
 import CollectionKanbanView from "./CollectionKanbanView.vue";
+import CollectionCustomView from "./CollectionCustomView.vue";
 import { dateOf, type Ymd } from "../utils/collections/calendarGrid";
 import { useConfirm } from "../composables/useConfirm";
 import { useAppApi } from "../composables/useAppApi";
 import { useShortcuts } from "../composables/useShortcuts";
 import { actionVisible, fieldVisible } from "../utils/collections/actionVisible";
 import { resolveEnumColor } from "../utils/collections/enumColors";
-import { readCollectionViewMode, writeCollectionViewMode, readCollectionSort, writeCollectionSort } from "../utils/collections/collectionViewMode";
+import {
+  readCollectionViewMode,
+  writeCollectionViewMode,
+  readCollectionSort,
+  writeCollectionSort,
+  type CollectionViewMode,
+  type BuiltInViewMode,
+} from "../utils/collections/collectionViewMode";
 import {
   isSortableField,
   nextSortDirection,
@@ -719,6 +766,7 @@ import { useCollectionRendering } from "../composables/collections/useCollection
 import { buildUpdatedRecord, coerceInlineValue, draftToRecord, firstMissingRequiredField, rowFromItem } from "../utils/collections/draft";
 import type {
   CollectionAction,
+  CollectionCustomView as CustomViewSpec,
   CollectionDetail,
   CollectionDetailResponse,
   CollectionItem,
@@ -751,7 +799,7 @@ const props = defineProps<{
    *  card's persisted `viewState` so a switch to calendar or kanban
    *  survives a remount. (The table sort is NOT a card prop — it's a shared
    *  per-collection localStorage preference, read by both modes.) */
-  initialView?: "table" | "calendar" | "kanban" | "dashboard";
+  initialView?: BuiltInViewMode;
   initialAnchorField?: string;
   initialGroupField?: string;
 }>();
@@ -764,7 +812,7 @@ const emit = defineEmits<{
   /** Embedded mode only: the view mode / calendar anchor / kanban group
    *  changed. The card persists these alongside `selected` so the calendar
    *  and kanban stick. (The table sort is shared via localStorage instead.) */
-  viewStateChange: [state: { view: "table" | "calendar" | "kanban" | "dashboard"; anchorField: string; groupField: string }];
+  viewStateChange: [state: { view: BuiltInViewMode; anchorField: string; groupField: string }];
 }>();
 
 const { t, locale } = useI18n();
@@ -1351,7 +1399,8 @@ const isFeedRoute = computed<boolean>(() => !embedded.value && route.name === PA
 // the card's own `initialView` first; lacking that (a freshly-rendered
 // presentCollection card), they fall back to the same per-collection store
 // the standalone page uses, so a card also opens in the last-used view.
-type CollectionViewMode = "table" | "calendar" | "kanban" | "dashboard";
+// `CollectionViewMode` ("table" | "calendar" | "kanban" | "dashboard" |
+// `custom:<id>`) is imported from the view-mode util.
 
 /** The view to open with: the embedded card's restored `initialView` if
  *  present (its own persisted state wins), else the slug's stored
@@ -1398,12 +1447,53 @@ const hasDashboard = computed<boolean>(() => enumFields.value.length > 0);
  *  vanished (e.g. `view = "kanban"` after switching to an enum-less
  *  collection) back to "table". Single source of truth for the toggle and
  *  the body branches. */
+/** Custom (LLM-authored) HTML views declared on the schema. */
+const customViews = computed<CustomViewSpec[]>(() => collection.value?.schema.views ?? []);
+const hasCustomViews = computed<boolean>(() => customViews.value.length > 0);
+
 const activeView = computed<CollectionViewMode>(() => {
   if (view.value === "calendar" && hasCalendar.value) return "calendar";
   if (view.value === "kanban" && hasKanban.value) return "kanban";
   if (view.value === "dashboard" && hasDashboard.value) return "dashboard";
+  if (view.value.startsWith("custom:")) {
+    const viewId = view.value.slice("custom:".length);
+    if (customViews.value.some((entry) => entry.id === viewId)) return view.value;
+  }
   return "table";
 });
+
+/** The selected custom view's spec, or null when a built-in view is active. */
+const activeCustomView = computed<CustomViewSpec | null>(() => {
+  const mode = activeView.value;
+  if (!mode.startsWith("custom:")) return null;
+  const viewId = mode.slice("custom:".length);
+  return customViews.value.find((entry) => entry.id === viewId) ?? null;
+});
+
+/** Narrow a (possibly custom) mode to a built-in one, used where only the
+ *  built-in views are representable (the embedded card's viewState). */
+function builtInViewOrTable(mode: CollectionViewMode): BuiltInViewMode {
+  return mode === "calendar" || mode === "kanban" || mode === "dashboard" ? mode : "table";
+}
+
+/** Whether to offer the "+" (author a new custom view) button. Standalone
+ *  page only (the seed starts a chat), and not for feeds (their HTML would
+ *  live outside the data/skills authoring path). */
+const canAddCustomView = computed<boolean>(() => Boolean(collection.value) && !embedded.value && !isFeed.value);
+
+/** Seed a chat asking Claude to author a new custom view for this collection.
+ *  Reuses the same chat-seed path as collection actions — the host injects a
+ *  templated prompt; Claude asks, authors the HTML, and registers it. */
+function addCustomView(): void {
+  const current = collection.value;
+  if (!current) return;
+  const prompt = t("collectionsView.addViewPrompt", { title: current.title, slug: current.slug });
+  if (props.sendTextMessage) {
+    props.sendTextMessage(prompt);
+    return;
+  }
+  appApi.startNewChat(prompt, BUILTIN_ROLE_IDS.general);
+}
 
 /** True when the calendar is the active body. */
 const calendarActive = computed<boolean>(() => activeView.value === "calendar");
@@ -1452,6 +1542,17 @@ const calendarTimeField = computed<string | undefined>(() => {
 
 function setView(next: CollectionViewMode): void {
   view.value = next;
+}
+
+/** Select a custom view by id (builds the `custom:<id>` mode key). */
+function setCustomView(viewId: string): void {
+  const mode: CollectionViewMode = `custom:${viewId}`;
+  view.value = mode;
+}
+
+/** Selector-key for a custom view, for active-state comparison in the template. */
+function customViewKey(viewId: string): CollectionViewMode {
+  return `custom:${viewId}`;
 }
 
 /** A short, slug-safe id not already used by a loaded record. Collisions
@@ -1986,7 +2087,10 @@ watch([activeView, calendarAnchorField, kanbanGroupField, sortState, loading], (
   // stale "calendar"/"kanban" that has fallen back to "table" (its enabling
   // field gone) must not be saved as an impossible mode.
   if (embedded.value) {
-    emit("viewStateChange", { view: activeView.value, anchorField: calendarAnchorField.value, groupField: kanbanGroupField.value });
+    // Embedded cards persist only the built-in view in v1 — a custom view
+    // collapses to "table" for the card's restore state (custom views are a
+    // standalone-page feature; widening the card viewState is a follow-up).
+    emit("viewStateChange", { view: builtInViewOrTable(activeView.value), anchorField: calendarAnchorField.value, groupField: kanbanGroupField.value });
   }
   // Don't write during the load window: until the collection resolves,
   // `hasCalendar`/`hasKanban` are false so `activeView` reads "table",

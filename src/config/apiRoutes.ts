@@ -254,6 +254,16 @@ const HOST_API_ROUTES = {
     /** POST → re-run a feed collection's retrieval now → { refreshed, written }.
      *  400 when the collection has no `ingest` block (not a feed). */
     refresh: "/api/collections/:slug/refresh",
+    /** GET ?id=<viewId> → the custom view's HTML file (global-bearer auth),
+     *  read from data/skills/:slug/views/. The parent renders it sandboxed. */
+    viewFile: "/api/collections/:slug/view-file",
+    /** POST → mint a slug- and capability-scoped token for a custom view
+     *  (global-bearer auth) → { token, exp, dataUrl, capabilities }. */
+    viewToken: "/api/collections/:slug/view-token",
+    /** GET → enriched records (getItems); PUT → validated write (putItems).
+     *  Guarded by the scoped view token (NOT the global bearer); exempt from
+     *  the global bearer + CSRF middleware. See server/api/auth/viewToken.ts. */
+    viewData: "/api/collections/:slug/view-data",
   },
 
   // `scheduler` group migrated to META — see `src/plugins/scheduler/automationsMeta.ts`.

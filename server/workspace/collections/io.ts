@@ -11,6 +11,7 @@ import { writeFileAtomic } from "../../utils/files/atomic.js";
 import { workspacePath } from "../workspace.js";
 import { isContainedInRoot, itemFilePath, resolveTemplatePath, safeSlugName } from "./paths.js";
 import type { CollectionItem, CollectionSchema } from "./types.js";
+import type { LoadedCollection } from "./discovery.js";
 
 export interface IoOptions {
   /** Override the workspace root for containment checks. Default:
@@ -213,6 +214,34 @@ export async function deleteItem(dataDir: string, itemId: string, opts: IoOption
  *  semantic id from the record's name). */
 export function generateItemId(): string {
   return randomBytes(4).toString("hex");
+}
+
+/** Read a collection's custom-view HTML, path-safely. `viewFile` is a
+ *  schema-validated `views/*.html` path, resolved with realpath containment.
+ *  Returns the HTML, or null when the path is unsafe or the file is missing.
+ *
+ *  The base dir is source-aware: a **project** collection authors views in the
+ *  `data/skills/<slug>/` staging dir (custom-view HTML is staging-only — NOT
+ *  mirrored to `.claude/skills`, because rendering is host-side; see
+ *  plans/feat-collections-custom-views.md), whereas a **user** / **feed**
+ *  collection is authored directly in its own discovered `skillDir`. Reading
+ *  relative to the wrong tree would 404 a perfectly valid view. */
+export async function readCustomViewHtml(
+  collection: Pick<LoadedCollection, "slug" | "source" | "skillDir">,
+  viewFile: string,
+  opts: IoOptions = {},
+): Promise<string | null> {
+  const safeSlug = safeSlugName(collection.slug);
+  if (safeSlug === null) return null;
+  const workspaceRoot = opts.workspaceRoot ?? workspacePath;
+  const base = collection.source === "project" ? path.join(workspaceRoot, "data", "skills", safeSlug) : collection.skillDir;
+  const resolved = resolveTemplatePath(base, viewFile);
+  if (resolved === null) return null;
+  try {
+    return await readFile(resolved, "utf-8");
+  } catch {
+    return null;
+  }
 }
 
 /** The item id a CREATE should use for `schema`, or null when the

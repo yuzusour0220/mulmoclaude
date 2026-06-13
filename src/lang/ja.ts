@@ -1231,6 +1231,11 @@ const jaMessages = {
     viewDashboard: "ダッシュボード",
     dashboardAlertHeading: "{label} — {count}件",
     dashboardAllItems: "一覧",
+    addView: "ビューを追加",
+    customViewLoading: "ビューを読み込み中…",
+    customViewError: "このビューを読み込めませんでした: {error}",
+    addViewPrompt:
+      '「{title}」コレクションにカスタムビューを追加したい。何を見たい／編集したいか質問してから、HTML ビューファイルを data/skills/{slug}/views/your-view.html に作成し、コレクションの schema.json の `views[]` に登録して（読み取り専用なら capabilities ["read"]、レコードを編集するなら ["read","write"]）。データ契約は custom-view ヘルプに従ってください。',
     repair: "修復",
     dataIssuesDetected: "{count} 件のレコードファイルにデータの問題があり、この表示に出てこない可能性があります。",
     repairPrompt:

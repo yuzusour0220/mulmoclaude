@@ -16,7 +16,7 @@ Under the hood it uses the Claude Code Agent SDK as its LLM core. Claude has ful
 - **Storyteller** — Crafts illustrated narrative stories as a MulmoScript storyboard.
 - **Storyteller Plus** — Like Storyteller, with consistent character images across beats.
 - **Settings** — Manages information sources, skills, and scheduled automations for the workspace.
-- *(Additional roles may be defined by the user in the workspace.)*
+- _(Additional roles may be defined by the user in the workspace.)_
 
 ## Key Capabilities
 
@@ -53,6 +53,7 @@ See [Wiki](config/helps/wiki.md) for details on how it works.
 - [Feeds](config/helps/feeds.md) — register a self-refreshing data feed (RSS/Atom/JSON) by authoring `feeds/<slug>/schema.json`: schema shape, the `ingest` block, raw-item field mapping, and `maxItems` retention
 - [GitHub repositories in the workspace](config/helps/github.md) — clone-destination rules under `github/<name>/` and how to handle existing directories with matching or different remotes
 - [Collection skills](config/helps/collection-skills.md) — build a data app (model + UI + relations + computed fields + action buttons) by authoring a `schema.json` collection skill: the DSL, field types, derived formulas, actions, records
+- [Custom views](config/helps/custom-view.md) — give a collection a view the built-ins don't cover (year/quarter overview, Gantt): an HTML file under `views/`, registered in `schema.json`, rendered in a sandboxed iframe over the records
 - [Todo list collection](config/helps/todo-collection.md) — the canonical recipe for building or migrating a todo / task list: full schema (status enum + `done` toggle + priority bells), `SKILL.md`, and legacy `todo-plugin` migration steps
 - [Vocabulary collection](config/helps/vocabulary.md) — recipe for a language-learning word deck (any language): `proficiency` enum + `mastered` toggle + `meaning`/`example` fields, a kanban for drag-to-promote review, and bulk-add / quiz workflows
 - [Lessons collection](config/helps/lessons-collection.md) — recipe for a multi-session **curriculum** (any topic): one lesson per record, a `status` kanban, a `file` link to each lesson's HTML, and per-lesson + course-level **Learn** actions run by the Tutor

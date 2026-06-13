@@ -1241,6 +1241,11 @@ const frMessages = {
     viewDashboard: "Tableau de bord",
     dashboardAlertHeading: "{label} — {count}",
     dashboardAllItems: "Tous les éléments",
+    addView: "Ajouter une vue",
+    customViewLoading: "Chargement de la vue…",
+    customViewError: "Impossible de charger cette vue : {error}",
+    addViewPrompt:
+      'Je veux ajouter une vue personnalisée à la collection « {title} ». Demande-moi ce que je veux voir ou modifier, puis crée le fichier HTML de la vue dans data/skills/{slug}/views/your-view.html et enregistre-le dans le schema.json de la collection sous `views[]` (capabilities ["read"] pour une vue en lecture seule, ["read","write"] si elle modifie des enregistrements). Suis l\'aide custom-view pour le contrat de données.',
     repair: "Réparer",
     dataIssuesDetected: "{count} fichier(s) d'enregistrement présentent des problèmes de données et peuvent être absents de cette vue.",
     repairPrompt:
