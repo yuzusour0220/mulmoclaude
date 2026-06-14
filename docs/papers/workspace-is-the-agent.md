@@ -402,7 +402,52 @@ change to files you can read.
 
 ---
 
-## 8. The broader shift
+## 8. Owning the learning loop: from one user to the firm
+
+The sharpest external statement of *why this matters* arrived, while this essay was
+being written, from Satya Nadella:
+["a frontier without an ecosystem is not stable."](https://x.com/satyanadella/status/2066182223213293753)
+His argument is that the strategic question for any organization in an AI economy is
+not which model is best, but whether it can **own the learning loop** that encodes
+its institutional knowledge — and that the *test* of that ownership is whether it can
+swap out a generalist model without losing the "company-veteran" expertise built on
+top of it.
+
+The workspace-is-the-agent architecture passes that test by construction. The
+expertise lives in `config/roles/`, the collection schemas, the `SKILL.md` files,
+and the wiki — files the model interprets, not weights it carries. Replace the model
+and the accumulated knowledge is untouched, because it was never inside the model.
+The "company veteran" *is* the workspace.
+
+This is a stronger form of ownership than the one usually reached for. The reflexive
+answer to "own your learning loop" is *fine-tune a model on your private traces* —
+but a model you tuned is a model you are now coupled to: the IP is baked into weights
+you cannot fully inspect, diff, or carry to the next frontier model without
+retraining. A declarative workspace keeps the IP **inspectable, diffable, forkable,
+and model-agnostic.** The honest qualification is one of coverage, not direction:
+declarative files capture *explicit* knowledge — workflows, judgment-as-prose, linked
+notes — better than the *tacit* pattern recognition that learning on private traces
+can absorb. The two are complementary. The workspace is the portable substrate that
+survives a model swap; private tuning, if any, is an accelerator layered on top — not
+the thing you own.
+
+And the concept is not intrinsically personal. MulmoClaude, throughout this essay, is
+a **single-user** agent, and that is the scope of the evidence. But the same
+primitives scale to an organization: a team's learning loop becomes a **shared,
+versioned workspace** — roles, collection schemas, skills, and a cross-linked wiki —
+forked with `cp -r`, branched and audited with `git`, and owned independently of any
+model vendor. At that scale the workspace is precisely the firm's compounding
+capital: institutional memory made queryable, recurring workflows crystallized into
+applications (§4), and the whole of it portable across model generations. The
+multi-user case has real open problems — concurrency, access control, and the merge
+discipline that keeps a shared "self" coherent — which this essay does not solve. But
+the single-user result already points at the conclusion that matters: **the durable
+unit of ownership, whether the owner is a person or a firm, can be a workspace of
+files rather than a tuned model.**
+
+---
+
+## 9. The broader shift
 
 Two sentences capture the change in how software comes to exist.
 

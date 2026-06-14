@@ -509,6 +509,39 @@ how often the loop is run, how much authoring effort it saves versus alternative
 and how the discipline of pruning holds up across users and longer horizons is
 future work.
 
+\paragraph{Owning the learning loop.}
+A firm's strategic question in an AI-driven economy---recently framed by
+Nadella~\citep{nadella2026ecosystem}---is whether it can \emph{own the learning
+loop} that encodes its institutional knowledge, and, as the test of that ownership,
+whether it can swap out a generalist model without losing the ``company-veteran''
+expertise built on top of it. The workspace-as-agent architecture passes that test
+by construction: the expertise lives in roles, schemas, skills, and the
+wiki---files the model interprets---not in weights it carries, so replacing the
+model leaves the accumulated knowledge intact. This is a stronger form of ownership
+than encoding the loop by fine-tuning a model on private traces, which re-couples
+the firm's IP to a particular model; a declarative workspace keeps that IP
+inspectable, diff-able, forkable, and model-agnostic. The honest qualification is
+one of coverage: declarative files capture \emph{explicit} knowledge---workflows,
+judgment-as-prose, linked notes---better than the \emph{tacit} pattern recognition
+that learning on private traces can absorb. The two are complementary; the workspace
+is the portable substrate that survives a model swap, and any private tuning is an
+accelerator layered on top of it rather than the thing one owns.
+
+\paragraph{From one user to the firm.}
+MulmoClaude is, throughout this paper, a \emph{single-user} agent, and our evidence
+is one personal workspace---but nothing in the architecture is intrinsically
+personal, and the concept generalizes directly to an organization. The same
+primitives scale: a team's learning loop becomes a shared, versioned workspace of
+roles, collection schemas, skills, and a cross-linked wiki, forked with \code{cp -r},
+branched and audited with \code{git}, and owned independently of any model vendor.
+At that scale the workspace is exactly the firm's compounding capital---institutional
+memory made queryable, recurring workflows crystallized into applications, and the
+whole of it portable across model generations. We have not evaluated the multi-user
+case, and its open problems are real (concurrency, access control, and the merge
+discipline that keeps a shared ``self'' coherent); but the single-user results
+suggest that the durable unit of ownership---whether the owner is a person or a
+firm---can be a workspace of files rather than a tuned model.
+
 % ===========================================================================
 \section{Conclusion}
 \label{sec:conclusion}
