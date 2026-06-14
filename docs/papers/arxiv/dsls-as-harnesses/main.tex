@@ -31,9 +31,15 @@
 
 \newcommand{\code}[1]{\texttt{\small #1}}
 
+% Include a screenshot if present, else a labeled placeholder box (keeps the
+% build green before the PNGs are dropped into figures/).
+\newcommand{\viewfig}[1]{%
+  \IfFileExists{#1}{\includegraphics[width=\linewidth]{#1}}{%
+    \fbox{\parbox[c][3cm][c]{0.92\linewidth}{\centering\footnotesize\itshape
+      screenshot pending\\\texttt{\scriptsize #1}}}}}
+
 % --- title ------------------------------------------------------------------
-\title{\textbf{DSLs as Harnesses:}\\[2pt]
-\large Declarative Applications-as-Data as a Reliability Substrate for LLM Agents}
+\title{\textbf{DSLs as Harnesses for Reliable LLM Agents}}
 
 \author{
   Satoshi Nakajima\\
@@ -69,9 +75,9 @@ language, domain modeling). We position the approach against token-level
 constrained decoding and schema-validated tool interfaces---which bound a single
 generation or call---whereas a collection schema bounds a persistent, on-disk
 application the agent operates \emph{inside}. We report a longitudinal single-user
-deployment in which 26 applications, 6 bespoke sandboxed UI views, and 3 external
-feeds accreted over roughly two months without any host code being written per
-application. We discuss the design's principal hazard---the escape hatch from the
+deployment in which 24 schema-defined applications, 3 external feeds, and 9 bespoke
+sandboxed UI views accreted over roughly two months without any host code being
+written per application. We discuss the design's principal hazard---the escape hatch from the
 declarative surface to arbitrary code---and its limitations: the open-ended
 formula and custom-view sub-surfaces that lie outside the finite grammar, indirect
 prompt injection through ingested feed content, non-replayable execution, and the
@@ -108,8 +114,7 @@ and typically ships with a parser and validator that can decide well-formedness
 before anything executes.
 
 We ground the argument in a working system. \textbf{Collections} is a feature of
-MulmoClaude,\footnote{\url{https://github.com/receptron/mulmoclaude}} an
-open-source agent application built on the Claude Agent SDK whose
+MulmoClaude, an open-source agent application built on the Claude Agent SDK whose
 founding philosophy is \emph{the workspace is the database; files are the source
 of truth; the model is the intelligent interface.} A collection is defined by a
 single JSON \emph{schema} that simultaneously specifies a data model, inter-record
@@ -144,9 +149,9 @@ actionable message, before it can run.
   \emph{reliability dial}, and explain the validator and escape-hatch mechanisms
   that keep the surface both safe and expressive (\S\ref{sec:dial},
   \S\ref{sec:escape}).
-  \item We report a \textbf{longitudinal single-user deployment}: 26 applications,
-  6 bespoke sandboxed views, and 3 external feeds accreted over $\sim$2 months
-  with no per-application host code (\S\ref{sec:casestudy}).
+  \item We report a \textbf{longitudinal single-user deployment}: 24 schema-defined
+  applications, 3 external feeds, and 9 bespoke sandboxed views accreted over
+  $\sim$2 months with no per-application host code (\S\ref{sec:casestudy}).
   \item We give an \textbf{honest account of the limitations}: the escape-hatch
   hazard, non-replayable execution, and the scope of our evidence
   (\S\ref{sec:limitations}).
@@ -531,10 +536,13 @@ these applications; each is a schema plus records, authored by the agent in
 response to natural-language requests.
 
 \paragraph{Scale.}
-The workspace contains 26 collections holding $\sim$700 records. Their sizes vary
-by three orders of magnitude (Table~\ref{tab:collections}), consistent with the
-claim that the marginal cost of a new application is low enough to justify even a
-single-record one.
+The workspace contains 24 schema-defined collections holding $\sim$700 records,
+plus 3 feeds (\S\ref{sec:collections}) holding a further $\sim$260 ingested
+records. Collection sizes vary by nearly three orders of magnitude
+(Table~\ref{tab:collections}), consistent with the claim that the marginal cost of
+a new application is low enough to justify even a single-record one. Each schema is
+small---32 lines of JSON on average---and there is, by construction, zero
+per-application host code behind any of them.
 
 \begin{table}[t]
 \centering
@@ -548,12 +556,12 @@ vocabulary       & 50  & restaurants & 20 & videos          & 6 \\
 todos            & 23  & lessons-biology & 12 & worklog      & 6 \\
 reading-list     & 10  & baseball-scout  & 11 & portfolio    & 4 \\
 stock-quotes     & 10  & watchlist       & 10 & html-apps    & 4 \\
-tax-payments     & 7   & clients         & 3  & \emph{(13 more)} & $\le 2$ \\
+tax-payments     & 7   & clients         & 3  & \emph{(7 more)} & $\le 2$ \\
 \bottomrule
 \end{tabular}
 \caption{Representative collections by record count in the studied workspace
-(26 total). Sizes span from a single-record profile to 466 newsletter
-subscribers.}
+(24 schema-defined collections total). Sizes span from a single-record profile to
+466 newsletter subscribers.}
 \label{tab:collections}
 \end{table}
 
@@ -565,13 +573,36 @@ host-driven recurrence (monthly and annual obligations via \code{spawn}), and
 completion/notification gating (todos, tax payments).
 
 \paragraph{Bespoke views.}
-Six collections carry custom HTML views authored by the agent on request: a
-restaurant guide rendered as a transit-style map, a movie watchlist as a poster
-gallery, a vocabulary list as a flashcard drill, a portfolio as an allocation
-chart, a scouting collection as per-entity radar charts, and a subscriber
-collection as a trend line. Each is software with an addressable audience of
-one---software no vendor would build---produced for the cost of a request. The
-owner never wrote or read the HTML.
+Nine custom HTML views, authored by the agent on request, are deployed---seven over
+collections and two over feeds. They include a restaurant guide rendered as a
+transit-style map, a movie watchlist as a poster gallery, a vocabulary list as a
+flashcard drill, a portfolio as an allocation chart, a stock list as a valuation
+scatter plot, a scouting collection as per-entity radar charts, and a subscriber
+collection as a trend line (Figure~\ref{fig:views}). Each is software with an
+addressable audience of one---software no vendor would build---produced for the cost
+of a request. The owner never wrote or read the HTML.
+
+\begin{figure}[t]
+\centering
+\begin{minipage}[t]{0.31\textwidth}\centering
+  \viewfig{figures/restaurants-map.png}\\[2pt]\footnotesize (a) a restaurant guide as a transit-style map
+\end{minipage}\hfill
+\begin{minipage}[t]{0.31\textwidth}\centering
+  \viewfig{figures/portfolio-allocation.png}\\[2pt]\footnotesize (b) a portfolio as an allocation chart
+\end{minipage}\hfill
+\begin{minipage}[t]{0.31\textwidth}\centering
+  \viewfig{figures/feed-gallery.png}\\[2pt]\footnotesize (c) a podcast feed as a read--write gallery
+\end{minipage}
+\caption{Three of the nine agent-authored custom views in the studied deployment
+(two collection views and one feed view): a restaurant collection rendered as a
+transit-style map (a); a portfolio whose host-computed valuations (\S\ref{sec:collections})
+drive an allocation chart (b); and an ingested podcast feed turned into a
+read--write gallery (c), where the owner's rating, notes, and resume position are
+layered on top of episode metadata. Each is a self-contained HTML file the host
+serves in a sandboxed, capability-scoped iframe; the owner described each in
+natural language and never saw the generated markup.}
+\label{fig:views}
+\end{figure}
 
 \paragraph{Feeds.}
 Three collections are feeds: an hourly newspaper-technology feed (64 records at
