@@ -106,9 +106,9 @@ executed" is, in MulmoScript, an actual boundary in the pipeline.
 MulmoClaude's collections feature is a DSL-as-harness whose authoring pen is
 handed to the end user. A collection is defined by a schema — a small DSL
 describing the shape of the data: its fields and types, the relationships between
-them, which value marks a record "done," when to raise a notification, and how a
-record recurs. That schema drives the skills the agent uses to read, write, and
-reason over the records. The schema is the spec; the generated skill files and
+them, which value marks a record "done," when to raise a notification, how a
+record recurs, and — for a feed — where to fetch its records from. That schema
+drives the skills the agent uses to read, write, and reason over the records. The schema is the spec; the generated skill files and
 the host's reconciler are the execution layer.
 
 Like any good harness, the schema enforces its own invariants. Whoever declares a
@@ -145,6 +145,11 @@ The well-designed DSLs all answer this the same way — with a deliberate exit t
 more expressive layer. A collection drops out of its declarative schema into a
 seeded chat — an agent with full tools — the moment a record needs the human
 judgment the form cannot capture; its action buttons start exactly such a chat.
+A collection's *presentation* has the same exit: when host-rendered field types
+cannot show the data well — a portfolio as a chart, restaurants as a map — the
+schema escapes to a **custom HTML view**, arbitrary code the agent writes and the
+host serves sandboxed, rather than contorting the field-type vocabulary into a
+layout it was never meant to express.
 MulmoScript can incorporate arbitrary external assets and media rather than
 insisting everything be expressed in its own primitives.
 The art of DSL-as-harness is not maximizing constraint; it is choosing *where*

@@ -95,13 +95,15 @@ This is the key distinction between Collections and traditional application fram
 
 A single schema defines:
 
-| Concern        | Collection DSL |
-| -------------- | -------------- |
-| Data Model     | Fields         |
-| Relationships  | Ref / Embed    |
-| User Interface | Field Types    |
-| Computation    | Derived Fields |
-| Workflow       | Actions        |
+| Concern          | Collection DSL  |
+| ---------------- | --------------- |
+| Data Model       | Fields          |
+| Relationships    | Ref / Embed     |
+| User Interface   | Field Types     |
+| Custom UI        | Views (HTML)    |
+| Computation      | Derived Fields  |
+| Workflow         | Actions         |
+| Data Acquisition | Ingest (Feeds)  |
 
 Traditional application frameworks spread these concerns across multiple technologies and codebases.
 
@@ -234,6 +236,97 @@ are often easier to express in prose than in a specialized language.
 Collections embrace that reality.
 
 > Business logic becomes language.
+
+---
+
+## Custom Views
+
+The host renders every collection from its field types: a list, a detail form, and — where the schema declares them — calendar and Kanban layouts.
+
+Every collection therefore has a usable interface for free.
+
+But host-rendered field types describe data; they do not always present it well.
+
+A portfolio is clearer as an allocation chart.
+
+A set of restaurants is clearer as a map.
+
+A vocabulary list is clearer as flashcards.
+
+For these, a collection can carry custom views: HTML files the agent authors and the host serves.
+
+```json
+"views": [
+  { "id": "allocation", "label": "Allocation", "file": "views/allocation.html", "capabilities": ["read", "write"] }
+]
+```
+
+A view is an ordinary web page.
+
+It may pull a charting library such as Chart.js or Plotly from a curated CDN allow-list.
+
+It receives its collection's records through a capability-scoped token, not ambient access.
+
+The host serves it inside a sandboxed iframe under a strict Content-Security-Policy: an opaque origin, `default-src 'none'`, and network access only back to the host.
+
+A view's `capabilities` declare what its token permits: `read` to fetch records, `write` to update them.
+
+So a custom view is not a hole in the harness.
+
+It is the same bargain as the rest of Collections.
+
+The agent supplies the bespoke surface.
+
+The host supplies the deterministic, sandboxed boundary around it.
+
+The presentation layer, too, becomes data — an HTML file inside the collection, authored on request, versioned with everything else.
+
+---
+
+## Feeds — Acquisition as Data
+
+A collection holds records.
+
+Where do the records come from?
+
+Usually the agent writes them.
+
+But some collections track an external source: a podcast's episodes, a newspaper's headlines, a JSON API.
+
+For these, a collection declares an `ingest` block, and becomes a feed.
+
+```json
+"ingest": {
+  "kind": "rss",
+  "url": "https://lexfridman.com/feed/podcast/",
+  "schedule": "daily",
+  "idFrom": "guid",
+  "map": { "headline": "title", "url": "link", "published": "pubDate" },
+  "maxItems": 100
+}
+```
+
+The block is purely declarative.
+
+`kind` selects a retriever (`rss`, `atom`, or `http-json`).
+
+`map` projects source fields onto the collection's fields.
+
+`schedule` (`hourly` / `daily` / `weekly` / `on-demand`) tells the host when to fetch.
+
+`maxItems` caps how many records are kept.
+
+The host owns the deterministic half: fetching on schedule, parsing the response, mapping fields, de-duplicating by id, pruning to the cap, and tracking a cursor and failure count.
+
+No retrieval code is written.
+
+And because a feed is just a collection, everything else still applies.
+
+It can carry its own custom views.
+
+The user can layer their own fields on top of the ingested ones — a rating, a note, a resume position — turning a passive mirror into a read-write application over an external source.
+
+Acquisition becomes data, in the same way computation, UI, and workflow already did.
 
 ---
 
