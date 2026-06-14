@@ -60,7 +60,9 @@ Look at what is actually there:
 | `config/mcp.json` | tool-and-server wiring | **code** (capability DSL) |
 | `config/helps/` | help surfaces | code + data |
 | `data/collections/*/schema.json` | data model + UI + computation + workflow | **code** (application DSL) |
+| `data/collections/*/views/*.html` | bespoke, agent-authored UI for a collection | **code** (presentation) |
 | collection `SKILL.md` | procedural instructions the agent reads to operate a collection | **code** (procedural DSL) |
+| `feeds/*/schema.json` | external-source ingestion + data model | **code** (acquisition DSL) |
 | `data/scheduler/` | recurring automations | **code** (trigger DSL) |
 | `data/wiki/` | densely cross-linked knowledge | data + graph DSL |
 | `conversations/memory.md` | accreted facts | **data** |
@@ -126,16 +128,19 @@ The most important consequence of "code lives in the workspace" is this: **a
 collection skill is an application in the full, traditional sense — not merely
 structured memory.**
 
-A traditional application bundles four things. A collection skill bundles the
-same four, and the host supplies the runtime for all of them generically:
+A traditional application bundles a handful of concerns. A collection skill
+bundles the same ones, and the host supplies the runtime for all of them
+generically:
 
 | Concern | Traditional stack | Collection skill |
 |---|---|---|
 | Data model | database + ORM | `schema.json` fields |
 | Relationships | foreign keys, joins | `ref` / `embed` fields |
 | User interface | frontend framework | host-rendered field types — **free** |
+| Custom UI | bespoke frontend code | `views/*.html` the agent authors — sandboxed, capability-scoped |
 | Computation | service code | `derived` fields (spreadsheet-like, cross-collection) |
 | Workflow | workflow engine | `actions` + `SKILL.md` procedures |
+| Data acquisition | ETL / cron jobs | `ingest` block (RSS / Atom / JSON, scheduled) |
 | Persistence | DB server | `records/*.json` on disk |
 
 A personal restaurant guide built this way *is* an app: it has persistent
@@ -158,7 +163,9 @@ a note, and it is threefold:
    skill is a stable contract; a prompt-of-the-moment is not. CRUD on a
    collection is a real, repeatable file operation, not a re-derived guess.
 3. **A UI for free.** The host renders the collection as a navigable surface with
-   pickers, links, and computed columns. A note renders as text.
+   pickers, links, and computed columns — and where field types are not enough,
+   the agent authors a bespoke view (`views/*.html`: a chart, a map, a flashcard
+   deck) that the host serves sandboxed. A note renders as text.
 
 There is a natural ladder of memory maturity, and a collection skill is the top
 rung:
