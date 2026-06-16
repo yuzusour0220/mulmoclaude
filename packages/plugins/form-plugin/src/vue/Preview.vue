@@ -11,10 +11,10 @@
       </svg>
 
       <h3 class="text-gray-900 font-bold text-lg mb-1 line-clamp-2">
-        {{ formData?.title || t("pluginPresentForm.fallbackTitle") }}
+        {{ formData?.title || t.fallbackTitle }}
       </h3>
 
-      <p class="text-gray-600 text-sm mb-2">{{ t("pluginPresentForm.fieldCount", { count: fieldCount }, fieldCount) }}</p>
+      <p class="text-gray-600 text-sm mb-2">{{ t.fieldCount(fieldCount) }}</p>
 
       <div v-if="!isSubmitted" class="flex items-center justify-center gap-2">
         <div class="w-32 h-2 bg-gray-200 rounded-full overflow-hidden">
@@ -31,7 +31,7 @@
             clip-rule="evenodd"
           />
         </svg>
-        {{ t("pluginPresentForm.submitted") }}
+        Submitted
       </div>
     </div>
   </div>
@@ -39,11 +39,11 @@
 
 <script setup lang="ts">
 import { computed } from "vue";
-import { useI18n } from "vue-i18n";
 import type { ToolResult } from "gui-chat-protocol";
-import type { FormData } from "./types";
+import type { FormData } from "../core/types";
+import { useT } from "../lang";
 
-const { t } = useI18n();
+const t = useT();
 
 interface FormViewState {
   userResponses: Record<string, unknown>;

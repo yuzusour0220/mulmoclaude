@@ -18,7 +18,7 @@
               clip-rule="evenodd"
             />
           </svg>
-          {{ t("pluginPresentForm.errorSummary") }}
+          {{ t.errorSummary }}
         </h3>
         <ul class="text-red-700 space-y-1">
           <li v-for="[fieldId, error] in fieldErrors" :key="fieldId">
@@ -45,7 +45,7 @@
             }"
           >
             {{ field.label }}
-            <span v-if="field.required" class="text-red-500 ml-1" aria-label="required">{{ t("pluginPresentForm.requiredMarker") }}</span>
+            <span v-if="field.required" class="text-red-500 ml-1" aria-label="required">{{ t.requiredMarker }}</span>
           </label>
 
           <p v-if="field.description" class="text-gray-600 text-sm mb-2">
@@ -182,7 +182,7 @@
             @blur="handleBlur(field.id)"
             @change="handleInput(field.id)"
           >
-            <option :value="null" disabled>{{ t("pluginPresentForm.selectOption") }}</option>
+            <option :value="null" disabled>{{ t.selectOption }}</option>
             <option v-for="(choice, index) in field.choices" :key="index" :value="index">
               {{ getChoiceLabel(choice) }}
             </option>
@@ -241,10 +241,10 @@
             }"
           >
             <template v-if="field.maxLength">
-              {{ t("pluginPresentForm.charactersCount", { current: (formValues[field.id] || "").length, max: field.maxLength }) }}
+              {{ t.charactersCount((formValues[field.id] || "").length, field.maxLength) }}
             </template>
             <template v-else>
-              {{ t("pluginPresentForm.charactersCountNoMax", { current: (formValues[field.id] || "").length }) }}
+              {{ t.charactersCountNoMax((formValues[field.id] || "").length) }}
             </template>
           </div>
         </div>
@@ -256,12 +256,12 @@
             :class="submitted ? 'bg-green-600 cursor-default' : 'bg-blue-600 hover:bg-blue-700'"
             class="px-8 py-3 rounded-lg text-white font-semibold text-lg transition-colors"
           >
-            {{ submitted ? t("pluginPresentForm.submitted") : t("pluginPresentForm.submit") }}
+            {{ submitted ? t.submitted : t.submit }}
           </button>
         </div>
 
         <div class="mt-4 text-center text-gray-600 text-sm">
-          {{ t("pluginPresentForm.progress", { filled: filledRequiredCount, total: requiredFieldsCount }) }}
+          {{ t.progress(filledRequiredCount, requiredFieldsCount) }}
         </div>
       </form>
     </div>
@@ -270,11 +270,11 @@
 
 <script setup lang="ts">
 import { ref, watch, computed } from "vue";
-import { useI18n } from "vue-i18n";
 import type { ToolResult } from "gui-chat-protocol";
-import type { FormData, FormField, TextField, TextareaField, NumberField, DateField, CheckboxField } from "./types";
+import type { FormData, FormField, TextField, TextareaField, NumberField, DateField, CheckboxField } from "../core/types";
+import { useT } from "../lang";
 
-const { t } = useI18n();
+const t = useT();
 
 interface FieldError {
   fieldId: string;
@@ -458,7 +458,6 @@ function isValidEmail(email: string): boolean {
 
 function isValidUrl(url: string): boolean {
   try {
-    // eslint-disable-next-line no-new -- side-effect probe to validate URL syntax
     new URL(url);
     return true;
   } catch {
@@ -623,8 +622,7 @@ function indentContinuation(text: string): string {
 }
 
 // LLM-authored title/label/choice strings — collapse any newline so they
-// can't smuggle phantom bullets into the payload. split-trim-join avoids
-// sonarjs's slow-regex flag on `\s*\n\s*`.
+// can't smuggle phantom bullets into the payload.
 function singleLine(text: unknown): string {
   if (typeof text !== "string") {
     return getChoiceLabel(text);
