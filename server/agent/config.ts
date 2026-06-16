@@ -39,13 +39,49 @@ const BASE_ALLOWED_TOOLS = ["Bash", "Read", "Write", "Edit", "Glob", "Grep", "We
 // syntax).
 //
 // Maintenance: when the user enables a new Anthropic connector that
-// MulmoClaude should pre-allow (GitHub / Notion / Linear / Atlassian
-// / Sentry / Cloudflare / etc. — Anthropic keeps adding), append a
-// `mcp__claude_ai_<DisplayName>` entry here. The server-id mapping
-// is `display name with [\s.] → _` (e.g. `claude.ai Google Drive` →
-// `mcp__claude_ai_Google_Drive`). Confirm the live spelling via
-// `claude mcp list` before adding.
-const CLAUDE_AI_CONNECTOR_SERVERS = ["mcp__claude_ai_Gmail", "mcp__claude_ai_Google_Calendar", "mcp__claude_ai_Google_Drive", "mcp__claude_ai_Slack"];
+// MulmoClaude should pre-allow, append a `mcp__claude_ai_<DisplayName>`
+// entry here. The server-id mapping is `display name with [\s.] → _`
+// (e.g. `claude.ai Google Drive` → `mcp__claude_ai_Google_Drive`).
+// Confirm the live spelling against `~/.claude.json`'s
+// `claudeAiMcpEverConnected` list — that's the canonical display
+// name Anthropic ships in the account-level connector picker, and
+// hand-entered guesses (`Atlassian Jira` vs `Atlassian`) misfire
+// silently.
+//
+// A spelling that doesn't match a real server is a no-op (the entry
+// is just an unused `--allowedTools` argument), so the cost of
+// over-listing is zero — better to include a connector that may not
+// exist yet than to make users edit Settings → Allowed Tools every
+// time Anthropic ships a new one (#1715).
+const CLAUDE_AI_CONNECTOR_SERVERS = [
+  // Google + Slack — Anthropic's original first-party set.
+  "mcp__claude_ai_Gmail",
+  "mcp__claude_ai_Google_Calendar",
+  "mcp__claude_ai_Google_Drive",
+  "mcp__claude_ai_Slack",
+  // Anthropic's expanding catalog (alphabetical). When the actual
+  // claude.ai display name uses spaces or dots, replace them with
+  // underscores — see the rule at the top of this block.
+  "mcp__claude_ai_Asana",
+  "mcp__claude_ai_Atlassian",
+  "mcp__claude_ai_Box",
+  "mcp__claude_ai_Calendly",
+  "mcp__claude_ai_Canva",
+  "mcp__claude_ai_ClickUp",
+  "mcp__claude_ai_Cloudflare",
+  "mcp__claude_ai_Figma",
+  "mcp__claude_ai_GitHub",
+  "mcp__claude_ai_HubSpot",
+  "mcp__claude_ai_Intercom",
+  "mcp__claude_ai_Linear",
+  "mcp__claude_ai_Notion",
+  "mcp__claude_ai_PagerDuty",
+  "mcp__claude_ai_Plaid",
+  "mcp__claude_ai_Salesforce",
+  "mcp__claude_ai_Sentry",
+  "mcp__claude_ai_Stripe",
+  "mcp__claude_ai_Zapier",
+];
 
 /** Tool names the agent is allowed to call this session. Drives
  *  `PLUGIN_NAMES` env (the MCP child's filter) and the CLI's
