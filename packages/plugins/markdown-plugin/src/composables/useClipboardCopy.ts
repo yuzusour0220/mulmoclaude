@@ -10,12 +10,16 @@ export interface UseClipboardCopyHandle {
 
 export function useClipboardCopy(resetMs = 2000): UseClipboardCopyHandle {
   const copied = ref(false);
+  let resetTimer: ReturnType<typeof setTimeout> | undefined;
 
   async function copy(text: string): Promise<void> {
     try {
       await navigator.clipboard.writeText(text);
       copied.value = true;
-      setTimeout(() => {
+      // Cancel any in-flight reset so a quick second copy doesn't get its
+      // "Copied!" hint cleared early by the previous timer.
+      clearTimeout(resetTimer);
+      resetTimer = setTimeout(() => {
         copied.value = false;
       }, resetMs);
     } catch {

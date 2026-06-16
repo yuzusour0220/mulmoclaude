@@ -8,11 +8,13 @@ export interface MarkdownToolData {
   filenamePrefix?: string;
 }
 
-/** Args the LLM passes when invoking the tool (the create path). */
+/** Args the LLM passes when invoking the tool (the create path). All
+ *  three are `required` in TOOL_DEFINITION.parameters, so they're
+ *  non-optional here too. */
 export interface MarkdownArgs {
-  title?: string;
+  title: string;
   markdown: string;
-  filenamePrefix?: string;
+  filenamePrefix: string;
 }
 
 /** True when the `markdown` field is a workspace-relative file path

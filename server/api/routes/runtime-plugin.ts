@@ -68,23 +68,25 @@ router.get(API_ROUTES.plugins.runtimeList, (_req: Request, res: Response<{ plugi
 
 router.post(API_ROUTES.plugins.runtimeDispatch, async (req: Request<{ pkg: string }>, res: Response) => {
   const pkg = decodeURIComponent(req.params.pkg);
+  const args = isRecord(req.body) ? req.body : {};
+  // Built-in plugins (bundled by Vite, wrapped with `wrapWithScope`)
+  // share this dispatch channel but resolve out of the built-in
+  // registry — they need host backends injected via ToolContext.app,
+  // which the generic runtime path doesn't carry (task #6). Resolve
+  // built-ins FIRST so a (user-installed) runtime plugin can't shadow a
+  // first-party built-in scope by registering the same name.
+  const builtin = getBuiltinDispatch(pkg);
+  if (builtin) {
+    try {
+      res.json(await builtin(args));
+    } catch (err) {
+      log.error(LOG_PREFIX, "builtin execute failed", { pkg, error: errorMessage(err) });
+      serverError(res, `plugin execute failed: ${errorMessage(err)}`);
+    }
+    return;
+  }
   const plugin = getRuntimePlugins().find((entry) => entry.name === pkg);
   if (!plugin) {
-    // Built-in plugins (bundled by Vite, wrapped with `wrapWithScope`)
-    // share this dispatch channel but resolve out of the built-in
-    // registry — they need host backends injected via ToolContext.app,
-    // which the generic runtime path doesn't carry (task #6).
-    const builtin = getBuiltinDispatch(pkg);
-    if (builtin) {
-      const args = isRecord(req.body) ? req.body : {};
-      try {
-        res.json(await builtin(args));
-      } catch (err) {
-        log.error(LOG_PREFIX, "builtin execute failed", { pkg, error: errorMessage(err) });
-        serverError(res, `plugin execute failed: ${errorMessage(err)}`);
-      }
-      return;
-    }
     notFound(res, `runtime plugin "${pkg}" not registered`);
     return;
   }
@@ -92,7 +94,6 @@ router.post(API_ROUTES.plugins.runtimeDispatch, async (req: Request<{ pkg: strin
     serverError(res, `runtime plugin "${pkg}" has no execute() — the package's dist/index.js must export a function under "${plugin.definition.name}"`);
     return;
   }
-  const args = isRecord(req.body) ? req.body : {};
   try {
     // gui-chat-protocol's ToolPluginCore.execute is
     // `(context: ToolContext, args) => Promise<ToolResult>`. The

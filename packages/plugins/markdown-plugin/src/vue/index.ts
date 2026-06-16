@@ -8,8 +8,6 @@ import Preview from "../plugins/markdown/Preview.vue";
 import MarpView from "../plugins/markdown/MarpView.vue";
 import MarpSplitEditor from "../plugins/markdown/MarpSplitEditor.vue";
 
-export const TOOL_NAME = "presentDocument";
-
 export const plugin: ToolPlugin<MarkdownToolData, MarkdownToolData, MarkdownArgs> = {
   ...pluginCore,
   viewComponent: View,
@@ -20,7 +18,7 @@ export type { MarkdownToolData, MarkdownArgs } from "../plugins/markdown/definit
 export type { MarkdownHostApp, MarkdownDispatchArgs, MarkdownDispatchResult, ExportPdfOptions, MarpThemeEntry } from "../plugins/markdown/contract";
 
 export { TOOL_DEFINITION, executeDocument, pluginCore } from "../core/plugin";
-export { isFilePath } from "../plugins/markdown/definition";
+export { isFilePath, TOOL_NAME } from "../plugins/markdown/definition";
 export { setFilesRawUrl } from "../utils/image/resolve";
 
 // MarpView / MarpSplitEditor are also consumed standalone by hosts that

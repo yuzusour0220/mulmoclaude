@@ -19,8 +19,12 @@ async function createDocument(context: MarkdownExecuteContext, args: MarkdownArg
   };
 }
 
+const DISPATCH_KINDS: ReadonlySet<string> = new Set(["loadDoc", "saveDoc", "marpThemes", "exportPdf", "fillImages"]);
+
 function hasKind(value: unknown): value is MarkdownDispatchArgs {
-  return typeof value === "object" && value !== null && "kind" in value;
+  if (typeof value !== "object" || value === null) return false;
+  const kind = (value as { kind?: unknown }).kind;
+  return typeof kind === "string" && DISPATCH_KINDS.has(kind);
 }
 
 /**
