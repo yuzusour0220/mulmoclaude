@@ -246,44 +246,6 @@ async function renderPdf(fullHtml: string, format: "Letter" | "A4" = "Letter"): 
   }
 }
 
-// Marp slides render at a fixed pixel canvas (default 1280×720). We
-// feed puppeteer a page sized to that canvas with zero margin so each
-// `<section>` becomes exactly one PDF page at the slide's native
-// proportions. Skips the markdown CSS wrapper — Marp's own theme CSS
-// is the only style sheet the slides need. Images are inlined as
-// base64 data URIs (same path as the markdown route) because puppeteer
-// can't reach workspace-relative paths over the wire.
-// Parse the slide canvas dimensions out of Marp's first SVG viewBox.
-// Defaults to 16:9 / 1280×720 — same fallback as the MarpView preview.
-// Marp emits the actual dimensions per its `size:` directive (e.g.
-// `size: 4:3` → 960×720), so honouring viewBox lets the exported PDF
-// match the deck's declared aspect instead of stretching every deck
-// into the puppeteer-hardcoded 1280×720.
-//
-// Dimensions are clamped to a safe range before being handed to
-// Puppeteer. Without this, a hostile / typo'd `size: 99999x99999`
-// would forward those numbers into `page.setViewport()` +
-// `page.pdf({ width, height })` and Chromium can either OOM during
-// raster or take pathologically long to render a single page.
-const DEFAULT_SLIDE_WIDTH = 1280;
-const DEFAULT_SLIDE_HEIGHT = 720;
-const MIN_SLIDE_DIM = 200;
-const MAX_SLIDE_DIM = 3840;
-
-function clampDim(value: number, fallback: number): number {
-  if (!Number.isFinite(value) || value < MIN_SLIDE_DIM) return fallback;
-  if (value > MAX_SLIDE_DIM) return MAX_SLIDE_DIM;
-  return value;
-}
-
-export function extractSlideDimensions(html: string): { width: number; height: number } {
-  const match = html.match(/viewBox="0 0 (\d+) (\d+)"/);
-  if (!match) return { width: DEFAULT_SLIDE_WIDTH, height: DEFAULT_SLIDE_HEIGHT };
-  const width = clampDim(Number(match[1]), DEFAULT_SLIDE_WIDTH);
-  const height = clampDim(Number(match[2]), DEFAULT_SLIDE_HEIGHT);
-  return { width, height };
-}
-
 async function renderMarpPdf(markdown: string, baseDir?: string): Promise<Buffer> {
   // Shared render core (@mulmoclaude/markdown-plugin) — the MarpView
   // preview and every host's PDF export use the same Marp config + theme
