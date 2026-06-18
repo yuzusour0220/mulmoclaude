@@ -1,3 +1,4 @@
+import "../../../server/workspace/collections/configure.js"; // configure @mulmoclaude/collection-plugin host binding for tests
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync } from "node:fs";
@@ -92,7 +93,7 @@ function makeCappedFeed(root: string, maxItems: number): LoadedCollection {
       dataPath: "data/capped",
       primaryKey: "id",
       fields: { id: { type: "string", label: "ID", primary: true }, when: { type: "date", label: "When" } },
-      ingest: { ...fakeIngest("test-fake"), maxItems },
+      ingest: { ...fakeIngest("test-fake"), maxItems } as IngestSpec,
     },
     dataDir: path.join(root, "data", "capped"),
     skillDir: path.join(root, "feeds", "capped"),

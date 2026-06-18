@@ -63,7 +63,7 @@ import type { HookPayload } from "../shared/stdin.js";
 import { extractCommand, extractFilePath, extractToolName } from "../shared/stdin.js";
 import { workspaceRoot } from "../shared/workspace.js";
 import { errorMessage } from "../../../utils/errors.js";
-import { isSafeActionTemplatePath } from "../../collections/templatePath.js";
+import { isSafeActionTemplatePath } from "@mulmoclaude/collection-plugin/server";
 
 const DATA_SKILLS_DIR = path.join("data", "skills");
 const CLAUDE_SKILLS_DIR = path.join(".claude", "skills");

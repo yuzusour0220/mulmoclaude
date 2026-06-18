@@ -1,3 +1,4 @@
+import "../../../server/workspace/collections/configure.js"; // configure @mulmoclaude/collection-plugin host binding for tests
 // deleteCustomView — removes a custom view from every on-disk schema.json
 // copy and unlinks its HTML file, source-aware (project staging+mirror vs a
 // feed's single tree). Pins the scope guards (user-scope, preset) and the
@@ -9,8 +10,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { deleteCustomView } from "../../../server/workspace/collections/views.js";
-import type { LoadedCollection } from "../../../server/workspace/collections/discovery.js";
+import { deleteCustomView, type LoadedCollection } from "@mulmoclaude/collection-plugin/server";
 import type { CollectionCustomView, CollectionSchema, CollectionSource } from "../../../server/workspace/collections/types.js";
 
 let workdir: string;

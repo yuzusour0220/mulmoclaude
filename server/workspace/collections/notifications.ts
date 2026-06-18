@@ -41,10 +41,16 @@ import { clear as notifierClear, listAll, publish as notifierPublish, updateForP
 import type { NotifierEntry } from "../../notifier/types.js";
 import { log } from "../../system/logger/index.js";
 import { errorMessage } from "../../utils/errors.js";
-import { whenMatches } from "../../../src/utils/collections/actionVisible.js";
-import { loadCollection, type DiscoveryOptions } from "./discovery.js";
-import { listItems, readItem, type IoOptions } from "./io.js";
-import { isTriggerDue, maybeSpawnSuccessor } from "./spawn.js";
+import { whenMatches } from "@mulmoclaude/collection-plugin";
+import {
+  loadCollection,
+  type DiscoveryOptions,
+  listItems,
+  readItem,
+  type IoOptions,
+  isTriggerDue,
+  maybeSpawnSuccessor,
+} from "@mulmoclaude/collection-plugin/server";
 import type { CollectionItem, CollectionSchema } from "./types.js";
 
 /** The legacy-id prefix every collection-completion bell entry carries.

@@ -6,12 +6,11 @@
 import { lstat, mkdir, open, readdir, readFile, unlink } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
 import path from "node:path";
-import { log } from "../../system/logger/index.js";
-import { writeFileAtomic } from "../../utils/files/atomic.js";
-import { workspacePath } from "../workspace.js";
-import { isContainedInRoot, itemFilePath, resolveTemplatePath, safeSlugName } from "./paths.js";
-import type { CollectionItem, CollectionSchema } from "./types.js";
-import type { LoadedCollection } from "./discovery.js";
+import { getWorkspaceRoot, log, skillsStagingDir } from "./host";
+import { writeFileAtomic } from "./atomic";
+import { isContainedInRoot, itemFilePath, resolveTemplatePath, safeSlugName } from "./paths";
+import type { CollectionItem, CollectionSchema } from "../core/schema";
+import type { LoadedCollection } from "./discoveredCollection";
 
 export interface IoOptions {
   /** Override the workspace root for containment checks. Default:
@@ -63,7 +62,7 @@ async function tryReadRecord(filePath: string): Promise<CollectionItem | null> {
  *  containment to defend against a symlinked data dir appearing
  *  between discovery and use. */
 export async function listItems(dataDir: string, opts: IoOptions = {}): Promise<CollectionItem[]> {
-  const workspaceRoot = opts.workspaceRoot ?? workspacePath;
+  const workspaceRoot = opts.workspaceRoot ?? getWorkspaceRoot();
   if (!isContainedInRoot(dataDir, workspaceRoot)) {
     log.warn("collections", "listItems refused: dataDir escapes workspace via symlink", { dataDir });
     return [];
@@ -98,7 +97,7 @@ export async function listItems(dataDir: string, opts: IoOptions = {}): Promise<
 export async function readItem(dataDir: string, itemId: string, opts: IoOptions = {}): Promise<CollectionItem | null> {
   const safeId = safeSlugName(itemId);
   if (safeId === null) return null;
-  const workspaceRoot = opts.workspaceRoot ?? workspacePath;
+  const workspaceRoot = opts.workspaceRoot ?? getWorkspaceRoot();
   if (!isContainedInRoot(dataDir, workspaceRoot)) return null;
   const filePath = itemFilePath(dataDir, safeId);
   if (!(await isRegularFile(filePath))) return null;
@@ -145,7 +144,7 @@ export type WriteItemResult =
 export async function writeItem(dataDir: string, itemId: string, item: CollectionItem, opts: WriteItemOptions = {}): Promise<WriteItemResult> {
   const safeId = safeSlugName(itemId);
   if (safeId === null) return { kind: "invalid-id", itemId };
-  const workspaceRoot = opts.workspaceRoot ?? workspacePath;
+  const workspaceRoot = opts.workspaceRoot ?? getWorkspaceRoot();
   // Containment check runs BEFORE mkdir so we never create
   // directories outside the workspace even if a symlink ancestor
   // was swapped after discovery. We re-check AFTER mkdir to catch
@@ -193,7 +192,7 @@ export type DeleteItemResult =
 export async function deleteItem(dataDir: string, itemId: string, opts: IoOptions = {}): Promise<DeleteItemResult> {
   const safeId = safeSlugName(itemId);
   if (safeId === null) return { kind: "invalid-id", itemId };
-  const workspaceRoot = opts.workspaceRoot ?? workspacePath;
+  const workspaceRoot = opts.workspaceRoot ?? getWorkspaceRoot();
   if (!isContainedInRoot(dataDir, workspaceRoot)) {
     log.warn("collections", "deleteItem refused: dataDir escapes workspace via symlink", { dataDir, itemId: safeId });
     return { kind: "path-escape", itemId: safeId };
@@ -233,8 +232,8 @@ export async function readCustomViewHtml(
 ): Promise<string | null> {
   const safeSlug = safeSlugName(collection.slug);
   if (safeSlug === null) return null;
-  const workspaceRoot = opts.workspaceRoot ?? workspacePath;
-  const base = collection.source === "project" ? path.join(workspaceRoot, "data", "skills", safeSlug) : collection.skillDir;
+  const workspaceRoot = opts.workspaceRoot ?? getWorkspaceRoot();
+  const base = collection.source === "project" ? path.join(skillsStagingDir(workspaceRoot), safeSlug) : collection.skillDir;
   const resolved = resolveTemplatePath(base, viewFile);
   if (resolved === null) return null;
   try {

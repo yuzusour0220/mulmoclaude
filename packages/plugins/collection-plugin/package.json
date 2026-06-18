@@ -1,0 +1,48 @@
+{
+  "name": "@mulmoclaude/collection-plugin",
+  "version": "0.2.2",
+  "description": "Schema-driven Collections plugin (presentCollection) — shared gui-chat-protocol plugin for MulmoClaude and MulmoTerminal. This entry is the isomorphic collection engine (derive / formula / visibility); Vue surfaces land in ./vue.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs",
+      "default": "./dist/index.js"
+    },
+    "./server": {
+      "types": "./dist/server/index.d.ts",
+      "import": "./dist/server.js",
+      "require": "./dist/server.cjs",
+      "default": "./dist/server.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "vite build",
+    "typecheck": "tsc --noEmit",
+    "test": "echo 'no in-package tests; collection logic is covered by host tests test/utils/collections/*'"
+  },
+  "dependencies": {
+    "zod": "^4.4.3"
+  },
+  "peerDependencies": {
+    "gui-chat-protocol": "^0.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.3",
+    "gui-chat-protocol": "^0.4.0",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.13",
+    "vite-plugin-dts": "^5.0.0"
+  },
+  "license": "MIT"
+}

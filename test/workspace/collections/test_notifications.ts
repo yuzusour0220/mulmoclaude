@@ -1,3 +1,4 @@
+import "../../../server/workspace/collections/configure.js"; // configure @mulmoclaude/collection-plugin host binding for tests
 // Reconciler tests for collection-completion bell notifications.
 // Drives the reconciler functions against a tmpdir workspace + tmpdir
 // notifier active.json so the assertions are deterministic and never

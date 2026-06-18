@@ -10,7 +10,7 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { validateCollectionRecords, validateRecordObject } from "../../../server/workspace/collections/validate.js";
+import { validateCollectionRecords, validateRecordObject } from "@mulmoclaude/collection-plugin/server";
 import type { LoadedCollection } from "../../../server/workspace/collections/index.js";
 import type { CollectionSchema } from "../../../server/workspace/collections/types.js";
 

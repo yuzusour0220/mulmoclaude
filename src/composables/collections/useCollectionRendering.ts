@@ -12,7 +12,7 @@ import { apiGet } from "../../utils/api";
 import { API_ROUTES } from "../../config/apiRoutes";
 import { htmlPreviewUrlFor, svgPreviewUrlFor } from "../useContentDisplay";
 import { isValidFilePath } from "../useFileSelection";
-import { deriveAll } from "../../utils/collections/deriveAll";
+import { deriveAll } from "@mulmoclaude/collection-plugin";
 import type { EmbedRow, EmbedView } from "../../components/collectionEmbed";
 import type {
   CollectionDetail,

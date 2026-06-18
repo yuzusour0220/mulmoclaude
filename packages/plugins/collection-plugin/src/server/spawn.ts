@@ -20,11 +20,10 @@
 // never drifts (it clamps per-month at compute time, not stored
 // clamped). See `advanceTriggerDate`.
 
-import { log } from "../../system/logger/index.js";
-import { errorMessage } from "../../utils/errors.js";
-import { ONE_DAY_MS } from "../../utils/time.js";
-import { writeItem, type IoOptions } from "./io.js";
-import type { CollectionEvery, CollectionItem, CollectionSchema, CollectionWhen } from "./types.js";
+import { log } from "./host";
+import { errorMessage, ONE_DAY_MS } from "./util";
+import { writeItem, type IoOptions } from "./io";
+import type { CollectionEvery, CollectionItem, CollectionSchema, CollectionWhen } from "../core/schema";
 
 /** A timezone-free calendar date. `m` is 1-12. */
 export interface CivilDate {

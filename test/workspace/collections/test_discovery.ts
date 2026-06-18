@@ -1,3 +1,4 @@
+import "../../../server/workspace/collections/configure.js"; // configure @mulmoclaude/collection-plugin host binding for tests
 // Schema validation + field-type tests for the collections discovery
 // module. Locks in: (1) the v0 supported field-type set, (2) the
 // rejection of unknown types and structurally malformed schemas,
@@ -14,7 +15,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { discoverCollections, loadCollection } from "../../../server/workspace/collections/discovery.js";
+import { discoverCollections, loadCollection } from "@mulmoclaude/collection-plugin/server";
 
 let workdir: string;
 let emptyUserDir: string;

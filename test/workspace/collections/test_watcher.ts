@@ -1,3 +1,4 @@
+import "../../../server/workspace/collections/configure.js"; // configure @mulmoclaude/collection-plugin host binding for tests
 // Watcher-layer tests for the collection-completion bell. Exercises:
 //
 //  - Boot reconcile (a pending item already on disk gets a bell entry

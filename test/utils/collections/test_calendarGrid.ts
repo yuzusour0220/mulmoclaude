@@ -21,7 +21,7 @@ import {
   daySlice,
   assignLanes,
   MINUTES_PER_DAY,
-} from "../../../src/utils/collections/calendarGrid.js";
+} from "@mulmoclaude/collection-plugin";
 
 describe("parseIsoDate", () => {
   it("parses a valid YYYY-MM-DD", () => {

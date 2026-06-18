@@ -30,7 +30,7 @@ import {
   writeItem,
 } from "../../workspace/collections/index.js";
 import type { CollectionItem, CollectionSchema, LoadedCollection } from "../../workspace/collections/index.js";
-import type { DiscoveryOptions } from "../../workspace/collections/discovery.js";
+import type { DiscoveryOptions } from "@mulmoclaude/collection-plugin/server";
 import { defangForPrompt } from "../../../src/utils/promptSafety.js";
 
 /** Refuse an unselective getItems beyond this many records — a silent

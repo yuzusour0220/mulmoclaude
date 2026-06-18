@@ -15,7 +15,7 @@
 //   false<true · ref → display label · derived → its display type.
 // markdown/table/image/file/embed get no sort button.
 
-import type { CollectionItem, FieldSpec, FieldType } from "../../components/collectionTypes";
+import type { CollectionItem, CollectionFieldSpec, CollectionFieldType } from "./schema";
 
 export type SortDirection = "asc" | "desc";
 
@@ -36,9 +36,9 @@ export interface SortValue {
 const EMPTY: SortValue = { empty: true };
 
 /** Field types that render no value text in the table, so offer no sort. */
-const NON_SORTABLE: ReadonlySet<FieldType> = new Set<FieldType>(["markdown", "table", "image", "file", "embed"]);
+const NON_SORTABLE: ReadonlySet<CollectionFieldType> = new Set<CollectionFieldType>(["markdown", "table", "image", "file", "embed"]);
 
-export function isSortableField(field: FieldSpec): boolean {
+export function isSortableField(field: CollectionFieldSpec): boolean {
   return !NON_SORTABLE.has(field.type);
 }
 

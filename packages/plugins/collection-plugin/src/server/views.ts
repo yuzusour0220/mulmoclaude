@@ -17,13 +17,11 @@
 
 import { readFile, unlink } from "node:fs/promises";
 import path from "node:path";
-import { writeFileAtomic } from "../../utils/files/atomic.js";
-import { workspacePath } from "../workspace.js";
-import { WORKSPACE_DIRS } from "../paths.js";
-import { isPresetSlug } from "../skills-preset.js";
-import { resolveTemplatePath, safeSlugName, SCHEMA_FILE } from "./paths.js";
-import type { LoadedCollection } from "./discovery.js";
-import type { IoOptions } from "./io.js";
+import { writeFileAtomic } from "./atomic";
+import { getWorkspaceRoot, isPresetSlug, skillsStagingDir } from "./host";
+import { resolveTemplatePath, safeSlugName, SCHEMA_FILE } from "./paths";
+import type { IoOptions } from "./io";
+import type { LoadedCollection } from "./discoveredCollection";
 
 export type DeleteViewResult =
   | { kind: "ok"; viewId: string }
@@ -36,7 +34,7 @@ export type DeleteViewResult =
  *  the staging tree for a project collection, else its own skill dir. Matches
  *  `readCustomViewHtml`'s resolution so reads and deletes agree. */
 function canonicalBase(collection: Pick<LoadedCollection, "source" | "skillDir">, workspaceRoot: string, safeSlug: string): string {
-  return collection.source === "project" ? path.join(workspaceRoot, WORKSPACE_DIRS.skillsStaging, safeSlug) : collection.skillDir;
+  return collection.source === "project" ? path.join(skillsStagingDir(workspaceRoot), safeSlug) : collection.skillDir;
 }
 
 /** Every on-disk schema.json that must reflect the removal. For a project
@@ -44,7 +42,7 @@ function canonicalBase(collection: Pick<LoadedCollection, "source" | "skillDir">
  *  the single skill-dir copy. */
 function schemaWriteTargets(collection: Pick<LoadedCollection, "source" | "skillDir">, workspaceRoot: string, safeSlug: string): string[] {
   const active = path.join(collection.skillDir, SCHEMA_FILE);
-  if (collection.source === "project") return [path.join(workspaceRoot, WORKSPACE_DIRS.skillsStaging, safeSlug, SCHEMA_FILE), active];
+  if (collection.source === "project") return [path.join(skillsStagingDir(workspaceRoot), safeSlug, SCHEMA_FILE), active];
   return [active];
 }
 
@@ -83,7 +81,7 @@ export async function deleteCustomView(collection: LoadedCollection, viewId: str
   const views = collection.schema.views ?? [];
   const view = views.find((entry) => entry.id === viewId);
   if (!view) return { kind: "not-found", viewId };
-  const workspaceRoot = opts.workspaceRoot ?? workspacePath;
+  const workspaceRoot = opts.workspaceRoot ?? getWorkspaceRoot();
   const htmlPath = resolveTemplatePath(canonicalBase(collection, workspaceRoot, safeSlug), view.file);
   if (htmlPath === null) return { kind: "unsafe-path", viewId };
   // Rewrite the schema BEFORE unlinking: if the write fails the request errors

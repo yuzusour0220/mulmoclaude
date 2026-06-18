@@ -8,11 +8,10 @@
 
 import { readdir, readFile, lstat } from "node:fs/promises";
 import path from "node:path";
-import { log } from "../../system/logger/index.js";
-import { workspacePath } from "../workspace.js";
-import { isContainedInRoot } from "./paths.js";
-import type { LoadedCollection } from "./discovery.js";
-import type { CollectionItem, CollectionSchema } from "./types.js";
+import { getWorkspaceRoot, log } from "./host";
+import { isContainedInRoot } from "./paths";
+import type { LoadedCollection } from "./discoveredCollection";
+import type { CollectionItem, CollectionSchema } from "../core/schema";
 
 export interface RecordIssue {
   /** Record filename, e.g. `lesson-003.json`. */
@@ -48,7 +47,7 @@ async function listRecordFilenames(dataDir: string, workspaceRoot: string): Prom
 }
 
 export async function validateCollectionRecords(collection: LoadedCollection, opts: { workspaceRoot?: string } = {}): Promise<RecordIssue[]> {
-  const workspaceRoot = opts.workspaceRoot ?? workspacePath;
+  const workspaceRoot = opts.workspaceRoot ?? getWorkspaceRoot();
   const entries = await listRecordFilenames(collection.dataDir, workspaceRoot);
   const issues: RecordIssue[] = [];
   for (const name of entries.sort()) {

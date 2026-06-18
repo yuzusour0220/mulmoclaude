@@ -19,7 +19,7 @@ import {
   readSkillTemplate,
   buildActionSeedPrompt,
   buildCollectionActionSeedPrompt,
-} from "../../../server/workspace/collections/io.js";
+} from "@mulmoclaude/collection-plugin/server";
 import type { CollectionSchema } from "../../../server/workspace/collections/types.js";
 
 let workdir: string;

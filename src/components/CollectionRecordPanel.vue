@@ -435,7 +435,7 @@
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import CollectionEmbedView from "./CollectionEmbedView.vue";
-import { fieldVisible } from "../utils/collections/actionVisible";
+import { fieldVisible } from "@mulmoclaude/collection-plugin";
 import { resolveEnumColor } from "../utils/collections/enumColors";
 import { emptyRow } from "../utils/collections/draft";
 import { resolveImageSrc } from "../utils/image/resolve";

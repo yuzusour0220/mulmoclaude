@@ -6,7 +6,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
-import { evaluateDerived } from "../../../src/utils/collections/derivedFormula.js";
+import { evaluateDerived } from "@mulmoclaude/collection-plugin";
 
 describe("evaluateDerived — literals + arithmetic", () => {
   it("returns a bare number literal", () => {

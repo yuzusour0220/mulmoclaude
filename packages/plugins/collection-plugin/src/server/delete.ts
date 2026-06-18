@@ -20,12 +20,9 @@
 import { cp, mkdir, rm, rmdir, stat, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
-import { log } from "../../system/logger/index.js";
-import { WORKSPACE_DIRS } from "../paths.js";
-import { workspacePath } from "../workspace.js";
-import { isPresetSlug } from "../skills-preset.js";
-import { isContainedInRoot } from "./paths.js";
-import type { LoadedCollection } from "./discovery.js";
+import { log, getWorkspaceRoot, isPresetSlug, skillsStagingDir, archiveDir as archiveRelDir } from "./host";
+import { isContainedInRoot } from "./paths";
+import type { LoadedCollection } from "./discoveredCollection";
 
 export type DeleteCollectionResult =
   | { kind: "ok"; slug: string; archivePath: string }
@@ -64,7 +61,7 @@ export interface DeleteCollectionOptions {
 
 /** The canonical staging dir for a slug: `data/skills/<slug>`. */
 function stagingSkillDir(workspaceRoot: string, slug: string): string {
-  return path.join(workspaceRoot, WORKSPACE_DIRS.skillsStaging, slug);
+  return path.join(skillsStagingDir(workspaceRoot), slug);
 }
 
 async function pathExists(target: string): Promise<boolean> {
@@ -165,7 +162,7 @@ async function removeLocations(collection: LoadedCollection, workspaceRoot: stri
 
 export async function deleteCollection(collection: LoadedCollection, opts: DeleteCollectionOptions = {}): Promise<DeleteCollectionResult> {
   const { slug } = collection;
-  const workspaceRoot = opts.workspaceRoot ?? workspacePath;
+  const workspaceRoot = opts.workspaceRoot ?? getWorkspaceRoot();
   if (collection.source === "user") return { kind: "user-scope", slug };
   if (isPresetSlug(slug)) return { kind: "preset", slug };
   if (!isDataDirSafe(collection.dataDir, slug, workspaceRoot)) {
@@ -176,7 +173,7 @@ export async function deleteCollection(collection: LoadedCollection, opts: Delet
     log.warn("collections", "deleteCollection refused: a target escapes the workspace", { slug });
     return { kind: "path-escape", slug };
   }
-  const archiveRel = path.join(WORKSPACE_DIRS.archive, `${opts.dateStamp ?? todayStamp()}-${randomUUID()}`);
+  const archiveRel = path.join(archiveRelDir(), `${opts.dateStamp ?? todayStamp()}-${randomUUID()}`);
   const archiveDir = path.join(workspaceRoot, archiveRel);
   await mkdir(archiveDir, { recursive: true });
   await writeArchive(collection, archiveDir, workspaceRoot);

@@ -4,24 +4,17 @@
 // retrieval engine reads it to periodically refill the collection's
 // records via the shared collections io layer.
 //
+// The ingest vocab (INGEST_KINDS / FEED_SCHEDULES + their literal-union types)
+// now lives in @mulmoclaude/collection-plugin alongside the schema contract, so
+// the package's schema validator can enforce it. Re-exported here so the feeds
+// engine's existing importers resolve them unchanged.
+import { type CollectionIngest, INGEST_KINDS, FEED_SCHEDULES, type IngestKind, type FeedSchedule } from "@mulmoclaude/collection-plugin";
+//
 // Declarative-only for now; the `kind` enum reserves room for future
 // "code" (LLM-generated transform) and "prompt" (LLM-performed fetch)
 // retrievers without reshaping the engine.
 
-/** Retriever kinds the engine can dispatch on. `rss`/`atom` share one
- *  XML parser; `http-json` walks a JSON response. New kinds register a
- *  matching module under `retrievers/` — nothing else changes. */
-export const INGEST_KINDS = ["rss", "atom", "http-json"] as const;
-
-export type IngestKind = (typeof INGEST_KINDS)[number];
-
-/** How often the host should refresh a feed. Mirrors the source
- *  registry's schedule vocabulary; `on-demand` is never auto-fetched
- *  (only the explicit `refresh` action runs it). Fresh copy — the
- *  feeds tree does not import the legacy `sources` tree. */
-export const FEED_SCHEDULES = ["hourly", "daily", "weekly", "on-demand"] as const;
-
-export type FeedSchedule = (typeof FEED_SCHEDULES)[number];
+export { INGEST_KINDS, FEED_SCHEDULES, type IngestKind, type FeedSchedule };
 
 const FEED_SCHEDULE_SET: ReadonlySet<string> = new Set(FEED_SCHEDULES);
 
@@ -38,8 +31,11 @@ export const DEFAULT_FEED_MAX_ITEMS = 100;
  *  `"data.name"`). */
 export type IngestFieldMap = Record<string, string>;
 
-/** The `ingest` block carried on a Feed's `CollectionSchema`. */
-export interface IngestSpec {
+/** The `ingest` block carried on a Feed's `CollectionSchema`. The canonical
+ *  schema (in @mulmoclaude/collection-plugin) only promises the minimal
+ *  `CollectionIngest` (kind/url/schedule as plain strings); this feeds-only
+ *  subtype narrows those + adds the retrieval fields the engine needs. */
+export interface IngestSpec extends CollectionIngest {
   /** Which retriever handles this feed. */
   kind: IngestKind;
   /** Endpoint to fetch (http/https). */

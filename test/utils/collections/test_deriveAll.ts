@@ -6,7 +6,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
-import { deriveAll, resolveRowRefs, type DerivableSchema } from "../../../src/utils/collections/deriveAll.js";
+import { deriveAll, resolveRowRefs, type DerivableSchema } from "@mulmoclaude/collection-plugin";
 
 const field = (type: string, extra: Record<string, unknown> = {}) => ({ type, ...extra });
 

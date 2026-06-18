@@ -8,14 +8,12 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
-import { log } from "../../system/logger/index.js";
-import { workspacePath } from "../workspace.js";
-import { USER_SKILLS_DIR, projectSkillsDir } from "../skills/paths.js";
-import { feedsRoot } from "../feeds/paths.js";
-import { INGEST_KINDS, FEED_SCHEDULES } from "../feeds/ingestTypes.js";
-import { SCHEMA_FILE, resolveDataDir, safeSlugName } from "./paths.js";
-import { isSafeActionTemplatePath, isSafeCustomViewPath } from "./templatePath.js";
-import type { CollectionDetail, CollectionSchema, CollectionSource, CollectionSummary } from "./types.js";
+import { log, getWorkspaceRoot, userSkillsDir, projectSkillsDir, feedsRoot } from "./host";
+import { INGEST_KINDS, FEED_SCHEDULES } from "../core/schema";
+import { SCHEMA_FILE, resolveDataDir, safeSlugName } from "./paths";
+import type { LoadedCollection } from "./discoveredCollection";
+import { isSafeActionTemplatePath, isSafeCustomViewPath } from "./templatePath";
+import type { CollectionDetail, CollectionSource, CollectionSummary } from "../core/schema";
 
 // Cross-field refines, factored out so they can apply at both the
 // top-level FieldSpec and the table-row SubFieldSpec without prose
@@ -582,19 +580,9 @@ export const CollectionSchemaZ = z
     path: ["views"],
   });
 
-interface LoadedCollection {
-  slug: string;
-  source: CollectionSource;
-  schema: CollectionSchema;
-  /** Absolute path to the resolved dataPath directory (inside the
-   *  workspace). May not exist yet — the data folder is created on
-   *  first write. */
-  dataDir: string;
-  /** Absolute path to the skill directory this collection was loaded
-   *  from (`<skillsRoot>/<slug>/`). Action templates are read from
-   *  here, path-safely. */
-  skillDir: string;
-}
+// The LoadedCollection shape now lives in @mulmoclaude/collection-plugin/server
+// (imported at the top, re-exported below) so discovery stays its producer and
+// the many `from "./discovery.js"` importers resolve it unchanged.
 
 // Normalize an agent-authored feed schema (no register tool to do it):
 // default `icon`, and **force** `dataPath` to the feed-owned namespace
@@ -730,8 +718,8 @@ export interface DiscoveryOptions {
  *  previously dataDir was always rooted at the live workspacePath
  *  regardless of override). */
 export async function discoverCollections(opts: DiscoveryOptions = {}): Promise<LoadedCollection[]> {
-  const workspaceRoot = opts.workspaceRoot ?? workspacePath;
-  const userDir = opts.userSkillsDir ?? USER_SKILLS_DIR;
+  const workspaceRoot = opts.workspaceRoot ?? getWorkspaceRoot();
+  const userDir = opts.userSkillsDir ?? userSkillsDir();
   const projectDir = projectSkillsDir(workspaceRoot);
   // Feeds (the non-skill `<workspace>/feeds/` registry) are scanned as a
   // third root. They merge FIRST so a real skill collection (user or
@@ -752,8 +740,8 @@ export async function discoverCollections(opts: DiscoveryOptions = {}): Promise<
 export async function loadCollection(slug: string, opts: DiscoveryOptions = {}): Promise<LoadedCollection | null> {
   const safeName = safeSlugName(slug);
   if (safeName === null) return null;
-  const workspaceRoot = opts.workspaceRoot ?? workspacePath;
-  const userDir = opts.userSkillsDir ?? USER_SKILLS_DIR;
+  const workspaceRoot = opts.workspaceRoot ?? getWorkspaceRoot();
+  const userDir = opts.userSkillsDir ?? userSkillsDir();
   const projectDir = projectSkillsDir(workspaceRoot);
   // Project first (overrides user), then user, then the feeds registry
   // last — mirroring the merge precedence in `discoverCollections` so a
@@ -772,5 +760,3 @@ export function toSummary(collection: LoadedCollection): CollectionSummary {
 export function toDetail(collection: LoadedCollection): CollectionDetail {
   return { ...toSummary(collection), schema: collection.schema };
 }
-
-export type { LoadedCollection };

@@ -1,3 +1,4 @@
+import "../../server/workspace/collections/configure.js"; // configure @mulmoclaude/collection-plugin host binding for tests
 // `manageCollection` MCP tool: getItems returns computed-enriched
 // records with ids/fields selection and the unselective-size refusal;
 // putItems gates every row on schema validation (and computed-key

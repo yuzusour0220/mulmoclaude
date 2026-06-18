@@ -5,7 +5,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
-import { labelFieldFor, itemIdOf, itemLabelOf } from "../../../src/utils/collections/itemLabel.js";
+import { labelFieldFor, itemIdOf, itemLabelOf } from "@mulmoclaude/collection-plugin";
 import type { CollectionSchema } from "../../../src/components/collectionTypes.js";
 
 const schema: CollectionSchema = {

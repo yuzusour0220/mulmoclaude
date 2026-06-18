@@ -115,9 +115,9 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
-import { bucketRecords, daySlice, assignLanes, ymdKey, MINUTES_PER_DAY, type Ymd, type DaySlice } from "../utils/collections/calendarGrid";
+import { bucketRecords, daySlice, assignLanes, ymdKey, MINUTES_PER_DAY, type Ymd, type DaySlice } from "@mulmoclaude/collection-plugin";
 import { resolveEnumColor, type EnumColorClasses } from "../utils/collections/enumColors";
-import { labelFieldFor, itemIdOf, itemLabelOf } from "../utils/collections/itemLabel";
+import { labelFieldFor, itemIdOf, itemLabelOf } from "@mulmoclaude/collection-plugin";
 import type { CollectionItem, CollectionSchema } from "./collectionTypes";
 
 const props = defineProps<{

@@ -67,7 +67,7 @@
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import draggable from "vuedraggable";
-import { fieldVisible } from "../utils/collections/actionVisible";
+import { fieldVisible } from "@mulmoclaude/collection-plugin";
 import { resolveEnumColor } from "../utils/collections/enumColors";
 import type { NotifierSeverity } from "../utils/collections/notifiedItems";
 import type { CollectionItem, CollectionSchema } from "./collectionTypes";

@@ -2,7 +2,7 @@
 // grid + day view), so both label a record identically. Pure, type-only
 // dependency on the schema shape.
 
-import type { CollectionItem, CollectionSchema } from "../../components/collectionTypes";
+import type { CollectionItem, CollectionSchema } from "./schema";
 
 // Text-like field types that make a sensible human-readable label.
 const LABEL_FIELD_TYPES = new Set(["string", "text", "markdown", "email"]);

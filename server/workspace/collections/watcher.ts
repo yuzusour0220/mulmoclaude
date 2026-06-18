@@ -24,7 +24,7 @@ import { mkdir } from "node:fs/promises";
 import { log } from "../../system/logger/index.js";
 import { errorMessage } from "../../utils/errors.js";
 import { ONE_MINUTE_MS, ONE_SECOND_MS } from "../../utils/time.js";
-import { discoverCollections, loadCollection, type DiscoveryOptions, type LoadedCollection } from "./discovery.js";
+import { discoverCollections, loadCollection, type DiscoveryOptions, type LoadedCollection } from "@mulmoclaude/collection-plugin/server";
 import { reconcileAllItems, reconcileItem, sweepStaleActiveEntries } from "./notifications.js";
 import type { CollectionSchema } from "./types.js";
 

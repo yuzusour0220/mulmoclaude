@@ -1,8 +1,8 @@
-export { discoverCollections, loadCollection, toSummary, toDetail, CollectionSchemaZ, type LoadedCollection } from "./discovery.js";
-export { validateCollectionRecords, validateRecordObject, COMPUTED_TYPES, type RecordIssue } from "./validate.js";
-export { enrichItems } from "./derive.js";
-export { deleteCollection, deleteCollectionRefusalMessage, type DeleteCollectionResult } from "./delete.js";
-export { deleteCustomView, type DeleteViewResult } from "./views.js";
+export { discoverCollections, loadCollection, toSummary, toDetail, CollectionSchemaZ, type LoadedCollection } from "@mulmoclaude/collection-plugin/server";
+export { validateCollectionRecords, validateRecordObject, COMPUTED_TYPES, type RecordIssue } from "@mulmoclaude/collection-plugin/server";
+export { enrichItems } from "@mulmoclaude/collection-plugin/server";
+export { deleteCollection, deleteCollectionRefusalMessage, type DeleteCollectionResult } from "@mulmoclaude/collection-plugin/server";
+export { deleteCustomView, type DeleteViewResult } from "@mulmoclaude/collection-plugin/server";
 export {
   listItems,
   readItem,
@@ -16,7 +16,7 @@ export {
   buildCollectionActionSeedPrompt,
   type WriteItemResult,
   type DeleteItemResult,
-} from "./io.js";
+} from "@mulmoclaude/collection-plugin/server";
 export type {
   CollectionSchema,
   CollectionAction,

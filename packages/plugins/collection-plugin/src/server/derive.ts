@@ -6,10 +6,11 @@
 // time; this module gives server consumers (manageCollection getItems)
 // the same numbers the user sees on screen.
 
-import { deriveAll, type DeriveRefRecords } from "../../../src/utils/collections/deriveAll.js";
-import { loadCollection, type DiscoveryOptions, type LoadedCollection } from "./discovery.js";
-import { listItems } from "./io.js";
-import type { CollectionFieldSpec, CollectionItem, CollectionSchema } from "./types.js";
+import { deriveAll, type DeriveRefRecords } from "../core/deriveAll";
+import { loadCollection, type DiscoveryOptions } from "./discovery";
+import type { LoadedCollection } from "./discoveredCollection";
+import { listItems } from "./io";
+import type { CollectionFieldSpec, CollectionItem, CollectionSchema } from "../core/schema";
 
 /** Slugs of every collection referenced by a `ref` field — top-level
  *  and one level into `table` sub-fields (nested tables are

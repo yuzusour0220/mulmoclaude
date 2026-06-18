@@ -733,21 +733,9 @@ import CollectionCalendarView from "./CollectionCalendarView.vue";
 import CollectionDayView from "./CollectionDayView.vue";
 import CollectionKanbanView from "./CollectionKanbanView.vue";
 import CollectionCustomView from "./CollectionCustomView.vue";
-import { dateOf, type Ymd } from "../utils/collections/calendarGrid";
-import { useConfirm } from "../composables/useConfirm";
-import { useAppApi } from "../composables/useAppApi";
-import { useShortcuts } from "../composables/useShortcuts";
-import { actionVisible, fieldVisible } from "../utils/collections/actionVisible";
-import { resolveEnumColor } from "../utils/collections/enumColors";
 import {
-  readCollectionViewMode,
-  writeCollectionViewMode,
-  readCollectionSort,
-  writeCollectionSort,
-  type CollectionViewMode,
-  type BuiltInViewMode,
-} from "../utils/collections/collectionViewMode";
-import {
+  dateOf,
+  type Ymd,
   isSortableField,
   nextSortDirection,
   sortItems,
@@ -758,7 +746,20 @@ import {
   boolSortValue,
   type SortState,
   type SortValue,
-} from "../utils/collections/sortItems";
+} from "@mulmoclaude/collection-plugin";
+import { useConfirm } from "../composables/useConfirm";
+import { useAppApi } from "../composables/useAppApi";
+import { useShortcuts } from "../composables/useShortcuts";
+import { actionVisible, fieldVisible } from "@mulmoclaude/collection-plugin";
+import { resolveEnumColor } from "../utils/collections/enumColors";
+import {
+  readCollectionViewMode,
+  writeCollectionViewMode,
+  readCollectionSort,
+  writeCollectionSort,
+  type CollectionViewMode,
+  type BuiltInViewMode,
+} from "../utils/collections/collectionViewMode";
 import { useCollectionRendering } from "../composables/collections/useCollectionRendering";
 import { buildUpdatedRecord, coerceInlineValue, draftToRecord, firstMissingRequiredField, rowFromItem } from "../utils/collections/draft";
 import type {
