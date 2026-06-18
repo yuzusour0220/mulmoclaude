@@ -92,6 +92,7 @@ const jaMessages: CollectionMessages = {
     },
   },
   common: {
+    close: "閉じる",
     add: "追加",
     cancel: "キャンセル",
     loading: "読み込み中...",

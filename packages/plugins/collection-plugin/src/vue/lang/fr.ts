@@ -93,6 +93,7 @@ const frMessages: CollectionMessages = {
     },
   },
   common: {
+    close: "Fermer",
     add: "Ajouter",
     cancel: "Annuler",
     loading: "Chargement...",

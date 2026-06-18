@@ -62,8 +62,9 @@
 <script setup lang="ts">
 // `<router-link>` is a host-provided global (vue-router). MulmoClaude registers
 // it app-wide; a host embedding this card must do the same and own a
-// `/collections/:slug` route. Translation keys (`collectionsView.*`) resolve
-// against the host's vue-i18n instance — the host must define them.
+// `/collections/:slug` route. Translation keys resolve through the plugin's own
+// `useCollectionI18n()` instance (self-contained); a host only feeds the active
+// locale via `collectionUi().localeTag()`.
 import { useCollectionI18n } from "../lang";
 import type { EmbedView } from "../../core/uiTypes";
 

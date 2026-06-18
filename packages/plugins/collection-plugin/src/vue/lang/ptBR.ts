@@ -92,6 +92,7 @@ const ptBRMessages: CollectionMessages = {
     },
   },
   common: {
+    close: "Fechar",
     add: "Adicionar",
     cancel: "Cancelar",
     loading: "Carregando...",

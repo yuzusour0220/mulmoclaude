@@ -92,6 +92,7 @@ const zhMessages: CollectionMessages = {
     },
   },
   common: {
+    close: "关闭",
     add: "添加",
     cancel: "取消",
     loading: "加载中...",

@@ -92,6 +92,7 @@ const esMessages: CollectionMessages = {
     },
   },
   common: {
+    close: "Cerrar",
     add: "Añadir",
     cancel: "Cancelar",
     loading: "Cargando...",

@@ -92,6 +92,7 @@ const koMessages: CollectionMessages = {
     },
   },
   common: {
+    close: "닫기",
     add: "추가",
     cancel: "취소",
     loading: "불러오는 중...",

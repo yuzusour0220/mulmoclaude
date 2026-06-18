@@ -34,7 +34,10 @@ import type { CollectionsListResponse, FeedsListResponse } from "@mulmoclaude/co
 import type { CollectionDetailResponse, ItemMutationResponse } from "../../components/collectionTypes";
 
 const { openConfirm } = useConfirm();
-const { unpin, reconcile } = useShortcuts();
+// NOTE: useShortcuts() is resolved lazily inside the unpin/reconcile capabilities
+// below, NOT here. Calling it eagerly at module-eval would trigger the store's
+// load() before main.ts runs setAuthToken(), firing /api/shortcuts without a
+// bearer on cold boot. By call time (a pin/reconcile from a mounted view) auth is set.
 
 // ── URL builders (mirror the route templates in API_ROUTES.collections) ──
 const withSlug = (route: string, slug: string): string => route.replace(":slug", encodeURIComponent(slug));
@@ -103,7 +106,7 @@ configureCollectionUi({
   // index pages
   listCollections: () => apiGet<CollectionsListResponse>(API_ROUTES.collections.list),
   listFeeds: () => apiGet<FeedsListResponse>(API_ROUTES.feeds.list),
-  reconcileShortcuts: (kind, live) => reconcile(kind, live),
+  reconcileShortcuts: (kind, live) => useShortcuts().reconcile(kind, live),
 
   // app integration
   // `i18n.global.locale` is typed as a string but is actually a Ref at runtime
@@ -112,7 +115,7 @@ configureCollectionUi({
   startChat: (prompt, role) => startChatFn?.(prompt, role),
   generalRoleId: BUILTIN_ROLE_IDS.general,
   personalRoleId: BUILTIN_ROLE_IDS.personal,
-  unpin: (kind, slug) => unpin(kind, slug),
+  unpin: (kind, slug) => useShortcuts().unpin(kind, slug),
   notifiedSeverities: (slug) => notifiedSeveritiesFn?.(slug) ?? new Map<string, NotifierSeverity>(),
 
   pinToggle: PinToggle,

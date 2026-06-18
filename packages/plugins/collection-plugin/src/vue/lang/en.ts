@@ -90,6 +90,7 @@ const enMessages = {
     },
   },
   common: {
+    close: "Close",
     add: "Add",
     cancel: "Cancel",
     loading: "Loading...",

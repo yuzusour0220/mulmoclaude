@@ -46,12 +46,15 @@ let syncing = false;
  *  configured the binding, so `collectionUi()` resolves. */
 function ensureLocaleSync(): void {
   if (syncing) return;
-  syncing = true;
+  // Flip the flag only after the effect is wired — if the first locale read
+  // throws (e.g. the binding isn't configured yet), a later call can retry
+  // rather than being locked out forever.
   syncScope.run(() => {
     watchEffect(() => {
       i18n.global.locale.value = collectionUi().localeTag();
     });
   });
+  syncing = true;
 }
 
 /** The plugin's i18n composable — a drop-in for vue-i18n's `useI18n()` over the

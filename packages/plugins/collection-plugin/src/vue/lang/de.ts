@@ -92,6 +92,7 @@ const deMessages: CollectionMessages = {
     },
   },
   common: {
+    close: "Schließen",
     add: "Hinzufügen",
     cancel: "Abbrechen",
     loading: "Wird geladen...",
