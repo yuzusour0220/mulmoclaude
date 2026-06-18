@@ -112,12 +112,17 @@ export function useCollectionRendering(collection: Ref<CollectionDetail | null>,
     const embedTargets = new Set(uniqueEmbedTargets(schema));
     const allTargets = [...new Set([...refTargets, ...embedTargets])];
     if (allTargets.length === 0) return;
+    // Best-effort: a single target whose fetch *rejects* (vs. resolving to
+    // `{ ok: false }`) must not abort the others, so coerce a throw to a skip.
+    const binding = collectionUi();
     const results = await Promise.all(
-      allTargets.map((target) =>
-        collectionUi()
-          .fetchCollectionDetail(target)
-          .then((result) => ({ target, result })),
-      ),
+      allTargets.map(async (target) => {
+        try {
+          return { target, result: await binding.fetchCollectionDetail(target) };
+        } catch {
+          return { target, result: { ok: false as const } };
+        }
+      }),
     );
     // Stale-write guard: a quicker subsequent load may have replaced
     // `collection.value`; dropping the write avoids surfacing the

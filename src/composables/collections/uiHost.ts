@@ -3,6 +3,11 @@
 // package's rendering composable can resolve ref/embed data and file/asset URLs.
 // MulmoTerminal has its own equivalent shim.
 import { configureCollectionUi } from "@mulmoclaude/collection-plugin/vue";
+// The package's compiled Tailwind classes — the library build extracts the
+// SFCs' styles into this file rather than injecting them, and node_modules isn't
+// in this host's Tailwind content scan, so the classes the collection components
+// use must be loaded explicitly here.
+import "@mulmoclaude/collection-plugin/style.css";
 import { apiGet } from "../../utils/api";
 import { API_ROUTES } from "../../config/apiRoutes";
 import { htmlPreviewUrlFor, svgPreviewUrlFor } from "../useContentDisplay";

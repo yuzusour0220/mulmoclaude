@@ -732,6 +732,7 @@ import {
   CollectionDayView,
   CollectionKanbanView,
   CollectionRecordPanel,
+  useCollectionRendering,
 } from "@mulmoclaude/collection-plugin/vue";
 import CollectionViewConfigModal from "./CollectionViewConfigModal.vue";
 import CollectionCustomView from "./CollectionCustomView.vue";
@@ -762,7 +763,6 @@ import {
   type CollectionViewMode,
   type BuiltInViewMode,
 } from "../utils/collections/collectionViewMode";
-import { useCollectionRendering } from "@mulmoclaude/collection-plugin/vue";
 import { buildUpdatedRecord, coerceInlineValue, draftToRecord, firstMissingRequiredField, rowFromItem } from "../utils/collections/draft";
 import type {
   CollectionAction,
