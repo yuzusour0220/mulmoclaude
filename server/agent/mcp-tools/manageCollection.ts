@@ -31,7 +31,7 @@ import {
 } from "../../workspace/collections/index.js";
 import type { CollectionItem, CollectionSchema, LoadedCollection } from "../../workspace/collections/index.js";
 import type { DiscoveryOptions } from "@mulmoclaude/collection-plugin/server";
-import { defangForPrompt } from "../../../src/utils/promptSafety.js";
+import { defangForPrompt } from "@mulmoclaude/collection-plugin";
 
 /** Refuse an unselective getItems beyond this many records — a silent
  *  truncation would read as "covered everything", and an unbounded dump

@@ -6,7 +6,7 @@ import { executeForm } from "../../../src/plugins/presentForm/plugin.js";
 import { executePresentCollection } from "../../../src/plugins/presentCollection/plugin.js";
 import type { PresentCollectionArgs } from "../../../src/plugins/presentCollection/types.js";
 import { loadCollection, validateCollectionRecords } from "../../workspace/collections/index.js";
-import { defangForPrompt } from "../../../src/utils/promptSafety.js";
+import { defangForPrompt } from "@mulmoclaude/collection-plugin";
 import { executeOpenCanvas } from "../../../src/plugins/canvas/definition.js";
 import { executePresent3D } from "@gui-chat-plugin/present3d";
 import { executeMapControl } from "@gui-chat-plugin/google-map";
@@ -259,7 +259,7 @@ bindRoute(
 // the LLM reads) so the model — which is told to call presentCollection
 // after every write — fixes the file instead of losing the record.
 // `defangForPrompt` (shared with the client Repair button via
-// `src/utils/promptSafety.ts`) strips markup / escape sequences, collapses
+// `@mulmoclaude/collection-plugin`) strips markup / escape sequences, collapses
 // whitespace, and clips — so record-controlled text in a validation issue (a
 // filename, id, or enum value) can't be read as instructions once appended to
 // the LLM-facing result.

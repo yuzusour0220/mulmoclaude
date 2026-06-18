@@ -735,6 +735,12 @@ import {
   CollectionViewConfigModal,
   CollectionCustomView,
   useCollectionRendering,
+  readCollectionViewMode,
+  writeCollectionViewMode,
+  readCollectionSort,
+  writeCollectionSort,
+  type CollectionViewMode,
+  type BuiltInViewMode,
 } from "@mulmoclaude/collection-plugin/vue";
 import {
   dateOf,
@@ -749,20 +755,14 @@ import {
   boolSortValue,
   type SortState,
   type SortValue,
+  shortHexId,
+  defangForPrompt,
 } from "@mulmoclaude/collection-plugin";
 import { useConfirm } from "../composables/useConfirm";
 import { useAppApi } from "../composables/useAppApi";
 import { useShortcuts } from "../composables/useShortcuts";
 import { actionVisible, fieldVisible } from "@mulmoclaude/collection-plugin";
 import { resolveEnumColor } from "../utils/collections/enumColors";
-import {
-  readCollectionViewMode,
-  writeCollectionViewMode,
-  readCollectionSort,
-  writeCollectionSort,
-  type CollectionViewMode,
-  type BuiltInViewMode,
-} from "../utils/collections/collectionViewMode";
 import { buildUpdatedRecord, coerceInlineValue, draftToRecord, firstMissingRequiredField, rowFromItem } from "../utils/collections/draft";
 import type {
   CollectionAction,
@@ -776,8 +776,6 @@ import type {
   ItemMutationResponse,
   TableRowDraft,
 } from "./collectionTypes";
-import { shortHexId } from "../utils/id";
-import { defangForPrompt } from "../utils/promptSafety";
 import { useNotifications } from "../composables/useNotifications";
 import { collectionNotifiedSeverities, type NotifierSeverity } from "../utils/collections/notifiedItems";
 

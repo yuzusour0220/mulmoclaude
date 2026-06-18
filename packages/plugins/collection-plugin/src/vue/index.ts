@@ -27,6 +27,15 @@ export {
   type CollectionViewSrcdocBoot,
 } from "./uiContext";
 export { useCollectionRendering, type CollectionRendering } from "./useCollectionRendering";
+export {
+  readCollectionViewMode,
+  writeCollectionViewMode,
+  readCollectionSort,
+  writeCollectionSort,
+  type CollectionViewMode,
+  type BuiltInViewMode,
+  type CustomViewMode,
+} from "./collectionViewMode";
 export { default as CollectionRecordModal } from "./components/CollectionRecordModal.vue";
 export { default as CollectionEmbedView } from "./components/CollectionEmbedView.vue";
 export { default as CollectionCalendarView } from "./components/CollectionCalendarView.vue";

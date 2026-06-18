@@ -5,7 +5,7 @@
 // own copy in the tool-result `viewState` (they read, never write — so a
 // stale card can't clobber the shared preference).
 
-import type { SortState } from "@mulmoclaude/collection-plugin";
+import type { SortState } from "../core/sortItems";
 
 /** The host's built-in, field-derived view modes. */
 export type BuiltInViewMode = "table" | "calendar" | "kanban";
