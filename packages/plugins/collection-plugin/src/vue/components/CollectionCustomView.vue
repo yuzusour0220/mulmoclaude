@@ -27,13 +27,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onBeforeUnmount } from "vue";
+import { ref, watch, onBeforeUnmount } from "vue";
 import { useI18n } from "vue-i18n";
-import { API_ROUTES } from "../config/apiRoutes";
-import { apiPost, apiFetchRaw } from "../utils/api";
-import { buildCustomViewSrcdoc } from "../utils/html/customViewSrcdoc";
-import { errorMessage } from "../utils/errors";
-import type { CollectionCustomView } from "./collectionTypes";
+import { errorMessage } from "../../core/errorMessage";
+import type { CollectionCustomView } from "../../core/schema";
+import { collectionUi } from "../uiContext";
 
 const { t } = useI18n();
 
@@ -45,16 +43,6 @@ const props = defineProps<{
 const loading = ref(true);
 const error = ref<string | null>(null);
 const srcdoc = ref<string | null>(null);
-
-const viewTokenUrl = computed(() => API_ROUTES.collections.viewToken.replace(":slug", encodeURIComponent(props.slug)));
-const viewFileUrl = computed(() => API_ROUTES.collections.viewFile.replace(":slug", encodeURIComponent(props.slug)));
-
-interface MintResponse {
-  token: string;
-  exp: number;
-  dataUrl: string;
-  capabilities: string[];
-}
 
 // The injected token expires (VIEW_TOKEN_TTL_MS, 1h). The sandboxed view can't
 // re-mint itself (it has no global bearer), so a view left mounted past expiry
@@ -90,9 +78,10 @@ async function load(): Promise<void> {
   loading.value = true;
   error.value = null;
   srcdoc.value = null;
+  const binding = collectionUi();
   try {
     // 1. Mint a scoped token for this view's declared capabilities.
-    const mint = await apiPost<MintResponse>(viewTokenUrl.value, { viewId: props.view.id });
+    const mint = await binding.mintViewToken(props.slug, props.view.id);
     if (stale()) return;
     if (!mint.ok) {
       error.value = mint.error;
@@ -100,17 +89,15 @@ async function load(): Promise<void> {
     }
     // Re-mint + reload before this token expires (the iframe can't do it itself).
     scheduleRefresh(mint.data.exp);
-    // 2. Fetch the view's HTML (global-bearer; attached by apiFetchRaw).
-    const resp = await apiFetchRaw(viewFileUrl.value, { query: { id: props.view.id } });
+    // 2. Fetch the view's HTML (global-bearer; attached by the host).
+    const resp = await binding.fetchViewHtml(props.slug, props.view.id);
     if (stale()) return;
     if (!resp.ok) {
       error.value = `HTTP ${resp.status}`;
       return;
     }
-    const html = await resp.text();
-    if (stale()) return;
     // 3. Render it sandboxed with the token + CSP injected.
-    srcdoc.value = buildCustomViewSrcdoc(html, {
+    srcdoc.value = binding.buildViewSrcdoc(resp.html, {
       slug: props.slug,
       token: mint.data.token,
       dataUrl: mint.data.dataUrl,

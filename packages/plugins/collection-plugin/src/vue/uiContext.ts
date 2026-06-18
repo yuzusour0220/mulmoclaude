@@ -19,6 +19,32 @@ export type CollectionFetchResult<T> = { ok: true; data: T } | { ok: false };
  *  Carries the host's error string on failure for inline display. */
 export type CollectionMutationResult = { ok: true } | { ok: false; error: string };
 
+/** Full host `ApiResult<T>` (data on success, error string on failure) — used
+ *  where the view layer needs both the payload and a failure message. */
+export type CollectionApiResult<T> = { ok: true; data: T } | { ok: false; error: string };
+
+/** Scoped capability token for a sandboxed custom view (mirrors the host's mint
+ *  response) — the iframe reads/writes the collection through it. */
+export interface CollectionViewToken {
+  token: string;
+  exp: number;
+  dataUrl: string;
+  capabilities: string[];
+}
+
+/** Result of fetching a custom view's HTML — status-only failure (the host
+ *  attaches the global bearer; a non-2xx is surfaced as `HTTP <status>`). */
+export type CollectionViewHtmlResult = { ok: true; html: string } | { ok: false; status: number };
+
+/** Inputs the host needs to wrap a custom view's HTML into a sandboxed srcdoc
+ *  (token + data URL injected, CSP applied — the host owns the CSP policy). */
+export interface CollectionViewSrcdocBoot {
+  slug: string;
+  token: string;
+  dataUrl: string;
+  origin: string;
+}
+
 /** Options for the host's confirm dialog — structurally matches the host's own
  *  `ConfirmOptions`, so `confirm` can forward to `useConfirm().openConfirm`. */
 export interface CollectionConfirmOptions {
@@ -49,6 +75,16 @@ export interface CollectionUi {
   /** Delete a collection's custom view by id. Replaces the host's
    *  `apiDelete(API_ROUTES.collections.viewDelete)`. */
   deleteView: (slug: string, viewId: string) => Promise<CollectionMutationResult>;
+  /** Mint a scoped capability token for a custom view (host: `apiPost` over
+   *  `API_ROUTES.collections.viewToken`). */
+  mintViewToken: (slug: string, viewId: string) => Promise<CollectionApiResult<CollectionViewToken>>;
+  /** Fetch a custom view's raw HTML (host: `apiFetchRaw` over
+   *  `API_ROUTES.collections.viewFile`, global bearer attached). */
+  fetchViewHtml: (slug: string, viewId: string) => Promise<CollectionViewHtmlResult>;
+  /** Wrap a custom view's HTML in a sandboxed `<iframe srcdoc>` with the token +
+   *  data URL injected and the host's CSP applied. Replaces the host's
+   *  `buildCustomViewSrcdoc`. */
+  buildViewSrcdoc: (html: string, boot: CollectionViewSrcdocBoot) => string;
 }
 
 let current: CollectionUi | null = null;

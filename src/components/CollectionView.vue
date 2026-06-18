@@ -733,9 +733,9 @@ import {
   CollectionKanbanView,
   CollectionRecordPanel,
   CollectionViewConfigModal,
+  CollectionCustomView,
   useCollectionRendering,
 } from "@mulmoclaude/collection-plugin/vue";
-import CollectionCustomView from "./CollectionCustomView.vue";
 import {
   dateOf,
   type Ymd,
