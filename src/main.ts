@@ -1,4 +1,7 @@
 import { createApp } from "vue";
+// Wire @mulmoclaude/collection-plugin/vue to this host's collection API +
+// asset-URL scheme before any collection View mounts (side effect).
+import "./composables/collections/uiHost";
 import App from "./App.vue";
 import router from "./router/index";
 import { installGuards } from "./router/guards";

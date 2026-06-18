@@ -15,7 +15,7 @@ import path from "node:path";
 import { ref } from "vue";
 
 import { enrichItems, loadCollection, toDetail } from "@mulmoclaude/collection-plugin/server";
-import { useCollectionRendering } from "../../../src/composables/collections/useCollectionRendering.js";
+import { useCollectionRendering } from "@mulmoclaude/collection-plugin/vue";
 import { deriveAll } from "@mulmoclaude/collection-plugin";
 import type { CollectionDetail, FieldSpec } from "../../../src/components/collectionTypes.js";
 

@@ -8,26 +8,20 @@
 // pass the returned object down to child panels.
 
 import { computed, ref, type ComputedRef, type Ref } from "vue";
-import { apiGet } from "../../utils/api";
-import { API_ROUTES } from "../../config/apiRoutes";
-import { htmlPreviewUrlFor, svgPreviewUrlFor } from "../useContentDisplay";
-import { isValidFilePath } from "../useFileSelection";
-import { deriveAll } from "@mulmoclaude/collection-plugin";
-import type { EmbedRow, EmbedView } from "../../components/collectionEmbed";
+import { collectionUi } from "./uiContext";
+import { deriveAll } from "../core/deriveAll";
+import type { CollectionDetail, CollectionItem, CollectionSchema, CollectionFieldSpec as FieldSpec, CollectionFieldType as FieldType } from "../core/schema";
 import type {
-  CollectionDetail,
   CollectionDetailResponse,
-  CollectionItem,
-  CollectionSchema,
   EmbedCache,
-  FieldSpec,
-  FieldType,
+  EmbedRow,
+  EmbedView,
   RefCache,
   RefDisplayMap,
   RefOption,
   RefRecordCache,
   RefRecordMap,
-} from "../../components/collectionTypes";
+} from "../core/uiTypes";
 
 export interface CollectionRendering {
   refCache: Ref<RefCache>;
@@ -53,10 +47,6 @@ export interface CollectionRendering {
   deriveAll: (schema: CollectionSchema, base: CollectionItem, refRecords: RefRecordCache) => CollectionItem;
   evaluateDerivedAgainstItem: (field: FieldSpec, fieldKey: string, item: CollectionItem) => number | null;
   derivedDisplay: (field: FieldSpec, computedValue: unknown, record: CollectionItem | null) => string;
-}
-
-function detailUrl(slug: string): string {
-  return API_ROUTES.collections.detail.replace(":slug", encodeURIComponent(slug));
 }
 
 export function useCollectionRendering(collection: Ref<CollectionDetail | null>, locale: Ref<string>): CollectionRendering {
@@ -122,7 +112,13 @@ export function useCollectionRendering(collection: Ref<CollectionDetail | null>,
     const embedTargets = new Set(uniqueEmbedTargets(schema));
     const allTargets = [...new Set([...refTargets, ...embedTargets])];
     if (allTargets.length === 0) return;
-    const results = await Promise.all(allTargets.map((target) => apiGet<CollectionDetailResponse>(detailUrl(target)).then((result) => ({ target, result }))));
+    const results = await Promise.all(
+      allTargets.map((target) =>
+        collectionUi()
+          .fetchCollectionDetail(target)
+          .then((result) => ({ target, result })),
+      ),
+    );
     // Stale-write guard: a quicker subsequent load may have replaced
     // `collection.value`; dropping the write avoids surfacing the
     // previous collection's linked data on the current one.
@@ -238,17 +234,14 @@ export function useCollectionRendering(collection: Ref<CollectionDetail | null>,
   // — the preview-URL builders don't, so a `..` would normalize out of
   // the intended mount.
   function artifactUrl(value: unknown): string | null {
-    if (!isValidFilePath(value)) return null;
-    return htmlPreviewUrlFor(value) ?? svgPreviewUrlFor(value);
+    return collectionUi().fileAssetUrl(value);
   }
 
   // In-app File Explorer route for a workspace path — the fallback for
-  // `file` values that aren't a directly-served artifact. Returns null
-  // for paths the Files view would reject (absolute or `..`-traversing),
-  // so we never emit a link that lands on an empty Files page.
+  // `file` values that aren't a directly-served artifact. The host owns the
+  // path validity + route scheme.
   function fileRoutePath(value: unknown): string | null {
-    if (!isValidFilePath(value)) return null;
-    return `/files/${value.split("/").map(encodeURIComponent).join("/")}`;
+    return collectionUi().fileRoutePath(value);
   }
 
   function detailText(value: unknown): string {

@@ -439,7 +439,7 @@ import { fieldVisible } from "@mulmoclaude/collection-plugin";
 import { resolveEnumColor } from "../utils/collections/enumColors";
 import { emptyRow } from "../utils/collections/draft";
 import { resolveImageSrc } from "../utils/image/resolve";
-import type { CollectionRendering } from "../composables/collections/useCollectionRendering";
+import type { CollectionRendering } from "@mulmoclaude/collection-plugin/vue";
 import type { CollectionAction, CollectionDetail, CollectionItem, EditState, FieldSpec, TableRowDraft } from "./collectionTypes";
 
 const props = defineProps<{
