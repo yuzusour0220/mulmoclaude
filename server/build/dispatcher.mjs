@@ -147,7 +147,7 @@ function errorMessage(err, fallback) {
   return String(err);
 }
 
-// packages/plugins/collection-plugin/dist/deriveAll-B5spcUIb.js
+// packages/plugins/collection-plugin/dist/schema-DyfSfVzh.js
 var INGEST_KINDS = [
   "rss",
   "atom",

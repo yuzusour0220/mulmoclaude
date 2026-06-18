@@ -24,7 +24,8 @@
       "import": "./dist/vue.js",
       "require": "./dist/vue.cjs",
       "default": "./dist/vue.js"
-    }
+    },
+    "./style.css": "./dist/style.css"
   },
   "files": [
     "dist"
@@ -33,8 +34,8 @@
     "access": "public"
   },
   "scripts": {
-    "build": "vite build",
-    "typecheck": "tsc --noEmit",
+    "build": "vite build && vue-tsc -p tsconfig.build.json --emitDeclarationOnly",
+    "typecheck": "vue-tsc --noEmit",
     "test": "echo 'no in-package tests; collection logic is covered by host tests test/utils/collections/*'"
   },
   "dependencies": {
@@ -42,15 +43,20 @@
   },
   "peerDependencies": {
     "gui-chat-protocol": "^0.4.0",
-    "vue": "^3.5.0"
+    "vue": "^3.5.0",
+    "vue-i18n": "^11.4.4"
   },
   "devDependencies": {
+    "@tailwindcss/vite": "^4.2.2",
     "@types/node": "^25.9.3",
+    "@vitejs/plugin-vue": "^6.0.5",
     "gui-chat-protocol": "^0.4.0",
+    "tailwindcss": "^4.2.2",
     "typescript": "^6.0.3",
     "vite": "^8.0.13",
-    "vite-plugin-dts": "^5.0.0",
-    "vue": "^3.5.34"
+    "vue": "^3.5.34",
+    "vue-i18n": "11.4.4",
+    "vue-tsc": "^3.2.6"
   },
   "license": "MIT"
 }

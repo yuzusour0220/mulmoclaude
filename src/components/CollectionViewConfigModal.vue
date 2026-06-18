@@ -56,7 +56,7 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import { useI18n } from "vue-i18n";
-import CollectionRecordModal from "./CollectionRecordModal.vue";
+import { CollectionRecordModal } from "@mulmoclaude/collection-plugin/vue";
 import type { CollectionCustomView } from "./collectionTypes";
 import { apiDelete } from "../utils/api";
 import { errorMessage } from "../utils/errors";
