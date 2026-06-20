@@ -11,7 +11,8 @@
   "workspaces": [
     "packages/*",
     "packages/bridges/*",
-    "packages/plugins/*"
+    "packages/plugins/*",
+    "packages/services/*"
   ],
   "scripts": {
     "plugins:codegen": "tsx scripts/codegen-plugin-barrels.ts",
