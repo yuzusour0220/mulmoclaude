@@ -1,11 +1,7 @@
 import { Router, Request, Response } from "express";
-import { realpathSync } from "node:fs";
-import { WORKSPACE_DIRS } from "../../workspace/paths.js";
-import { workspacePath } from "../../workspace/workspace.js";
-import { writeWorkspaceText } from "../../utils/files/workspace-io.js";
-import { resolveWithinRoot } from "../../utils/files/index.js";
-import { buildArtifactPath } from "../../utils/files/naming.js";
-import { overwriteHtml, isHtmlPath } from "../../utils/files/html-store.js";
+import { executeHtml, executeHtmlUpdate } from "@mulmoclaude/html-plugin";
+import type { HtmlArgs, PresentHtmlData } from "@mulmoclaude/html-plugin";
+import { makeArtifactsFileOps } from "../../plugins/runtime.js";
 import { errorMessage } from "../../utils/errors.js";
 import { badRequest, serverError } from "../../utils/httpError.js";
 import { API_ROUTES } from "../../../src/config/apiRoutes.js";
@@ -16,75 +12,36 @@ import { publishFileChange } from "../../events/file-change.js";
 
 const router = Router();
 
-// Realpath'd workspace root, resolved once — `resolveWithinRoot` needs an
-// already-realpath'd root (same pattern as the files route).
-const workspaceReal = realpathSync(workspacePath);
+// presentHtml's tool schema, validation, and artifacts persistence now live in
+// the shared @mulmoclaude/html-plugin package (single source of truth, also
+// consumable by MulmoTerminal). These routes are THIN host adapters: they inject
+// the GENERIC `files.artifacts` runtime capability and forward the package's
+// result, adding only the host-specific file-change pub/sub so subscribed View
+// tabs cache-bust. All html logic — html/path mutual exclusion, slug/path
+// building, containment guard, write — lives in the package.
 
-const PRESENT_ACK = "Acknowledge that the HTML page has been presented to the user.";
-
-interface PresentHtmlBody {
-  html?: string;
-  title?: string;
-  path?: string;
-}
-
-interface PresentHtmlSuccessResponse {
+interface PresentHtmlResponse {
   message: string;
-  instructions: string;
-  data: { title?: string; filePath: string };
+  instructions?: string;
+  data?: PresentHtmlData;
+  error?: string;
 }
 
-interface PresentHtmlErrorResponse {
-  error: string;
-}
-
-type PresentHtmlResponse = PresentHtmlSuccessResponse | PresentHtmlErrorResponse;
-
-// New HTML: persist under a fresh artifact path, then present it.
-async function saveAndPresent(html: string, title: string | undefined, res: Response<PresentHtmlResponse>): Promise<void> {
-  const filePath = buildArtifactPath(WORKSPACE_DIRS.htmls, title, ".html", "page");
-  await writeWorkspaceText(filePath, html);
-  log.info("html", "present: ok", { filePath, bytes: html.length });
-  // Fire-and-forget: any subscribed View tab refetches via cache-bust.
-  void publishFileChange(filePath);
-  res.json({ message: `Saved HTML to ${filePath}`, instructions: PRESENT_ACK, data: { title, filePath } });
-}
-
-// Existing HTML: present a file already on disk without re-saving a copy.
-function presentExisting(relativePath: string, title: string | undefined, res: Response<PresentHtmlResponse>): void {
-  // `isHtmlPath` rejects non-artifact / traversal paths; `resolveWithinRoot` is the
-  // realpath-based containment check (and returns null when the file is missing).
-  if (!isHtmlPath(relativePath) || resolveWithinRoot(workspaceReal, relativePath) === null) {
-    log.warn("html", "present: bad path", { pathPreview: previewSnippet(relativePath) });
-    badRequest(res, "path must be an existing .html file under artifacts/html/");
-    return;
-  }
-  log.info("html", "present: existing", { filePath: relativePath });
-  res.json({ message: `Presented existing HTML at ${relativePath}`, instructions: PRESENT_ACK, data: { title, filePath: relativePath } });
-}
-
-bindRoute(router, API_ROUTES.html.create, async (req: Request<object, unknown, PresentHtmlBody>, res: Response<PresentHtmlResponse>) => {
-  const { html, title, path: htmlPath } = req.body;
+bindRoute(router, API_ROUTES.html.create, async (req: Request<object, unknown, HtmlArgs>, res: Response<PresentHtmlResponse>) => {
+  const { html, title, path: htmlPath } = req.body ?? {};
   log.info("html", "present: start", {
     titlePreview: typeof title === "string" ? previewSnippet(title) : undefined,
     bytes: typeof html === "string" ? html.length : undefined,
     pathPreview: typeof htmlPath === "string" ? previewSnippet(htmlPath) : undefined,
   });
   try {
-    // `html` and `path` are mutually exclusive (the tool contract / prompt say
-    // "either, not both") — reject both-set and neither-set rather than letting
-    // one silently win and present the wrong page.
-    if (typeof htmlPath === "string" && htmlPath.length > 0 && typeof html === "string" && html.length > 0) {
-      log.warn("html", "present: both html and path provided");
-      badRequest(res, "provide either `html` or `path`, not both");
-    } else if (typeof htmlPath === "string" && htmlPath.length > 0) {
-      presentExisting(htmlPath, title, res);
-    } else if (typeof html === "string" && html.length > 0) {
-      await saveAndPresent(html, title, res);
-    } else {
-      log.warn("html", "present: missing html and path");
-      badRequest(res, "provide either `html` or `path`");
-    }
+    const result = await executeHtml({ files: { artifacts: makeArtifactsFileOps() } }, req.body);
+    // Fire-and-forget: any subscribed View tab refetches via cache-bust. Only a
+    // freshly-saved page (data present) needs the nudge; present-existing and
+    // validation errors don't change bytes on disk.
+    if (result.data) void publishFileChange(result.data.filePath);
+    log.info("html", "present: ok", { hasData: Boolean(result.data) });
+    res.json(result);
   } catch (err) {
     log.error("html", "present: threw", { error: errorMessage(err) });
     serverError(res, errorMessage(err));
@@ -100,45 +57,26 @@ interface UpdateHtmlBody {
   html: string;
 }
 
-interface UpdateHtmlSuccessResponse {
-  path: string;
-}
-
-interface UpdateHtmlErrorResponse {
-  error: string;
-}
-
-bindRoute(
-  router,
-  API_ROUTES.html.update,
-  async (req: Request<object, unknown, UpdateHtmlBody>, res: Response<UpdateHtmlSuccessResponse | UpdateHtmlErrorResponse>) => {
-    const { relativePath, html } = req.body;
-    log.info("html", "update: start", {
-      pathPreview: typeof relativePath === "string" ? previewSnippet(relativePath) : undefined,
-      bytes: typeof html === "string" ? html.length : undefined,
-    });
-    if (!html) {
-      log.warn("html", "update: missing html");
-      badRequest(res, "html is required");
+bindRoute(router, API_ROUTES.html.update, async (req: Request<object, unknown, UpdateHtmlBody>, res: Response<{ path: string } | { error: string }>) => {
+  const { relativePath, html } = req.body ?? {};
+  log.info("html", "update: start", {
+    pathPreview: typeof relativePath === "string" ? previewSnippet(relativePath) : undefined,
+    bytes: typeof html === "string" ? html.length : undefined,
+  });
+  try {
+    const result = await executeHtmlUpdate({ files: { artifacts: makeArtifactsFileOps() } }, { relativePath, html });
+    if (!result.ok) {
+      log.warn("html", "update: rejected", { error: result.error, pathPreview: typeof relativePath === "string" ? previewSnippet(relativePath) : undefined });
+      badRequest(res, result.error);
       return;
     }
-    if (!relativePath || !isHtmlPath(relativePath)) {
-      log.warn("html", "update: invalid relativePath", {
-        pathPreview: typeof relativePath === "string" ? previewSnippet(relativePath) : undefined,
-      });
-      badRequest(res, "invalid html relativePath");
-      return;
-    }
-    try {
-      await overwriteHtml(relativePath, html);
-      log.info("html", "update: ok", { pathPreview: previewSnippet(relativePath), bytes: html.length });
-      void publishFileChange(relativePath);
-      res.json({ path: relativePath });
-    } catch (err) {
-      log.error("html", "update: threw", { pathPreview: previewSnippet(relativePath), error: errorMessage(err) });
-      serverError(res, errorMessage(err));
-    }
-  },
-);
+    log.info("html", "update: ok", { pathPreview: previewSnippet(result.filePath), bytes: html.length });
+    void publishFileChange(result.filePath);
+    res.json({ path: result.filePath });
+  } catch (err) {
+    log.error("html", "update: threw", { error: errorMessage(err) });
+    serverError(res, errorMessage(err));
+  }
+});
 
 export default router;

@@ -1,0 +1,40 @@
+{
+  "name": "@mulmoclaude/html-plugin",
+  "version": "0.1.0",
+  "description": "presentHtml — self-contained HTML page tool for MulmoClaude and MulmoTerminal. Server core (validation + artifacts persistence) shared via the generic gui-chat-protocol files.artifacts capability. Vue View lands in a follow-up (./vue).",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "vite build",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test test/test_*.ts"
+  },
+  "peerDependencies": {
+    "gui-chat-protocol": "^0.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.3",
+    "gui-chat-protocol": "^0.4.0",
+    "tsx": "^4.22.4",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.13",
+    "vite-plugin-dts": "^5.0.0"
+  },
+  "license": "MIT"
+}

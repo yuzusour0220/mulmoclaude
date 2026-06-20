@@ -7,11 +7,11 @@ import View from "./View.vue";
 import Preview from "./Preview.vue";
 import { apiCall } from "../../utils/api";
 import { makeUuid } from "../../utils/id";
+import type { PresentHtmlData } from "@mulmoclaude/html-plugin";
 
-export interface PresentHtmlData {
-  title?: string;
-  filePath: string;
-}
+// Re-exported from the shared package so the View / Preview keep importing the
+// result-data shape from "./index" while the type stays single-sourced.
+export type { PresentHtmlData };
 
 const presentHtmlPlugin: ToolPlugin<PresentHtmlData> = {
   toolDefinition,
