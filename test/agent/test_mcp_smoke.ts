@@ -26,7 +26,7 @@ interface JsonRpcResponse {
   id: number;
   result?: {
     protocolVersion?: string;
-    capabilities?: object;
+    capabilities?: { tools?: { listChanged?: boolean } };
     serverInfo?: { name: string };
     tools?: { name: string; description: string }[];
   };
@@ -131,6 +131,11 @@ describe("MCP server subprocess smoke test", () => {
     assert.ok(initResp.result, "Initialize response has no result");
     assert.equal(initResp.result.serverInfo?.name, "mulmoclaude");
 
+    // Must advertise tools/list_changed so the client re-fetches once
+    // runtime plugins finish loading (#1698 — the static tools/list now
+    // returns immediately rather than waiting for that load).
+    assert.equal(initResp.result.capabilities?.tools?.listChanged, true, "initialize must advertise capabilities.tools.listChanged");
+
     // tools/list response
     const toolsResp = responses.find((resp) => resp.id === 2);
     assert.ok(toolsResp, "Missing tools/list response");
@@ -146,5 +151,10 @@ describe("MCP server subprocess smoke test", () => {
     // tool definition was removed; the plugin record stays for
     // canvas dispatch only, not for LLM-side calls.
     assert.ok(!toolNames.includes(TOOL_NAMES.manageWiki), `${TOOL_NAMES.manageWiki} should not be exposed via MCP: ${toolNames.join(", ")}`);
+
+    // The always-on permission-prompt tool MUST appear in the very first
+    // tools/list, so an ask-mode permission check at session start never
+    // hits "MCP tool mcp__mulmoclaude__handlePermission ... not found" (#1698).
+    assert.ok(toolNames.includes("handlePermission"), `handlePermission not in tools: ${toolNames.join(", ")}`);
   });
 });

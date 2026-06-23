@@ -139,6 +139,42 @@ function expandActiveNames(base: readonly string[]): string[] {
 let activeNames: string[] = expandActiveNames(PLUGIN_NAMES);
 let tools: ToolDef[] = activeNames.map((name) => ALL_TOOLS[name]).filter(Boolean);
 
+// Comma-joined tool names, used to detect whether runtime-plugin load
+// actually changed the advertised surface (so we only nudge the client
+// to re-fetch when there is something new to see).
+const toolSignature = (list: ToolDef[]): string => list.map((toolDef) => toolDef.name).join(",");
+
+// The tool surface served by the immediate `tools/list` response, before
+// runtime plugins load.
+const staticToolSignature = toolSignature(tools);
+
+// The MCP lifecycle forbids the server from sending notifications before
+// the client's `notifications/initialized`. If runtime plugins finish
+// loading first, the `tools/list_changed` notification is held here until
+// the handshake completes.
+let initializedReceived = false;
+let listChangedPending = false;
+
+// Ask the client to re-fetch `tools/list` because runtime plugins just
+// became available. `respond` is hoisted (declared below).
+function notifyToolsListChanged(): void {
+  if (!initializedReceived) {
+    listChangedPending = true;
+    return;
+  }
+  respond({ jsonrpc: "2.0", method: "notifications/tools/list_changed" });
+}
+
+// Whether a tool name resolves without waiting for runtime-plugin load:
+// the `manageSkills` special case, any pure MCP tool (incl. the always-on
+// `handlePermission`), or a static plugin already in `tools`. A name that
+// is none of these may be a runtime plugin still loading.
+function isToolKnown(name: string): boolean {
+  if (name === "manageSkills") return true;
+  if (mcpTools.some((toolDef) => toolDef.definition.name === name)) return true;
+  return tools.some((toolDef) => toolDef.name === name);
+}
+
 // Static collision floor — both the GUI plugin set (`MCP_PLUGIN_NAMES`)
 // AND the pure MCP tool set (`mcpToolDefs` keys: notify / readXPost /
 // searchX / …). A runtime plugin named `notify` must NOT shadow the
@@ -149,9 +185,10 @@ const STATIC_TOOL_NAMES: ReadonlySet<string> = new Set([...MCP_PLUGIN_NAMES, ...
 // Internal try/catch so a filesystem failure (EACCES on plugins.json,
 // busted tgz, runaway plugin import) can never strand the MCP
 // handshake. Runtime plugins are best-effort: any failure logs and
-// falls back to the static-only tool list initialised above. The
-// `tools/list` and `tools/call` paths downstream just call
-// `runtimeReady.then(...)` and proceed.
+// falls back to the static-only tool list initialised above. `tools/list`
+// answers immediately from the static set; only a `tools/call` for an
+// as-yet-unknown name awaits `runtimeReady`. When it resolves, the client
+// is nudged to re-fetch via `notifications/tools/list_changed`.
 const runtimeReady: Promise<void> = (async () => {
   try {
     // Same merge order as the parent server (server/index.ts):
@@ -185,6 +222,12 @@ const runtimeReady: Promise<void> = (async () => {
     tools = activeNames.map((name) => ALL_TOOLS[name]).filter(Boolean);
   } catch (err) {
     process.stderr.write(`[mcp-server] runtime plugin load failed; static tools only: ${String(err)}\n`);
+  }
+  // Runtime plugins (if any) are now folded into `tools`. The initial
+  // `tools/list` already served the static set (incl. handlePermission);
+  // nudge the client to re-fetch only if the surface actually grew.
+  if (toolSignature(tools) !== staticToolSignature) {
+    notifyToolsListChanged();
   }
 })();
 
@@ -475,6 +518,89 @@ async function handleToolCall(name: string, args: Record<string, unknown>): Prom
   return parts.length > 0 ? parts.join("\n") : "Done";
 }
 
+function handleInitialize(requestId: JsonRpcId | undefined): void {
+  respond({
+    jsonrpc: "2.0",
+    id: requestId,
+    result: {
+      protocolVersion: "2024-11-05",
+      capabilities: { tools: { listChanged: true } },
+      serverInfo: { name: "mulmoclaude", version: "1.0.0" },
+    },
+  });
+}
+
+// Respond immediately with the current tool set — do NOT wait for
+// `runtimeReady`. The always-on `handlePermission` tool (wired via
+// `--permission-prompt-tool`) and all static tools are present from the
+// start, so an ask-mode permission check at session start no longer races a
+// slow plugin load (#1698). Runtime plugins that finish loading later are
+// advertised via `notifications/tools/list_changed`, prompting a re-fetch.
+function handleToolsList(requestId: JsonRpcId | undefined): void {
+  respond({
+    jsonrpc: "2.0",
+    id: requestId,
+    result: {
+      tools: tools.map((toolDef) => ({
+        name: toolDef.name,
+        description: toolDef.description,
+        inputSchema: toolDef.inputSchema,
+      })),
+    },
+  });
+}
+
+function handleToolsCall(requestId: JsonRpcId | undefined, params?: ToolCallParams): void {
+  if (!params?.name) {
+    respond({
+      jsonrpc: "2.0",
+      id: requestId,
+      error: { code: -32602, message: "Invalid params: tools/call requires params.name" },
+    });
+    return;
+  }
+  const toolArgs = params.arguments ?? {};
+  const callName = params.name;
+  // Static tools (incl. `handlePermission`) resolve synchronously, so they
+  // need not wait for `runtimeReady`; only an as-yet-unknown name (possibly a
+  // runtime plugin still loading) does. Keeps the permission-prompt tool
+  // responsive at session start (#1698).
+  const callReady = isToolKnown(callName) ? Promise.resolve() : runtimeReady;
+  callReady
+    .then(() => handleToolCall(callName, toolArgs))
+    .then((text) => {
+      respond({ jsonrpc: "2.0", id: requestId, result: { content: [{ type: "text", text }] } });
+    })
+    .catch((err: unknown) => {
+      respond({
+        jsonrpc: "2.0",
+        id: requestId,
+        result: { content: [{ type: "text", text: String(err) }], isError: true },
+      });
+    });
+}
+
+// The client is ready for server notifications. Flush a `tools/list_changed`
+// that runtime-plugin load produced before the handshake completed (the MCP
+// lifecycle forbids sending it earlier).
+function handleInitialized(): void {
+  initializedReceived = true;
+  if (listChangedPending) {
+    listChangedPending = false;
+    respond({ jsonrpc: "2.0", method: "notifications/tools/list_changed" });
+  }
+}
+
+function dispatchRpc(msg: JsonRpcMessage): void {
+  const { id: requestId, method, params } = msg;
+  if (method === "initialize") handleInitialize(requestId);
+  else if (method === "tools/list") handleToolsList(requestId);
+  else if (method === "tools/call") handleToolsCall(requestId, params);
+  else if (method === "ping") respond({ jsonrpc: "2.0", id: requestId, result: {} });
+  else if (method === "notifications/initialized") handleInitialized();
+  // other notifications: no response needed
+}
+
 let buffer = "";
 
 process.stdin.on("data", (chunk: Buffer) => {
@@ -490,90 +616,17 @@ process.stdin.on("data", (chunk: Buffer) => {
     } catch {
       continue;
     }
-    if (!isJsonRpcMessage(msg)) continue;
-
-    const { id: requestId, method, params } = msg;
-
-    if (method === "initialize") {
-      respond({
-        jsonrpc: "2.0",
-        id: requestId,
-        result: {
-          protocolVersion: "2024-11-05",
-          capabilities: { tools: {} },
-          serverInfo: { name: "mulmoclaude", version: "1.0.0" },
-        },
-      });
-    } else if (method === "tools/list") {
-      // Await runtime-plugin load before responding so workspace-
-      // installed tools appear in the very first list call. Without
-      // this, an early tools/list could miss them and the LLM would
-      // never call them this session. `tools` is a `let` binding
-      // updated once when `runtimeReady` resolves; reading the latest
-      // value at callback time is the desired behaviour, not the
-      // loop-capture footgun the rule flags.
-      // eslint-disable-next-line no-loop-func -- read latest `tools` post-runtimeReady
-      runtimeReady.then(() =>
-        respond({
-          jsonrpc: "2.0",
-          id: requestId,
-          result: {
-            tools: tools.map((toolDef) => ({
-              name: toolDef.name,
-              description: toolDef.description,
-              inputSchema: toolDef.inputSchema,
-            })),
-          },
-        }),
-      );
-    } else if (method === "tools/call") {
-      if (!params?.name) {
-        respond({
-          jsonrpc: "2.0",
-          id: requestId,
-          error: {
-            code: -32602,
-            message: "Invalid params: tools/call requires params.name",
-          },
-        });
-        continue;
-      }
-      const toolArgs = params.arguments ?? {};
-      const callName = params.name;
-      runtimeReady
-        .then(() => handleToolCall(callName, toolArgs))
-        .then((text) => {
-          respond({
-            jsonrpc: "2.0",
-            id: requestId,
-            result: { content: [{ type: "text", text }] },
-          });
-        })
-        .catch((err: unknown) => {
-          respond({
-            jsonrpc: "2.0",
-            id: requestId,
-            result: {
-              content: [{ type: "text", text: String(err) }],
-              isError: true,
-            },
-          });
-        });
-    } else if (method === "ping") {
-      respond({ jsonrpc: "2.0", id: requestId, result: {} });
-    }
-    // notifications/initialized and other notifications: no response needed
+    if (isJsonRpcMessage(msg)) dispatchRpc(msg);
   }
 });
 
-// Drain pending responses before exiting. `tools/list` and `tools/call`
-// queue their replies on `runtimeReady.then(...)`, so a synchronous
-// `process.exit(0)` here can race them: if stdin closes before the
-// runtime plugin loader resolves, those `.then` callbacks never get
-// to write their response. Awaiting `runtimeReady` first lets the
-// pending replies flush, and setting `exitCode` (instead of calling
-// `exit`) lets the event loop drain the rest of the I/O before the
-// process leaves naturally.
+// Drain pending responses before exiting. A `tools/call` for an
+// as-yet-unknown name queues its reply on `runtimeReady.then(...)`, so a
+// synchronous `process.exit(0)` here can race it: if stdin closes before the
+// runtime plugin loader resolves, that `.then` callback never gets to write
+// its response. Awaiting `runtimeReady` first lets the pending reply flush,
+// and setting `exitCode` (instead of calling `exit`) lets the event loop
+// drain the rest of the I/O before the process leaves naturally.
 process.stdin.on("end", () => {
   runtimeReady.finally(() => {
     process.exitCode = 0;
