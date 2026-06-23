@@ -122,6 +122,7 @@ export const ROLES: Role[] = [
       TOOL_NAMES.presentDocument,
       TOOL_NAMES.presentSpreadsheet,
       TOOL_NAMES.presentForm,
+      TOOL_NAMES.presentCollection,
       TOOL_NAMES.presentMulmoScript,
       TOOL_NAMES.createMindMap,
       TOOL_NAMES.generateImage,
