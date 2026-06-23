@@ -44,9 +44,19 @@ export interface CollectionRendering {
   hasTableRows: (value: unknown) => boolean;
   formatSubCell: (subField: FieldSpec, value: unknown, record: CollectionItem | null) => string;
   inputTypeFor: (type: FieldType) => string;
+  stepFor: (type: FieldType) => string | undefined;
   deriveAll: (schema: CollectionSchema, base: CollectionItem, refRecords: RefRecordCache) => CollectionItem;
   evaluateDerivedAgainstItem: (field: FieldSpec, fieldKey: string, item: CollectionItem) => number | null;
   derivedDisplay: (field: FieldSpec, computedValue: unknown, record: CollectionItem | null) => string;
+}
+
+// `<input type="number">` defaults to step="1", which makes the browser
+// reject any decimal value (e.g. 0.1) as invalid. Emit step="any" for
+// numeric fields so fractional values can be entered and saved.
+export function stepForFieldType(type: FieldType): string | undefined {
+  if (type === "money") return "0.01";
+  if (type === "number") return "any";
+  return undefined;
 }
 
 export function useCollectionRendering(collection: Ref<CollectionDetail | null>, locale: Ref<string>): CollectionRendering {
@@ -278,6 +288,8 @@ export function useCollectionRendering(collection: Ref<CollectionDetail | null>,
     return "text";
   }
 
+  const stepFor = stepForFieldType;
+
   // The derive loop itself lives in `utils/collections/deriveAll.ts`,
   // shared with the server's manageCollection enrichment so both sides
   // compute identical values. This composable re-exposes it (typed with
@@ -318,6 +330,7 @@ export function useCollectionRendering(collection: Ref<CollectionDetail | null>,
     hasTableRows,
     formatSubCell,
     inputTypeFor,
+    stepFor,
     deriveAll,
     evaluateDerivedAgainstItem,
     derivedDisplay,
