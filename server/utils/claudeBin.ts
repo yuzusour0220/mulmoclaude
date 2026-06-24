@@ -21,7 +21,7 @@
 // and PATH lookup behaves the way Node's documentation describes.
 
 import { spawnSync as nodeSpawnSync, type SpawnSyncReturns } from "node:child_process";
-import { existsSync as nodeExistsSync } from "node:fs";
+import { existsSync as nodeExistsSync, readdirSync as nodeReaddirSync } from "node:fs";
 import path from "node:path";
 
 // All Windows-side path joins go through `path.win32` so the candidates
@@ -41,6 +41,10 @@ export interface ResolveOptions {
   readonly spawnSync?: typeof nodeSpawnSync;
   /** Defaults to `node:fs` `existsSync`. */
   readonly existsSync?: typeof nodeExistsSync;
+  /** Defaults to `node:fs` `readdirSync`. Used to enumerate pnpm's
+   *  `global/<version>/` directories so the probe stays version-
+   *  agnostic (pnpm bumps the global-store major every few releases). */
+  readonly readdirSync?: typeof nodeReaddirSync;
   /** Defaults to `process.env`. */
   readonly env?: typeof process.env;
   /** Tests reset the module-level cache between cases. */
@@ -107,7 +111,7 @@ function* candidatesFromWhereProbe(options: ResolveOptions): Generator<string> {
   for (const line of out.split(/\r?\n/)) {
     const trimmed = line.trim();
     if (!trimmed) continue;
-    yield* walkUpForPackage(winPath.dirname(trimmed));
+    yield* walkUpForPackage(options, winPath.dirname(trimmed));
   }
 }
 
@@ -134,10 +138,9 @@ function* candidatesFromEnvDefaults(options: ResolveOptions): Generator<string> 
     // Yarn classic global node_modules layout.
     yield winPath.join(localAppData, "Yarn", "config", "global", "node_modules", PACKAGE_REL_PATH);
     // pnpm global is `<root>/global/<version>/node_modules/...` —
-    // we cannot list directories without `fs` so probe the most
-    // common shape and let walk-up catch the rest from step 1.
-    yield winPath.join(localAppData, "pnpm", "global", "5", "node_modules", PACKAGE_REL_PATH);
-    yield winPath.join(localAppData, "pnpm", "global", "6", "node_modules", PACKAGE_REL_PATH);
+    // enumerate `<root>/global/` so every current and future major
+    // (5, 6, 7, 8, …) is picked up automatically.
+    yield* pnpmGlobalCandidates(options, winPath.join(localAppData, "pnpm"));
   }
 }
 
@@ -153,17 +156,36 @@ function* candidatesFromEnvDefaults(options: ResolveOptions): Generator<string> 
 // `<bin-dir>` here is the dir that contained the `.cmd` wrapper, so
 // step 0 catches npm immediately and step 1 catches the typical yarn
 // classic install one level up.
-function* walkUpForPackage(startDir: string): Generator<string> {
+function* walkUpForPackage(options: ResolveOptions, startDir: string): Generator<string> {
   let dir = startDir;
   for (let depth = 0; depth <= PARENT_WALK_DEPTH; depth++) {
     yield winPath.join(dir, "node_modules", PACKAGE_REL_PATH);
     yield winPath.join(dir, "config", "global", "node_modules", PACKAGE_REL_PATH);
-    for (const pnpmVer of ["5", "6", "7"]) {
-      yield winPath.join(dir, "global", pnpmVer, "node_modules", PACKAGE_REL_PATH);
-    }
+    yield* pnpmGlobalCandidates(options, dir);
     const parent = winPath.dirname(dir);
     if (parent === dir) break;
     dir = parent;
+  }
+}
+
+// pnpm's global store lives at `<root>/global/<major-version>/...` and
+// the major bumps every few releases (5, 6, 7, 8, ...). Hard-coding a
+// version list ages badly — enumerate the `global/` dir at probe time
+// instead so any current and future major picks up automatically.
+// Silent-skip when `<dir>/global/` doesn't exist or isn't readable;
+// readdirSync throwing must not abort the wider candidate walk.
+function* pnpmGlobalCandidates(options: ResolveOptions, dir: string): Generator<string> {
+  const readdirSync = options.readdirSync ?? nodeReaddirSync;
+  const globalDir = winPath.join(dir, "global");
+  let entries: ReturnType<typeof nodeReaddirSync>;
+  try {
+    entries = readdirSync(globalDir);
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    const name = typeof entry === "string" ? entry : entry.name;
+    yield winPath.join(globalDir, name, "node_modules", PACKAGE_REL_PATH);
   }
 }
 

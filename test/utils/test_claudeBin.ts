@@ -50,6 +50,21 @@ function makeExistsSync(existingPaths: readonly string[]): typeof import("node:f
   }) as typeof import("node:fs").existsSync;
 }
 
+// Map directory → entry names. Lookup uses normalized win32 paths so
+// tests can declare keys in either separator style.
+function makeReaddirSync(dirs: Record<string, readonly string[]>): typeof import("node:fs").readdirSync {
+  const normalized: Record<string, readonly string[]> = {};
+  for (const [dir, entries] of Object.entries(dirs)) {
+    normalized[winPath.normalize(dir)] = entries;
+  }
+  return ((dir: string | URL | Buffer): string[] => {
+    if (typeof dir !== "string") throw new Error("ENOENT");
+    const hit = normalized[winPath.normalize(dir)];
+    if (!hit) throw new Error("ENOENT");
+    return [...hit];
+  }) as typeof import("node:fs").readdirSync;
+}
+
 function commonOpts(overrides: Partial<ResolveOptions> = {}): ResolveOptions {
   return {
     platform: "win32",
@@ -57,6 +72,7 @@ function commonOpts(overrides: Partial<ResolveOptions> = {}): ResolveOptions {
     resetCache: true,
     spawnSync: makeSpawnSync([]),
     existsSync: makeExistsSync([]),
+    readdirSync: makeReaddirSync({}),
     ...overrides,
   };
 }
@@ -134,10 +150,53 @@ describe("claudeBinPath — Windows resolution", () => {
         assert.match(err.message, /Install with: npm install -g @anthropic-ai\/claude-code/);
         assert.match(err.message, /AppData\\Roaming\\npm/);
         assert.match(err.message, /Yarn\\config\\global/);
-        assert.match(err.message, /pnpm/);
+        // pnpm coverage is asserted by the dedicated `pnpm version-
+        // agnostic global probe` tests below — the entries only appear
+        // here when readdirSync actually finds `<root>/global/<v>/`.
         return true;
       },
     );
+  });
+});
+
+describe("claudeBinPath — pnpm version-agnostic global probe", () => {
+  // Regression for the hard-coded `5/6/7` pnpm version list (Codex
+  // review on PR #1769): enumerate `<root>/global/` via readdirSync
+  // so a current pnpm install with `global/15/` is picked up.
+  it("resolves a pnpm v15 layout (`%LOCALAPPDATA%\\pnpm\\global\\15\\node_modules\\…`)", () => {
+    const pnpmRoot = "C:\\Users\\test\\AppData\\Local\\pnpm";
+    const pnpmGlobal = winPath.join(pnpmRoot, "global");
+    const claudeExe = winPath.join(pnpmGlobal, "15", "node_modules", "@anthropic-ai", "claude-code", "bin", "claude.exe");
+    const opts = commonOpts({
+      env: { LOCALAPPDATA: "C:\\Users\\test\\AppData\\Local" },
+      existsSync: makeExistsSync([claudeExe]),
+      readdirSync: makeReaddirSync({ [pnpmGlobal]: ["15"] }),
+    });
+    assert.equal(claudeBinPath(opts), claudeExe);
+  });
+
+  it("resolves a pnpm v8 layout when readdir yields multiple majors", () => {
+    const pnpmRoot = "C:\\Users\\test\\AppData\\Local\\pnpm";
+    const pnpmGlobal = winPath.join(pnpmRoot, "global");
+    const claudeExe = winPath.join(pnpmGlobal, "8", "node_modules", "@anthropic-ai", "claude-code", "bin", "claude.exe");
+    const opts = commonOpts({
+      env: { LOCALAPPDATA: "C:\\Users\\test\\AppData\\Local" },
+      existsSync: makeExistsSync([claudeExe]),
+      // Stale directories from older majors stick around — probe must
+      // try every entry and pick the one that has the binary on disk.
+      readdirSync: makeReaddirSync({ [pnpmGlobal]: ["5", "6", "7", "8"] }),
+    });
+    assert.equal(claudeBinPath(opts), claudeExe);
+  });
+
+  it("silently skips pnpm enumeration when `<root>/global` is missing", () => {
+    // No env, no spawn hits, no readdir entries — the probe must fall
+    // through to the descriptive "not found" error without crashing on
+    // a missing pnpm install.
+    const opts = commonOpts({
+      env: { LOCALAPPDATA: "C:\\Users\\test\\AppData\\Local" },
+    });
+    assert.throws(() => claudeBinPath(opts), /claude CLI binary not found/);
   });
 });
 
