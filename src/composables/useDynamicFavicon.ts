@@ -3,6 +3,7 @@
 
 import { watch, type Ref, type ComputedRef } from "vue";
 import logoUrl from "../assets/mulmo_bw.png";
+import { toError } from "../utils/errors";
 
 const NOTIFICATION_DOT_COLOR = "#DC2626"; // red-600
 const ACTIVE_SESSION_DOT_COLOR = "#EAB308"; // yellow-500
@@ -35,12 +36,12 @@ function decodeAndPunchOutWhite(): Promise<HTMLCanvasElement> {
         resolve(logoCanvas);
       } catch (err) {
         logoLoadFailed = true;
-        reject(err instanceof Error ? err : new Error(String(err)));
+        reject(toError(err));
       }
     };
     img.onerror = (err) => {
       logoLoadFailed = true;
-      reject(err instanceof Error ? err : new Error("favicon logo failed to load"));
+      reject(toError(err, "favicon logo failed to load"));
     };
     img.src = logoUrl;
   });

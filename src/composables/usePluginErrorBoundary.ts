@@ -11,6 +11,7 @@
 // here and is fully testable in isolation.
 
 import { computed, ref, type ComputedRef, type Ref } from "vue";
+import { toError } from "../utils/errors";
 
 export interface PluginErrorBoundary {
   /** Captured error object, or `null` while the plugin renders
@@ -53,7 +54,7 @@ export function usePluginErrorBoundary(pkgName: string): PluginErrorBoundary {
   });
 
   function captureError(err: unknown): void {
-    const captured = err instanceof Error ? err : new Error(String(err));
+    const captured = toError(err);
     console.error(`[plugin/${pkgName}] uncaught error`, captured);
     error.value = captured;
   }

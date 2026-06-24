@@ -24,3 +24,17 @@ export function errorMessage(err: unknown, fallback?: string): string {
   if (fallback !== undefined) return fallback;
   return String(err);
 }
+
+// Coerce an unknown caught value into an Error, preserving the
+// original if it already was one. Use in error boundaries / Promise
+// rejections / event-handler onerror callbacks where the downstream
+// API wants an Error object (not just its message string).
+//
+// `fallback` is the message used when coercing a non-Error value —
+// pass a descriptive string for cases where `String(err)` would just
+// produce noise (e.g. `<img>.onerror` hands you an Event, not the
+// underlying load failure).
+export function toError(err: unknown, fallback?: string): Error {
+  if (err instanceof Error) return err;
+  return new Error(fallback ?? errorMessage(err));
+}
