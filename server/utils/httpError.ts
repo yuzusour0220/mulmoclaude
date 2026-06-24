@@ -59,3 +59,15 @@ export function conflict(res: Response, error: string): Response {
 export function serverError(res: Response, error: string): Response {
   return sendError(res, 500, error);
 }
+
+/** 413 Payload Too Large — request body exceeds an enforced cap. */
+export function payloadTooLarge(res: Response, error: string): Response {
+  return sendError(res, 413, error);
+}
+
+/** 503 Service Unavailable — a capability/dependency is off or not yet
+ *  ready (e.g. an optional binary is missing, a model is still
+ *  downloading). Defense-in-depth guard for capability-gated routes. */
+export function serviceUnavailable(res: Response, error: string): Response {
+  return sendError(res, 503, error);
+}

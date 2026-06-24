@@ -57,6 +57,7 @@ describe("WORKSPACE_DIRS expected keys", () => {
     "marpThemes",
     "memoryDir",
     "memoryStaging",
+    "models",
     "notifier",
     "pluginCache",
     "plugins",

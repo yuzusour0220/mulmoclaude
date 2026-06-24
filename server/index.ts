@@ -15,6 +15,7 @@ import feedsRoutes from "./api/routes/feeds.js";
 import pluginsRoutes from "./api/routes/plugins.js";
 import imageRoutes from "./api/routes/image.js";
 import attachmentRoutes from "./api/routes/attachment.js";
+import transcribeRoutes from "./api/routes/transcribe.js";
 import presentHtmlRoutes from "./api/routes/presentHtml.js";
 import presentSvgRoutes from "./api/routes/presentSvg.js";
 import chartRoutes from "./api/routes/chart.js";
@@ -75,7 +76,8 @@ import { serverError } from "./utils/httpError.js";
 import { makeUuid } from "./utils/id.js";
 import { mcpToolsRouter, mcpTools, isMcpToolEnabled } from "./agent/mcp-tools/index.js";
 import { preflightUserServers, logPreflightResult } from "./agent/mcpPreflight.js";
-import { loadMcpConfig } from "./system/config.js";
+import { loadMcpConfig, loadSettings } from "./system/config.js";
+import { getVoiceInputStatus, stopWhisperSidecar, warmupVoiceInput } from "./system/whisper/index.js";
 import { initWorkspace, workspacePath } from "./workspace/workspace.js";
 import { runMemoryMigrationOnce } from "./workspace/memory/run.js";
 import { runTopicMigrationOnce } from "./workspace/memory/topic-run.js";
@@ -606,6 +608,10 @@ app.get(API_ROUTES.health, (_req: Request, res: Response) => {
     version: APP_VERSION,
     geminiAvailable: isGeminiAvailable(),
     sandboxEnabled,
+    // Local voice input: `capable` (platform + whisper binary) is
+    // distinct from `enabled` (user opt-in) and `model.state` (download
+    // readiness). The mic button gates on all three. See useHealth.ts.
+    voiceInput: getVoiceInputStatus(loadSettings()),
     cpu: { load1, cores },
   });
 });
@@ -639,6 +645,7 @@ app.use(feedsRoutes);
 app.use(pluginsRoutes);
 app.use(imageRoutes);
 app.use(attachmentRoutes);
+app.use(transcribeRoutes);
 app.use(presentHtmlRoutes);
 app.use(presentSvgRoutes);
 app.use(chartRoutes);
@@ -935,6 +942,13 @@ async function startRuntimeServices(httpServer: ReturnType<typeof app.listen>, p
   // later opaque crash. Never throws.
   await announceOptionalDeps();
 
+  // --- Voice input sidecar warm-up ---
+  // If local voice input is enabled and its model is already on disk,
+  // pre-spawn the whisper-server sidecar now (deps were just probed) so
+  // the user's first dictation doesn't pay the ~10s+ model-load cost
+  // inside the request. No-op when voice input is off / not ready.
+  warmupVoiceInput(loadSettings());
+
   // --- Billing-suite migration ---
   // The invoicing collections moved from bundled `mc-*` presets to
   // help-file recipes. Remove any lingering starred `mc-*` billing
@@ -1181,7 +1195,7 @@ async function startRuntimeServices(httpServer: ReturnType<typeof app.listen>, p
 // dead token. Crashes that skip this are harmless — see
 // plans/done/feat-bearer-token-auth.md; the next startup overwrites and
 // the stale file's token no longer matches the live in-memory one.
-const shutdownHooks: (() => void)[] = [];
+const shutdownHooks: (() => void)[] = [stopWhisperSidecar];
 function registerShutdownHook(hook: () => void): void {
   shutdownHooks.push(hook);
 }

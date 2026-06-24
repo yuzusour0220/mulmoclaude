@@ -64,6 +64,9 @@ const enMessages = {
     tooManyFiles: "You can attach up to {max} files at once.",
     removeAttachment: "Remove {name}",
     attachmentFallbackName: "attachment",
+    voice: {
+      tooltip: "Hold to talk",
+    },
   },
   sessionHistoryPanel: {
     filters: {
@@ -226,6 +229,7 @@ const enMessages = {
       map: "Map",
       photos: "Photos",
       model: "Model",
+      voice: "Voice",
       skills: "Skills",
       roles: "Roles",
     },
@@ -267,6 +271,20 @@ const enMessages = {
       helperText: "Higher levels allow more thinking time but increase latency and token usage.",
       configured: "Effort: {level}",
       notConfigured: "Not set",
+      loadError: "Failed to load settings",
+      saveError: "Failed to save",
+    },
+    voiceTab: {
+      description:
+        "Dictate chat messages with your voice. Audio is transcribed locally on the machine running MulmoClaude — nothing is sent to any external service.",
+      unsupported: "Voice input requires macOS with the whisper.cpp server installed. It is not available on this machine.",
+      enableLabel: "Enable voice input",
+      enableHint: "Turning this on downloads the speech model (1–3 GB) once. A mic button then appears in the chat input.",
+      modelLabel: "Speech model",
+      downloading: "Downloading model… {percent}%",
+      ready: "Model ready",
+      downloadError: "Model download failed.",
+      retry: "Retry",
       loadError: "Failed to load settings",
       saveError: "Failed to save",
     },

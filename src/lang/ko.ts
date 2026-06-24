@@ -49,6 +49,9 @@ const koMessages = {
     tooManyFiles: "한 번에 최대 {max}개까지 첨부할 수 있습니다.",
     removeAttachment: "{name} 제거",
     attachmentFallbackName: "첨부파일",
+    voice: {
+      tooltip: "누르고 있는 동안 말하기",
+    },
   },
   sessionHistoryPanel: {
     filters: {
@@ -212,6 +215,7 @@ const koMessages = {
       map: "지도",
       photos: "사진",
       model: "모델",
+      voice: "음성",
       skills: "스킬",
       roles: "역할",
     },
@@ -252,6 +256,19 @@ const koMessages = {
       helperText: "레벨이 높을수록 사고 시간이 늘어나지만 지연 시간과 토큰 사용량도 증가합니다.",
       configured: "Effort: {level}",
       notConfigured: "미설정",
+      loadError: "설정을 불러오지 못했습니다",
+      saveError: "저장에 실패했습니다",
+    },
+    voiceTab: {
+      description: "음성으로 채팅 메시지를 입력합니다. 오디오는 MulmoClaude를 실행하는 컴퓨터에서 로컬로 전사되며 외부 서비스로 전송되지 않습니다.",
+      unsupported: "음성 입력에는 whisper.cpp 서버가 설치된 macOS가 필요합니다. 이 컴퓨터에서는 사용할 수 없습니다.",
+      enableLabel: "음성 입력 활성화",
+      enableHint: "켜면 음성 모델(1–3 GB)을 한 번 다운로드합니다. 이후 채팅 입력란에 마이크 버튼이 표시됩니다.",
+      modelLabel: "음성 모델",
+      downloading: "모델 다운로드 중… {percent}%",
+      ready: "모델 준비 완료",
+      downloadError: "모델 다운로드에 실패했습니다.",
+      retry: "다시 시도",
       loadError: "설정을 불러오지 못했습니다",
       saveError: "저장에 실패했습니다",
     },

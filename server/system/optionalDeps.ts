@@ -35,6 +35,10 @@ export interface DepStatus {
 const REGISTRY: readonly OptionalDep[] = [
   { id: "docker", command: "docker", enables: "dockerSandbox", probe: isDockerLive },
   { id: "ffmpeg", command: "ffmpeg", enables: "mulmocast" },
+  // Local voice input (whisper.cpp server binary). Spawned as a warm
+  // sidecar, not loaded in-process — see server/system/whisper/. The
+  // Homebrew `whisper-cpp` formula installs `whisper-server`.
+  { id: "whisper", command: "whisper-server", enables: "voiceInput" },
 ];
 
 async function onPath(command: string): Promise<boolean> {

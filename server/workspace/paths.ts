@@ -211,6 +211,13 @@ const HOST_WORKSPACE_DIRS = {
   wikiHistory: "data/wiki/.history",
   // Development — git-cloned repositories (#256).
   github: "github",
+  // Local voice-input models (whisper.cpp GGML weights). A top-level
+  // dir — deliberately NOT under `data/` (which the user manages with
+  // git) — since model files are large binaries that must stay out of
+  // the git-tracked tree. Created lazily on first download, never
+  // eagerly (most users never enable voice input). See
+  // plans/feat-voice-input.md.
+  models: "models",
   // Runtime-loaded plugins (#1043 C-2). The `plugins/` directory holds
   // user-installed npm-published plugin tarballs; `.cache/<name>/<ver>/`
   // is the extracted-on-boot mirror. Both live under the workspace root

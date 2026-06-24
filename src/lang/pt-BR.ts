@@ -42,6 +42,9 @@ const ptBRMessages = {
     tooManyFiles: "Você pode anexar no máximo {max} arquivos por vez.",
     removeAttachment: "Remover {name}",
     attachmentFallbackName: "anexo",
+    voice: {
+      tooltip: "Segure para falar",
+    },
   },
   sessionHistoryPanel: {
     filters: {
@@ -206,6 +209,7 @@ const ptBRMessages = {
       map: "Mapa",
       photos: "Fotos",
       model: "Modelo",
+      voice: "Voz",
       skills: "Skills",
       roles: "Papéis",
     },
@@ -247,6 +251,20 @@ const ptBRMessages = {
       helperText: "Níveis mais altos permitem mais tempo de pensamento mas aumentam latência e uso de tokens.",
       configured: "Esforço: {level}",
       notConfigured: "Sem configurar",
+      loadError: "Falha ao carregar as configurações",
+      saveError: "Falha ao salvar",
+    },
+    voiceTab: {
+      description:
+        "Dite mensagens de chat com sua voz. O áudio é transcrito localmente na máquina que executa o MulmoClaude — nada é enviado para nenhum serviço externo.",
+      unsupported: "A entrada de voz requer macOS com o servidor whisper.cpp instalado. Não está disponível nesta máquina.",
+      enableLabel: "Ativar entrada de voz",
+      enableHint: "Ao ativar, o modelo de voz (1–3 GB) é baixado uma vez. Em seguida, um botão de microfone aparece na entrada de chat.",
+      modelLabel: "Modelo de voz",
+      downloading: "Baixando modelo… {percent}%",
+      ready: "Modelo pronto",
+      downloadError: "Falha ao baixar o modelo.",
+      retry: "Tentar novamente",
       loadError: "Falha ao carregar as configurações",
       saveError: "Falha ao salvar",
     },

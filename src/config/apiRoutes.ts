@@ -164,6 +164,16 @@ const HOST_API_ROUTES = {
     translate: "/api/translation",
   },
 
+  // Local voice input (Mac-only, whisper.cpp). `run` transcribes one
+  // audio clip; `model` reports capability + download status; `modelDownload`
+  // is the opt-in trigger fired by the Settings → Voice enable toggle.
+  // See plans/feat-voice-input.md.
+  transcribe: {
+    run: "/api/transcribe",
+    model: "/api/transcribe/model",
+    modelDownload: "/api/transcribe/model/download",
+  },
+
   // Plugin-owned endpoints that don't follow a single naming pattern.
   // Names match the plugin tool name or the short verb the plugin uses.
   plugins: {

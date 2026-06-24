@@ -42,6 +42,9 @@ const deMessages = {
     tooManyFiles: "Sie können maximal {max} Dateien gleichzeitig anhängen.",
     removeAttachment: "{name} entfernen",
     attachmentFallbackName: "Anhang",
+    voice: {
+      tooltip: "Zum Sprechen gedrückt halten",
+    },
   },
   sessionHistoryPanel: {
     filters: {
@@ -208,6 +211,7 @@ const deMessages = {
       map: "Karte",
       photos: "Fotos",
       model: "Modell",
+      voice: "Sprache",
       skills: "Skills",
       roles: "Rollen",
     },
@@ -250,6 +254,21 @@ const deMessages = {
       helperText: "Höhere Stufen erlauben mehr Denkzeit, erhöhen aber Latenz und Token-Verbrauch.",
       configured: "Effort: {level}",
       notConfigured: "Nicht gesetzt",
+      loadError: "Einstellungen konnten nicht geladen werden",
+      saveError: "Speichern fehlgeschlagen",
+    },
+    voiceTab: {
+      description:
+        "Diktieren Sie Chat-Nachrichten mit Ihrer Stimme. Das Audio wird lokal auf dem Rechner transkribiert, der MulmoClaude ausführt — nichts wird an einen externen Dienst gesendet.",
+      unsupported: "Spracheingabe erfordert macOS mit installiertem whisper.cpp-Server. Auf diesem Rechner ist sie nicht verfügbar.",
+      enableLabel: "Spracheingabe aktivieren",
+      enableHint:
+        "Beim Aktivieren wird das Sprachmodell (1–3 GB) einmalig heruntergeladen. Anschließend erscheint eine Mikrofon-Schaltfläche im Chat-Eingabefeld.",
+      modelLabel: "Sprachmodell",
+      downloading: "Modell wird heruntergeladen… {percent}%",
+      ready: "Modell bereit",
+      downloadError: "Modell-Download fehlgeschlagen.",
+      retry: "Erneut versuchen",
       loadError: "Einstellungen konnten nicht geladen werden",
       saveError: "Speichern fehlgeschlagen",
     },

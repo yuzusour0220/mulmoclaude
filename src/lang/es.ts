@@ -47,6 +47,9 @@ const esMessages = {
     tooManyFiles: "Puedes adjuntar hasta {max} archivos a la vez.",
     removeAttachment: "Quitar {name}",
     attachmentFallbackName: "archivo adjunto",
+    voice: {
+      tooltip: "Mantén pulsado para hablar",
+    },
   },
   sessionHistoryPanel: {
     filters: {
@@ -211,6 +214,7 @@ const esMessages = {
       map: "Mapa",
       photos: "Fotos",
       model: "Modelo",
+      voice: "Voz",
       skills: "Skills",
       roles: "Roles",
     },
@@ -252,6 +256,20 @@ const esMessages = {
       helperText: "Niveles más altos permiten más tiempo de pensamiento pero aumentan la latencia y el uso de tokens.",
       configured: "Esfuerzo: {level}",
       notConfigured: "Sin configurar",
+      loadError: "Error al cargar los ajustes",
+      saveError: "Error al guardar",
+    },
+    voiceTab: {
+      description:
+        "Dicta mensajes de chat con tu voz. El audio se transcribe localmente en la máquina que ejecuta MulmoClaude; no se envía nada a ningún servicio externo.",
+      unsupported: "La entrada de voz requiere macOS con el servidor whisper.cpp instalado. No está disponible en esta máquina.",
+      enableLabel: "Activar entrada de voz",
+      enableHint: "Al activarlo se descarga una vez el modelo de voz (1–3 GB). Luego aparece un botón de micrófono en la entrada de chat.",
+      modelLabel: "Modelo de voz",
+      downloading: "Descargando modelo… {percent}%",
+      ready: "Modelo listo",
+      downloadError: "Error al descargar el modelo.",
+      retry: "Reintentar",
       loadError: "Error al cargar los ajustes",
       saveError: "Error al guardar",
     },

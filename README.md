@@ -39,6 +39,7 @@ Open [http://localhost:5173](http://localhost:5173). That's it — start chattin
   - Linux: `apt install ffmpeg`
   - Windows: `winget install Gyan.FFmpeg`
 - **Docker Desktop** (optional but recommended) — enables sandbox mode. See [Installing Docker Desktop](#installing-docker-desktop) below
+- **whisper.cpp** (optional, macOS only) — enables local voice input (dictate chat messages). See [Optional: Local Voice Input](#optional-local-voice-input-macos) below
 
 > **UI language**: 8 locales are supported (English, Japanese, Simplified Chinese, Korean, Spanish, Brazilian Portuguese, French, German). The default is auto-detected from the browser / OS language. To set it explicitly, put `VITE_LOCALE=ja` (or `zh` / `ko` / `es` / `pt-BR` / `fr` / `de`) in `.env`. Locale is picked at build/dev time; restart `yarn dev` after changing it. See [`docs/developer.md`](docs/developer.md#i18n-vue-i18n) for how to add strings.
 
@@ -412,6 +413,39 @@ These tools are **only available in custom roles**. The built-in roles do not in
 2. Add `readXPost` and/or `searchX` to its `availablePlugins` list
 
 Once configured, you can paste any `x.com` or `twitter.com` URL into the chat and Claude will fetch and read it automatically.
+
+## Optional: Local Voice Input (macOS)
+
+Dictate chat messages instead of typing them. Hold the mic button in the chat input, speak, release — the speech is transcribed and inserted into the input for review before you send it. Transcription runs **entirely on the machine running MulmoClaude** via [whisper.cpp](https://github.com/ggml-org/whisper.cpp) with Metal acceleration: no audio leaves the device, no per-minute API cost.
+
+This is **disabled by default** and **macOS-only** (Apple Silicon recommended). The mic button stays hidden until the feature is set up and enabled.
+
+### Setup
+
+1. **Install `cmake` first.** The build script compiles whisper.cpp from source and requires `cmake` — it aborts with an error if `cmake` is missing. Install it before running the script:
+
+   ```bash
+   brew install cmake
+   ```
+
+2. **Build and install the `whisper-server` binary.** Homebrew's `whisper-cpp` formula ships only `whisper-cli` (it builds with the server target off), so build from source with the bundled script:
+
+   ```bash
+   yarn build:whisper      # clones + builds whisper.cpp, links whisper-server onto PATH
+   ```
+
+   Verify with `whisper-server --help`. By default the binaries are linked into `/opt/homebrew/bin`; pass `--link-dir=<dir>` (a directory on your `PATH`) or `--ref=<git-tag>` to customize. `ffmpeg` is also required (see [Prerequisites](#prerequisites)).
+
+3. **Restart `yarn dev`** so the server re-probes for the binary.
+
+4. **Enable it in the app.** Open **Settings → Voice**, turn on **Enable voice input**. This downloads the speech model (`large-v3-turbo`, ~1.5 GB) once into `~/mulmoclaude/models/` with a progress bar. When it reaches "Model ready," the mic button appears in the chat input.
+
+### Notes
+
+- **Language** is auto-detected from your UI/browser locale, with a per-session override and an `auto` option that lets Whisper detect the spoken language from the audio.
+- **Model choice**: `large-v3-turbo` (default), `small`, and `base` are selectable in Settings → Voice; the lighter models suit lower-RAM machines.
+- **Privacy**: audio is processed on-device and temporary files are deleted immediately after transcription. (The "on-device" guarantee assumes you run the server on your own machine.)
+- Models live under `~/mulmoclaude/models/` — deliberately outside the git-managed `data/` workspace tree. Disabling the feature offers to delete the downloaded weights.
 
 ## Configuring Additional Tools (Web Settings)
 

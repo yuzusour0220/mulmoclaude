@@ -47,6 +47,9 @@ const zhMessages = {
     tooManyFiles: "一次最多可附加 {max} 个文件。",
     removeAttachment: "移除 {name}",
     attachmentFallbackName: "附件",
+    voice: {
+      tooltip: "按住说话",
+    },
   },
   sessionHistoryPanel: {
     filters: {
@@ -207,6 +210,7 @@ const zhMessages = {
       map: "地图",
       photos: "照片",
       model: "模型",
+      voice: "语音",
       skills: "技能",
       roles: "角色",
     },
@@ -246,6 +250,19 @@ const zhMessages = {
       helperText: "更高的等级会带来更多思考时间,但也会增加延迟和 token 消耗。",
       configured: "推理强度:{level}",
       notConfigured: "未设置",
+      loadError: "加载设置失败",
+      saveError: "保存失败",
+    },
+    voiceTab: {
+      description: "用语音口述聊天消息。音频在运行 MulmoClaude 的机器上本地转录,不会发送到任何外部服务。",
+      unsupported: "语音输入需要已安装 whisper.cpp 服务器的 macOS。本机不支持此功能。",
+      enableLabel: "启用语音输入",
+      enableHint: "开启后会一次性下载语音模型(1–3 GB)。随后聊天输入框中会出现麦克风按钮。",
+      modelLabel: "语音模型",
+      downloading: "正在下载模型… {percent}%",
+      ready: "模型已就绪",
+      downloadError: "模型下载失败。",
+      retry: "重试",
       loadError: "加载设置失败",
       saveError: "保存失败",
     },

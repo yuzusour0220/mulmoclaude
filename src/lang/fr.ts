@@ -42,6 +42,9 @@ const frMessages = {
     tooManyFiles: "Vous pouvez joindre jusqu'à {max} fichiers à la fois.",
     removeAttachment: "Retirer {name}",
     attachmentFallbackName: "pièce jointe",
+    voice: {
+      tooltip: "Maintenez pour parler",
+    },
   },
   sessionHistoryPanel: {
     filters: {
@@ -206,6 +209,7 @@ const frMessages = {
       map: "Carte",
       photos: "Photos",
       model: "Modèle",
+      voice: "Voix",
       skills: "Skills",
       roles: "Rôles",
     },
@@ -247,6 +251,20 @@ const frMessages = {
       helperText: "Les niveaux plus élevés autorisent plus de temps de réflexion mais augmentent la latence et la consommation de tokens.",
       configured: "Effort : {level}",
       notConfigured: "Non défini",
+      loadError: "Échec du chargement des paramètres",
+      saveError: "Échec de l'enregistrement",
+    },
+    voiceTab: {
+      description:
+        "Dictez vos messages de chat à la voix. L'audio est transcrit localement sur la machine qui exécute MulmoClaude — rien n'est envoyé à un service externe.",
+      unsupported: "La saisie vocale nécessite macOS avec le serveur whisper.cpp installé. Elle n'est pas disponible sur cette machine.",
+      enableLabel: "Activer la saisie vocale",
+      enableHint: "L'activation télécharge le modèle vocal (1–3 Go) une seule fois. Un bouton micro apparaît ensuite dans la zone de saisie du chat.",
+      modelLabel: "Modèle vocal",
+      downloading: "Téléchargement du modèle… {percent}%",
+      ready: "Modèle prêt",
+      downloadError: "Échec du téléchargement du modèle.",
+      retry: "Réessayer",
       loadError: "Échec du chargement des paramètres",
       saveError: "Échec de l'enregistrement",
     },

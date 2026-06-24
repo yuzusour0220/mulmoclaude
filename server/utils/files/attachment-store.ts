@@ -186,10 +186,22 @@ export async function loadAttachmentBytes(relativePath: string): Promise<Buffer>
 export const isAttachmentPath = makePathValidator({ prefix: WORKSPACE_DIRS.attachments });
 
 export function stripDataUri(dataUri: string): { mimeType: string; base64: string } | undefined {
-  const match = /^data:([^;,]+)(;base64)?,(.*)$/s.exec(dataUri);
-  if (!match) return undefined;
-  const [, mimeType, isBase64, payload] = match;
-  if (!isBase64) {
+  // Parse without a regex (the nested-quantifier form trips
+  // security/detect-unsafe-regex). RFC 2397 shape:
+  //   data:<mediatype>(;<param>)*(;base64)?,<payload>
+  // The first comma delimits header from payload. MediaRecorder +
+  // FileReader emit params like `;codecs=opus`, so we must tolerate
+  // them; the bare MIME type (params dropped) is what callers want for
+  // extension lookup.
+  if (!dataUri.startsWith("data:")) return undefined;
+  const commaIndex = dataUri.indexOf(",");
+  if (commaIndex === -1) return undefined;
+  const header = dataUri.slice("data:".length, commaIndex);
+  const payload = dataUri.slice(commaIndex + 1);
+  const params = header.split(";");
+  const [mimeType] = params;
+  if (!mimeType) return undefined;
+  if (!params.includes("base64")) {
     // URL-encoded inline form — convert to base64 for storage.
     return { mimeType, base64: Buffer.from(decodeURIComponent(payload), "utf-8").toString("base64") };
   }

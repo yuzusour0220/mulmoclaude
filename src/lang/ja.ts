@@ -49,6 +49,9 @@ const jaMessages = {
     tooManyFiles: "一度に添付できるのは {max} 件までです。",
     removeAttachment: "{name} を削除",
     attachmentFallbackName: "添付ファイル",
+    voice: {
+      tooltip: "押している間だけ話す",
+    },
   },
   sessionHistoryPanel: {
     filters: {
@@ -209,6 +212,7 @@ const jaMessages = {
       map: "地図",
       photos: "写真",
       model: "モデル",
+      voice: "音声",
       skills: "スキル",
       roles: "ロール",
     },
@@ -250,6 +254,20 @@ const jaMessages = {
       helperText: "高いレベルほど思考時間が長くなりますが、レイテンシとトークン消費も増えます。",
       configured: "Effort: {level}",
       notConfigured: "未設定",
+      loadError: "設定の読み込みに失敗しました",
+      saveError: "保存に失敗しました",
+    },
+    voiceTab: {
+      description:
+        "チャットメッセージを音声で入力できます。音声は MulmoClaude を実行しているマシン上でローカルに文字起こしされ、外部サービスには一切送信されません。",
+      unsupported: "音声入力には whisper.cpp サーバーがインストールされた macOS が必要です。このマシンでは利用できません。",
+      enableLabel: "音声入力を有効にする",
+      enableHint: "オンにすると音声モデル（1〜3 GB）を一度だけダウンロードします。その後、チャット入力欄にマイクボタンが表示されます。",
+      modelLabel: "音声モデル",
+      downloading: "モデルをダウンロード中… {percent}%",
+      ready: "モデルの準備が完了しました",
+      downloadError: "モデルのダウンロードに失敗しました。",
+      retry: "再試行",
       loadError: "設定の読み込みに失敗しました",
       saveError: "保存に失敗しました",
     },

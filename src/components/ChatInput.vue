@@ -90,6 +90,24 @@
           >
             <span class="material-icons text-base leading-none">attach_file</span>
           </button>
+          <!-- Push-to-talk mic. Hidden unless the backend reports voice
+               input ready (Mac + enabled + model downloaded). Hold to
+               record, release to transcribe; transcript is appended to
+               the input for review, never auto-sent. -->
+          <button
+            v-if="voiceAvailable"
+            data-testid="mic-btn"
+            class="rounded w-8 h-8 flex items-center justify-center"
+            :class="voiceRecording ? 'bg-red-600 text-white animate-pulse' : 'text-gray-400 hover:text-gray-600'"
+            :disabled="isRunning || voiceTranscribing"
+            :title="t('chatInput.voice.tooltip')"
+            :aria-label="t('chatInput.voice.tooltip')"
+            @pointerdown.prevent="startVoice"
+            @pointerup="stopVoice"
+            @pointerleave="stopVoice"
+          >
+            <span class="material-icons text-base leading-none">{{ voiceTranscribing ? "hourglass_top" : "mic" }}</span>
+          </button>
         </div>
       </div>
 
@@ -103,8 +121,9 @@
 </template>
 
 <script setup lang="ts">
-import { nextTick, ref, toRef, watch } from "vue";
+import { nextTick, onMounted, ref, toRef, watch } from "vue";
 import { useI18n } from "vue-i18n";
+import { useVoiceInput } from "../composables/useVoiceInput";
 import ChatAttachmentPreview from "./ChatAttachmentPreview.vue";
 import SlashCommandMenu from "./SlashCommandMenu.vue";
 import SuggestionsPanel from "./SuggestionsPanel.vue";
@@ -115,7 +134,7 @@ import type { PastedFile } from "../types/pastedFile";
 
 export type { PastedFile };
 
-const { t } = useI18n();
+const { t, locale } = useI18n();
 
 const props = withDefaults(
   defineProps<{
@@ -134,6 +153,30 @@ const emit = defineEmits<{
   stop: [];
   "suggestion-send": [query: string];
 }>();
+
+// Local voice input (Mac-only). The mic button is hidden unless the
+// backend reports voice input ready; transcripts are appended to the
+// input for review, never auto-sent. See plans/feat-voice-input.md.
+function insertTranscript(text: string): void {
+  const current = props.modelValue;
+  const next = current.trim().length > 0 ? `${current.trimEnd()} ${text}` : text;
+  emit("update:modelValue", next);
+}
+
+const {
+  available: voiceAvailable,
+  recording: voiceRecording,
+  transcribing: voiceTranscribing,
+  start: startVoice,
+  stop: stopVoice,
+  refreshAvailability: refreshVoiceAvailability,
+} = useVoiceInput({
+  locale: () => locale.value,
+  onTranscript: insertTranscript,
+});
+onMounted(() => {
+  void refreshVoiceAvailability();
+});
 
 const textarea = ref<HTMLTextAreaElement | null>(null);
 const fileError = ref<string | null>(null);

@@ -52,6 +52,17 @@ export interface AppSettings {
   // every agent invocation (#1323). Unset → flag is omitted →
   // Claude's own default.
   effortLevel?: EffortLevel;
+
+  // Local voice input (whisper.cpp). Ships off. `enabled` is the
+  // user's explicit opt-in from Settings → Voice; flipping it true is
+  // what triggers the model download. `model` is the selected GGML
+  // model name (validated against the registry at the route layer, kept
+  // as a free string here to avoid a low-level → whisper dependency).
+  // See plans/feat-voice-input.md.
+  voiceInput?: {
+    enabled: boolean;
+    model?: string;
+  };
 }
 
 const DEFAULT_SETTINGS: AppSettings = { extraAllowedTools: [] };
@@ -83,12 +94,20 @@ function isEffortLevel(value: unknown): value is EffortLevel {
   return typeof value === "string" && (EFFORT_LEVELS as readonly string[]).includes(value);
 }
 
+function isVoiceInputSettings(value: unknown): value is { enabled: boolean; model?: string } {
+  if (!isRecord(value)) return false;
+  if (typeof value.enabled !== "boolean") return false;
+  if (value.model !== undefined && typeof value.model !== "string") return false;
+  return true;
+}
+
 export function isAppSettings(value: unknown): value is AppSettings {
   if (!isRecord(value)) return false;
   if (!isStringArray(value.extraAllowedTools)) return false;
   if (value.googleMapsApiKey !== undefined && typeof value.googleMapsApiKey !== "string") return false;
   if (value.photoExif !== undefined && !isPhotoExifSettings(value.photoExif)) return false;
   if (value.effortLevel !== undefined && !isEffortLevel(value.effortLevel)) return false;
+  if (value.voiceInput !== undefined && !isVoiceInputSettings(value.voiceInput)) return false;
   return true;
 }
 
@@ -129,6 +148,7 @@ export function isAppSettingsPatch(value: unknown): value is AppSettingsPatch {
   if (value.googleMapsApiKey !== undefined && typeof value.googleMapsApiKey !== "string") return false;
   if (value.photoExif !== undefined && !isPhotoExifSettings(value.photoExif)) return false;
   if (value.effortLevel !== undefined && value.effortLevel !== null && !isEffortLevel(value.effortLevel)) return false;
+  if (value.voiceInput !== undefined && !isVoiceInputSettings(value.voiceInput)) return false;
   return true;
 }
 
@@ -155,6 +175,12 @@ function cloneAppSettings(settings: AppSettings): AppSettings {
   }
   if (settings.effortLevel !== undefined) {
     copy.effortLevel = settings.effortLevel;
+  }
+  if (settings.voiceInput !== undefined) {
+    copy.voiceInput = { enabled: settings.voiceInput.enabled };
+    if (settings.voiceInput.model !== undefined) {
+      copy.voiceInput.model = settings.voiceInput.model;
+    }
   }
   return copy;
 }
@@ -201,6 +227,12 @@ export function saveSettings(settings: AppSettings): void {
   }
   if (settings.effortLevel !== undefined) {
     payload.effortLevel = settings.effortLevel;
+  }
+  if (settings.voiceInput !== undefined) {
+    payload.voiceInput = { enabled: settings.voiceInput.enabled };
+    if (settings.voiceInput.model !== undefined) {
+      payload.voiceInput.model = settings.voiceInput.model;
+    }
   }
   const serialised = JSON.stringify(payload, null, 2);
   writeFileAtomicSync(settingsPath(), `${serialised}\n`, { mode: 0o600 });
