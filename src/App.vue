@@ -1111,13 +1111,14 @@ function startNewChat(message: string, roleId?: string): void {
   void seedCollectionPresentation(message);
 }
 
-// A chat seeded from a collection view carries that collection's slash command
+// A chat started from a collection view carries that collection's slash command
 // (`/<slug> …`). Present the collection in the canvas immediately — a
-// client-side stand-in for the presentCollection call the agent makes moments
-// later — so the user isn't staring at an empty canvas during the round trip.
-// The placeholder is reconciled away once the real tool result arrives
-// (reconcileSyntheticCollection in eventDispatch). No-op for non-collection
-// slash commands (e.g. /deep-research) and plain prose.
+// client-side stand-in for the presentCollection call the agent makes when the
+// message is sent — so the collection is visible up front (#1768). Used by both
+// entry points: startNewChat (message sent) and startNewChatDraft (message left
+// as an editable draft). The placeholder is reconciled away once the real tool
+// result arrives (reconcileSyntheticCollection in eventDispatch). No-op for
+// non-collection slash commands (e.g. /deep-research) and plain prose.
 async function seedCollectionPresentation(message: string): Promise<void> {
   const seed = parseCollectionSlashSeed(message);
   if (!seed) return;
@@ -1148,13 +1149,16 @@ async function isKnownCollectionSlug(slug: string): Promise<boolean> {
 // Used by custom collection views (`__MC_VIEW.startChat`) so a view button can
 // propose a chat without the view's code triggering an agent run on its own.
 // `roleId` is validated against the known roles and falls back to General
-// (createNewSession does not validate the id it is handed).
+// (createNewSession does not validate the id it is handed). When the draft is a
+// collection slash command, the collection is presented in the canvas up front
+// (#1768) — presentCollection first, then the prefilled draft.
 function startNewChatDraft(message: string, roleId?: string): void {
   const rId = roleId && roles.value.some((role) => role.id === roleId) ? roleId : BUILTIN_ROLE_IDS.general;
   createNewSession(rId);
   userInput.value = message;
   chatInputRef.value?.collapseSuggestions();
   nextTick(() => focusChatInput());
+  void seedCollectionPresentation(message);
 }
 
 function handleAskGemini(): void {
