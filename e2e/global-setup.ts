@@ -34,7 +34,7 @@ async function preWarmRoute(baseURL: string, route: string): Promise<void> {
 }
 
 export default async function globalSetup(config: FullConfig): Promise<void> {
-  const project = config.projects[0];
+  const [project] = config.projects;
   const baseURL = project?.use?.baseURL ?? DEFAULT_BASE_URL;
   for (const route of PREWARM_ROUTES) {
     await preWarmRoute(baseURL, route);
