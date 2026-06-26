@@ -17,18 +17,12 @@ Sie interagieren in natürlicher Sprache, und Claude ruft die passende GUI für 
 ## Schnellstart
 
 ```bash
-# 1. Clone and install
-git clone git@github.com:receptron/mulmoclaude.git
-cd mulmoclaude && yarn install
-
-# 2. Configure (optional — image generation requires Gemini API key)
-cp .env.example .env   # edit .env to add GEMINI_API_KEY
-
-# 3. Run
-yarn dev
+npx mulmoclaude@latest
 ```
 
-Öffnen Sie [http://localhost:5173](http://localhost:5173). Das war's — beginnen Sie mit dem Chat.
+Der Launcher startet den Server und öffnet [http://localhost:3001](http://localhost:3001) in Ihrem Browser. Das war's — beginnen Sie mit dem Chat.
+
+> **Im Hintergrund weiterlaufen lassen**: Beim Schließen des Terminals stoppt der Server. Für den Dauerbetrieb starten Sie ihn in `tmux` / `screen` (macOS/Linux) oder als Startaufgabe in der Windows-Aufgabenplanung.
 
 ### Voraussetzungen
 
@@ -41,6 +35,19 @@ yarn dev
 - **Docker Desktop** (optional, aber empfohlen) — aktiviert den Sandbox-Modus. Siehe [Docker Desktop installieren](#docker-desktop-installieren) unten
 
 > **UI-Sprache**: 8 Sprachen werden unterstützt (Englisch, Japanisch, Chinesisch, Koreanisch, Spanisch, Portugiesisch (BR), Französisch, Deutsch). Standardmäßig wird die Sprache automatisch aus der Browser- / Betriebssystemsprache erkannt. Um sie explizit festzulegen, setzen Sie `VITE_LOCALE=de` in `.env`. Die Locale wird zur Build-/Dev-Zeit ausgewählt; starten Sie `yarn dev` nach einer Änderung neu. Siehe [`docs/developer.md`](docs/developer.md#i18n-vue-i18n) zum Hinzufügen von Strings.
+
+### Vom Quellcode aus ausführen (für Entwickler)
+
+Wenn Sie den Code ändern statt ihn nur auszuführen möchten:
+
+```bash
+git clone git@github.com:receptron/mulmoclaude.git
+cd mulmoclaude && yarn install
+cp .env.example .env   # optional — fügen Sie GEMINI_API_KEY für die Bilderzeugung hinzu
+yarn dev
+```
+
+Öffnen Sie [http://localhost:5173](http://localhost:5173). Architektur und Skripte siehe [`docs/developer.md`](docs/developer.md).
 
 ## Was kann man tun?
 

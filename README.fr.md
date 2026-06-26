@@ -17,18 +17,12 @@ Vous interagissez en langage naturel, et Claude invoque la bonne GUI pour la tâ
 ## Démarrage rapide
 
 ```bash
-# 1. Clone and install
-git clone git@github.com:receptron/mulmoclaude.git
-cd mulmoclaude && yarn install
-
-# 2. Configure (optional — image generation requires Gemini API key)
-cp .env.example .env   # edit .env to add GEMINI_API_KEY
-
-# 3. Run
-yarn dev
+npx mulmoclaude@latest
 ```
 
-Ouvrez [http://localhost:5173](http://localhost:5173). C'est tout — commencez à discuter.
+Le lanceur démarre le serveur et ouvre [http://localhost:3001](http://localhost:3001) dans votre navigateur. C'est tout — commencez à discuter.
+
+> **Pour le garder actif** : fermer le terminal arrête le serveur. Pour l'exécuter en arrière-plan, lancez-le dans `tmux` / `screen` (macOS/Linux) ou enregistrez-le comme tâche au démarrage dans le Planificateur de tâches Windows.
 
 ### Prérequis
 
@@ -41,6 +35,19 @@ Ouvrez [http://localhost:5173](http://localhost:5173). C'est tout — commencez 
 - **Docker Desktop** (optionnel mais recommandé) — active le mode bac à sable. Voir [Installer Docker Desktop](#installer-docker-desktop) ci-dessous
 
 > **Langue de l'interface** : 8 langues sont prises en charge (anglais, japonais, chinois, coréen, espagnol, portugais (BR), français, allemand). Par défaut, la langue est détectée automatiquement à partir de la langue du navigateur / du système d'exploitation. Pour l'indiquer explicitement, définissez `VITE_LOCALE=fr` dans `.env`. La locale est choisie au moment de la compilation / du développement ; redémarrez `yarn dev` après l'avoir modifiée. Consultez [`docs/developer.md`](docs/developer.md#i18n-vue-i18n) pour savoir comment ajouter des chaînes de caractères.
+
+### Exécuter depuis le code source (pour les développeurs)
+
+Pour modifier le code au lieu de simplement l'exécuter :
+
+```bash
+git clone git@github.com:receptron/mulmoclaude.git
+cd mulmoclaude && yarn install
+cp .env.example .env   # optionnel — ajoutez GEMINI_API_KEY pour la génération d'images
+yarn dev
+```
+
+Ouvrez [http://localhost:5173](http://localhost:5173). Voir [`docs/developer.md`](docs/developer.md) pour l'architecture et les scripts.
 
 ## Que pouvez-vous faire ?
 

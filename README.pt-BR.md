@@ -17,18 +17,12 @@ Você interage em linguagem natural, e o Claude invoca a GUI certa para a tarefa
 ## Início Rápido
 
 ```bash
-# 1. Clone and install
-git clone git@github.com:receptron/mulmoclaude.git
-cd mulmoclaude && yarn install
-
-# 2. Configure (optional — image generation requires Gemini API key)
-cp .env.example .env   # edit .env to add GEMINI_API_KEY
-
-# 3. Run
-yarn dev
+npx mulmoclaude@latest
 ```
 
-Abra [http://localhost:5173](http://localhost:5173). É isso — comece a conversar.
+O lançador inicia o servidor e abre [http://localhost:3001](http://localhost:3001) no seu navegador. É isso — comece a conversar.
+
+> **Mantendo em execução**: fechar o terminal encerra o servidor. Para rodar em segundo plano, inicie-o dentro de `tmux` / `screen` (macOS/Linux) ou registre-o como tarefa de inicialização no Agendador de Tarefas do Windows.
 
 ### Pré-requisitos
 
@@ -41,6 +35,19 @@ Abra [http://localhost:5173](http://localhost:5173). É isso — comece a conver
 - **Docker Desktop** (opcional, mas recomendado) — habilita o modo sandbox. Consulte [Instalando o Docker Desktop](#instalando-o-docker-desktop) abaixo
 
 > **Idioma da UI**: 8 idiomas são suportados (inglês, japonês, chinês, coreano, espanhol, português (BR), francês, alemão). O padrão é detectado automaticamente a partir do idioma do navegador / sistema operacional. Para indicá-lo explicitamente, defina `VITE_LOCALE=pt-BR` em `.env`. O locale é escolhido em tempo de build/dev; reinicie `yarn dev` após alterá-lo. Consulte [`docs/developer.md`](docs/developer.md#i18n-vue-i18n) para saber como adicionar strings.
+
+### Executar a partir do código-fonte (para desenvolvedores)
+
+Para modificar o código em vez de apenas executá-lo:
+
+```bash
+git clone git@github.com:receptron/mulmoclaude.git
+cd mulmoclaude && yarn install
+cp .env.example .env   # opcional — adicione GEMINI_API_KEY para geração de imagens
+yarn dev
+```
+
+Abra [http://localhost:5173](http://localhost:5173). Consulte [`docs/developer.md`](docs/developer.md) para arquitetura e scripts.
 
 ## O que você pode fazer?
 
