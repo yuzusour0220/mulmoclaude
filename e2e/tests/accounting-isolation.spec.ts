@@ -1,9 +1,10 @@
-// Hard-constraint regression for the accounting plugin: in the
-// default (General) Role environment, the plugin must be invisible.
-// No launcher button, no /accounting route. Reaching the plugin
-// requires actively switching into the built-in Accounting role
-// (or a custom role) whose `availablePlugins` include
-// `manageAccounting`.
+// Accounting plugin surface guard. The accounting (double-entry
+// bookkeeping) app has a first-class UI entry point — a launcher
+// button and a /accounting route — reachable by any user regardless
+// of role. What stays role-gated is the `manageAccounting` *tool*
+// (LLM access): it must NOT appear in the default (General) Role's
+// availablePlugins. This file guards both halves of that contract:
+// the UI entry point is present, and the tool surface stays clean.
 
 import { test, expect } from "@playwright/test";
 import { mockAllApis } from "../fixtures/api";
@@ -12,23 +13,26 @@ test.beforeEach(async ({ page }) => {
   await mockAllApis(page);
 });
 
-test.describe("accounting plugin — isolation regression", () => {
-  test("PluginLauncher does not render an accounting button", async ({ page }) => {
+test.describe("accounting plugin — UI entry point + tool isolation", () => {
+  test("PluginLauncher renders an accounting button that navigates to /accounting", async ({ page }) => {
     await page.goto("/chat");
     await page.waitForURL(/\/chat\//);
     await expect(page.getByText("MulmoClaude")).toBeVisible();
     // The launcher buttons use plugin-launcher-{key} testids; the
-    // accounting plugin is NOT supposed to register one.
-    await expect(page.getByTestId("plugin-launcher-accounting")).toHaveCount(0);
+    // accounting plugin registers one in the first group.
+    const accountingButton = page.getByTestId("plugin-launcher-accounting");
+    await expect(accountingButton).toHaveCount(1);
+    await accountingButton.click();
+    await page.waitForURL(/\/accounting$/);
+    await expect(page.getByTestId("accounting-app")).toBeVisible();
   });
 
-  test("/accounting URL does not match a route — falls through to /chat", async ({ page }) => {
+  test("/accounting URL resolves to the accounting view", async ({ page }) => {
     await page.goto("/accounting");
     await expect(page.getByText("MulmoClaude")).toBeVisible();
     const { pathname } = new URL(page.url());
-    // Bounded segment, no nested-quantifier overlap — same rationale as router-guards.spec.ts.
-    // eslint-disable-next-line security/detect-unsafe-regex -- bounded `[\w-]+`, single optional group
-    expect(pathname).toMatch(/^\/chat(?:\/[\w-]+)?$/);
+    expect(pathname).toBe("/accounting");
+    await expect(page.getByTestId("accounting-app")).toBeVisible();
   });
 
   test("Roles settings tab surfaces no manageAccounting plugin on a fresh workspace", async ({ page }) => {
