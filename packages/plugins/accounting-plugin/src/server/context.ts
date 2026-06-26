@@ -69,11 +69,3 @@ export const log: AccountingLogger = {
   info: (namespace, msg, data) => (deps?.logger ?? consoleLogger).info(namespace, msg, data),
   debug: (namespace, msg, data) => (deps?.logger ?? consoleLogger).debug(namespace, msg, data),
 };
-
-/** Workspace-relative directories this plugin owns. Mirrors the host
- *  META's `workspaceDirs` (kept in sync by value; the host META stays
- *  the codegen-discoverable source for the aggregator merge). */
-export const ACCOUNTING_DIRS = {
-  accounting: "data/accounting",
-  accountingBooks: "data/accounting/books",
-} as const;

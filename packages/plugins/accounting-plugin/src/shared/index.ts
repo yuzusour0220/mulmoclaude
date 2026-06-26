@@ -7,6 +7,7 @@ export * from "./actions";
 export * from "./api";
 export * from "./channels";
 export * from "./errors";
+export * from "./paths";
 export * from "./fiscalYear";
 export * from "./countries";
 export * from "./currencies";

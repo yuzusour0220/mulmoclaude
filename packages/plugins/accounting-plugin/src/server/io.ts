@@ -12,7 +12,8 @@
 import { promises as fsPromises } from "node:fs";
 import path from "node:path";
 
-import { defaultWorkspaceRoot, ACCOUNTING_DIRS as WORKSPACE_DIRS } from "./context.js";
+import { defaultWorkspaceRoot } from "./context.js";
+import { ACCOUNTING_DIRS as WORKSPACE_DIRS } from "../shared";
 import { writeJsonAtomic, isEnoent } from "./atomic.js";
 import type { AccountingConfig, Account, JournalEntry, MonthSnapshot } from "./types.js";
 
