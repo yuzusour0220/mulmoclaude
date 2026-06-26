@@ -17,18 +17,12 @@ Interactúas en lenguaje natural, y Claude invoca la GUI adecuada para la tarea 
 ## Inicio rápido
 
 ```bash
-# 1. Clone and install
-git clone git@github.com:receptron/mulmoclaude.git
-cd mulmoclaude && yarn install
-
-# 2. Configure (optional — image generation requires Gemini API key)
-cp .env.example .env   # edit .env to add GEMINI_API_KEY
-
-# 3. Run
-yarn dev
+npx mulmoclaude@latest
 ```
 
-Abre [http://localhost:5173](http://localhost:5173). Y listo — empieza a chatear.
+El lanzador arranca el servidor y abre [http://localhost:3001](http://localhost:3001) en tu navegador. Y listo — empieza a chatear.
+
+> **Para mantenerlo en ejecución**: cerrar la terminal detiene el servidor. Para ejecutarlo en segundo plano, lánzalo dentro de `tmux` / `screen` (macOS/Linux) o regístralo como tarea de inicio en el Programador de tareas de Windows.
 
 ### Requisitos previos
 
@@ -41,6 +35,19 @@ Abre [http://localhost:5173](http://localhost:5173). Y listo — empieza a chate
 - **Docker Desktop** (opcional pero recomendado) — habilita el modo sandbox. Consulta [Cómo instalar Docker Desktop](#cómo-instalar-docker-desktop) más abajo
 
 > **Idioma de la UI**: se admiten 8 idiomas (inglés, japonés, chino, coreano, español, portugués (BR), francés, alemán). Por defecto se detecta automáticamente a partir del idioma del navegador / sistema operativo. Para indicarlo explícitamente, define `VITE_LOCALE=es` en `.env`. El idioma se selecciona en tiempo de build/dev; reinicia `yarn dev` después de cambiarlo. Consulta [`docs/developer.md`](docs/developer.md#i18n-vue-i18n) para saber cómo añadir cadenas.
+
+### Ejecutar desde el código fuente (para desarrolladores)
+
+Si quieres modificar el código en lugar de solo ejecutarlo:
+
+```bash
+git clone git@github.com:receptron/mulmoclaude.git
+cd mulmoclaude && yarn install
+cp .env.example .env   # opcional — añade GEMINI_API_KEY para generación de imágenes
+yarn dev
+```
+
+Abre [http://localhost:5173](http://localhost:5173). Consulta [`docs/developer.md`](docs/developer.md) para la arquitectura y los scripts.
 
 ## ¿Qué puedes hacer?
 

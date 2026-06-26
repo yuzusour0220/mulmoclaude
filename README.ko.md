@@ -17,18 +17,12 @@ MulmoClaude는 로컬 머신에서 실행되는 오픈소스 AI-네이티브 애
 ## 빠른 시작
 
 ```bash
-# 1. 클론 및 설치
-git clone git@github.com:receptron/mulmoclaude.git
-cd mulmoclaude && yarn install
-
-# 2. 설정 (선택사항 — 이미지 생성에는 Gemini API 키 필요)
-cp .env.example .env   # .env 파일을 편집하여 GEMINI_API_KEY 추가
-
-# 3. 실행
-yarn dev
+npx mulmoclaude@latest
 ```
 
-[http://localhost:5173](http://localhost:5173) 을 여세요. 이제 끝입니다 — 대화를 시작하세요.
+런처가 서버를 띄우고 브라우저에서 [http://localhost:3001](http://localhost:3001) 을 엽니다. 이제 끝입니다 — 대화를 시작하세요.
+
+> **백그라운드로 계속 실행하기**: 터미널을 닫으면 서버도 종료됩니다. 백그라운드로 운영하려면 `tmux` / `screen` (macOS/Linux) 안에서 실행하거나 Windows 의 작업 스케줄러에 시작 작업으로 등록하세요.
 
 ### 필수 조건
 
@@ -41,6 +35,19 @@ yarn dev
 - **Docker Desktop** (선택 사항이지만 권장) — 샌드박스 모드를 활성화합니다. 아래 [Docker Desktop 설치](#docker-desktop-설치) 를 참조하세요
 
 > **UI 언어**: 영어, 일본어, 중국어, 한국어, 스페인어, 포르투갈어 (브라질), 프랑스어, 독일어 등 8개 언어를 지원합니다. 기본값은 브라우저 / OS 언어 설정에서 자동으로 감지됩니다. 명시적으로 지정하려면 `.env` 에 `VITE_LOCALE=ko` 를 설정하세요. 로케일은 빌드/개발 시점에 결정되므로 변경 후 `yarn dev` 를 재시작해야 합니다. 문자열 추가 방법은 [`docs/developer.md`](docs/developer.md#i18n-vue-i18n) 를 참고하세요.
+
+### 소스에서 실행하기 (개발자용)
+
+코드를 수정하면서 실행하려면:
+
+```bash
+git clone git@github.com:receptron/mulmoclaude.git
+cd mulmoclaude && yarn install
+cp .env.example .env   # 선택 사항 — 이미지 생성을 위해 GEMINI_API_KEY 추가
+yarn dev
+```
+
+[http://localhost:5173](http://localhost:5173) 을 여세요. 아키텍처와 스크립트 자세한 내용은 [`docs/developer.md`](docs/developer.md) 를 참고하세요.
 
 ## 무엇을 할 수 있나요?
 

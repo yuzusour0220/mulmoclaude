@@ -17,18 +17,12 @@ You interact in natural language, and Claude summons the right GUI for the task 
 ## Quick Start
 
 ```bash
-# 1. Clone and install
-git clone git@github.com:receptron/mulmoclaude.git
-cd mulmoclaude && yarn install
-
-# 2. Configure (optional — image generation requires Gemini API key)
-cp .env.example .env   # edit .env to add GEMINI_API_KEY
-
-# 3. Run
-yarn dev
+npx mulmoclaude@latest
 ```
 
-Open [http://localhost:5173](http://localhost:5173). That's it — start chatting.
+The launcher boots the server and opens [http://localhost:3001](http://localhost:3001) in your browser. That's it — start chatting.
+
+> **Keep it running**: closing the terminal stops the server. To run in the background, launch inside `tmux` / `screen` (macOS/Linux) or as a startup task (Windows Task Scheduler).
 
 ### Prerequisites
 
@@ -42,6 +36,19 @@ Open [http://localhost:5173](http://localhost:5173). That's it — start chattin
 - **whisper.cpp** (optional, macOS only) — enables local voice input (dictate chat messages). See [Optional: Local Voice Input](#optional-local-voice-input-macos) below
 
 > **UI language**: 8 locales are supported (English, Japanese, Simplified Chinese, Korean, Spanish, Brazilian Portuguese, French, German). The default is auto-detected from the browser / OS language. To set it explicitly, put `VITE_LOCALE=ja` (or `zh` / `ko` / `es` / `pt-BR` / `fr` / `de`) in `.env`. Locale is picked at build/dev time; restart `yarn dev` after changing it. See [`docs/developer.md`](docs/developer.md#i18n-vue-i18n) for how to add strings.
+
+### Run from source (for developers)
+
+To modify the code instead of just running it:
+
+```bash
+git clone git@github.com:receptron/mulmoclaude.git
+cd mulmoclaude && yarn install
+cp .env.example .env   # optional — add GEMINI_API_KEY for image generation
+yarn dev
+```
+
+Open [http://localhost:5173](http://localhost:5173). See [`docs/developer.md`](docs/developer.md) for architecture and scripts.
 
 ## What can you do?
 
