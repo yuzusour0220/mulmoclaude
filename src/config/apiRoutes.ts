@@ -285,6 +285,8 @@ const HOST_API_ROUTES = {
   // /collections Discover tab — the upstream URL is never exposed to the client.
   collectionsRegistry: {
     list: "/api/collections-registry",
+    /** GET ?author=&slug= → { entry, schema, meta } for one in-index collection. */
+    preview: "/api/collections-registry/preview",
   },
 
   // `scheduler` group migrated to META — see `src/plugins/scheduler/automationsMeta.ts`.

@@ -6,7 +6,9 @@
 import { Router, Request, Response } from "express";
 
 import { API_ROUTES } from "../../../src/config/apiRoutes.js";
+import { badRequest } from "../../utils/httpError.js";
 import { fetchRegistryIndex } from "../../workspace/collectionsRegistry/client.js";
+import { previewCollection } from "../../workspace/collectionsRegistry/collectionFiles.js";
 import type { RegistryCollectionEntry } from "../../workspace/collectionsRegistry/registryIndex.js";
 
 const router = Router();
@@ -31,6 +33,27 @@ router.get(API_ROUTES.collectionsRegistry.list, async (_req: Request, res: Respo
   }
   const { registry, generatedAt, collections } = result.index;
   res.json({ registry, generatedAt, stale: result.stale, collections });
+});
+
+interface RegistryPreviewResponse {
+  entry: RegistryCollectionEntry;
+  schema: Record<string, unknown>;
+  meta: Record<string, unknown>;
+}
+
+router.get(API_ROUTES.collectionsRegistry.preview, async (req: Request, res: Response<RegistryPreviewResponse | ErrorResponse>) => {
+  const author = typeof req.query.author === "string" ? req.query.author : "";
+  const slug = typeof req.query.slug === "string" ? req.query.slug : "";
+  if (!author || !slug) {
+    badRequest(res, "author and slug query params are required");
+    return;
+  }
+  const result = await previewCollection(author, slug);
+  if (!result.ok) {
+    res.status(result.status).json({ error: result.error });
+    return;
+  }
+  res.json({ entry: result.entry, schema: result.schema, meta: result.meta });
 });
 
 export default router;
