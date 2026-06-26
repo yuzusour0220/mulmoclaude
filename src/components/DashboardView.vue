@@ -8,10 +8,10 @@
     </div>
 
     <!-- Two-column grid of favorite collections. Each tile shows a live
-         embedded CollectionView in the tile's chosen view mode.
-         `items-start` keeps each tile at its own height so a row's two
-         tiles don't stretch to match — heights stay independent. -->
-    <div v-else class="grid gap-4 sm:grid-cols-2 items-start" data-testid="dashboard-grid">
+         embedded CollectionView in the tile's chosen view mode. Grid rows
+         stretch (default), so two tiles side by side share the height of
+         the taller one; each tile's set height acts as its minimum. -->
+    <div v-else class="grid gap-4 sm:grid-cols-2" data-testid="dashboard-grid">
       <section
         v-for="(tile, index) in tiles"
         v-show="metaFor(tile.slug)"
@@ -54,9 +54,10 @@
           </select>
         </header>
         <!-- Live embedded view. `:key` remounts the view when the mode
-             changes so the new initial view takes effect. Height is
-             per-tile and drag-resizable via the handle below. -->
-        <div class="overflow-auto" :style="{ height: `${bodyHeight(tile)}px` }">
+             changes so the new initial view takes effect. The tile's set
+             height is the body's MIN height; `flex-1` lets it grow to fill
+             when a taller sibling stretches the row. -->
+        <div class="flex-1 overflow-auto" :style="{ minHeight: `${bodyHeight(tile)}px` }">
           <CollectionView
             :key="`${tile.slug}:${effectiveView(tile)}`"
             :slug="tile.slug"
