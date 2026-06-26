@@ -36,6 +36,8 @@
             class="flex items-center gap-1.5 min-w-0 flex-1 text-left text-sm font-semibold text-slate-700 hover:text-indigo-600"
             :title="t('dashboard.openFull')"
             @dblclick="openFull(tile.slug)"
+            @keydown.enter.prevent="openFull(tile.slug)"
+            @keydown.space.prevent="openFull(tile.slug)"
           >
             <span class="material-symbols-outlined text-base flex-none">{{ metaFor(tile.slug)?.icon || "apps" }}</span>
             <span class="truncate">{{ metaFor(tile.slug)?.title || tile.slug }}</span>
@@ -216,13 +218,24 @@ function onReorderStart(index: number, event: PointerEvent): void {
 }
 
 // ── Drag-to-resize, per grid ROW (height is positional, not per tile) ──
-const COLUMNS = 2; // matches the `sm:grid-cols-2` layout
 const DEFAULT_HEIGHT = 320;
 const MIN_HEIGHT = 160;
 const MAX_HEIGHT = 900;
 
+// Column count tracks the grid's responsive breakpoint (`sm:grid-cols-2`):
+// 1 column below 640px, 2 at/above. Row grouping must follow it so a
+// stacked tile in the single-column layout resizes on its own row instead
+// of sharing a height with its desktop pair.
+const SM_BREAKPOINT = "(min-width: 640px)";
+const columns = ref(2);
+let columnQuery: MediaQueryList | null = null;
+
+function syncColumns(): void {
+  columns.value = columnQuery?.matches ? 2 : 1;
+}
+
 function rowOf(index: number): number {
-  return Math.floor(index / COLUMNS);
+  return Math.floor(index / columns.value);
 }
 
 // Live height during a drag (smooth, not yet persisted), keyed by row.
@@ -322,11 +335,15 @@ function onResizeStart(index: number, event: PointerEvent): void {
 onBeforeUnmount(() => {
   teardownResize();
   teardownReorder();
+  columnQuery?.removeEventListener("change", syncColumns);
 });
 
 // First load: fold favorites into the stored layout once both lists are
 // authoritatively loaded (so an empty pre-load list never prunes tiles).
 onMounted(async () => {
+  columnQuery = window.matchMedia(SM_BREAKPOINT);
+  syncColumns();
+  columnQuery.addEventListener("change", syncColumns);
   await Promise.all([loadShortcuts(), loadDashboard()]);
   await reconcile(favoriteSlugs.value);
 });
