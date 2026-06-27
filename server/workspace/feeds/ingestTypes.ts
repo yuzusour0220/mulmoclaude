@@ -8,21 +8,22 @@
 // now lives in @mulmoclaude/core/collection alongside the schema contract, so
 // the package's schema validator can enforce it. Re-exported here so the feeds
 // engine's existing importers resolve them unchanged.
-import {
-  type CollectionIngest,
-  INGEST_KINDS,
-  AGENT_INGEST_KIND,
-  FEED_SCHEDULES,
-  type IngestKind,
-  type AgentIngestKind,
-  type FeedSchedule,
-} from "@mulmoclaude/core/collection";
+import { type CollectionIngest, INGEST_KINDS, FEED_SCHEDULES, type IngestKind, type FeedSchedule } from "@mulmoclaude/core/collection";
 //
 // Two flavours: the declarative kinds (`rss`/`atom`/`http-json`) fetch-and-map,
 // and `agent` dispatches a hidden worker. The `code` kind (LLM-generated
 // deterministic transform) is still reserved for a future retriever.
 
-export { INGEST_KINDS, AGENT_INGEST_KIND, FEED_SCHEDULES, type IngestKind, type AgentIngestKind, type FeedSchedule };
+// The agent ingest kind. Defined HERE (not imported from core) on purpose: the
+// host only needs the literal to branch in the engine, and importing it as a
+// VALUE from `@mulmoclaude/core` would make the launcher fail to boot against a
+// core version published before this feature (ESM "no export named
+// AGENT_INGEST_KIND"). Core owns its own copy for the schema validator; this
+// matches the same literal. The published core catches up on the next cascade.
+export const AGENT_INGEST_KIND = "agent" as const;
+export type AgentIngestKind = typeof AGENT_INGEST_KIND;
+
+export { INGEST_KINDS, FEED_SCHEDULES, type IngestKind, type FeedSchedule };
 
 const FEED_SCHEDULE_SET: ReadonlySet<string> = new Set(FEED_SCHEDULES);
 

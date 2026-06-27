@@ -56,6 +56,12 @@ export type CompletionHook = (outcome: { didError: boolean }) => void | Promise<
 
 const completionHooks = new Map<string, CompletionHook>();
 
+// Hook keys are server-generated session ids (`randomUUID()`). Validate the
+// shape before using a session id to look up + invoke a hook, so a malformed or
+// foreign id can never select an unexpected call target (defensive — and it
+// keeps the dynamic call off a request-derived, unvalidated string).
+const SESSION_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /** Register a one-shot completion hook for a hidden worker session. Replaces
  *  any existing hook for the same id (last writer wins). */
 export function registerCompletionHook(chatSessionId: string, hook: CompletionHook): void {
@@ -72,6 +78,7 @@ export function registerCompletionHook(chatSessionId: string, hook: CompletionHo
  *  risk). The hook is best-effort: a throwing hook rejects the returned promise
  *  for the caller to catch+log. */
 export async function runCompletionHook(chatSessionId: string, outcome: { didError: boolean }): Promise<void> {
+  if (!SESSION_ID_RE.test(chatSessionId)) return;
   const hook = completionHooks.get(chatSessionId);
   if (!hook) return;
   completionHooks.delete(chatSessionId);
