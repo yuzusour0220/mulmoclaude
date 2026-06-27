@@ -278,10 +278,15 @@ div.marpit > svg > foreignObject > section img:not([data-marp-twemoji]) {
 /* CJK font fallback for headless-Chromium PDF render (#1821). The Marp
    default theme's font-family is Latin-only, so puppeteer renders
    Japanese / Chinese / Korean glyphs as tofu on hosts without a CJK
-   font. Append a CJK stack — macOS / Windows hit Hiragino / Yu Gothic /
-   Meiryo, Linux hits Noto Sans CJK (must be installed on the host). */
-div.marpit > svg > foreignObject > section,
-div.marpit > svg > foreignObject > section * {
+   font. Append a CJK stack on the section root — macOS / Windows hit
+   Hiragino / Yu Gothic / Meiryo, Linux hits Noto Sans CJK (must be
+   installed on the host). Scoped to the section selector only (no
+   descendant combinator) so the cascade still lets the theme's
+   per-element fonts win — code and pre keep their monospace stack
+   and are not silently replaced with this sans-serif chain. Code
+   blocks containing CJK still fall through to the OS's monospace
+   CJK substitution (e.g. macOS Osaka / Linux Noto Sans Mono CJK). */
+div.marpit > svg > foreignObject > section {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial,
                "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo,
                "Noto Sans CJK JP", "Noto Sans JP", sans-serif;
