@@ -100,6 +100,27 @@ describe("parseRegistriesConfig — drops invalid entries (rest still load)", ()
     );
   });
 
+  it("drops an entry whose rawBaseUrl contains a query string or fragment", () => {
+    // rawBaseUrl is joined as `${rawBase}/<path>`; a `?` or `#` would land in
+    // the middle of every composed collection-file URL and break the fetch.
+    // CodeRabbit review on #1837.
+    for (const rawBaseUrl of ["https://example.test/raw?x=1", "https://example.test/raw#frag"]) {
+      const result = parseRegistriesConfig([validEntry({ rawBaseUrl }), validEntry({ name: "ok" })]);
+      assert.deepEqual(
+        result.map((reg) => reg.name),
+        ["ok"],
+        `${rawBaseUrl} should be dropped`,
+      );
+    }
+  });
+
+  it("ALLOWS a query string in indexUrl (the index is fetched directly, no path-join)", () => {
+    // Asymmetric on purpose — indexUrl is just fetched; only rawBaseUrl gets joined.
+    const result = parseRegistriesConfig([validEntry({ indexUrl: "https://example.test/index.json?v=1" })]);
+    assert.equal(result.length, 1);
+    assert.equal(result[0].indexUrl, "https://example.test/index.json?v=1");
+  });
+
   it("dedupes on name (first wins, later duplicates dropped)", () => {
     const result = parseRegistriesConfig([
       validEntry({ name: "dup", indexUrl: "https://example.test/first/index.json" }),

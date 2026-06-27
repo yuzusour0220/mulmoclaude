@@ -60,6 +60,14 @@ function parseEntry(value: unknown, index: number): RegistryConfigEntry | string
   }
   if (!isValidHttpsUrl(indexUrl)) return `entry[${index}].indexUrl must be a valid HTTPS URL (no credentials)`;
   if (!isValidHttpsUrl(rawBaseUrl)) return `entry[${index}].rawBaseUrl must be a valid HTTPS URL (no credentials)`;
+  // `rawBaseUrl` gets joined as `${rawBaseUrl}/<path>` downstream — a query or
+  // fragment would land in the middle of the composed URL and break every
+  // collection-file fetch on that registry (CodeRabbit review on #1837). The
+  // index URL is fetched directly so a query is fine there; only rawBase
+  // needs the constraint.
+  if (rawBaseUrl.includes("?") || rawBaseUrl.includes("#")) {
+    return `entry[${index}].rawBaseUrl must not contain a query (?) or fragment (#) — it's joined as a path prefix`;
+  }
   // Strip trailing slashes so `${rawBaseUrl}/${path}` joins cleanly regardless
   // of what the user wrote. Plain-loop trim instead of a regex — the linter
   // flags any unanchored-quantifier regex as ReDoS-suspect even when it's

@@ -23,10 +23,17 @@ const STATUS_NOT_FOUND = 404;
 /** Compose the raw URL for `<dirPath>/<relFile>` under a given registry's
  *  rawBase. Empty and traversal (`.`/`..`) segments are dropped so the URL can
  *  never escape the base, even if an upstream check is bypassed (the index
- *  parser already rejects such identifiers — this is defense-in-depth). */
+ *  parser already rejects such identifiers — this is defense-in-depth). The
+ *  rawBase is trailing-slash-normalized: `parseRegistriesConfig` already trims
+ *  user-config trailing slashes, but the official descriptor and any test
+ *  bypass parse — repeating the trim here keeps the join `${base}/${path}`
+ *  from producing `//` even when the caller bypassed config validation
+ *  (CodeRabbit review on #1837). */
 export function collectionFileUrl(rawBase: string, dirPath: string, relFile: string): string {
+  let base = rawBase;
+  while (base.endsWith("/")) base = base.slice(0, -1);
   const segments = dirPath.split("/").filter((segment) => segment.length > 0 && segment !== "." && segment !== "..");
-  return `${rawBase}/${segments.join("/")}/${relFile}`;
+  return `${base}/${segments.join("/")}/${relFile}`;
 }
 
 export type FileResult = { ok: true; text: string } | { ok: false; status: number; error: string };

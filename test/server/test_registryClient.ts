@@ -98,4 +98,22 @@ describe("fetchRegistryIndex caching + backoff", () => {
     assert.ok(officialAgain.ok && !officialAgain.stale);
     assert.equal(officialLoader.calls(), 1);
   });
+
+  it("invalidates the cache when the registry's URL changes under the same name", async () => {
+    // CodeRabbit review on #1837: if the user edits `indexUrl` (or rawBase) in
+    // config but keeps the same `name`, the cache must not keep serving the old
+    // upstream's entries — otherwise the catalog (cached) and import/preview
+    // (resolves rawBase from current config) drift.
+    const loader = makeLoader([
+      { ok: true, index: { ...okIndex, generatedAt: "v1" }, stale: false },
+      { ok: true, index: { ...okIndex, generatedAt: "v2" }, stale: false },
+    ]);
+    const first = await fetchRegistryIndex(customDescriptor, { nowMs: 0, loader: loader.load });
+    assert.ok(first.ok && first.index.generatedAt === "v1");
+    // Re-fetch with the same name but a new indexUrl → MUST hit the network again.
+    const renamed: RegistryDescriptor = { ...customDescriptor, indexUrl: "https://example.test/myorg-v2/index.json" };
+    const second = await fetchRegistryIndex(renamed, { nowMs: 1000, loader: loader.load });
+    assert.ok(second.ok && second.index.generatedAt === "v2", "new URL ⇒ fresh fetch, not stale cache");
+    assert.equal(loader.calls(), 2);
+  });
 });

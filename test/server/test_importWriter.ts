@@ -7,7 +7,12 @@ import { tmpdir } from "node:os";
 import { writeImportedCollection } from "../../server/workspace/collectionsRegistry/importWriter.js";
 import type { RegistryCollectionEntry } from "../../server/workspace/collectionsRegistry/registryIndex.js";
 
-const REGISTRY = "receptron/mulmoclaude-collections";
+// `registryName` is the short label the multi-registry refactor passes through
+// (`"official"` for receptron/mulmoclaude-collections, otherwise the user's
+// config entry name). The test exercises `writeImportedCollection` which is
+// agnostic to the value — pin it to "official" to mirror what production
+// passes in, since the entry fixture below also carries `registryName: "official"`.
+const REGISTRY = "official";
 
 const entry: RegistryCollectionEntry = {
   id: "isamu/movies",

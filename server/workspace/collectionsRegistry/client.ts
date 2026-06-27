@@ -85,30 +85,43 @@ async function loadFromNetwork(descriptor: RegistryDescriptor): Promise<FetchInd
 
 export type IndexLoader = (descriptor: RegistryDescriptor) => Promise<FetchIndexResult>;
 
+/** Cache key incorporates BOTH URLs so editing `indexUrl` or `rawBaseUrl` for
+ *  an existing registry name invalidates the cached index automatically — same
+ *  refresh cycle as if the user had renamed it (CodeRabbit review on #1837).
+ *  Without this, the Discover catalog could keep serving the old upstream's
+ *  entries while preview / import resolved the new rawBase, drifting until TTL
+ *  expiry. Tab + key-content guarantees no collision between e.g. swapped
+ *  name/url pairs. */
+function descriptorCacheKey(descriptor: RegistryDescriptor): string {
+  return `${descriptor.name}\t${descriptor.indexUrl}\t${descriptor.rawBaseUrl}`;
+}
+
 /** Fetch one registry's index. Same cache + stale-on-failure semantics as the
- *  original single-registry implementation — just keyed by the registry's
- *  configured name so multiple registries don't fight over one slot. */
+ *  original single-registry implementation — just keyed by descriptor identity
+ *  (name + both URLs) so multiple registries don't fight over one slot AND a
+ *  reconfigured registry doesn't serve a stale index from the prior URL. */
 export async function fetchRegistryIndex(
   descriptor: RegistryDescriptor,
   opts: { force?: boolean; nowMs?: number; loader?: IndexLoader } = {},
 ): Promise<FetchIndexResult> {
   const nowMs = opts.nowMs ?? Date.now();
   const loader = opts.loader ?? loadFromNetwork;
-  const cached = cache.get(descriptor.name);
+  const key = descriptorCacheKey(descriptor);
+  const cached = cache.get(key);
   if (!opts.force && cached && nowMs - cached.atMs < CACHE_TTL_MS) {
     return { ok: true, index: cached.index, stale: false };
   }
-  const failedAt = lastFailureMs.get(descriptor.name);
+  const failedAt = lastFailureMs.get(key);
   if (!opts.force && cached && failedAt !== undefined && nowMs - failedAt < STALE_RETRY_BACKOFF_MS) {
     return { ok: true, index: cached.index, stale: true };
   }
   const fresh = await loader(descriptor);
   if (fresh.ok) {
-    cache.set(descriptor.name, { index: fresh.index, atMs: nowMs });
-    lastFailureMs.delete(descriptor.name);
+    cache.set(key, { index: fresh.index, atMs: nowMs });
+    lastFailureMs.delete(key);
     return { ok: true, index: fresh.index, stale: false };
   }
-  lastFailureMs.set(descriptor.name, nowMs);
+  lastFailureMs.set(key, nowMs);
   if (cached) return { ok: true, index: cached.index, stale: true };
   return fresh;
 }
