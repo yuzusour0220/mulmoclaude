@@ -10,6 +10,7 @@ import { badRequest } from "../../utils/httpError.js";
 import { fetchRegistryIndex } from "../../workspace/collectionsRegistry/client.js";
 import { previewCollection } from "../../workspace/collectionsRegistry/collectionFiles.js";
 import { performImport } from "../../workspace/collectionsRegistry/importWriter.js";
+import { performExport } from "../../workspace/collectionsRegistry/performExport.js";
 import type { RegistryCollectionEntry } from "../../workspace/collectionsRegistry/registryIndex.js";
 import { workspacePath } from "../../workspace/workspace.js";
 
@@ -83,6 +84,44 @@ router.post(API_ROUTES.collectionsRegistry.import, async (req: Request<object, u
     return;
   }
   res.json({ localSlug: result.localSlug, updated: result.updated, seedWritten: result.seedWritten, seedSkipped: result.seedSkipped });
+});
+
+interface ExportBody {
+  slug?: unknown;
+  author?: unknown;
+  license?: unknown;
+  includeSeed?: unknown;
+}
+
+interface ExportResponse {
+  outputPath: string;
+  fileCount: number;
+  seedCount: number;
+  seedSkipped: number;
+  warnings: string[];
+}
+
+router.post(API_ROUTES.collectionsRegistry.export, async (req: Request<object, unknown, ExportBody>, res: Response<ExportResponse | ErrorResponse>) => {
+  const slug = typeof req.body.slug === "string" ? req.body.slug : "";
+  const author = typeof req.body.author === "string" ? req.body.author : "";
+  if (!slug || !author) {
+    badRequest(res, "slug and author are required");
+    return;
+  }
+  const license = typeof req.body.license === "string" && req.body.license ? req.body.license : "MIT";
+  const includeSeed = req.body.includeSeed === true;
+  const result = await performExport(slug, { author, license, includeSeed }, workspacePath);
+  if (!result.ok) {
+    res.status(result.status).json({ error: result.error });
+    return;
+  }
+  res.json({
+    outputPath: result.outputPath,
+    fileCount: result.fileCount,
+    seedCount: result.seedCount,
+    seedSkipped: result.seedSkipped,
+    warnings: result.warnings,
+  });
 });
 
 export default router;

@@ -295,6 +295,10 @@ const HOST_API_ROUTES = {
     /** POST { author, slug } → fetch + re-validate + install into .claude/skills/,
      *  normalize dataPath, materialize seed, record provenance. */
     import: "/api/collections-registry/import",
+    /** POST { slug, author, license?, includeSeed? } → write a registry-contribution
+     *  bundle (collections/<author>/<slug>/ + meta.json + optional seed) under
+     *  data/registry-export/ for the user to open a PR. */
+    export: "/api/collections-registry/export",
   },
 
   // `scheduler` group migrated to META — see `src/plugins/scheduler/automationsMeta.ts`.
