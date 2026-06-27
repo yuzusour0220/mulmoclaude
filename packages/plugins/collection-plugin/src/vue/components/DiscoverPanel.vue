@@ -89,6 +89,9 @@ import { collectionUi, type RegistryEntry } from "../uiContext";
 
 const { t } = useCollectionI18n();
 const cui = collectionUi();
+// Emitted after a successful import so the parent can refresh its installed list
+// (the newly-installed collection should show up on the Installed tab right away).
+const emit = defineEmits<{ imported: [] }>();
 
 interface ImportState {
   status: "idle" | "importing" | "done" | "error";
@@ -130,6 +133,7 @@ async function doImport(entry: RegistryEntry): Promise<void> {
     return;
   }
   setState(entry, { status: "done", localSlug: result.data.localSlug, updated: result.data.updated });
+  emit("imported");
 }
 
 function openImported(entry: RegistryEntry): void {

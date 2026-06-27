@@ -39,7 +39,7 @@
         </button>
       </div>
 
-      <DiscoverPanel v-if="tab === 'discover'" />
+      <DiscoverPanel v-if="tab === 'discover'" @imported="loadCollections" />
       <template v-else>
         <div v-if="loading" class="flex flex-col items-center justify-center py-20 text-sm text-slate-500 gap-3">
           <div class="h-8 w-8 border-2 border-indigo-600/20 border-t-indigo-600 rounded-full animate-spin"></div>
