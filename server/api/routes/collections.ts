@@ -44,7 +44,7 @@ import { badRequest, notFound, conflict, forbidden, serverError } from "../../ut
 import { errorMessage } from "../../utils/errors.js";
 import { log } from "../../system/logger/index.js";
 import { workspacePath } from "../../workspace/workspace.js";
-import { refreshOne } from "../../workspace/feeds/index.js";
+import { refreshOne } from "@mulmoclaude/core/feeds/server";
 import { manageCollection } from "../../agent/mcp-tools/manageCollection.js";
 import { clampCapabilities, mintViewToken, requireViewToken, type ViewCapability } from "../auth/viewToken.js";
 

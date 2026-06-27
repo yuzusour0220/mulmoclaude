@@ -4,8 +4,8 @@
 // The `agent` kind is NOT a retriever (it dispatches a hidden worker before
 // the engine consults this registry); a future `code` kind would register here.
 
-import type { CollectionItem, CollectionSchema } from "../../collections/index.js";
-import type { DeclarativeIngestSpec } from "../ingestTypes.js";
+import type { CollectionItem, CollectionSchema } from "../../../collection/index.js";
+import type { DeclarativeIngestSpec } from "../../ingestTypes.js";
 import type { FeedState } from "../state.js";
 
 export interface RetrieveResult {

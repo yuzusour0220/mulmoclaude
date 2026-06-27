@@ -93,7 +93,8 @@ import { cpus, loadavg } from "os";
 import { isDockerAvailable, ensureSandboxImage } from "./system/docker.js";
 import { maybeRunJournal } from "./workspace/journal/index.js";
 import { backfillAllSessions } from "./workspace/chat-index/index.js";
-import { refreshDue as refreshDueFeeds, setAgentWorkerRunner } from "./workspace/feeds/index.js";
+import { refreshDue as refreshDueFeeds } from "@mulmoclaude/core/feeds/server";
+import { configureFeeds } from "./workspace/feeds/configure.js";
 import { createPubSub } from "./events/pub-sub/index.js";
 import { PUBSUB_CHANNELS } from "../src/config/pubsubChannels.js";
 import { createTaskManager } from "./events/task-manager/index.js";
@@ -1173,12 +1174,13 @@ async function startRuntimeServices(httpServer: ReturnType<typeof app.listen>, p
     }
   }
 
-  // Wire the agent-ingest dispatcher's hidden-worker launcher (DI seam — keeps
-  // the feeds engine from importing the routes layer) BEFORE scheduler init:
+  // Wire @mulmoclaude/core/feeds/server to this host (workspace, logger, atomic
+  // writer, and the agent-ingest worker launcher) BEFORE scheduler init:
   // `initScheduler` runs catch-up, which can fire `system:feed-refresh` and
   // dispatch agent ingest immediately. Wiring after would make those first
-  // refreshes fail with "worker runner not configured".
-  setAgentWorkerRunner(spawnSystemWorker);
+  // refreshes fail with "host not configured". `spawnSystemWorker` is passed in
+  // here because workspace code must not import the routes layer.
+  configureFeeds(spawnSystemWorker);
 
   initScheduler(taskManager, systemTasks).catch((err) => {
     log.error("scheduler", "init failed (non-fatal)", {

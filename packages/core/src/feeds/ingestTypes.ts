@@ -5,21 +5,19 @@
 // records via the shared collections io layer.
 //
 // The ingest vocab (INGEST_KINDS / FEED_SCHEDULES + their literal-union types)
-// now lives in @mulmoclaude/core/collection alongside the schema contract, so
+// lives in the sibling `../collection` subpath alongside the schema contract, so
 // the package's schema validator can enforce it. Re-exported here so the feeds
 // engine's existing importers resolve them unchanged.
-import { type CollectionIngest, INGEST_KINDS, FEED_SCHEDULES, type IngestKind, type FeedSchedule } from "@mulmoclaude/core/collection";
+import { type CollectionIngest, INGEST_KINDS, FEED_SCHEDULES, type IngestKind, type FeedSchedule } from "../collection/index.js";
 //
 // Two flavours: the declarative kinds (`rss`/`atom`/`http-json`) fetch-and-map,
 // and `agent` dispatches a hidden worker. The `code` kind (LLM-generated
 // deterministic transform) is still reserved for a future retriever.
 
-// The agent ingest kind. Defined HERE (not imported from core) on purpose: the
-// host only needs the literal to branch in the engine, and importing it as a
-// VALUE from `@mulmoclaude/core` would make the launcher fail to boot against a
-// core version published before this feature (ESM "no export named
-// AGENT_INGEST_KIND"). Core owns its own copy for the schema validator; this
-// matches the same literal. The published core catches up on the next cascade.
+// The agent ingest kind. Defined HERE (not imported from `../collection`) on
+// purpose: the engine only needs the literal to branch, and re-importing it as a
+// VALUE keeps this module free of a value dependency on the collection vocab.
+// Core owns its own copy for the schema validator; this matches the same literal.
 export const AGENT_INGEST_KIND = "agent" as const;
 export type AgentIngestKind = typeof AGENT_INGEST_KIND;
 
@@ -42,8 +40,8 @@ export type IngestFieldMap = Record<string, string>;
 
 /** Declarative retrieval (`rss`/`atom`/`http-json`): the host fetches `url`
  *  and projects each item through `map`. The canonical schema (in
- *  @mulmoclaude/core/collection) only promises the minimal `CollectionIngest`;
- *  this feeds-only subtype narrows those + adds the retrieval fields the engine
+ *  `../collection`) only promises the minimal `CollectionIngest`; this
+ *  feeds-only subtype narrows those + adds the retrieval fields the engine
  *  needs. */
 export interface DeclarativeIngestSpec extends CollectionIngest {
   /** Which declarative retriever handles this feed. */

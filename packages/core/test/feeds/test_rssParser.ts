@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { parseFeed } from "../../../server/workspace/feeds/fetch/rssParser.js";
+import { parseFeed } from "../../src/feeds/server/fetch/rssParser.ts";
 
 const PODCAST = `<?xml version="1.0" encoding="UTF-8"?>
 <rss xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd" xmlns:dc="http://purl.org/dc/elements/1.1/" version="2.0">

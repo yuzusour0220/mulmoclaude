@@ -6,42 +6,28 @@
 // everything stock-specific (or whatever the collection does) is prose in the
 // template.
 //
-// DI seam: the worker is launched through a runner injected at boot
-// (`setAgentWorkerRunner`), not imported directly, because this module lives in
-// `server/workspace/` and must not import `server/api/routes/agent.ts` (that
-// would form a workspace→routes cycle). `server/index.ts` wires
-// `spawnSystemWorker` in as the runner.
+// DI seam: the worker is launched through `FeedsHost.spawnWorker`, injected at
+// boot via `configureFeedsHost`, not imported directly — this module ships in a
+// shared package and must not reach into any host's session/routes layer.
 
-import { log } from "../../system/logger/index.js";
-import { listItems, readSkillTemplate, buildCollectionActionSeedPrompt, type LoadedCollection } from "../collections/index.js";
-import { publish as publishNotifier, clear as clearNotifier } from "../../notifier/engine.js";
+import { listItems, readSkillTemplate, buildCollectionActionSeedPrompt, type LoadedCollection } from "../../collection/server/index.js";
+import { publish as publishNotifier, clear as clearNotifier } from "../../notifier/index.js";
+import { log, requireFeedsHost, type AgentWorkerResult, type AgentWorkerRunner } from "./host.js";
 import { readFeedState, writeFeedState, type FeedState } from "./state.js";
-import type { AgentIngestSpec } from "./ingestTypes.js";
+import type { AgentIngestSpec } from "../ingestTypes.js";
 import type { RefreshResult } from "./refreshResult.js";
 
-/** Outcome of launching one hidden worker. `chatId` lets the caller register a
- *  completion hook so a failed refresh doesn't die silently. */
-export type AgentWorkerResult = { ok: true; chatId: string } | { ok: false; error: string };
+export type { AgentWorkerResult, AgentWorkerRunner } from "./host.js";
 
-/** Launches a worker chat. Injected at boot to avoid a workspace→routes import
- *  cycle. `hidden` chooses an invisible system worker (scheduled refresh) vs a
- *  visible session the user can watch (manual Refresh — debuggable).
- *  `onComplete` is a one-shot completion hook (only honoured for hidden workers)
- *  so the dispatcher learns success/failure. Returns `ok:false` on the
- *  concurrency-cap miss or a launch error — the caller leaves state untouched
- *  and retries next tick. */
-export type AgentWorkerRunner = (args: {
-  message: string;
-  roleId: string;
-  hidden: boolean;
-  onComplete?: (outcome: { didError: boolean }) => void | Promise<void>;
-}) => Promise<AgentWorkerResult>;
-
-let workerRunner: AgentWorkerRunner | null = null;
-
-/** Wire the hidden-worker launcher. Called once at boot from `server/index.ts`. */
-export function setAgentWorkerRunner(runner: AgentWorkerRunner): void {
-  workerRunner = runner;
+/** The injected worker launcher, or null if the host was never configured.
+ *  Read non-throwingly so the failure-isolated contract holds (an unconfigured
+ *  host becomes an `errors` entry, not a thrown exception). */
+function workerRunnerOrNull(): AgentWorkerRunner | null {
+  try {
+    return requireFeedsHost().spawnWorker;
+  } catch {
+    return null;
+  }
 }
 
 function result(slug: string, patch: Partial<RefreshResult>): RefreshResult {
@@ -60,6 +46,7 @@ export async function refreshViaAgent(workspaceRoot: string, collection: LoadedC
   const { slug } = collection;
   const ingest = collection.schema.ingest as AgentIngestSpec | undefined;
   if (!ingest || ingest.kind !== "agent") return result(slug, { errors: ["collection has no agent ingest config"] });
+  const workerRunner = workerRunnerOrNull();
   if (!workerRunner) return result(slug, { errors: ["agent ingest worker runner not configured"] });
 
   const template = await readSkillTemplate(collection.skillDir, ingest.template);

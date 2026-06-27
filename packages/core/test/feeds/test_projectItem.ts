@@ -1,8 +1,8 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { projectRecord } from "../../../server/workspace/feeds/projectItem.js";
-import type { CollectionSchema } from "../../../server/workspace/collections/index.js";
-import type { DeclarativeIngestSpec } from "../../../server/workspace/feeds/ingestTypes.js";
+import { projectRecord } from "../../src/feeds/server/projectItem.ts";
+import type { CollectionSchema } from "../../src/collection/index.ts";
+import type { DeclarativeIngestSpec } from "../../src/feeds/ingestTypes.ts";
 
 // projectRecord only reads schema.primaryKey, so a minimal cast suffices.
 const schema = { primaryKey: "id" } as unknown as CollectionSchema;

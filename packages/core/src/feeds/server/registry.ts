@@ -2,18 +2,16 @@
 // the agent writing / deleting `feeds/<slug>/schema.json` directly (see
 // config/helps/feeds.md) — the host only discovers + retrieves them.
 // icon / dataPath defaults for agent-authored feed schemas are applied in
-// `collections/discovery.ts` (source === "feed").
+// `collection/server/discovery.ts` (source === "feed").
 
 import { rm } from "node:fs/promises";
-import { workspacePath } from "../workspace.js";
-import { log } from "../../system/logger/index.js";
-import { discoverCollections, type LoadedCollection } from "../collections/index.js";
-import { resolveDataDir, safeSlugName } from "@mulmoclaude/core/collection/server";
-import { feedDir } from "./paths.js";
+import { discoverCollections, resolveDataDir, safeSlugName, type LoadedCollection } from "../../collection/server/index.js";
+import { log, requireFeedsHost } from "./host.js";
+import { feedDir } from "../paths.js";
 
 /** Every registered feed, as a discovered collection (carrying its
  *  validated schema, `ingest`, and resolved `dataDir`). */
-export async function listFeeds(workspaceRoot: string = workspacePath): Promise<LoadedCollection[]> {
+export async function listFeeds(workspaceRoot: string = requireFeedsHost().workspaceRoot): Promise<LoadedCollection[]> {
   const all = await discoverCollections({ workspaceRoot });
   return all.filter((collection) => collection.source === "feed");
 }

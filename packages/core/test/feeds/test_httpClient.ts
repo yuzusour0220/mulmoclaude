@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { fetchText } from "../../../server/workspace/feeds/fetch/httpClient.js";
+import { fetchText } from "../../src/feeds/server/fetch/httpClient.ts";
 
 // All cases reject at the SSRF guard BEFORE any network call (IP literals
 // need no DNS), so these run offline and deterministically.

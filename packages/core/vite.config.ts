@@ -21,6 +21,9 @@ export default defineConfig({
         "collection/index": "src/collection/index.ts",
         "collection/server/index": "src/collection/server/index.ts",
         "collection/paths": "src/collection/server/templatePath.ts",
+        "feeds/index": "src/feeds/index.ts",
+        "feeds/server/index": "src/feeds/server/index.ts",
+        "feeds/paths": "src/feeds/paths.ts",
         "collection-watchers/index": "src/collection-watchers/index.ts",
         "skill-bridge/index": "src/skill-bridge/index.ts",
         "file-change/index": "src/file-change/index.ts",
@@ -33,7 +36,7 @@ export default defineConfig({
       fileName: (format, entryName) => `${entryName}.${format === "es" ? "js" : "cjs"}`,
     },
     rollupOptions: {
-      external: [/^node:/, /^@receptron\//, "zod", "gui-chat-protocol"],
+      external: [/^node:/, /^@receptron\//, "zod", "gui-chat-protocol", "fast-xml-parser"],
       output: { exports: "named" },
     },
     minify: false,

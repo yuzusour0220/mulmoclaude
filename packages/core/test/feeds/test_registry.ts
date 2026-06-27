@@ -1,10 +1,10 @@
-import "../../../server/workspace/collections/configure.js"; // configure @mulmoclaude/core/collection host binding for tests
+import "./_setup.ts"; // configure @mulmoclaude/core collection + feeds hosts for tests
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { listFeeds, removeFeed } from "../../../server/workspace/feeds/registry.js";
+import { listFeeds, removeFeed } from "../../src/feeds/server/index.ts";
 
 // Feeds are now agent-authored files (no register tool): a
 // feeds/<slug>/schema.json under the workspace. listFeeds() discovers

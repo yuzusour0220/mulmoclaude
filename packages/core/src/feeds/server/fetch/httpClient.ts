@@ -8,7 +8,10 @@
 
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
-import { ONE_SECOND_MS } from "../../../utils/time.js";
+
+// Inlined — the client needs only this one time constant and must stay free of
+// host-side time-constant modules.
+const ONE_SECOND_MS = 1_000;
 
 /** Identifies the bot to site operators. */
 export const FEED_USER_AGENT = "MulmoClaude-FeedBot/1.0 (+https://github.com/receptron/mulmoclaude)";

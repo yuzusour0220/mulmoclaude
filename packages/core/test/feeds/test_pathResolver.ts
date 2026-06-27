@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { getByPath, getItemsArray } from "../../../server/workspace/feeds/pathResolver.js";
+import { getByPath, getItemsArray } from "../../src/feeds/server/pathResolver.ts";
 
 describe("getByPath", () => {
   const root = {

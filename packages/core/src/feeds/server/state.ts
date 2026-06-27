@@ -11,10 +11,9 @@
 
 import { mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
-import type { CollectionSource } from "@mulmoclaude/core/collection";
-import { writeFileAtomic } from "../../utils/files/atomic.js";
-import { log } from "../../system/logger/index.js";
-import { feedStatePath, ingestStatePath } from "./paths.js";
+import type { CollectionSource } from "../../collection/index.js";
+import { log, requireFeedsHost } from "./host.js";
+import { feedStatePath, ingestStatePath } from "../paths.js";
 
 /** Minimal shape needed to locate a collection's state file. `LoadedCollection`
  *  satisfies it. */
@@ -80,5 +79,5 @@ export async function readFeedState(workspaceRoot: string, target: StateTarget):
 export async function writeFeedState(workspaceRoot: string, target: StateTarget, state: FeedState): Promise<void> {
   const file = stateFilePath(target, workspaceRoot);
   await mkdir(path.dirname(file), { recursive: true });
-  await writeFileAtomic(file, `${JSON.stringify(state, null, 2)}\n`);
+  await requireFeedsHost().writeFileAtomic(file, `${JSON.stringify(state, null, 2)}\n`);
 }

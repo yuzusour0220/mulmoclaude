@@ -8,7 +8,7 @@ import { workspacePath } from "../workspace.js";
 import { log } from "../../system/logger/index.js";
 import { WORKSPACE_DIRS } from "../paths.js";
 import { USER_SKILLS_DIR, projectSkillsDir } from "../skills/paths.js";
-import { feedsRoot } from "../feeds/paths.js";
+import { feedsRoot } from "@mulmoclaude/core/feeds/paths";
 import { isPresetSlug } from "../skills-preset.js";
 
 configureCollectionHost({

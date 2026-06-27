@@ -11,8 +11,8 @@
 
 import { createHash } from "node:crypto";
 import { getByPath } from "./pathResolver.js";
-import type { CollectionItem, CollectionSchema } from "../collections/index.js";
-import type { DeclarativeIngestSpec } from "./ingestTypes.js";
+import type { CollectionItem, CollectionSchema } from "../../collection/index.js";
+import type { DeclarativeIngestSpec } from "../ingestTypes.js";
 
 function asKeyString(value: unknown): string | null {
   if (typeof value === "string" && value.trim().length > 0) return value.trim();

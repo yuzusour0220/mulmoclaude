@@ -1,13 +1,14 @@
-import "../../../server/workspace/collections/configure.js"; // configure @mulmoclaude/core/collection host binding for tests
+import "./_setup.ts"; // configure @mulmoclaude/core collection + feeds hosts for tests
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { registerRetriever } from "../../../server/workspace/feeds/retrievers/index.js";
-import { refreshOne } from "../../../server/workspace/feeds/engine.js";
-import { listItems, type CollectionItem, type LoadedCollection } from "../../../server/workspace/collections/index.js";
-import type { IngestSpec } from "../../../server/workspace/feeds/ingestTypes.js";
+import { registerRetriever } from "../../src/feeds/server/retrievers/index.ts";
+import { refreshOne } from "../../src/feeds/server/engine.ts";
+import { listItems, type LoadedCollection } from "../../src/collection/server/index.ts";
+import type { CollectionItem } from "../../src/collection/index.ts";
+import type { IngestSpec } from "../../src/feeds/ingestTypes.ts";
 
 // Cast helper: tests use synthetic ingest kinds (the LoadedCollection is
 // hand-built, bypassing schema validation), so widen past the real union.

@@ -12,7 +12,15 @@
 // legacy `sources` tree. Pure; unit-testable with fixture strings.
 
 import { XMLParser } from "fast-xml-parser";
-import { isNonEmptyString, isRecord } from "../../../utils/types.js";
+
+// Tiny inline type guards (the host's shared `utils/types` is not available in
+// this shared package — these are the only two we need here).
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
 
 export interface ParsedFeedItem {
   /** The raw parsed XML <item>/<entry> object, verbatim. */

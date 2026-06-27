@@ -5,26 +5,22 @@
 // processes feeds sequentially to stay gentle on remote hosts (the
 // fetch client does no rate-limiting yet).
 
-import { workspacePath } from "../workspace.js";
-import { log } from "../../system/logger/index.js";
-import {
-  deleteItem,
-  discoverCollections,
-  listItems,
-  writeItem,
-  type CollectionItem,
-  type CollectionSchema,
-  type LoadedCollection,
-} from "../collections/index.js";
-import { ONE_HOUR_MS, ONE_DAY_MS } from "../../utils/time.js";
+import { deleteItem, discoverCollections, listItems, writeItem, type LoadedCollection } from "../../collection/server/index.js";
+import type { CollectionItem, CollectionSchema } from "../../collection/index.js";
+import { log, requireFeedsHost } from "./host.js";
 import { getRetriever } from "./retrievers/index.js";
 import "./retrievers/registerAll.js";
 import { readFeedState, writeFeedState, type FeedState } from "./state.js";
-import { DEFAULT_FEED_MAX_ITEMS, AGENT_INGEST_KIND, type FeedSchedule, type IngestSpec } from "./ingestTypes.js";
+import { DEFAULT_FEED_MAX_ITEMS, AGENT_INGEST_KIND, type FeedSchedule, type IngestSpec } from "../ingestTypes.js";
 import { refreshViaAgent } from "./agentIngest.js";
 import type { RefreshResult } from "./refreshResult.js";
 
 export type { RefreshResult } from "./refreshResult.js";
+
+// Refresh cadence anchors (ms). Inlined — the engine needs only these two and
+// must stay free of host-side time-constant modules.
+const ONE_HOUR_MS = 3_600_000;
+const ONE_DAY_MS = 86_400_000;
 
 /** Feed schemas carry the rich `IngestSpec` (validated at discovery —
  *  `source === "feed"` requires `ingest`), but the canonical
@@ -161,7 +157,7 @@ function isFeedDue(feed: LoadedCollection, state: FeedState): boolean {
 /** Refresh every collection whose ingest schedule says it's due — declarative
  *  feeds AND skill-backed collections with `ingest.kind: "agent"`. Called by the
  *  hourly system task. Sequential + failure-isolated. */
-export async function refreshDue(workspaceRoot: string = workspacePath): Promise<RefreshResult[]> {
+export async function refreshDue(workspaceRoot: string = requireFeedsHost().workspaceRoot): Promise<RefreshResult[]> {
   const all = await discoverCollections({ workspaceRoot });
   const withIngest = all.filter((collection) => collection.schema.ingest);
   const results: RefreshResult[] = [];
