@@ -14,6 +14,7 @@ const enMessages = {
       importing: "Importing…",
       imported: "Imported",
       importedAs: "Imported as {slug}",
+      registryBadge: "From the {registry} registry",
       updated: "Updated",
       open: "Open",
     },

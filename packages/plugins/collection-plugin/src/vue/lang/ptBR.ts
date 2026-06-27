@@ -16,6 +16,7 @@ const ptBRMessages: CollectionMessages = {
       importing: "Importando…",
       imported: "Importada",
       importedAs: "Importada como {slug}",
+      registryBadge: "Do registro {registry}",
       updated: "Atualizada",
       open: "Abrir",
     },

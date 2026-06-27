@@ -1,27 +1,31 @@
-import { describe, it, afterEach } from "node:test";
+import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
-import { collectionFileUrl, parseJsonObject, rawBaseUrl } from "../../server/workspace/collectionsRegistry/collectionFiles.js";
+import { collectionFileUrl, parseJsonObject } from "../../server/workspace/collectionsRegistry/collectionFiles.js";
+
+const OFFICIAL_RAW = "https://raw.githubusercontent.com/receptron/mulmoclaude-collections/main";
 
 describe("collectionFileUrl", () => {
-  afterEach(() => {
-    delete process.env.COLLECTIONS_REGISTRY_RAW_BASE;
-  });
-
-  it("composes the default raw URL", () => {
+  it("composes the URL under the supplied rawBase", () => {
     assert.equal(
-      collectionFileUrl("collections/isamu/movies", "schema.json"),
+      collectionFileUrl(OFFICIAL_RAW, "collections/isamu/movies", "schema.json"),
       "https://raw.githubusercontent.com/receptron/mulmoclaude-collections/main/collections/isamu/movies/schema.json",
     );
   });
 
   it("trims leading/trailing slashes in the dir path", () => {
-    assert.equal(collectionFileUrl("/collections/a/b/", "meta.json"), `${rawBaseUrl()}/collections/a/b/meta.json`);
+    assert.equal(collectionFileUrl(OFFICIAL_RAW, "/collections/a/b/", "meta.json"), `${OFFICIAL_RAW}/collections/a/b/meta.json`);
   });
 
-  it("honors the COLLECTIONS_REGISTRY_RAW_BASE override", () => {
-    process.env.COLLECTIONS_REGISTRY_RAW_BASE = "https://example.test/reg";
-    assert.equal(collectionFileUrl("collections/a/b", "schema.json"), "https://example.test/reg/collections/a/b/schema.json");
+  it("accepts a user-configured rawBase (multi-registry support)", () => {
+    assert.equal(collectionFileUrl("https://example.test/reg", "collections/a/b", "schema.json"), "https://example.test/reg/collections/a/b/schema.json");
+  });
+
+  it("rejects traversal segments inside the dir path", () => {
+    // `..` segments would otherwise let the URL escape the rawBase, so they're
+    // dropped even though the index parser already rejects such identifiers
+    // (defense-in-depth).
+    assert.equal(collectionFileUrl(OFFICIAL_RAW, "collections/../escape", "x.json"), `${OFFICIAL_RAW}/collections/escape/x.json`);
   });
 });
 

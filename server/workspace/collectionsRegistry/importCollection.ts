@@ -8,7 +8,7 @@
 // malformed/poisoned.
 
 import { isRecord } from "../../utils/types.js";
-import { fetchCollectionFile, parseJsonObject } from "./collectionFiles.js";
+import { fetchCollectionFile, parseJsonObject, rawBaseForEntry } from "./collectionFiles.js";
 import type { RegistryCollectionEntry } from "./registryIndex.js";
 
 const MANIFEST_FILE = "manifest.json";
@@ -44,7 +44,9 @@ export function withNormalizedDataPath(schema: Record<string, unknown>, localSlu
 export type ManifestFetch = { ok: true; files: string[] } | { ok: false; status: number; error: string };
 
 export async function fetchManifest(entry: RegistryCollectionEntry): Promise<ManifestFetch> {
-  const file = await fetchCollectionFile(entry.path, MANIFEST_FILE);
+  const rawBase = rawBaseForEntry(entry);
+  if (!rawBase) return { ok: false, status: STATUS_BAD_GATEWAY, error: `registry "${entry.registryName}" is no longer configured` };
+  const file = await fetchCollectionFile(rawBase, entry.path, MANIFEST_FILE);
   if (!file.ok) return { ok: false, status: file.status, error: `manifest.json: ${file.error}` };
   const obj = parseJsonObject(file.text, "manifest.json");
   if (!obj.ok) return { ok: false, status: STATUS_BAD_GATEWAY, error: obj.error };
@@ -57,9 +59,11 @@ export type BundleFetch = { ok: true; files: Map<string, string> } | { ok: false
 
 /** Fetch every manifest file. Paths are already safety-checked by parseManifest. */
 export async function fetchBundle(entry: RegistryCollectionEntry, fileList: readonly string[]): Promise<BundleFetch> {
+  const rawBase = rawBaseForEntry(entry);
+  if (!rawBase) return { ok: false, status: STATUS_BAD_GATEWAY, error: `registry "${entry.registryName}" is no longer configured` };
   const files = new Map<string, string>();
   for (const rel of fileList) {
-    const file = await fetchCollectionFile(entry.path, rel);
+    const file = await fetchCollectionFile(rawBase, entry.path, rel);
     if (!file.ok) return { ok: false, status: file.status, error: `${rel}: ${file.error}` };
     files.set(rel, file.text);
   }

@@ -16,6 +16,7 @@ const jaMessages: CollectionMessages = {
       importing: "取り込み中…",
       imported: "取り込み済み",
       importedAs: "{slug} として取り込み",
+      registryBadge: "{registry} レジストリより",
       updated: "更新済み",
       open: "開く",
     },

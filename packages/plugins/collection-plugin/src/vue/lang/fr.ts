@@ -16,6 +16,7 @@ const frMessages: CollectionMessages = {
       importing: "Importation…",
       imported: "Importée",
       importedAs: "Importée comme {slug}",
+      registryBadge: "Du registre {registry}",
       updated: "Mise à jour",
       open: "Ouvrir",
     },

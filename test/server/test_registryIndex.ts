@@ -1,7 +1,12 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
-import { parseRegistryIndex } from "../../server/workspace/collectionsRegistry/registryIndex.js";
+import { parseRegistryIndex as parseRegistryIndexBase } from "../../server/workspace/collectionsRegistry/registryIndex.js";
+
+// Every test in this file uses the same registry name. Wrap the parser so each
+// call site stays a single-arg expression and the multi-registry refactor stays
+// invisible at the test level.
+const parseRegistryIndex = (value: unknown) => parseRegistryIndexBase(value, "official");
 
 function validEntry(): Record<string, unknown> {
   return {
@@ -150,5 +155,13 @@ describe("parseRegistryIndex", () => {
     assert.ok(result.ok);
     assert.deepEqual(result.index.collections[0].tags, ["ok", "two"]);
     assert.deepEqual(result.index.collections[0].views, ["v"]);
+  });
+
+  it("stamps every entry with the registryName argument", () => {
+    // Multi-registry support: the parser receives the source registry's label so
+    // import / preview can later resolve the right rawBase via findRegistry.
+    const result = parseRegistryIndexBase(validIndex(), "myorg");
+    assert.ok(result.ok);
+    assert.equal(result.index.collections[0].registryName, "myorg");
   });
 });

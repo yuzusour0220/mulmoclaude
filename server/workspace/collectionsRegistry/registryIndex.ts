@@ -9,7 +9,9 @@
 import { isRecord } from "../../utils/types.js";
 
 export interface RegistryCollectionEntry {
-  /** `<author>/<slug>` — global identity. */
+  /** `<author>/<slug>` — identity inside its source registry. NOT globally
+   *  unique when multiple registries are configured — pair with `registryName`
+   *  for a global key. */
   id: string;
   author: string;
   slug: string;
@@ -30,6 +32,11 @@ export interface RegistryCollectionEntry {
   path: string;
   /** Stable bundle hash for update detection. */
   contentSha: string;
+  /** Label of the source registry. Set by the client (not by the parser) when
+   *  the index is fetched, so the import / preview path can resolve the right
+   *  rawBase. `"official"` for receptron/mulmoclaude-collections; otherwise
+   *  the user's config entry name. */
+  registryName: string;
 }
 
 export interface RegistryIndex {
@@ -90,7 +97,7 @@ function validatedCounts(value: Record<string, unknown>, index: number): { field
   return { fieldCount, seedCount };
 }
 
-function parseEntry(value: unknown, index: number): RegistryCollectionEntry | string {
+function parseEntry(value: unknown, index: number, registryName: string): RegistryCollectionEntry | string {
   if (!isRecord(value)) return `collections[${index}] is not an object`;
   const entryId = pickString(value, "id");
   const author = pickString(value, "author");
@@ -123,10 +130,15 @@ function parseEntry(value: unknown, index: number): RegistryCollectionEntry | st
     seedCount: counts.seedCount,
     hasSeed: pickBoolean(value, "hasSeed") ?? false,
     screenshot: pickString(value, "screenshot"),
+    registryName,
   };
 }
 
-export function parseRegistryIndex(value: unknown): ParseResult {
+/** Parse an index payload. `registryName` labels every entry produced — the
+ *  caller passes "official" for the canonical registry or the user's config
+ *  entry name. The label is needed downstream so import / preview can pick the
+ *  right rawBase for per-collection files. */
+export function parseRegistryIndex(value: unknown, registryName: string): ParseResult {
   if (!isRecord(value)) return { ok: false, error: "index is not an object" };
   if (value.schemaVersion !== SUPPORTED_SCHEMA_VERSION) {
     return { ok: false, error: `unsupported schemaVersion (expected ${SUPPORTED_SCHEMA_VERSION})` };
@@ -136,7 +148,7 @@ export function parseRegistryIndex(value: unknown): ParseResult {
   if (!registry || !generatedAt) return { ok: false, error: "index missing registry/generatedAt" };
   if (!Array.isArray(value.collections)) return { ok: false, error: "index.collections must be an array" };
 
-  const parsed = value.collections.map(parseEntry);
+  const parsed = value.collections.map((entry, idx) => parseEntry(entry, idx, registryName));
   const firstError = parsed.find((entry): entry is string => typeof entry === "string");
   if (firstError !== undefined) return { ok: false, error: firstError };
   const collections = parsed.filter((entry): entry is RegistryCollectionEntry => typeof entry !== "string");

@@ -16,6 +16,7 @@ const esMessages: CollectionMessages = {
       importing: "Importando…",
       imported: "Importada",
       importedAs: "Importada como {slug}",
+      registryBadge: "Del registro {registry}",
       updated: "Actualizada",
       open: "Abrir",
     },

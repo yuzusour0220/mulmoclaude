@@ -133,7 +133,7 @@ configureCollectionUi({
   listCollections: () => apiGet<CollectionsListResponse>(API_ROUTES.collections.list),
   listFeeds: () => apiGet<FeedsListResponse>(API_ROUTES.feeds.list),
   listRegistry: () => apiGet<RegistryListResponse>(API_ROUTES.collectionsRegistry.list),
-  importRegistry: (author, slug) => apiPost<RegistryImportResponse>(API_ROUTES.collectionsRegistry.import, { author, slug }),
+  importRegistry: (author, slug, registry) => apiPost<RegistryImportResponse>(API_ROUTES.collectionsRegistry.import, { author, slug, registry }),
   reconcileShortcuts: (kind, live) => useShortcuts().reconcile(kind, live),
 
   // app integration

@@ -83,8 +83,8 @@ export interface CollectionConfirmOptions {
   variant?: "primary" | "success" | "danger";
 }
 
-/** One collection in the curated registry's published index (the host fetches the
- *  registry's index.json and proxies it to the Discover tab). */
+/** One collection in a curated registry's published index (the host fetches
+ *  each registry's index.json and proxies them all to the Discover tab). */
 export interface RegistryEntry {
   id: string;
   author: string;
@@ -102,12 +102,30 @@ export interface RegistryEntry {
   screenshot?: string;
   path: string;
   contentSha: string;
+  /** Label of the source registry — `"official"` for the canonical
+   *  receptron/mulmoclaude-collections, otherwise the `name` of an entry in
+   *  the user's `config/collections-registries.json`. The Discover card shows
+   *  this as a small badge so users can tell apart same-title collections from
+   *  different sources. */
+  registryName: string;
 }
 
-/** `GET …collectionsRegistry.list` — the Discover catalog. */
+/** Per-registry summary in the merged Discover response. */
+export interface RegistrySummary {
+  name: string;
+  /** `ok` = fresh, `stale` = served from cache because the upstream failed,
+   *  `failed` = no cache to fall back to (the entries contribution is 0). */
+  status: "ok" | "stale" | "failed";
+  generatedAt: string | null;
+  error: string | null;
+  entryCount: number;
+}
+
+/** `GET …collectionsRegistry.list` — the Discover catalog merged across every
+ *  configured registry. */
 export interface RegistryListResponse {
-  registry: string;
-  generatedAt: string;
+  registries: RegistrySummary[];
+  /** Convenience flag: true iff any single registry's contribution was stale. */
   stale: boolean;
   collections: RegistryEntry[];
 }
@@ -207,9 +225,11 @@ export interface CollectionUi {
   /** List the curated registry's collections for the Discover tab (`apiGet` over
    *  `…collectionsRegistry.list`). */
   listRegistry: () => Promise<CollectionApiResult<RegistryListResponse>>;
-  /** Import a registry collection by author+slug (`apiPost` over
-   *  `…collectionsRegistry.import`). */
-  importRegistry: (author: string, slug: string) => Promise<CollectionApiResult<RegistryImportResponse>>;
+  /** Import a registry collection by author+slug. `registry` (the source
+   *  registry's name from the entry the user clicked) disambiguates when more
+   *  than one registry publishes the same author/slug; pass null for
+   *  best-match. (`apiPost` over `…collectionsRegistry.import`). */
+  importRegistry: (author: string, slug: string, registry: string | null) => Promise<CollectionApiResult<RegistryImportResponse>>;
   /** Bulk-reconcile pinned launcher shortcuts of one kind against the
    *  authoritative list — prune dead slugs, refresh stale labels
    *  (`useShortcuts().reconcile`). */

@@ -16,6 +16,7 @@ const zhMessages: CollectionMessages = {
       importing: "导入中…",
       imported: "已导入",
       importedAs: "已导入为 {slug}",
+      registryBadge: "来自 {registry} 注册表",
       updated: "已更新",
       open: "打开",
     },

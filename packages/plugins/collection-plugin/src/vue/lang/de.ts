@@ -16,6 +16,7 @@ const deMessages: CollectionMessages = {
       importing: "Wird importiert…",
       imported: "Importiert",
       importedAs: "Importiert als {slug}",
+      registryBadge: "Aus der Registry {registry}",
       updated: "Aktualisiert",
       open: "Öffnen",
     },

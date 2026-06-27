@@ -4,40 +4,46 @@
 // files of collections that actually appear in the published index.
 //
 // The index itself is served from GitHub Pages (see client.ts); per-collection
-// files are served from raw.githubusercontent. Both are overridable for tests /
-// self-hosting.
+// files are served from raw.githubusercontent. With multi-registry support the
+// rawBase is no longer a single module-level value — it comes from the entry's
+// source registry descriptor, so user-added registries can live anywhere.
 
 import { fetchWithTimeout } from "../../utils/fetch.js";
 import { errorMessage } from "../../utils/errors.js";
 import { isRecord } from "../../utils/types.js";
 import { ONE_SECOND_MS } from "../../utils/time.js";
-import { fetchRegistryIndex } from "./client.js";
+import { fetchAllRegistries, findRegistry } from "./client.js";
 import type { RegistryCollectionEntry } from "./registryIndex.js";
 
-const DEFAULT_RAW_BASE = "https://raw.githubusercontent.com/receptron/mulmoclaude-collections/main";
 const FETCH_TIMEOUT_MS = 10 * ONE_SECOND_MS;
 const STATUS_BAD_GATEWAY = 502;
 const STATUS_UNAVAILABLE = 503;
 const STATUS_NOT_FOUND = 404;
 
-export function rawBaseUrl(): string {
-  return process.env.COLLECTIONS_REGISTRY_RAW_BASE ?? DEFAULT_RAW_BASE;
-}
-
-/** Compose the raw URL for `<dirPath>/<relFile>`. `dirPath` is an index entry's
- *  repo-relative collection dir (e.g. `collections/isamu/movies`). Empty and
- *  traversal (`.`/`..`) segments are dropped so the URL can never escape the base,
- *  even if an upstream check is bypassed (the index parser already rejects such
- *  identifiers — this is defense-in-depth). */
-export function collectionFileUrl(dirPath: string, relFile: string): string {
+/** Compose the raw URL for `<dirPath>/<relFile>` under a given registry's
+ *  rawBase. Empty and traversal (`.`/`..`) segments are dropped so the URL can
+ *  never escape the base, even if an upstream check is bypassed (the index
+ *  parser already rejects such identifiers — this is defense-in-depth). The
+ *  rawBase is trailing-slash-normalized: `parseRegistriesConfig` already trims
+ *  user-config trailing slashes, but the official descriptor and any test
+ *  bypass parse — repeating the trim here keeps the join `${base}/${path}`
+ *  from producing `//` even when the caller bypassed config validation
+ *  (CodeRabbit review on #1837). */
+export function collectionFileUrl(rawBase: string, dirPath: string, relFile: string): string {
+  let base = rawBase;
+  while (base.endsWith("/")) base = base.slice(0, -1);
   const segments = dirPath.split("/").filter((segment) => segment.length > 0 && segment !== "." && segment !== "..");
-  return `${rawBaseUrl()}/${segments.join("/")}/${relFile}`;
+  return `${base}/${segments.join("/")}/${relFile}`;
 }
 
 export type FileResult = { ok: true; text: string } | { ok: false; status: number; error: string };
 
-export async function fetchCollectionFile(dirPath: string, relFile: string): Promise<FileResult> {
-  const url = collectionFileUrl(dirPath, relFile);
+/** Fetch one file out of a registry collection. `rawBase` comes from the
+ *  entry's source registry (`findRegistry(entry.registryName).rawBaseUrl`),
+ *  not a module-level setting — that's what makes additional user-configured
+ *  registries reachable. */
+export async function fetchCollectionFile(rawBase: string, dirPath: string, relFile: string): Promise<FileResult> {
+  const url = collectionFileUrl(rawBase, dirPath, relFile);
   let res: Response;
   try {
     res = await fetchWithTimeout(url, { timeoutMs: FETCH_TIMEOUT_MS });
@@ -62,32 +68,61 @@ export function parseJsonObject(text: string, label: string): JsonObjectResult {
 }
 
 async function fetchJsonObject(
+  rawBase: string,
   dirPath: string,
   relFile: string,
   label: string,
 ): Promise<{ ok: true; value: Record<string, unknown> } | { ok: false; status: number; error: string }> {
-  const file = await fetchCollectionFile(dirPath, relFile);
+  const file = await fetchCollectionFile(rawBase, dirPath, relFile);
   if (!file.ok) return { ok: false, status: file.status, error: `${label}: ${file.error}` };
   const parsed = parseJsonObject(file.text, label);
   if (!parsed.ok) return { ok: false, status: STATUS_BAD_GATEWAY, error: parsed.error };
   return { ok: true, value: parsed.value };
 }
 
+/** Resolve an entry's rawBase from its `registryName`. A missing match (the
+ *  user removed the registry from config while a cached index still references
+ *  it) returns null — the caller surfaces it as a 404 rather than crashing. */
+export function rawBaseForEntry(entry: Pick<RegistryCollectionEntry, "registryName">): string | null {
+  const registry = findRegistry(entry.registryName);
+  return registry?.rawBaseUrl ?? null;
+}
+
 export type PreviewResult =
   | { ok: true; entry: RegistryCollectionEntry; schema: Record<string, unknown>; meta: Record<string, unknown> }
   | { ok: false; status: number; error: string };
 
-/** Preview a registry collection: confirm it's in the published index, then fetch
- *  and parse its schema.json + meta.json so the Discover tab can show fields/views
- *  before import. Read-only; full structural re-validation happens at import. */
-export async function previewCollection(author: string, slug: string): Promise<PreviewResult> {
-  const indexResult = await fetchRegistryIndex();
-  if (!indexResult.ok) return { ok: false, status: indexResult.status, error: indexResult.error };
-  const entry = indexResult.index.collections.find((candidate) => candidate.author === author && candidate.slug === slug);
+/** Resolve an entry by author+slug across every cached registry's entries.
+ *  When `registry` is passed we constrain to that registry — needed because
+ *  multiple registries can publish the same author/slug, and the UI should
+ *  follow the card it just clicked. */
+function findEntryInMergedView(
+  merged: { name: string; entries: RegistryCollectionEntry[] }[],
+  author: string,
+  slug: string,
+  registry: string | null,
+): RegistryCollectionEntry | null {
+  for (const reg of merged) {
+    if (registry !== null && reg.name !== registry) continue;
+    const match = reg.entries.find((candidate) => candidate.author === author && candidate.slug === slug);
+    if (match) return match;
+  }
+  return null;
+}
+
+/** Preview a registry collection: confirm it's in some registry's published
+ *  index, then fetch + parse its schema.json + meta.json so the Discover tab
+ *  can show fields/views before import. With multi-registry support the
+ *  `registry` arg disambiguates same-name collections from different sources. */
+export async function previewCollection(author: string, slug: string, registry: string | null = null): Promise<PreviewResult> {
+  const merged = await fetchAllRegistries();
+  const entry = findEntryInMergedView(merged, author, slug, registry);
   if (!entry) return { ok: false, status: STATUS_NOT_FOUND, error: `unknown collection: ${author}/${slug}` };
-  const schema = await fetchJsonObject(entry.path, "schema.json", "schema.json");
+  const rawBase = rawBaseForEntry(entry);
+  if (!rawBase) return { ok: false, status: STATUS_NOT_FOUND, error: `registry "${entry.registryName}" is no longer configured` };
+  const schema = await fetchJsonObject(rawBase, entry.path, "schema.json", "schema.json");
   if (!schema.ok) return schema;
-  const meta = await fetchJsonObject(entry.path, "meta.json", "meta.json");
+  const meta = await fetchJsonObject(rawBase, entry.path, "meta.json", "meta.json");
   if (!meta.ok) return meta;
   return { ok: true, entry, schema: schema.value, meta: meta.value };
 }

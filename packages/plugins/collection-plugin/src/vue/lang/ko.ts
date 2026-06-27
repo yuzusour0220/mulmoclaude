@@ -16,6 +16,7 @@ const koMessages: CollectionMessages = {
       importing: "가져오는 중…",
       imported: "가져옴",
       importedAs: "{slug}(으)로 가져옴",
+      registryBadge: "{registry} 레지스트리에서",
       updated: "업데이트됨",
       open: "열기",
     },

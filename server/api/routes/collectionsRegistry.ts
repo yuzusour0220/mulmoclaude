@@ -1,13 +1,15 @@
-// Read endpoints for the curated collection registry (Discover tab). Backs
-// `GET /api/collections-registry` by server-fetching the published index.json
-// (receptron/mulmoclaude-collections) and returning its entries. The host never
-// exposes the upstream URL to the client; it proxies + caches it.
+// Read endpoints for the curated collection registries (Discover tab). Backs
+// `GET /api/collections-registry` by server-fetching every configured registry's
+// published index.json (official receptron/mulmoclaude-collections plus any
+// user-added entries from `config/collections-registries.json`) and returning
+// merged entries. The host never exposes upstream URLs to the client; it proxies
+// + caches each one.
 
 import { Router, Request, Response } from "express";
 
 import { API_ROUTES } from "../../../src/config/apiRoutes.js";
 import { badRequest } from "../../utils/httpError.js";
-import { fetchRegistryIndex } from "../../workspace/collectionsRegistry/client.js";
+import { fetchAllRegistries } from "../../workspace/collectionsRegistry/client.js";
 import { previewCollection } from "../../workspace/collectionsRegistry/collectionFiles.js";
 import { performImport } from "../../workspace/collectionsRegistry/importWriter.js";
 import { performExport } from "../../workspace/collectionsRegistry/performExport.js";
@@ -16,10 +18,20 @@ import { workspacePath } from "../../workspace/workspace.js";
 
 const router = Router();
 
+interface RegistrySummary {
+  name: string;
+  status: "ok" | "stale" | "failed";
+  generatedAt: string | null;
+  error: string | null;
+  entryCount: number;
+}
+
 interface RegistryListResponse {
-  registry: string;
-  generatedAt: string;
-  /** True when the upstream was unreachable and a previously-cached index is served. */
+  /** Per-registry status for the UI to surface origin badges + per-registry
+   *  errors without flooding the catalog with empty cards. */
+  registries: RegistrySummary[];
+  /** True iff at least one registry returned a stale-from-cache result; the UI
+   *  shows a single banner instead of per-card stale indicators. */
   stale: boolean;
   collections: RegistryCollectionEntry[];
 }
@@ -29,13 +41,17 @@ interface ErrorResponse {
 }
 
 router.get(API_ROUTES.collectionsRegistry.list, async (_req: Request, res: Response<RegistryListResponse | ErrorResponse>) => {
-  const result = await fetchRegistryIndex();
-  if (!result.ok) {
-    res.status(result.status).json({ error: result.error });
-    return;
-  }
-  const { registry, generatedAt, collections } = result.index;
-  res.json({ registry, generatedAt, stale: result.stale, collections });
+  const merged = await fetchAllRegistries();
+  const registries: RegistrySummary[] = merged.map((reg) => ({
+    name: reg.name,
+    status: reg.status,
+    generatedAt: reg.generatedAt,
+    error: reg.error,
+    entryCount: reg.entries.length,
+  }));
+  const collections = merged.flatMap((reg) => reg.entries);
+  const stale = merged.some((reg) => reg.status === "stale");
+  res.json({ registries, stale, collections });
 });
 
 interface RegistryPreviewResponse {
@@ -47,11 +63,12 @@ interface RegistryPreviewResponse {
 router.get(API_ROUTES.collectionsRegistry.preview, async (req: Request, res: Response<RegistryPreviewResponse | ErrorResponse>) => {
   const author = typeof req.query.author === "string" ? req.query.author : "";
   const slug = typeof req.query.slug === "string" ? req.query.slug : "";
+  const registry = typeof req.query.registry === "string" && req.query.registry ? req.query.registry : null;
   if (!author || !slug) {
     badRequest(res, "author and slug query params are required");
     return;
   }
-  const result = await previewCollection(author, slug);
+  const result = await previewCollection(author, slug, registry);
   if (!result.ok) {
     res.status(result.status).json({ error: result.error });
     return;
@@ -62,6 +79,7 @@ router.get(API_ROUTES.collectionsRegistry.preview, async (req: Request, res: Res
 interface ImportBody {
   author?: unknown;
   slug?: unknown;
+  registry?: unknown;
 }
 
 interface ImportResponse {
@@ -74,11 +92,12 @@ interface ImportResponse {
 router.post(API_ROUTES.collectionsRegistry.import, async (req: Request<object, unknown, ImportBody>, res: Response<ImportResponse | ErrorResponse>) => {
   const author = typeof req.body.author === "string" ? req.body.author : "";
   const slug = typeof req.body.slug === "string" ? req.body.slug : "";
+  const registry = typeof req.body.registry === "string" && req.body.registry ? req.body.registry : null;
   if (!author || !slug) {
     badRequest(res, "author and slug are required");
     return;
   }
-  const result = await performImport(author, slug, workspacePath);
+  const result = await performImport(author, slug, workspacePath, registry);
   if (!result.ok) {
     res.status(result.status).json({ error: result.error });
     return;

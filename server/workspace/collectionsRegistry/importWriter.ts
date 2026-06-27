@@ -31,7 +31,7 @@ import { log } from "../../system/logger/index.js";
 import { errorMessage } from "../../utils/errors.js";
 import { writeFileAtomic } from "../../utils/files/atomic.js";
 import { isRecord } from "../../utils/types.js";
-import { fetchRegistryIndex } from "./client.js";
+import { fetchAllRegistries } from "./client.js";
 import { fetchBundle, fetchManifest, normalizedDataPath } from "./importCollection.js";
 import type { RegistryCollectionEntry } from "./registryIndex.js";
 
@@ -340,10 +340,14 @@ export async function writeImportedCollection(params: {
   return { ok: true, localSlug, updated: target.updated, seedWritten: seed.written, seedSkipped: seed.skipped };
 }
 
-export async function performImport(author: string, slug: string, workspaceRoot: string): Promise<ImportResult> {
-  const indexResult = await fetchRegistryIndex();
-  if (!indexResult.ok) return { ok: false, status: indexResult.status, error: indexResult.error };
-  const entry = indexResult.index.collections.find((candidate) => candidate.author === author && candidate.slug === slug);
+export async function performImport(author: string, slug: string, workspaceRoot: string, registry: string | null = null): Promise<ImportResult> {
+  const merged = await fetchAllRegistries();
+  let entry: RegistryCollectionEntry | undefined;
+  for (const reg of merged) {
+    if (registry !== null && reg.name !== registry) continue;
+    entry = reg.entries.find((candidate) => candidate.author === author && candidate.slug === slug);
+    if (entry) break;
+  }
   if (!entry) return { ok: false, status: STATUS_NOT_FOUND, error: `unknown collection: ${author}/${slug}` };
   const manifest = await fetchManifest(entry);
   if (!manifest.ok) return { ok: false, status: manifest.status, error: manifest.error };
@@ -351,14 +355,14 @@ export async function performImport(author: string, slug: string, workspaceRoot:
   if (!bundle.ok) return { ok: false, status: bundle.status, error: bundle.error };
   try {
     return await writeImportedCollection({
-      registry: indexResult.index.registry,
+      registry: entry.registryName,
       entry,
       bundle: bundle.files,
       workspaceRoot,
       nowIso: new Date().toISOString(),
     });
   } catch (err) {
-    log.warn("collections-registry", "import write failed", { author, slug, error: errorMessage(err) });
+    log.warn("collections-registry", "import write failed", { author, slug, registry: entry.registryName, error: errorMessage(err) });
     return { ok: false, status: 500, error: `import failed: ${errorMessage(err)}` };
   }
 }
