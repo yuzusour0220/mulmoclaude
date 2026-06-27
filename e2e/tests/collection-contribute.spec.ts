@@ -141,7 +141,11 @@ test.describe("collection Contribute button", () => {
     expect(body).not.toContain("</script>");
     // Newline in the title was collapsed to a space → the
     // "NEW INSTRUCTION:" fragment must NOT appear on its own line.
-    expect(body).not.toMatch(/\\n\s*NEW INSTRUCTION:/);
+    // Use a real newline (not the literal two-char `\n` sequence) so a
+    // regression that lets `\n` through the sanitiser actually fails
+    // here (codex review on #1830).
+    // eslint-disable-next-line sonarjs/slow-regex -- bounded `\s*` followed by a literal terminator; no catastrophic backtracking possible
+    expect(body).not.toMatch(/\n\s*NEW INSTRUCTION:/);
     // The slug still lands verbatim — only the title was crafted.
     expect(body).toContain("danger");
   });

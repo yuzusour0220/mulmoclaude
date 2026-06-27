@@ -69,19 +69,36 @@ window.__MC_VIEW = {
 
 ### Reading records
 
+> **Always project `fields`.** The host refuses any read of more than 200
+> records that does not pass `?fields=…` or `?ids=…`, because an unscoped
+> fetch wastes work and bandwidth on columns your view never reads. Once a
+> user's collection grows past the threshold an unprojected view starts
+> returning `400` instead of records — write the projection from day one so
+> the same view keeps working forever.
+
 ```js
 const { token, dataUrl } = window.__MC_VIEW;
-const res = await fetch(dataUrl, { headers: { Authorization: "Bearer " + token } });
-if (!res.ok) throw new Error("load failed: " + res.status);
+// List the columns this view actually reads — never send `dataUrl` raw.
+const url = dataUrl + "?fields=" + encodeURIComponent("title,start,end,status");
+const res = await fetch(url, { headers: { Authorization: "Bearer " + token } });
+if (!res.ok) {
+  // Surface the server's reason (the 400 carries `{ error: "<message>" }`),
+  // not just the status code — that text is what tells the user / Claude
+  // how to fix the call (e.g. "pass `fields` to project only the columns").
+  const detail = await res.text();
+  throw new Error("load failed (" + res.status + "): " + detail);
+}
 const { items } = await res.json(); // { collection, count, items: [...] }
 ```
 
 Records come back **with computed fields already resolved** (derived formulas,
 toggles, embeds) — the same numbers the user sees elsewhere.
 
-- Narrow large reads: `dataUrl + "?fields=title,start,end"` or `?ids=a,b,c`
-  (comma-separated). A read of **more than 200 records** without `ids`/`fields`
-  is refused — always project `fields` for big collections.
+- **`?fields=a,b,c`** — only these columns per record (the primary key is always
+  included). Use this on every read; it is mandatory above 200 records.
+- **`?ids=x,y,z`** — only these specific record ids. Use it when the view edits
+  / shows one record at a time. Combinable with `fields`.
+- The primary key is always returned regardless of `fields`.
 
 ### Writing records (only with the `write` capability)
 
@@ -111,9 +128,11 @@ By default a view paints once, on load. To keep it fresh, register a callback �
 it runs whenever the collection's data changes on the server:
 
 ```js
+// Same projection rule as the initial read — list the columns this view uses.
+const url = dataUrl + "?fields=" + encodeURIComponent("title,start,end,status");
 async function render() {
-  const res = await fetch(dataUrl, { headers: { Authorization: "Bearer " + token } });
-  if (!res.ok) return; // handle the error per your UI
+  const res = await fetch(url, { headers: { Authorization: "Bearer " + token } });
+  if (!res.ok) return; // surface the body if you want a richer error UI
   const { items } = await res.json();
   // …draw items…
 }
@@ -303,8 +322,9 @@ fields `start` / `end` and a `title`. `capabilities: ["read"]`.
       const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
       async function main() {
         const { token, dataUrl } = window.__MC_VIEW;
-        const res = await fetch(dataUrl, { headers: { Authorization: "Bearer " + token } });
-        if (!res.ok) throw new Error("HTTP " + res.status);
+        const url = dataUrl + "?fields=" + encodeURIComponent("title,start");
+        const res = await fetch(url, { headers: { Authorization: "Bearer " + token } });
+        if (!res.ok) throw new Error("HTTP " + res.status + ": " + (await res.text()));
         const { items } = await res.json();
         const buckets = MONTHS.map(() => []);
         for (const it of items) {
@@ -382,10 +402,11 @@ writes it back. `capabilities: ["read","write"]`.
       const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
       const { token, dataUrl } = window.__MC_VIEW;
       const auth = { Authorization: "Bearer " + token, "Content-Type": "application/json" };
+      const readUrl = dataUrl + "?fields=" + encodeURIComponent("title,start");
 
       async function read() {
-        const res = await fetch(dataUrl, { headers: { Authorization: "Bearer " + token } });
-        if (!res.ok) throw new Error("HTTP " + res.status);
+        const res = await fetch(readUrl, { headers: { Authorization: "Bearer " + token } });
+        if (!res.ok) throw new Error("HTTP " + res.status + ": " + (await res.text()));
         return (await res.json()).items;
       }
       async function bump(item) {
