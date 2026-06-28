@@ -10,6 +10,54 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 ---
 
+## [0.9.1] - 2026-06-28
+
+Three threads run through this release: **multi-registry collections**, **collection-import path unification**, and **agent self-service troubleshooting**. Plus a stack of UX / i18n polish, the Contribute side of the registry going GA with sanitisation + a confirm dialog + dummy-data prompt + fork flow, custom-view i18n in all 8 locales, accounting plugin self-contained i18n, CJK font fixes for both code blocks and PDFs, the Discover tab landing fully, and a feeds package extraction. The shared `@mulmoclaude/core` ratchets to 0.2.12 with cascade publishes for `bookmarks-plugin`, `recipe-book-plugin`, and `debug-plugin` (initial), plus `collection-plugin` 0.5.16. Workflow: 48 PRs since 0.9.0.
+
+### Added
+
+- **Multi-registry Discover** (#1837) — Discover tab now reads `~/mulmoclaude/config/collections-registries.json` to add custom registries alongside the official one. Each entry: `{ name, indexUrl, rawBaseUrl }`. The Discover cards carry an origin badge so users can tell which registry an entry came from; `previewCollection` and `performImport` accept the registry name to disambiguate collisions. Per-registry cache + stale-on-failure backoff keyed by `(name, indexUrl, rawBaseUrl)`, so editing URLs invalidates the cached index. `docs/collection-registries.md` documents file format + validation rules + per-registry isolation semantics.
+- **Curated registry, Discover, and import-as-rename** (#1815 + #1817 + #1818 + #1819) — the official `receptron/mulmoclaude-collections` registry, the `/collections/discover` tab that lists it, server-side import into the workspace's `.claude/skills/`, and rename-on-collision (`movies-2`, `movies-3`, …) with an "Imported as" label.
+- **Contribute (registry export) flow** (#1828 + #1830 + #1832 + #1835 + #1845) — Contribute icon on each Installed-tab collection card seeds a new chat with a sanitised template prompt. The agent generates 3-5 synthetic dummy records based on `schema.json` (privacy-safe by default — never copies real user records), builds the contribution bundle, runs `build-index.mjs` + `validate.mjs`, and opens a PR to the registry after user confirmation. A confirm dialog wraps the icon button so a stray click doesn't launch the agent.
+- **Field-driven spawn from a record field** (#1820) — collection schema `spawn.every` accepts `{ fromField: "interval" }` so weekly / monthly branches off a record's own dropdown without splitting schemas.
+- **Custom-view i18n** (#1842) — the custom-view HTML wrapper threads the host locale through to the sandboxed view via a `<meta name="mulmoclaude:locale">` tag and `document.documentElement.lang`, so views can pick up the user's language at render time.
+- **Accounting plugin self-contained i18n** (#1838) — `@mulmoclaude/accounting-plugin` now ships its own 8-locale i18n inside the package instead of borrowing from the host, removing the runtime dependency on host i18n resources.
+- **Feeds package extraction** (#1840 + #1843) — feeds engine + schema + paths moved to a dedicated subpath of `@mulmoclaude/core` (`./feeds`, `./feeds/server`, `./feeds/paths`), enabling MulmoTerminal to consume the feeds runtime. Plus shareable feed refresh registration so the same feed can be triggered from multiple surfaces.
+- **Agent error-recovery help** (#1846) — new `config/helps/error-recovery.md` indexes the documented fix for common tool failures (gh/git/SSH in the sandbox, Marp PDF, registry import, build/workspace, plugin runtime). The system prompt now points the agent at it BEFORE asking the user a clarifying question on a failed tool call. CLAUDE.md rule mandates appending new diagnostics to that file.
+- **Collections export bundle generation** (#1825) — `performExport` produces the `{ SKILL.md, schema.json, meta.json, manifest.json, [seed/items/*] }` bundle that the Contribute flow ships up to the registry, with strict input validation.
+- **Imported-collection custom-view fallback** (#1836) — the custom-view file reader falls back to `data/skills/<slug>/views/` for project-source collections, so an imported collection's views render even though the bundle didn't mirror them through skill-bridge.
+
+### Changed
+
+- **Imports write to `data/skills/<slug>/` first** (#1839) — refactor unifies authored and imported collections on disk: both live at `data/skills/<slug>/`, mirrored to `.claude/skills/<slug>/` via the same skill-bridge allowlist (`SKILL.md`, `schema.json`, `templates/<safe>`). `.origin.json` (the imported-vs-authored marker) lives only on the data side. Editing an imported collection is now identical to editing an authored one; `rm -rf data/skills/<slug>/` deletes either kind through the existing bridge hook.
+- **Write-then-prune mirror ordering** (#1839 follow-up) — mirror writes happen before pruning stale files, so a transient mirror failure can no longer leave `.claude/skills/<slug>/` empty.
+- **Collections Contribute dummy data** (#1835) — replaces the "include my own records as seed?" question with an unconditional "generate 3-5 synthetic dummy records based on `schema.json`". Privacy-safe by default; the published bundle never contains real user data.
+- **`packages/mulmoclaude/README.md` refresh** (#1849) — the npm-shown README catches up with the last year of features (collections, Marp, sandbox credentials, full bridges list). Also adds a `/publish-mulmoclaude` skill step to verify the README each release so this doesn't drift again.
+- **CJK monospace fonts in code blocks** (#1829) — adds Windows CJK monospace fonts (`MS Gothic`, `BIZ UDGothic`) to the monospace stack across `src/index.css` and 11 plugin View files, plus the JSON editor's CodeMirror theme. Japanese inside code blocks renders correctly on Windows (was tofu). Bumps `@mulmoclaude/html-plugin` and `@mulmoclaude/markdown-plugin` for the shared CSS.
+- **CJK fonts in PDF render** (#1826) — adds Hiragino / Yu Gothic / Meiryo / Noto Sans CJK JP fallback to the `MARKDOWN_CSS` body + Marp inline style so PDF exports of Japanese decks render the glyphs.
+- **Custom view help — default fields hint** (#1834) — the addView prompt clarifies that referenced fields must exist on the schema before authoring the view.
+- **e2e test consolidation** (#1809 + #1812 + #1813) — three audits trimmed redundant specs, consolidated four redundant cases, split two mega-specs.
+
+### Fixed
+
+- **Delete of imported collections** (#1841) — the `isDataDirSafe` guard rejected `data/collections/<slug>/items` (the normalised dataPath for imports) as "outside the per-collection subtree". Now accepts both `data/<slug>/` (authored) and `data/collections/<slug>/` (imported) as valid per-slug subtrees. Imported collections can finally be deleted through the UI.
+
+### Internal
+
+- **Accounting plugin refactor + page** (#1811 + #1816) — accounting moves to `@mulmoclaude/accounting-plugin` with a dedicated `/accounting` page in the toolbar.
+- **Plans archive sweep** (#1810) — 25 shipped plans moved under `plans/done/`.
+- **CI: cache puppeteer browsers** (#1749) — speeds up the test job.
+
+### Cascade publishes
+
+- `@mulmoclaude/core` 0.2.7 → 0.2.12
+- `@mulmoclaude/collection-plugin` 0.5.11 → 0.5.16
+- `@mulmoclaude/html-plugin` 0.2.4 → 0.2.5
+- `@mulmoclaude/markdown-plugin` 0.1.6 → 0.1.7
+- Initial publishes: `@mulmoclaude/bookmarks-plugin@0.1.0`, `@mulmoclaude/debug-plugin@0.2.0`, `@mulmoclaude/recipe-book-plugin@0.1.0`
+
+---
+
 ## [0.9.0] - 2026-06-25
 
 Three things shape this release: **local voice input** (push-to-talk via on-device `whisper.cpp`, macOS first); a wave of **collection runtime power** (custom views can open records in a host modal *and* start chats with seed prompts referencing a specific record, live view updates over pubsub, field-driven spawn intervals, `manageCollection` schema management); and the **plugin-extraction sweep** that lifts the entire `presentCollection`, `presentHtml`, `presentForm`, `presentDocument` (markdown / marp), `presentChart`, and X-tools surfaces — server core, Vue View / Preview, 8-locale i18n — into standalone npm packages so MulmoTerminal can run them end-to-end with no MulmoClaude code reuse. A separate `packages/services/*` tree carves out headless-backend services on the same logic. Whisper input also lands as a shared `@mulmoclaude/whisper`. Side dishes: 16-connector claude.ai allowlist, a critical MCP handlePermission race fix that could lose the first turn of a fresh session, Windows `claude.exe` spawn, Docker broker path, attachment traversal hardening, vite pinned to 8.0.13 to dodge a dual-runtime e2e crash, CI dev-server pre-warming, Playwright/puppeteer browser caches, and the `mc-zenn` preset skill.
