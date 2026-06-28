@@ -248,7 +248,6 @@ waitUntilReady(port, () => {
   const openCmd = pickOpenCommand();
   try {
     // openCmd is a hard-coded literal; url is http://localhost:<numeric-port>.
-    // eslint-disable-next-line sonarjs/os-command
     execSync(`${openCmd} ${url}`, { stdio: "pipe" });
   } catch {
     log(`Open your browser: ${url}`);

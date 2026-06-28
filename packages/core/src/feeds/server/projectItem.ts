@@ -56,7 +56,7 @@ function toSafeId(natural: string): string {
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-");
-  // eslint-disable-next-line sonarjs/slow-regex -- anchored hyphen trim, linear, no catastrophic backtracking
+  // eslint-disable-next-line sonarjs/super-linear-regex -- anchored hyphen trim, linear, no catastrophic backtracking
   const slug = collapsed.replace(/^-+|-+$/g, "");
   if (slug.length > 0 && slug.length <= 80) return slug;
   const hash = createHash("sha256")

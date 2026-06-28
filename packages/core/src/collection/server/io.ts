@@ -372,7 +372,7 @@ function sanitizeForPrompt(value: string): string {
   let prev: string;
   do {
     prev = current;
-    // eslint-disable-next-line sonarjs/slow-regex -- bounded tag strip, mirrors legacy escapeForPrompt
+    // eslint-disable-next-line sonarjs/super-linear-regex -- bounded tag strip, mirrors legacy escapeForPrompt
     current = current.replace(/<[^>]*>/g, "");
   } while (current !== prev);
   return current.replace(/`/g, "'").replace(/\$\{/g, "\\${");
