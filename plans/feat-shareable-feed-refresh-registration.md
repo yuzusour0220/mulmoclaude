@@ -1,6 +1,7 @@
 # feat: export shareable `system:feed-refresh` registration from `@mulmoclaude/core`
 
-Status: core export + MulmoClaude rewire DONE (`@mulmoclaude/core` 0.2.7 → 0.2.8).
+Status: core export + MulmoClaude rewire DONE (`@mulmoclaude/core` 0.2.7 → 0.2.9;
+0.2.9 also fixes invalid YAML in the `mc-manage-automations` preset SKILL.md).
 MulmoTerminal consumption + double-scheduling decision below remain its own follow-up.
 Decisions: home = `@mulmoclaude/core/feeds/server` (Q1); double-scheduling = soft dedup,
 Option 1 (Q2). Follow-up to the feeds extraction (`feat-extract-feeds-package.md`,
