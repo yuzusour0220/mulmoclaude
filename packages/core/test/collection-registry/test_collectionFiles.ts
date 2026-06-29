@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
-import { collectionFileUrl, parseJsonObject } from "../../server/workspace/collectionsRegistry/collectionFiles.js";
+import { collectionFileUrl, parseJsonObject } from "../../src/collection/registry/server/collectionFiles.ts";
 
 const OFFICIAL_RAW = "https://raw.githubusercontent.com/receptron/mulmoclaude-collections/main";
 

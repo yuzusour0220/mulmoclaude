@@ -4,8 +4,8 @@ import { mkdtempSync, mkdirSync, writeFileSync, existsSync, readFileSync, rmSync
 import path from "node:path";
 import { tmpdir } from "node:os";
 
-import { writeImportedCollection, claudeSkillDir, dataSkillDir } from "../../server/workspace/collectionsRegistry/importWriter.js";
-import type { RegistryCollectionEntry } from "../../server/workspace/collectionsRegistry/registryIndex.js";
+import { writeImportedCollection, claudeSkillDir, dataSkillDir } from "../../src/collection/registry/server/importWriter.ts";
+import type { RegistryEntry } from "../../src/collection/registry/registryIndex.ts";
 
 // `registryName` is the short label the multi-registry refactor passes through
 // (`"official"` for receptron/mulmoclaude-collections, otherwise the user's
@@ -14,7 +14,7 @@ import type { RegistryCollectionEntry } from "../../server/workspace/collections
 // passes in, since the entry fixture below also carries `registryName: "official"`.
 const REGISTRY = "official";
 
-const entry: RegistryCollectionEntry = {
+const entry: RegistryEntry = {
   id: "isamu/movies",
   author: "isamu",
   slug: "movies",

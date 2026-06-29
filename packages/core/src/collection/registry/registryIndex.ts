@@ -6,9 +6,9 @@
 // The index is host-fetched convenience data for the Discover catalog, not a
 // trust boundary: a collection's actual files are re-validated on import.
 
-import { isRecord } from "../../utils/types.js";
+import { isRecord } from "./guards.js";
 
-export interface RegistryCollectionEntry {
+export interface RegistryEntry {
   /** `<author>/<slug>` — identity inside its source registry. NOT globally
    *  unique when multiple registries are configured — pair with `registryName`
    *  for a global key. */
@@ -43,7 +43,7 @@ export interface RegistryIndex {
   schemaVersion: number;
   generatedAt: string;
   registry: string;
-  collections: RegistryCollectionEntry[];
+  collections: RegistryEntry[];
 }
 
 export type ParseResult = { ok: true; index: RegistryIndex } | { ok: false; error: string };
@@ -97,7 +97,7 @@ function validatedCounts(value: Record<string, unknown>, index: number): { field
   return { fieldCount, seedCount };
 }
 
-function parseEntry(value: unknown, index: number, registryName: string): RegistryCollectionEntry | string {
+function parseEntry(value: unknown, index: number, registryName: string): RegistryEntry | string {
   if (!isRecord(value)) return `collections[${index}] is not an object`;
   const entryId = pickString(value, "id");
   const author = pickString(value, "author");
@@ -151,6 +151,6 @@ export function parseRegistryIndex(value: unknown, registryName: string): ParseR
   const parsed = value.collections.map((entry, idx) => parseEntry(entry, idx, registryName));
   const firstError = parsed.find((entry): entry is string => typeof entry === "string");
   if (firstError !== undefined) return { ok: false, error: firstError };
-  const collections = parsed.filter((entry): entry is RegistryCollectionEntry => typeof entry !== "string");
+  const collections = parsed.filter((entry): entry is RegistryEntry => typeof entry !== "string");
   return { ok: true, index: { schemaVersion: SUPPORTED_SCHEMA_VERSION, registry, generatedAt, collections } };
 }

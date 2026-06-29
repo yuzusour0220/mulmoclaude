@@ -6,10 +6,9 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
-import { loadCollection } from "@mulmoclaude/core/collection/server";
-
-import { isRecord } from "../../utils/types.js";
-import { parseSkillFrontmatter } from "../skills/parser.js";
+import { loadCollection } from "../../server/index.js";
+import { isRecord } from "../guards.js";
+import { parseSkillDescription } from "./skillDescription.js";
 import { writeCollectionExport, type ExportMeta, type ExportResult } from "./exportCollection.js";
 
 const STATUS_NOT_FOUND = 404;
@@ -31,14 +30,13 @@ export async function performExport(
   const collection = await loadCollection(slug);
   if (!collection) return { ok: false, status: STATUS_NOT_FOUND, error: `collection not found: ${slug}` };
   const skillMd = await readFile(path.join(collection.skillDir, "SKILL.md"), "utf-8").catch(() => "");
-  const frontmatter = parseSkillFrontmatter(skillMd);
   const existingMeta = await readJsonObject(path.join(collection.skillDir, "meta.json"));
   const meta: ExportMeta = {
     author: opts.author,
     slug,
     version: typeof existingMeta?.version === "string" ? existingMeta.version : "1.0.0",
     title: collection.schema.title,
-    description: frontmatter?.description ?? "",
+    description: parseSkillDescription(skillMd),
     tags: [],
     license: opts.license,
   };

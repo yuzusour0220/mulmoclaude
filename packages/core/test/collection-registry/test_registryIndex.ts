@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
-import { parseRegistryIndex as parseRegistryIndexBase } from "../../server/workspace/collectionsRegistry/registryIndex.js";
+import { parseRegistryIndex as parseRegistryIndexBase } from "../../src/collection/registry/registryIndex.ts";
 
 // Every test in this file uses the same registry name. Wrap the parser so each
 // call site stays a single-arg expression and the multi-registry refactor stays

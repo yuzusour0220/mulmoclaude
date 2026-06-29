@@ -5,10 +5,10 @@
 // dataPath when it's empty, and records provenance in `.origin.json` for
 // update detection (R5/R8). After the data-skills swap, the bundle's
 // allowlisted files (SKILL.md, schema.json, templates/<safe>) are mirrored
-// 1:1 into `.claude/skills/<localSlug>/` via the same `@mulmoclaude/core/skill-bridge`
-// rules an agent-authored skill would go through — so an authored and an
-// imported collection live in EXACTLY the same place on disk, and the user
-// can edit either one identically.
+// 1:1 into `.claude/skills/<localSlug>/` via the same skill-bridge rules an
+// agent-authored skill would go through — so an authored and an imported
+// collection live in EXACTLY the same place on disk, and the user can edit
+// either one identically.
 //
 // `.origin.json` lives ONLY in `data/skills/<slug>/.origin.json` and is NOT
 // mirrored — the skill-bridge allowlist deliberately excludes host
@@ -23,17 +23,17 @@ import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/p
 import type { Dirent } from "node:fs";
 import path from "node:path";
 
-import { acceptParsedSchema, CollectionSchemaZ, isSafeActionTemplatePath, safeRecordId } from "@mulmoclaude/core/collection/server";
-import type { CollectionSchema } from "@mulmoclaude/core/collection";
-import { claudeSkillDir, dataSkillDir, mirrorSkillWrite } from "@mulmoclaude/core/skill-bridge";
+import { acceptParsedSchema, CollectionSchemaZ, isSafeActionTemplatePath, safeRecordId } from "../../server/index.js";
+import type { CollectionSchema } from "../../index.js";
+import { claudeSkillDir, dataSkillDir, mirrorSkillWrite } from "../../../skill-bridge/index.js";
 
-import { log } from "../../system/logger/index.js";
-import { errorMessage } from "../../utils/errors.js";
-import { writeFileAtomic } from "../../utils/files/atomic.js";
-import { isRecord } from "../../utils/types.js";
+import { log } from "../../server/host.js";
+import { errorMessage } from "../../server/util.js";
+import { writeFileAtomic } from "../../server/atomic.js";
+import { isRecord } from "../guards.js";
 import { fetchAllRegistries } from "./client.js";
 import { fetchBundle, fetchManifest, normalizedDataPath } from "./importCollection.js";
-import type { RegistryCollectionEntry } from "./registryIndex.js";
+import type { RegistryEntry } from "../registryIndex.js";
 
 const ORIGIN_FILE = ".origin.json";
 const SEED_PREFIX = "seed/items/";
@@ -111,7 +111,7 @@ function isRenameOf(name: string, slug: string): boolean {
 // re-import always updates the existing install rather than duplicating it
 // (even if an earlier slug freed up). An authored skill without `.origin.json`
 // is invisible to this scan and so never collides with an update.
-async function findMatchingInstall(skillsDir: string, registry: string, entry: RegistryCollectionEntry): Promise<string | null> {
+async function findMatchingInstall(skillsDir: string, registry: string, entry: RegistryEntry): Promise<string | null> {
   const names = await readdir(skillsDir).catch(() => [] as string[]);
   for (const name of names) {
     if (!isRenameOf(name, entry.slug)) continue;
@@ -135,7 +135,7 @@ async function findMatchingInstall(skillsDir: string, registry: string, entry: R
 // import we never migrated), picking that slug would silently overwrite
 // their SKILL.md/schema.json and prune the rest of their files (CodeRabbit
 // review on #1839).
-async function resolveTarget(workspaceRoot: string, registry: string, entry: RegistryCollectionEntry): Promise<TargetResolution> {
+async function resolveTarget(workspaceRoot: string, registry: string, entry: RegistryEntry): Promise<TargetResolution> {
   const skillsDir = path.dirname(dataSkillDir(workspaceRoot, entry.slug));
   const existing = await findMatchingInstall(skillsDir, registry, entry);
   if (existing) return { targetDir: dataSkillDir(workspaceRoot, existing), localSlug: existing, updated: true };
@@ -268,7 +268,7 @@ async function mirrorToClaudeSkills(workspaceRoot: string, localSlug: string, bu
 
 export async function writeImportedCollection(params: {
   registry: string;
-  entry: RegistryCollectionEntry;
+  entry: RegistryEntry;
   bundle: Map<string, string>;
   workspaceRoot: string;
   nowIso: string;
@@ -341,7 +341,7 @@ export async function writeImportedCollection(params: {
 
 export async function performImport(author: string, slug: string, workspaceRoot: string, registry: string | null = null): Promise<ImportResult> {
   const merged = await fetchAllRegistries();
-  let entry: RegistryCollectionEntry | undefined;
+  let entry: RegistryEntry | undefined;
   for (const reg of merged) {
     if (registry !== null && reg.name !== registry) continue;
     entry = reg.entries.find((candidate) => candidate.author === author && candidate.slug === slug);

@@ -8,12 +8,11 @@
 // rawBase is no longer a single module-level value — it comes from the entry's
 // source registry descriptor, so user-added registries can live anywhere.
 
-import { fetchWithTimeout } from "../../utils/fetch.js";
-import { errorMessage } from "../../utils/errors.js";
-import { isRecord } from "../../utils/types.js";
-import { ONE_SECOND_MS } from "../../utils/time.js";
+import { fetchWithTimeout } from "./fetch.js";
+import { errorMessage, ONE_SECOND_MS } from "../../server/util.js";
+import { isRecord } from "../guards.js";
 import { fetchAllRegistries, findRegistry } from "./client.js";
-import type { RegistryCollectionEntry } from "./registryIndex.js";
+import type { RegistryEntry } from "../registryIndex.js";
 
 const FETCH_TIMEOUT_MS = 10 * ONE_SECOND_MS;
 const STATUS_BAD_GATEWAY = 502;
@@ -83,24 +82,24 @@ async function fetchJsonObject(
 /** Resolve an entry's rawBase from its `registryName`. A missing match (the
  *  user removed the registry from config while a cached index still references
  *  it) returns null — the caller surfaces it as a 404 rather than crashing. */
-export function rawBaseForEntry(entry: Pick<RegistryCollectionEntry, "registryName">): string | null {
+export function rawBaseForEntry(entry: Pick<RegistryEntry, "registryName">): string | null {
   const registry = findRegistry(entry.registryName);
   return registry?.rawBaseUrl ?? null;
 }
 
 export type PreviewResult =
-  { ok: true; entry: RegistryCollectionEntry; schema: Record<string, unknown>; meta: Record<string, unknown> } | { ok: false; status: number; error: string };
+  { ok: true; entry: RegistryEntry; schema: Record<string, unknown>; meta: Record<string, unknown> } | { ok: false; status: number; error: string };
 
 /** Resolve an entry by author+slug across every cached registry's entries.
  *  When `registry` is passed we constrain to that registry — needed because
  *  multiple registries can publish the same author/slug, and the UI should
  *  follow the card it just clicked. */
 function findEntryInMergedView(
-  merged: { name: string; entries: RegistryCollectionEntry[] }[],
+  merged: { name: string; entries: RegistryEntry[] }[],
   author: string,
   slug: string,
   registry: string | null,
-): RegistryCollectionEntry | null {
+): RegistryEntry | null {
   for (const reg of merged) {
     if (registry !== null && reg.name !== registry) continue;
     const match = reg.entries.find((candidate) => candidate.author === author && candidate.slug === slug);

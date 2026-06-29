@@ -21,6 +21,8 @@ export default defineConfig({
         "collection/index": "src/collection/index.ts",
         "collection/server/index": "src/collection/server/index.ts",
         "collection/paths": "src/collection/server/templatePath.ts",
+        "collection/registry/index": "src/collection/registry/index.ts",
+        "collection/registry/server/index": "src/collection/registry/server/index.ts",
         "feeds/index": "src/feeds/index.ts",
         "feeds/server/index": "src/feeds/server/index.ts",
         "feeds/paths": "src/feeds/paths.ts",

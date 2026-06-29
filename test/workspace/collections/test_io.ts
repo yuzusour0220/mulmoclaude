@@ -41,6 +41,7 @@ const TEST_HOST_PATHS = {
   feedsRoot: (root: string) => path.join(root, "feeds"),
   skillsStagingDir: (root: string) => path.join(root, "data", "skills"),
   archiveDir: ".archive",
+  collectionsRegistriesConfig: (root: string) => path.join(root, "config", "collections-registries.json"),
 };
 configureCollectionHost({
   workspaceRoot: "/tmp/__test_io_placeholder__",

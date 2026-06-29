@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
-import { isSafeBundlePath, parseManifest, normalizedDataPath, withNormalizedDataPath } from "../../server/workspace/collectionsRegistry/importCollection.js";
+import { isSafeBundlePath, parseManifest, normalizedDataPath, withNormalizedDataPath } from "../../src/collection/registry/server/importCollection.ts";
 
 describe("isSafeBundlePath", () => {
   it("accepts normal relative bundle paths", () => {

@@ -1,5 +1,5 @@
 // Unit tests for the pure `parseRegistriesConfig` helper exported by
-// `server/workspace/collectionsRegistry/registriesConfig.ts`. The full I/O
+// `collection/registry/server/registriesConfig.ts`. The full I/O
 // wrapper (`loadRegistriesConfig`) is exercised in integration; here we pin the
 // classification rules so a regression in URL validation / name uniqueness /
 // reserved-name handling can't slip past without a failing test.
@@ -7,7 +7,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
-import { parseRegistriesConfig, OFFICIAL_REGISTRY_NAME } from "../../server/workspace/collectionsRegistry/registriesConfig.js";
+import { parseRegistriesConfig, OFFICIAL_REGISTRY_NAME } from "../../src/collection/registry/server/registriesConfig.ts";
 
 const validEntry = (overrides: Record<string, unknown> = {}): Record<string, unknown> => ({
   name: "myorg",

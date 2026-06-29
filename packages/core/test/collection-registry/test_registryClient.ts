@@ -8,8 +8,8 @@ import {
   STALE_RETRY_BACKOFF_MS,
   type FetchIndexResult,
   type RegistryDescriptor,
-} from "../../server/workspace/collectionsRegistry/client.js";
-import type { RegistryIndex } from "../../server/workspace/collectionsRegistry/registryIndex.js";
+} from "../../src/collection/registry/server/client.ts";
+import type { RegistryIndex } from "../../src/collection/registry/registryIndex.ts";
 
 const okIndex: RegistryIndex = { schemaVersion: 1, generatedAt: "t", registry: "r", collections: [] };
 const okResult: FetchIndexResult = { ok: true, index: okIndex, stale: false };

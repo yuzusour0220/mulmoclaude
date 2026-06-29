@@ -10,7 +10,7 @@
 import { cp, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { log } from "../../system/logger/index.js";
+import { log } from "../../server/host.js";
 
 export const EXPORT_BASE = "data/registry-export";
 const BUNDLE_FILES = ["SKILL.md", "schema.json"] as const;

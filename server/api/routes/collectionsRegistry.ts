@@ -4,58 +4,32 @@
 // user-added entries from `config/collections-registries.json`) and returning
 // merged entries. The host never exposes upstream URLs to the client; it proxies
 // + caches each one.
+//
+// The registry import/export engine lives in @mulmoclaude/core/collection/registry,
+// wired to this workspace through the shared `configureCollectionHost` binding (see
+// server/workspace/collections/configure.ts). This route is thin host glue.
 
 import { Router, Request, Response } from "express";
 
+import type { RegistryEntry, RegistryListResponse, RegistryImportResponse } from "@mulmoclaude/core/collection/registry";
+import { listRegistry, previewCollection, importRegistry, performExport } from "@mulmoclaude/core/collection/registry/server";
+
 import { API_ROUTES } from "../../../src/config/apiRoutes.js";
 import { badRequest } from "../../utils/httpError.js";
-import { fetchAllRegistries } from "../../workspace/collectionsRegistry/client.js";
-import { previewCollection } from "../../workspace/collectionsRegistry/collectionFiles.js";
-import { performImport } from "../../workspace/collectionsRegistry/importWriter.js";
-import { performExport } from "../../workspace/collectionsRegistry/performExport.js";
-import type { RegistryCollectionEntry } from "../../workspace/collectionsRegistry/registryIndex.js";
 import { workspacePath } from "../../workspace/workspace.js";
 
 const router = Router();
-
-interface RegistrySummary {
-  name: string;
-  status: "ok" | "stale" | "failed";
-  generatedAt: string | null;
-  error: string | null;
-  entryCount: number;
-}
-
-interface RegistryListResponse {
-  /** Per-registry status for the UI to surface origin badges + per-registry
-   *  errors without flooding the catalog with empty cards. */
-  registries: RegistrySummary[];
-  /** True iff at least one registry returned a stale-from-cache result; the UI
-   *  shows a single banner instead of per-card stale indicators. */
-  stale: boolean;
-  collections: RegistryCollectionEntry[];
-}
 
 interface ErrorResponse {
   error: string;
 }
 
 router.get(API_ROUTES.collectionsRegistry.list, async (_req: Request, res: Response<RegistryListResponse | ErrorResponse>) => {
-  const merged = await fetchAllRegistries();
-  const registries: RegistrySummary[] = merged.map((reg) => ({
-    name: reg.name,
-    status: reg.status,
-    generatedAt: reg.generatedAt,
-    error: reg.error,
-    entryCount: reg.entries.length,
-  }));
-  const collections = merged.flatMap((reg) => reg.entries);
-  const stale = merged.some((reg) => reg.status === "stale");
-  res.json({ registries, stale, collections });
+  res.json(await listRegistry());
 });
 
 interface RegistryPreviewResponse {
-  entry: RegistryCollectionEntry;
+  entry: RegistryEntry;
   schema: Record<string, unknown>;
   meta: Record<string, unknown>;
 }
@@ -82,14 +56,7 @@ interface ImportBody {
   registry?: unknown;
 }
 
-interface ImportResponse {
-  localSlug: string;
-  updated: boolean;
-  seedWritten: number;
-  seedSkipped: boolean;
-}
-
-router.post(API_ROUTES.collectionsRegistry.import, async (req: Request<object, unknown, ImportBody>, res: Response<ImportResponse | ErrorResponse>) => {
+router.post(API_ROUTES.collectionsRegistry.import, async (req: Request<object, unknown, ImportBody>, res: Response<RegistryImportResponse | ErrorResponse>) => {
   const author = typeof req.body.author === "string" ? req.body.author : "";
   const slug = typeof req.body.slug === "string" ? req.body.slug : "";
   const registry = typeof req.body.registry === "string" && req.body.registry ? req.body.registry : null;
@@ -97,12 +64,12 @@ router.post(API_ROUTES.collectionsRegistry.import, async (req: Request<object, u
     badRequest(res, "author and slug are required");
     return;
   }
-  const result = await performImport(author, slug, workspacePath, registry);
+  const result = await importRegistry(author, slug, workspacePath, registry);
   if (!result.ok) {
     res.status(result.status).json({ error: result.error });
     return;
   }
-  res.json({ localSlug: result.localSlug, updated: result.updated, seedWritten: result.seedWritten, seedSkipped: result.seedSkipped });
+  res.json(result.response);
 });
 
 interface ExportBody {

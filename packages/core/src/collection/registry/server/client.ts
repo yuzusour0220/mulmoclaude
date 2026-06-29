@@ -6,11 +6,10 @@
 // upstreams. On a transient upstream failure we serve that registry's last good
 // index rather than failing the whole Discover view.
 
-import { fetchWithTimeout } from "../../utils/fetch.js";
-import { errorMessage } from "../../utils/errors.js";
-import { log } from "../../system/logger/index.js";
-import { ONE_SECOND_MS } from "../../utils/time.js";
-import { parseRegistryIndex, type RegistryCollectionEntry, type RegistryIndex } from "./registryIndex.js";
+import { fetchWithTimeout } from "./fetch.js";
+import { errorMessage, ONE_SECOND_MS } from "../../server/util.js";
+import { log } from "../../server/host.js";
+import { parseRegistryIndex, type RegistryEntry, type RegistryIndex } from "../registryIndex.js";
 import { loadRegistriesConfig, OFFICIAL_REGISTRY_NAME, type RegistryConfigEntry } from "./registriesConfig.js";
 
 const DEFAULT_OFFICIAL_INDEX_URL = "https://receptron.github.io/mulmoclaude-collections/index.json";
@@ -134,7 +133,7 @@ export interface MergedRegistryResult {
   status: "ok" | "stale" | "failed";
   generatedAt: string | null;
   error: string | null;
-  entries: RegistryCollectionEntry[];
+  entries: RegistryEntry[];
 }
 
 /** Fetch every configured registry in parallel and return per-registry

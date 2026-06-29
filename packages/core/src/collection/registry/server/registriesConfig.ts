@@ -16,23 +16,13 @@
 //
 // Pure read + parse — no network. Caller invalidates by re-reading the file.
 
-import { readWorkspaceTextSync } from "../../utils/files/workspace-io.js";
-import { WORKSPACE_FILES } from "../paths.js";
-import { isRecord } from "../../utils/types.js";
-import { log } from "../../system/logger/index.js";
+import { readFileSync } from "node:fs";
 
-export interface RegistryConfigEntry {
-  /** Short label shown on Discover cards + used as the routing key. */
-  name: string;
-  /** Absolute HTTPS URL of the registry's index.json. */
-  indexUrl: string;
-  /** Absolute HTTPS base for per-collection files (no trailing slash). */
-  rawBaseUrl: string;
-}
+import { isRecord } from "../guards.js";
+import { OFFICIAL_REGISTRY_NAME, type RegistryConfigEntry } from "../types.js";
+import { collectionsRegistriesConfigPath, log } from "../../server/host.js";
 
-/** Reserved name for the official registry. The client always synthesizes one
- *  entry under this name; user config that re-uses it is rejected. */
-export const OFFICIAL_REGISTRY_NAME = "official";
+export { OFFICIAL_REGISTRY_NAME, type RegistryConfigEntry };
 
 const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$/;
 
@@ -104,11 +94,22 @@ export function parseRegistriesConfig(raw: unknown): RegistryConfigEntry[] {
   return out;
 }
 
-/** Read `config/collections-registries.json` from the workspace. Missing file
- *  ⇒ empty list (the most common case — most users only want the official
- *  registry). Malformed JSON or rejected entries log but never throw. */
+// Missing file ⇒ null (the most common case — most users only want the official
+// registry). Other read errors propagate, matching the host's prior behavior.
+function readConfigTextOrNull(filePath: string): string | null {
+  try {
+    return readFileSync(filePath, "utf-8");
+  } catch (err) {
+    if (isRecord(err) && err.code === "ENOENT") return null;
+    throw err;
+  }
+}
+
+/** Read `config/collections-registries.json` from the configured workspace.
+ *  Missing file ⇒ empty list. Malformed JSON or rejected entries log but never
+ *  throw. */
 export function loadRegistriesConfig(): RegistryConfigEntry[] {
-  const text = readWorkspaceTextSync(WORKSPACE_FILES.collectionsRegistries);
+  const text = readConfigTextOrNull(collectionsRegistriesConfigPath());
   if (text === null) return [];
   let parsed: unknown;
   try {

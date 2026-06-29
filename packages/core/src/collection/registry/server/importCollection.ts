@@ -7,9 +7,9 @@
 // the host must never write outside the target skill dir even if the manifest is
 // malformed/poisoned.
 
-import { isRecord } from "../../utils/types.js";
+import { isRecord } from "../guards.js";
 import { fetchCollectionFile, parseJsonObject, rawBaseForEntry } from "./collectionFiles.js";
-import type { RegistryCollectionEntry } from "./registryIndex.js";
+import type { RegistryEntry } from "../registryIndex.js";
 
 const MANIFEST_FILE = "manifest.json";
 const STATUS_BAD_GATEWAY = 502;
@@ -43,7 +43,7 @@ export function withNormalizedDataPath(schema: Record<string, unknown>, localSlu
 
 export type ManifestFetch = { ok: true; files: string[] } | { ok: false; status: number; error: string };
 
-export async function fetchManifest(entry: RegistryCollectionEntry): Promise<ManifestFetch> {
+export async function fetchManifest(entry: RegistryEntry): Promise<ManifestFetch> {
   const rawBase = rawBaseForEntry(entry);
   if (!rawBase) return { ok: false, status: STATUS_BAD_GATEWAY, error: `registry "${entry.registryName}" is no longer configured` };
   const file = await fetchCollectionFile(rawBase, entry.path, MANIFEST_FILE);
@@ -58,7 +58,7 @@ export async function fetchManifest(entry: RegistryCollectionEntry): Promise<Man
 export type BundleFetch = { ok: true; files: Map<string, string> } | { ok: false; status: number; error: string };
 
 /** Fetch every manifest file. Paths are already safety-checked by parseManifest. */
-export async function fetchBundle(entry: RegistryCollectionEntry, fileList: readonly string[]): Promise<BundleFetch> {
+export async function fetchBundle(entry: RegistryEntry, fileList: readonly string[]): Promise<BundleFetch> {
   const rawBase = rawBaseForEntry(entry);
   if (!rawBase) return { ok: false, status: STATUS_BAD_GATEWAY, error: `registry "${entry.registryName}" is no longer configured` };
   const files = new Map<string, string>();

@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, existsSync, readFileSync, rmSync
 import path from "node:path";
 import { tmpdir } from "node:os";
 
-import { writeCollectionExport, type ExportMeta } from "../../server/workspace/collectionsRegistry/exportCollection.js";
+import { writeCollectionExport, type ExportMeta } from "../../src/collection/registry/server/exportCollection.ts";
 
 const meta: ExportMeta = {
   author: "isamu",
