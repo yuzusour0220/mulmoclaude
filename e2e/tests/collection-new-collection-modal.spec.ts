@@ -8,6 +8,7 @@
 
 import { test, expect, type Page } from "@playwright/test";
 import { mockAllApis } from "../fixtures/api";
+import { ONE_SECOND_MS } from "../../server/utils/time.ts";
 
 const COLLECTIONS_LIST = {
   collections: [{ slug: "reading-list", title: "Reading List", icon: "bookmark", source: "user" }],
@@ -54,7 +55,7 @@ test.describe("new collection modal", () => {
     await expect(page.getByTestId("new-collection-starter-portfolio")).toBeVisible();
 
     // Merely opening the chooser must not launch anything.
-    await page.waitForTimeout(200);
+    await page.waitForTimeout(0.2 * ONE_SECOND_MS);
     expect(agentRuns).toHaveLength(0);
   });
 
@@ -65,7 +66,7 @@ test.describe("new collection modal", () => {
     await page.getByTestId("collections-add-collection").click();
     await page.getByTestId("new-collection-guided").click();
 
-    await expect.poll(() => agentRuns.length, { timeout: 2000 }).toBe(1);
+    await expect.poll(() => agentRuns.length, { timeout: 2 * ONE_SECOND_MS }).toBe(1);
     expect(agentRuns[0]).toContain("collection-skills.md");
     expect(agentRuns[0]).toContain("presentForm");
   });
@@ -81,7 +82,7 @@ test.describe("new collection modal", () => {
     // and nothing is sent until the user hits Send.
     await expect(page).not.toHaveURL(/\/collections$/);
     await expect(page.getByTestId("user-input")).toHaveValue(/todo-collection\.md/);
-    await page.waitForTimeout(250);
+    await page.waitForTimeout(0.25 * ONE_SECOND_MS);
     expect(agentRuns).toHaveLength(0);
   });
 });

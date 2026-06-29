@@ -154,11 +154,16 @@ shrink because that content now lives in the modal.
 > the shared client to function there, but is tracked separately and is **not part of
 > this repo's PR**. Documented here so the contract is unambiguous.
 
-**Confirmed feasible** (inspection of `/Users/satoshi/git/ai/mulmoterminal`):
+**Confirmed feasible** (inspection of the MulmoTerminal checkout at `../mulmoterminal`):
 
-- MulmoTerminal already depends on `@mulmoclaude/core` (`^0.2.14`) and imports server
-  subpaths from it (e.g. `@mulmoclaude/core/feeds/server`). Consuming the new
-  `@mulmoclaude/core/translation/client` subpath is a non-event.
+- MulmoTerminal already depends on `@mulmoclaude/core` and imports server subpaths
+  from it (e.g. `@mulmoclaude/core/feeds/server`). Consuming the new
+  `@mulmoclaude/core/translation/client` subpath requires bumping its `@mulmoclaude/core`
+  to `^0.2.15` (the version that first ships the subpath) **in lockstep with** the
+  `@mulmoclaude/collection-plugin` bump — the plugin imports the subpath at module
+  load, so an older core there throws on resolution before the optional `translate`
+  fallback can run. The collection-plugin's peer range now pins `@mulmoclaude/core`
+  to `^0.2.15` to make that requirement explicit.
 - Same stack: Express server, Vue 3 frontend, same `data/<...>.json` workspace
   convention, same default workspace root (`CLAUDE_CWD`, default `~/mulmoclaude`).
 - It already spawns the `claude` CLI and also has a Gemini SDK path — so it can

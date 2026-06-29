@@ -6,7 +6,7 @@
 // request is in flight, on `en`, or when the host hasn't wired `translate`.
 
 import { computed, ref, watchEffect, type ComputedRef, type Ref } from "vue";
-import { createTranslationCache } from "@mulmoclaude/core/translation/client";
+import { createTranslationCache, type TranslateRequest } from "@mulmoclaude/core/translation/client";
 import { collectionUi } from "./uiContext";
 import { COLLECTION_STARTERS, type CollectionStarter } from "./starters";
 
@@ -21,44 +21,53 @@ const FIELDS_PER_STARTER = 3;
 // the host configures it), and `null` when no transport is wired → English.
 const cache = createTranslationCache((req) => collectionUi().translate?.(req) ?? Promise.resolve(null));
 
+/** Pure projection: map a flat [title, description, prompt, …] batch back onto the
+ *  starters, field by field. `null` batch (en / in flight / failed) → English source. */
+export function applyStarterTranslations(starters: readonly CollectionStarter[], batch: readonly string[] | null): CollectionStarter[] {
+  if (batch === null) return [...starters];
+  return starters.map((starter, index) => {
+    const base = index * FIELDS_PER_STARTER;
+    return {
+      ...starter,
+      title: batch[base] ?? starter.title,
+      description: batch[base + 1] ?? starter.description,
+      prompt: batch[base + 2] ?? starter.prompt,
+    };
+  });
+}
+
+/** Resolve the starter batch through the cache and hand it to `apply`, but only
+ *  while `isCurrent()` holds — so a stale response can't clobber a newer locale. */
+function loadBatch(req: TranslateRequest, isCurrent: () => boolean, apply: (value: readonly string[]) => void): void {
+  const hit = cache.peek(req);
+  if (hit !== null) {
+    apply(hit);
+    return;
+  }
+  cache
+    .fetch(req)
+    .then((result) => {
+      if (result !== null && isCurrent()) apply(result);
+    })
+    .catch(() => {
+      /* transport rejected — keep the English fallback */
+    });
+}
+
 /** The starters with `title` / `description` / `prompt` translated into `locale`,
  *  reactively swapping in once the batch resolves. English source meanwhile. */
 export function useTranslatedStarters(locale: Ref<string> | ComputedRef<string>): ComputedRef<CollectionStarter[]> {
-  // The resolved batch for the current locale; null means "fall back to English".
   const translated = ref<readonly string[] | null>(null);
-
   watchEffect(() => {
     const lang = locale.value;
     translated.value = null;
     if (lang === "en") return;
     const req = { namespace: NAMESPACE, targetLanguage: lang, sentences: SOURCES };
-    const hit = cache.peek(req);
-    if (hit !== null) {
-      translated.value = hit;
-      return;
-    }
-    cache
-      .fetch(req)
-      .then((result) => {
-        // Ignore a stale response if the locale changed while it was in flight.
-        if (result !== null && locale.value === lang) translated.value = result;
-      })
-      .catch(() => {
-        /* transport rejected — keep the English fallback */
-      });
+    loadBatch(
+      req,
+      () => locale.value === lang,
+      (value) => (translated.value = value),
+    );
   });
-
-  return computed<CollectionStarter[]>(() => {
-    const batch = translated.value;
-    if (batch === null) return [...COLLECTION_STARTERS];
-    return COLLECTION_STARTERS.map((starter, index) => {
-      const base = index * FIELDS_PER_STARTER;
-      return {
-        ...starter,
-        title: batch[base] ?? starter.title,
-        description: batch[base + 1] ?? starter.description,
-        prompt: batch[base + 2] ?? starter.prompt,
-      };
-    });
-  });
+  return computed<CollectionStarter[]>(() => applyStarterTranslations(COLLECTION_STARTERS, translated.value));
 }
