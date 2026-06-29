@@ -28,6 +28,17 @@ const frMessages: CollectionMessages = {
     addCollectionLabel: "Collection",
     addCollectionPrompt:
       "Aide-moi à créer une nouvelle collection. Lis d'abord `config/helps/collection-skills.md` pour les conventions des collections basées sur un schéma. Utilise ensuite l'outil `presentForm` (n'utilise pas AskUserQuestion) pour me demander quel type de données je veux suivre, et crée le schema.json et le SKILL.md à partir de mes réponses.",
+    newCollection: {
+      title: "Nouvelle collection",
+      close: "Fermer",
+      freeformLabel: "Discussion libre",
+      freeformDescription: "Décrivez la collection avec vos propres mots",
+      freeformPrompt:
+        "Je veux créer une nouvelle collection. Lis d'abord `config/helps/collection-skills.md` pour les conventions des collections basées sur un schéma.",
+      guidedLabel: "Configuration guidée",
+      guidedDescription: "Claude demande quoi suivre, puis la crée",
+      templatesHeading: "Exemples de prompts",
+    },
     addFeedTitle: "Ajouter un flux",
     addFeedHint: "Collez l'URL d'un flux ou d'une API ; je la récupère et déduis le titre et les champs pour vous.",
     addFeedPrompt:

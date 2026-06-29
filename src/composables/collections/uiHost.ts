@@ -39,6 +39,7 @@ import { useShortcuts } from "../useShortcuts";
 import PinToggle from "../../components/PinToggle.vue";
 import type { NotifierSeverity } from "../../utils/collections/notifiedItems";
 import type { CollectionsListResponse, FeedsListResponse } from "@mulmoclaude/core/collection";
+import type { TranslateResponse } from "@mulmoclaude/core/translation/client";
 import type { CollectionDetailResponse, ItemMutationResponse } from "../../components/collectionTypes";
 
 const { openConfirm } = useConfirm();
@@ -160,4 +161,9 @@ configureCollectionUi({
   subscribeChanges: (slug, onChange) => usePubSub().subscribe(collectionChannel(slug), () => onChange()),
 
   pinToggle: PinToggle,
+
+  // Runtime translation of UI strings (collection starter cards) — same route
+  // and bearer the host's role-query chips use; `null` on any failure so the
+  // view falls back to English.
+  translate: (req) => apiPost<TranslateResponse>(API_ROUTES.translation.translate, req).then((result) => (result.ok ? result.data : null)),
 });

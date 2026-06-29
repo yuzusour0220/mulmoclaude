@@ -28,6 +28,16 @@ const jaMessages: CollectionMessages = {
     addCollectionLabel: "コレクション",
     addCollectionPrompt:
       "新しいコレクションを作成したいです。まず `config/helps/collection-skills.md` を読んでスキーマ駆動コレクションの規約を確認してください。次に `presentForm` ツールを使って（AskUserQuestion は使わないで）どんなデータを管理したいか質問し、その回答をもとに schema.json と SKILL.md を作成してください。",
+    newCollection: {
+      title: "新しいコレクション",
+      close: "閉じる",
+      freeformLabel: "自由入力のチャット",
+      freeformDescription: "作りたいコレクションを自分の言葉で説明",
+      freeformPrompt: "新しいコレクションを作成したいです。まず `config/helps/collection-skills.md` を読んでスキーマ駆動コレクションの規約を確認してください。",
+      guidedLabel: "ガイド付きセットアップ",
+      guidedDescription: "Claude が何を記録するか質問して作成します",
+      templatesHeading: "サンプルプロンプト",
+    },
     addFeedTitle: "フィードを追加",
     addFeedHint: "フィードまたは API の URL を貼り付けてください。取得してタイトルとフィールドを自動で判断します。",
     addFeedPrompt:

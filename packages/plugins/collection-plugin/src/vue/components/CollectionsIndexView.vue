@@ -32,12 +32,14 @@
           type="button"
           class="h-8 px-2.5 flex items-center gap-1 rounded bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs transition-colors shadow-sm"
           data-testid="collections-add-collection"
-          @click="startCreateCollectionChat"
+          @click="showNewCollectionModal = true"
         >
           <span class="material-icons text-sm">add</span>
           <span>{{ t("collectionsView.addCollectionLabel") }}</span>
         </button>
       </div>
+
+      <NewCollectionModal v-if="showNewCollectionModal" @close="showNewCollectionModal = false" />
 
       <DiscoverPanel v-if="tab === 'discover'" @imported="loadCollections" />
       <template v-else>
@@ -128,6 +130,7 @@ import { onMounted, ref } from "vue";
 import { useCollectionI18n } from "../lang";
 import { collectionUi } from "../uiContext";
 import DiscoverPanel from "./DiscoverPanel.vue";
+import NewCollectionModal from "./NewCollectionModal.vue";
 import type { CollectionSummary } from "@mulmoclaude/core/collection";
 
 const { t } = useCollectionI18n();
@@ -136,6 +139,7 @@ const cui = collectionUi();
 const { pinToggle, reconcileShortcuts } = cui;
 
 const tab = ref<"installed" | "discover">("installed");
+const showNewCollectionModal = ref(false);
 const collections = ref<CollectionSummary[]>([]);
 const loading = ref(true);
 const loadError = ref<string | null>(null);
@@ -163,10 +167,6 @@ async function loadCollections(): Promise<void> {
 
 function openCollection(slug: string): void {
   cui.gotoDetail("collection", slug);
-}
-
-function startCreateCollectionChat(): void {
-  cui.startChat(t("collectionsView.addCollectionPrompt"), cui.generalRoleId);
 }
 
 // Defence against prompt injection via collection metadata. CodeRabbit

@@ -28,6 +28,16 @@ const koMessages: CollectionMessages = {
     addCollectionLabel: "컬렉션",
     addCollectionPrompt:
       "새 컬렉션을 만들고 싶어요. 먼저 `config/helps/collection-skills.md`를 읽고 스키마 기반 컬렉션 규칙을 확인하세요. 그런 다음 `presentForm` 도구를 사용해(AskUserQuestion은 사용하지 말고) 어떤 데이터를 관리하고 싶은지 물어보고, 제 답변을 바탕으로 schema.json과 SKILL.md를 작성해 주세요.",
+    newCollection: {
+      title: "새 컬렉션",
+      close: "닫기",
+      freeformLabel: "자유 형식 채팅",
+      freeformDescription: "원하는 컬렉션을 직접 설명하세요",
+      freeformPrompt: "새 컬렉션을 만들고 싶어요. 먼저 `config/helps/collection-skills.md`를 읽고 스키마 기반 컬렉션 규칙을 확인하세요.",
+      guidedLabel: "가이드 설정",
+      guidedDescription: "Claude가 무엇을 기록할지 묻고 만들어 줍니다",
+      templatesHeading: "샘플 프롬프트",
+    },
     addFeedTitle: "피드 추가",
     addFeedHint: "피드 또는 API URL을 붙여넣으세요. 가져와서 제목과 필드를 자동으로 추론합니다.",
     addFeedPrompt:

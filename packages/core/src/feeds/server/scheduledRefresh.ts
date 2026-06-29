@@ -2,7 +2,7 @@
 // Both MulmoClaude (via `initScheduler`, with persistence + catch-up) and a
 // standalone MulmoTerminal/MulmoBooks (via a bare task-manager `registerTask`)
 // register the SAME definition through this factory, so the id/schedule/run
-// can't drift between hosts. See plans/feat-shareable-feed-refresh-registration.md.
+// can't drift between hosts. See plans/done/feat-shareable-feed-refresh-registration.md.
 import { SCHEDULE_TYPES, MISSED_RUN_POLICIES } from "@receptron/task-scheduler";
 import type { SystemTaskDef } from "../../scheduler/adapter.js";
 import { refreshDue } from "./engine.js";

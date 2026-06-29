@@ -26,6 +26,16 @@ const enMessages = {
     addCollectionLabel: "Collection",
     addCollectionPrompt:
       "Help me create a new collection. First read `config/helps/collection-skills.md` for the schema-driven collection conventions. Then use the `presentForm` tool (do not use AskUserQuestion) to ask me what kind of data I want to track, and author the schema.json and SKILL.md from my answers.",
+    newCollection: {
+      title: "New collection",
+      close: "Close",
+      freeformLabel: "Free-form chat",
+      freeformDescription: "Describe the collection in your own words",
+      freeformPrompt: "I want to create a new collection. First read `config/helps/collection-skills.md` to review the schema-driven collection conventions.",
+      guidedLabel: "Guided setup",
+      guidedDescription: "Claude asks what to track, then builds it",
+      templatesHeading: "Sample prompts",
+    },
     addFeedTitle: "Add a feed",
     addFeedHint: "Paste a feed or API URL — I'll fetch it and work out the title and fields for you.",
     addFeedPrompt:

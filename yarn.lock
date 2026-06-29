@@ -727,20 +727,10 @@
     protobufjs "^7.5.4"
     ws "^8.18.0"
 
-"@google/genai@^2.10.0":
+"@google/genai@^2.10.0", "@google/genai@^2.7.0":
   version "2.10.0"
   resolved "https://npm.flatt.tech/@google/genai/-/genai-2.10.0.tgz#a668a0cc98f83e58fa8c80e04b780513d7281715"
   integrity sha512-e4cFxj3tiuMtsgOT4G9c1hXyGJhg7/Buj7VVeBacRY3fRtkRZZ59Q3nuVp2xbq8BGQXLXCDB253qMhklMOeUDg==
-  dependencies:
-    google-auth-library "^10.3.0"
-    p-retry "^4.6.2"
-    protobufjs "^7.5.4"
-    ws "^8.18.0"
-
-"@google/genai@^2.7.0":
-  version "2.7.0"
-  resolved "https://npm.flatt.tech/@google/genai/-/genai-2.7.0.tgz#8259b66b83d3576cb1d604fa44a0a267558c3f84"
-  integrity sha512-tv0DRtcndt2oEhBYy+5mA0TaXH98+L1Gt0AP9unBfH7DP20KhB7+O3QqAN1Lz+laMARGTHS7BFQSNpLbl4gm1g==
   dependencies:
     google-auth-library "^10.3.0"
     p-retry "^4.6.2"
@@ -1321,12 +1311,7 @@
     postcss "^8.5.6"
     postcss-nesting "^13.0.2"
 
-"@matrix-org/matrix-sdk-crypto-wasm@^18.2.0":
-  version "18.3.0"
-  resolved "https://registry.yarnpkg.com/@matrix-org/matrix-sdk-crypto-wasm/-/matrix-sdk-crypto-wasm-18.3.0.tgz#a5206792a78a3ebebd901662c65753e0914d204a"
-  integrity sha512-9a4feyt8QLysARu7PHKaRWT+wcCd+IYH074LXp9QK5WqfN4zUXueRhiSSMNT18Bm+8q3sBR/4zxDxOSDR0M8Kg==
-
-"@matrix-org/matrix-sdk-crypto-wasm@^18.3.1":
+"@matrix-org/matrix-sdk-crypto-wasm@^18.2.0", "@matrix-org/matrix-sdk-crypto-wasm@^18.3.1":
   version "18.3.1"
   resolved "https://npm.flatt.tech/@matrix-org/matrix-sdk-crypto-wasm/-/matrix-sdk-crypto-wasm-18.3.1.tgz#284dbaf8bfaee159773f04bb6b4e6d5f177f193c"
   integrity sha512-VRjWhE1UgHnPpJ3b9B5+8z71ZC/HICFngPPFIN6ktzmUBKI5RusPujzbAQUoB3CgZ0yU58L99AfSQS4YTztSWw==
@@ -6117,26 +6102,7 @@ matrix-events-sdk@0.0.1:
   resolved "https://registry.yarnpkg.com/matrix-events-sdk/-/matrix-events-sdk-0.0.1.tgz#c8c38911e2cb29023b0bbac8d6f32e0de2c957dd"
   integrity sha512-1QEOsXO+bhyCroIe2/A5OwaxHvBm7EsSQ46DEDn8RBIfQwN5HWBpFvyWWR4QY0KHPPnnJdI99wgRiAl7Ad5qaA==
 
-matrix-js-sdk@*:
-  version "41.5.0"
-  resolved "https://npm.flatt.tech/matrix-js-sdk/-/matrix-js-sdk-41.5.0.tgz#8519fc9a4626be7fe3f6ebe1ed13019e0b097314"
-  integrity sha512-CK3h+qQJ4wkVEUgEWc5MdLjccXyiFqncCC53P+auqOhnX2U6tAFsRfnbML1QQiKIsFMzqTrAnF/4a5LUUOIeXg==
-  dependencies:
-    "@babel/runtime" "^7.12.5"
-    "@matrix-org/matrix-sdk-crypto-wasm" "^18.2.0"
-    another-json "^0.2.0"
-    bs58 "^6.0.0"
-    content-type "^1.0.4"
-    jwt-decode "^4.0.0"
-    loglevel "^1.9.2"
-    matrix-events-sdk "0.0.1"
-    matrix-widget-api "^1.16.1"
-    oidc-client-ts "^3.0.1"
-    p-retry "8"
-    sdp-transform "^3.0.0"
-    unhomoglyph "^1.0.6"
-
-matrix-js-sdk@^41.8.0:
+matrix-js-sdk@*, matrix-js-sdk@^41.8.0:
   version "41.8.0"
   resolved "https://npm.flatt.tech/matrix-js-sdk/-/matrix-js-sdk-41.8.0.tgz#fd345521c0574255d13e3caeab6bf7fbb2b39897"
   integrity sha512-ojbSE7s9hbK49a43QYP/RGPnpXQdXzDvAr9HfG5boqyHcVFAwansxzXEYXbooiIaYxFZA2Xfzu6waxxB1yCVPg==

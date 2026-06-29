@@ -8,6 +8,7 @@
 // confirm, …) as components migrate.
 
 import type { Component } from "vue";
+import type { TranslateTransport } from "@mulmoclaude/core/translation/client";
 import type {
   CollectionDetailResponse,
   ItemMutationResponse,
@@ -301,6 +302,13 @@ export interface CollectionUi {
    *  (e.g. MulmoTerminal) points it at an in-shadow node so the injected styles
    *  still apply to the teleported modal. */
   modalTeleportTarget?: () => string | HTMLElement;
+  /** Translate a batch of UI strings into the active locale via the host's
+   *  `/api/translation` route (host: `apiPost`, global bearer attached). The
+   *  contract is host-agnostic (`@mulmoclaude/core/translation/client`); the LLM
+   *  step + transport are the host's own. Optional: a host that hasn't wired the
+   *  endpoint omits it and translated surfaces (e.g. the new-collection starter
+   *  modal) fall back to their English source. */
+  translate?: TranslateTransport;
 }
 
 let current: CollectionUi | null = null;

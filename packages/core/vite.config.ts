@@ -33,6 +33,7 @@ export default defineConfig({
         "scheduler/index": "src/scheduler/index.ts",
         "whisper/index": "src/whisper/index.ts",
         "whisper/client": "src/whisper/client.ts",
+        "translation/client": "src/translation/client.ts",
       },
       formats: ["es", "cjs"],
       fileName: (format, entryName) => `${entryName}.${format === "es" ? "js" : "cjs"}`,

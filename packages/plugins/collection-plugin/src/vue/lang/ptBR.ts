@@ -28,6 +28,17 @@ const ptBRMessages: CollectionMessages = {
     addCollectionLabel: "Coleção",
     addCollectionPrompt:
       "Ajude-me a criar uma nova coleção. Primeiro leia `config/helps/collection-skills.md` para conhecer as convenções de coleções baseadas em esquema. Depois use a ferramenta `presentForm` (não use AskUserQuestion) para perguntar que tipo de dados quero acompanhar, e crie o schema.json e o SKILL.md a partir das minhas respostas.",
+    newCollection: {
+      title: "Nova coleção",
+      close: "Fechar",
+      freeformLabel: "Conversa livre",
+      freeformDescription: "Descreva a coleção com suas próprias palavras",
+      freeformPrompt:
+        "Quero criar uma nova coleção. Primeiro leia `config/helps/collection-skills.md` para conhecer as convenções de coleções baseadas em esquema.",
+      guidedLabel: "Configuração guiada",
+      guidedDescription: "O Claude pergunta o que rastrear e cria para você",
+      templatesHeading: "Prompts de exemplo",
+    },
     addFeedTitle: "Adicionar um feed",
     addFeedHint: "Cole a URL de um feed ou API; vou buscá-la e deduzir o título e os campos para você.",
     addFeedPrompt:
