@@ -37,7 +37,7 @@ const frMessages: CollectionMessages = {
         "Je veux créer une nouvelle collection. Lis d'abord `config/helps/collection-skills.md` pour les conventions des collections basées sur un schéma.",
       guidedLabel: "Configuration guidée",
       guidedDescription: "Claude demande quoi suivre, puis la crée",
-      templatesHeading: "Partir d'un modèle",
+      templatesHeading: "Exemples de prompts",
     },
     addFeedTitle: "Ajouter un flux",
     addFeedHint: "Collez l'URL d'un flux ou d'une API ; je la récupère et déduis le titre et les champs pour vous.",

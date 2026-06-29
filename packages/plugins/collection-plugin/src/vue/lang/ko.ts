@@ -36,7 +36,7 @@ const koMessages: CollectionMessages = {
       freeformPrompt: "새 컬렉션을 만들고 싶어요. 먼저 `config/helps/collection-skills.md`를 읽고 스키마 기반 컬렉션 규칙을 확인하세요.",
       guidedLabel: "가이드 설정",
       guidedDescription: "Claude가 무엇을 기록할지 묻고 만들어 줍니다",
-      templatesHeading: "템플릿으로 시작하기",
+      templatesHeading: "샘플 프롬프트",
     },
     addFeedTitle: "피드 추가",
     addFeedHint: "피드 또는 API URL을 붙여넣으세요. 가져와서 제목과 필드를 자동으로 추론합니다.",

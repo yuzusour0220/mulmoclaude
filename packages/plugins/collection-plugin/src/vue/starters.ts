@@ -60,7 +60,7 @@ export const COLLECTION_STARTERS: readonly CollectionStarter[] = [
   {
     id: "bills",
     icon: "receipt_long",
-    title: "Bills",
+    title: "Bill Payments",
     description: "Recurring payments with due-date reminders",
     prompt:
       "Create a bills collection to track recurring payments — payee, amount, due date, and status. Remind me 10 days before each bill is due, and when I mark one paid, automatically set up next month's bill.",

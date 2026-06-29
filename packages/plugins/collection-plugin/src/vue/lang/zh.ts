@@ -35,7 +35,7 @@ const zhMessages: CollectionMessages = {
       freeformPrompt: "我想创建一个新的集合。请先阅读 `config/helps/collection-skills.md` 了解基于 schema 的集合约定。",
       guidedLabel: "引导式设置",
       guidedDescription: "Claude 询问要记录什么，然后创建",
-      templatesHeading: "从模板开始",
+      templatesHeading: "示例提示词",
     },
     addFeedTitle: "添加订阅源",
     addFeedHint: "粘贴订阅源或 API 的 URL，我会抓取并自动推断标题和字段。",

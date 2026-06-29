@@ -34,7 +34,7 @@ const enMessages = {
       freeformPrompt: "I want to create a new collection. First read `config/helps/collection-skills.md` to review the schema-driven collection conventions.",
       guidedLabel: "Guided setup",
       guidedDescription: "Claude asks what to track, then builds it",
-      templatesHeading: "Start from a template",
+      templatesHeading: "Sample prompts",
     },
     addFeedTitle: "Add a feed",
     addFeedHint: "Paste a feed or API URL — I'll fetch it and work out the title and fields for you.",

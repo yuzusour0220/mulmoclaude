@@ -37,7 +37,7 @@ const esMessages: CollectionMessages = {
         "Quiero crear una nueva colección. Primero lee `config/helps/collection-skills.md` para conocer las convenciones de las colecciones basadas en esquemas.",
       guidedLabel: "Configuración guiada",
       guidedDescription: "Claude pregunta qué registrar y la crea",
-      templatesHeading: "Empezar desde una plantilla",
+      templatesHeading: "Prompts de ejemplo",
     },
     addFeedTitle: "Añadir un feed",
     addFeedHint: "Pega la URL de un feed o una API; la obtendré y deduciré el título y los campos por ti.",

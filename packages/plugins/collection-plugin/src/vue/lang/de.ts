@@ -37,7 +37,7 @@ const deMessages: CollectionMessages = {
         "Ich möchte eine neue Sammlung erstellen. Lies zuerst `config/helps/collection-skills.md` für die Konventionen schemabasierter Sammlungen.",
       guidedLabel: "Geführte Einrichtung",
       guidedDescription: "Claude fragt, was erfasst werden soll, und erstellt sie",
-      templatesHeading: "Mit einer Vorlage beginnen",
+      templatesHeading: "Beispiel-Prompts",
     },
     addFeedTitle: "Feed hinzufügen",
     addFeedHint: "Füge die URL eines Feeds oder einer API ein; ich rufe sie ab und ermittle Titel und Felder für dich.",

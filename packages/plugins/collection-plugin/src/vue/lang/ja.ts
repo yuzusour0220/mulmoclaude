@@ -36,7 +36,7 @@ const jaMessages: CollectionMessages = {
       freeformPrompt: "新しいコレクションを作成したいです。まず `config/helps/collection-skills.md` を読んでスキーマ駆動コレクションの規約を確認してください。",
       guidedLabel: "ガイド付きセットアップ",
       guidedDescription: "Claude が何を記録するか質問して作成します",
-      templatesHeading: "テンプレートから始める",
+      templatesHeading: "サンプルプロンプト",
     },
     addFeedTitle: "フィードを追加",
     addFeedHint: "フィードまたは API の URL を貼り付けてください。取得してタイトルとフィールドを自動で判断します。",

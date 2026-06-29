@@ -23,18 +23,6 @@
         <button
           type="button"
           class="group flex items-start gap-3 rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm transition-all hover:border-indigo-300 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-          data-testid="new-collection-freeform"
-          @click="startFreeform"
-        >
-          <span class="material-icons text-indigo-600">chat</span>
-          <span class="min-w-0">
-            <span class="block font-semibold text-slate-800">{{ t("collectionsView.newCollection.freeformLabel") }}</span>
-            <span class="block text-xs text-slate-500 mt-0.5">{{ t("collectionsView.newCollection.freeformDescription") }}</span>
-          </span>
-        </button>
-        <button
-          type="button"
-          class="group flex items-start gap-3 rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm transition-all hover:border-indigo-300 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
           data-testid="new-collection-guided"
           @click="startGuided"
         >
@@ -42,6 +30,18 @@
           <span class="min-w-0">
             <span class="block font-semibold text-slate-800">{{ t("collectionsView.newCollection.guidedLabel") }}</span>
             <span class="block text-xs text-slate-500 mt-0.5">{{ t("collectionsView.newCollection.guidedDescription") }}</span>
+          </span>
+        </button>
+        <button
+          type="button"
+          class="group flex items-start gap-3 rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm transition-all hover:border-indigo-300 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+          data-testid="new-collection-freeform"
+          @click="startFreeform"
+        >
+          <span class="material-icons text-indigo-600">chat</span>
+          <span class="min-w-0">
+            <span class="block font-semibold text-slate-800">{{ t("collectionsView.newCollection.freeformLabel") }}</span>
+            <span class="block text-xs text-slate-500 mt-0.5">{{ t("collectionsView.newCollection.freeformDescription") }}</span>
           </span>
         </button>
       </div>

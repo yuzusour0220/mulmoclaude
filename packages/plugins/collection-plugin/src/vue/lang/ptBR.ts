@@ -37,7 +37,7 @@ const ptBRMessages: CollectionMessages = {
         "Quero criar uma nova coleção. Primeiro leia `config/helps/collection-skills.md` para conhecer as convenções de coleções baseadas em esquema.",
       guidedLabel: "Configuração guiada",
       guidedDescription: "O Claude pergunta o que rastrear e cria para você",
-      templatesHeading: "Começar a partir de um modelo",
+      templatesHeading: "Prompts de exemplo",
     },
     addFeedTitle: "Adicionar um feed",
     addFeedHint: "Cole a URL de um feed ou API; vou buscá-la e deduzir o título e os campos para você.",
