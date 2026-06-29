@@ -85,4 +85,19 @@ test.describe("new collection modal", () => {
     await page.waitForTimeout(0.25 * ONE_SECOND_MS);
     expect(agentRuns).toHaveLength(0);
   });
+
+  test("Free-form seeds the conventions preamble as a draft (no auto-send)", async ({ page }) => {
+    const agentRuns = await captureAgentRuns(page);
+    await page.goto("/collections");
+
+    await page.getByTestId("collections-add-collection").click();
+    await page.getByTestId("new-collection-freeform").click();
+
+    // Free-form is not a blank chat: it seeds the conventions-reading preamble as
+    // an editable draft, pointing the LLM at collection-skills.md, and auto-sends nothing.
+    await expect(page).not.toHaveURL(/\/collections$/);
+    await expect(page.getByTestId("user-input")).toHaveValue(/collection-skills\.md/);
+    await page.waitForTimeout(0.25 * ONE_SECOND_MS);
+    expect(agentRuns).toHaveLength(0);
+  });
 });

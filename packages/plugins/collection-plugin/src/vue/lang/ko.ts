@@ -33,6 +33,7 @@ const koMessages: CollectionMessages = {
       close: "닫기",
       freeformLabel: "자유 형식 채팅",
       freeformDescription: "원하는 컬렉션을 직접 설명하세요",
+      freeformPrompt: "새 컬렉션을 만들고 싶어요. 먼저 `config/helps/collection-skills.md`를 읽고 스키마 기반 컬렉션 규칙을 확인하세요.",
       guidedLabel: "가이드 설정",
       guidedDescription: "Claude가 무엇을 기록할지 묻고 만들어 줍니다",
       templatesHeading: "템플릿으로 시작하기",

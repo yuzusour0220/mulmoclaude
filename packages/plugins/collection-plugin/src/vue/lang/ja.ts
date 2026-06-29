@@ -33,6 +33,7 @@ const jaMessages: CollectionMessages = {
       close: "閉じる",
       freeformLabel: "自由入力のチャット",
       freeformDescription: "作りたいコレクションを自分の言葉で説明",
+      freeformPrompt: "新しいコレクションを作成したいです。まず `config/helps/collection-skills.md` を読んでスキーマ駆動コレクションの規約を確認してください。",
       guidedLabel: "ガイド付きセットアップ",
       guidedDescription: "Claude が何を記録するか質問して作成します",
       templatesHeading: "テンプレートから始める",

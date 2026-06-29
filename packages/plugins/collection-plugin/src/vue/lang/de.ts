@@ -33,6 +33,8 @@ const deMessages: CollectionMessages = {
       close: "Schließen",
       freeformLabel: "Freier Chat",
       freeformDescription: "Beschreibe die Sammlung in eigenen Worten",
+      freeformPrompt:
+        "Ich möchte eine neue Sammlung erstellen. Lies zuerst `config/helps/collection-skills.md` für die Konventionen schemabasierter Sammlungen.",
       guidedLabel: "Geführte Einrichtung",
       guidedDescription: "Claude fragt, was erfasst werden soll, und erstellt sie",
       templatesHeading: "Mit einer Vorlage beginnen",

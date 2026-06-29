@@ -33,6 +33,8 @@ const ptBRMessages: CollectionMessages = {
       close: "Fechar",
       freeformLabel: "Conversa livre",
       freeformDescription: "Descreva a coleção com suas próprias palavras",
+      freeformPrompt:
+        "Quero criar uma nova coleção. Primeiro leia `config/helps/collection-skills.md` para conhecer as convenções de coleções baseadas em esquema.",
       guidedLabel: "Configuração guiada",
       guidedDescription: "O Claude pergunta o que rastrear e cria para você",
       templatesHeading: "Começar a partir de um modelo",

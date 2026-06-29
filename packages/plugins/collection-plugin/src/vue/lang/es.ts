@@ -33,6 +33,8 @@ const esMessages: CollectionMessages = {
       close: "Cerrar",
       freeformLabel: "Chat libre",
       freeformDescription: "Describe la colección con tus propias palabras",
+      freeformPrompt:
+        "Quiero crear una nueva colección. Primero lee `config/helps/collection-skills.md` para conocer las convenciones de las colecciones basadas en esquemas.",
       guidedLabel: "Configuración guiada",
       guidedDescription: "Claude pregunta qué registrar y la crea",
       templatesHeading: "Empezar desde una plantilla",

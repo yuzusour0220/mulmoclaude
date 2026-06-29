@@ -33,6 +33,8 @@ const frMessages: CollectionMessages = {
       close: "Fermer",
       freeformLabel: "Discussion libre",
       freeformDescription: "Décrivez la collection avec vos propres mots",
+      freeformPrompt:
+        "Je veux créer une nouvelle collection. Lis d'abord `config/helps/collection-skills.md` pour les conventions des collections basées sur un schéma.",
       guidedLabel: "Configuration guidée",
       guidedDescription: "Claude demande quoi suivre, puis la crée",
       templatesHeading: "Partir d'un modèle",

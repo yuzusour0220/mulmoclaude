@@ -83,9 +83,11 @@ const { t, locale } = useCollectionI18n();
 const cui = collectionUi();
 const starters = useTranslatedStarters(locale);
 
-// Free-form: a blank new chat the user types into themselves.
+// Free-form: seed an editable draft with the conventions-reading preamble (no
+// presentForm instruction), so the LLM is pointed at config/helps/collection-skills.md
+// while the user describes what they want in their own words before sending.
 function startFreeform(): void {
-  cui.startNewChatDraft("", cui.generalRoleId);
+  cui.startNewChatDraft(t("collectionsView.newCollection.freeformPrompt"), cui.generalRoleId);
   emit("close");
 }
 

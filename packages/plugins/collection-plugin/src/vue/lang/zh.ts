@@ -32,6 +32,7 @@ const zhMessages: CollectionMessages = {
       close: "关闭",
       freeformLabel: "自由对话",
       freeformDescription: "用你自己的话描述这个集合",
+      freeformPrompt: "我想创建一个新的集合。请先阅读 `config/helps/collection-skills.md` 了解基于 schema 的集合约定。",
       guidedLabel: "引导式设置",
       guidedDescription: "Claude 询问要记录什么，然后创建",
       templatesHeading: "从模板开始",
