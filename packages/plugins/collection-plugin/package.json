@@ -38,11 +38,11 @@
   },
   "devDependencies": {
     "@mulmoclaude/core": "^0.2.15",
-    "@tailwindcss/vite": "^4.2.2",
+    "@tailwindcss/vite": "^4.3.2",
     "@types/node": "^26.0.1",
     "@vitejs/plugin-vue": "^6.0.5",
     "gui-chat-protocol": "^0.4.0",
-    "tailwindcss": "^4.2.2",
+    "tailwindcss": "^4.3.2",
     "typescript": "^6.0.3",
     "vite": "^8.1.0",
     "vue": "^3.5.39",
