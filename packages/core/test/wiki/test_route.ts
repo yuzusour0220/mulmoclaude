@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { buildWikiRouteParams, isSafeWikiSlug, readWikiRouteTarget, wikiActionFor } from "../../../src/plugins/wiki/route.js";
+import { buildWikiRouteParams, isSafeWikiSlug, readWikiRouteTarget, wikiActionFor } from "../../src/wiki/route.ts";
 
 describe("isSafeWikiSlug", () => {
   it("accepts plain ASCII slugs", () => {

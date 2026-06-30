@@ -16,7 +16,7 @@
 
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { WIKI_LINK_PATTERN, parseWikiLink } from "../../../src/lib/wiki-page/link.js";
+import { WIKI_LINK_PATTERN, parseWikiLink } from "../../src/wiki/link.ts";
 
 describe("parseWikiLink", () => {
   it("returns the same string for both halves when no pipe is present", () => {

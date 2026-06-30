@@ -1,11 +1,11 @@
 // Node-only wiki-page helpers — anything that needs `node:path`
-// lives here so the rest of `src/lib/wiki-page/` stays pure
+// lives here so the rest of `@mulmoclaude/core/wiki` stays pure
 // (string-only, importable from both browser and Node bundles).
 // Frontend code MUST NOT import this file directly; use the pure
-// modules instead.
+// `@mulmoclaude/core/wiki` modules instead.
 
 import path from "node:path";
-import { isSafeSlug } from "./slug.js";
+import { isSafeSlug } from "../slug.js";
 
 /** Given an absolute path and the absolute `pagesDir`, return the
  *  slug if `absPath` is a direct `.md` child of `pagesDir`, else

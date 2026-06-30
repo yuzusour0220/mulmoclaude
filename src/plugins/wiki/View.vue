@@ -406,12 +406,21 @@ import { parseFrontmatter } from "../../utils/markdown/frontmatter";
 import { useMarkdownDoc } from "../../composables/useMarkdownDoc";
 import { findTaskLines, toggleTaskAt } from "../../utils/markdown/taskList";
 import { apiPost } from "../../utils/api";
-import { WIKI_ACTION, WIKI_ROUTE_SECTION, buildWikiRouteParams, isSafeWikiSlug, readWikiRouteTarget, wikiActionFor, type WikiTarget } from "./route";
+import {
+  WIKI_ACTION,
+  WIKI_ROUTE_SECTION,
+  buildWikiRouteParams,
+  isSafeWikiSlug,
+  readWikiRouteTarget,
+  wikiActionFor,
+  incomingLinks,
+  type WikiTarget,
+  type WikiGraph,
+} from "@mulmoclaude/core/wiki";
 import FilterChip from "../../components/FilterChip.vue";
 import HistoryTab from "./history/HistoryTab.vue";
 import WikiPageBody from "./components/WikiPageBody.vue";
 import WikiGraphView from "./components/WikiGraphView.vue";
-import { incomingLinks, type WikiGraph } from "../../lib/wiki-page/graph";
 import { loadPageEdit } from "./pageEditLoader";
 
 const wikiEndpoints = pluginEndpoints<WikiEndpoints>("wiki");

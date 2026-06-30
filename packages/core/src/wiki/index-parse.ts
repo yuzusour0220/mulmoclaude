@@ -4,8 +4,8 @@
 //
 // All exports here are pure string ops; no `node:*` imports allowed.
 // If a future caller needs to walk the filesystem, that wrapper goes
-// in a sibling Node-only file (today nothing under `src/lib/wiki-page/`
-// touches disk except `paths.ts`).
+// under `@mulmoclaude/core/wiki/server` (today only `server/paths.ts`
+// touches `node:path`; nothing here touches disk).
 
 import { parseWikiLink } from "./link.js";
 import { wikiSlugify } from "./slug.js";

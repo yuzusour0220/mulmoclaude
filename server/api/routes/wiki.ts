@@ -16,14 +16,21 @@ import { previewSnippet } from "../../utils/logPreview.js";
 // long-standing local.
 import { errorMessage as formatError } from "../../utils/errors.js";
 // All wiki-text helpers (slug rules, index parsing, lint rules)
-// live in `src/lib/wiki-page/` as pure modules so the frontend can
-// share them without pulling in server-only deps. This route is
-// just the HTTP shell on top of those.
-import { parseWikiLink } from "../../../src/lib/wiki-page/link.js";
-import { wikiSlugify } from "../../../src/lib/wiki-page/slug.js";
-import { type WikiPageEntry, parseIndexEntries } from "../../../src/lib/wiki-page/index-parse.js";
-import { findBrokenLinksInPage, findMissingFiles, findOrphanPages, findTagDrift, formatLintReport } from "../../../src/lib/wiki-page/lint.js";
-import { buildWikiGraph, type WikiGraph } from "../../../src/lib/wiki-page/graph.js";
+// live in `@mulmoclaude/core/wiki` as pure modules shared with
+// MulmoTerminal. This route is just the HTTP shell on top of those.
+import {
+  parseWikiLink,
+  wikiSlugify,
+  type WikiPageEntry,
+  parseIndexEntries,
+  findBrokenLinksInPage,
+  findMissingFiles,
+  findOrphanPages,
+  findTagDrift,
+  formatLintReport,
+  buildWikiGraph,
+  type WikiGraph,
+} from "@mulmoclaude/core/wiki";
 
 const router = Router();
 
@@ -36,13 +43,12 @@ function readFileOrEmpty(absPath: string): string {
 }
 
 // Wiki-text helpers (slugify, index parsing, lint rules) now live
-// under `src/lib/wiki-page/` as pure modules — see imports above.
+// in `@mulmoclaude/core/wiki` as pure modules — see imports above.
 // Re-exports kept here for legacy callers that import via this
 // route module (e.g. tests in `test/routes/test_wikiHelpers.ts`).
-export { wikiSlugify } from "../../../src/lib/wiki-page/slug.js";
-export type { WikiPageEntry } from "../../../src/lib/wiki-page/index-parse.js";
-export { buildTableColumnMap, extractHashTags, extractSlugFromBulletHref, parseIndexEntries, parseTagsCell } from "../../../src/lib/wiki-page/index-parse.js";
-export { findBrokenLinksInPage, findMissingFiles, findOrphanPages, findTagDrift, formatLintReport } from "../../../src/lib/wiki-page/lint.js";
+export { wikiSlugify, buildTableColumnMap, extractHashTags, extractSlugFromBulletHref, parseIndexEntries, parseTagsCell } from "@mulmoclaude/core/wiki";
+export type { WikiPageEntry } from "@mulmoclaude/core/wiki";
+export { findBrokenLinksInPage, findMissingFiles, findOrphanPages, findTagDrift, formatLintReport } from "@mulmoclaude/core/wiki";
 
 // Resolve a page name to an absolute `.md` path using the in-memory
 // page index (see ./wiki/pageIndex.ts). Index is kept fresh via
@@ -279,8 +285,8 @@ function buildLogResponse(action: string): WikiResponse {
 
 // Pure lint helpers (findOrphanPages, findMissingFiles,
 // findBrokenLinksInPage, findTagDrift, formatLintReport) now live
-// in `src/lib/wiki-page/lint.ts` and are re-exported above. The
-// route below is the thin filesystem shell around them.
+// in `@mulmoclaude/core/wiki` (`lint.ts`) and are re-exported above.
+// The route below is the thin filesystem shell around them.
 
 async function collectLintIssues(): Promise<string[]> {
   const dir = pagesDir();

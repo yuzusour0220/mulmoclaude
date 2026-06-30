@@ -8,7 +8,7 @@
 
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { buildTableColumnMap, extractHashTags, extractSlugFromBulletHref, parseIndexEntries, parseTagsCell } from "../../../src/lib/wiki-page/index-parse.js";
+import { buildTableColumnMap, extractHashTags, extractSlugFromBulletHref, parseIndexEntries, parseTagsCell } from "../../src/wiki/index-parse.ts";
 
 describe("extractHashTags", () => {
   it("pulls `#tag` tokens and returns them sorted/deduped/lowercased", () => {

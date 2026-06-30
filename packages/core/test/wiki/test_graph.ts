@@ -13,8 +13,8 @@
 
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { buildWikiGraph, incomingLinks } from "../../../src/lib/wiki-page/graph.js";
-import type { WikiPageEntry } from "../../../src/lib/wiki-page/index-parse.js";
+import { buildWikiGraph, incomingLinks } from "../../src/wiki/graph.ts";
+import type { WikiPageEntry } from "../../src/wiki/index-parse.ts";
 
 function entry(slug: string, title: string): WikiPageEntry {
   return { slug, title, description: "", tags: [] };

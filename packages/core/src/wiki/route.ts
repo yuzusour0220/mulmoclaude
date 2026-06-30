@@ -1,17 +1,18 @@
 // Pure helpers for reading, building, and validating wiki route
-// params. Kept free of Vue / vue-router imports so it can be used
-// from:
+// params. Kept free of Vue / vue-router imports so it can be shared
+// across hosts (MulmoClaude + MulmoTerminal) from
+// `@mulmoclaude/core/wiki`:
 //
-//  - `src/router/guards.ts` (synchronous validation at navigation time)
-//  - `src/plugins/wiki/View.vue` (watcher + push helpers)
-//  - `src/App.vue` (workspace-link click handler)
+//  - the host router guard (synchronous validation at navigation time)
+//  - the wiki View (watcher + push helpers)
+//  - the workspace-link click handler
 //  - unit tests
 //
-// Mirrors the pattern established by `src/composables/useFileSelection.ts`
-// (#633): one file owns the URL ↔ domain mapping, so the literals don't
-// drift across the router definition, guards, views, and tests.
+// Mirrors the "one file owns the URL ↔ domain mapping" pattern so the
+// literals don't drift across the router definition, guards, views,
+// and tests.
 
-import { isSafeSlug } from "../../lib/wiki-page/slug";
+import { isSafeSlug } from "./slug.js";
 
 // URL segment used in `/wiki/:section/...`. Closed enum — the router
 // regex `(pages|log|lint-report)` rejects anything else.

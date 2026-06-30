@@ -12,8 +12,8 @@
 
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { findBrokenLinksInPage, findMissingFiles, findOrphanPages, findTagDrift, formatLintReport } from "../../../src/lib/wiki-page/lint.js";
-import type { WikiPageEntry } from "../../../src/lib/wiki-page/index-parse.js";
+import { findBrokenLinksInPage, findMissingFiles, findOrphanPages, findTagDrift, formatLintReport } from "../../src/wiki/lint.ts";
+import type { WikiPageEntry } from "../../src/wiki/index-parse.ts";
 
 describe("findBrokenLinksInPage — [[slug|alias]] regression", () => {
   it("uses the TARGET (left of pipe) for slug comparison, not the full body", () => {
