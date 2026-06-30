@@ -7,6 +7,18 @@
 import path from "node:path";
 import { isSafeSlug } from "../slug.js";
 
+/** Canonical on-disk layout of a wiki, derived from the workspace
+ *  root. Owning this here (not per host) is what keeps MulmoClaude and
+ *  MulmoTerminal agreeing on where `data/wiki/` lives. */
+export function wikiDirs(workspace: string): { pagesDir: string; indexFile: string; logFile: string } {
+  const root = path.join(workspace, "data", "wiki");
+  return {
+    pagesDir: path.join(root, "pages"),
+    indexFile: path.join(root, "index.md"),
+    logFile: path.join(root, "log.md"),
+  };
+}
+
 /** Given an absolute path and the absolute `pagesDir`, return the
  *  slug if `absPath` is a direct `.md` child of `pagesDir`, else
  *  null. Pure path-string math — no fs IO, no symlink resolution.

@@ -15,7 +15,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
-import { pickFuzzyMatch } from "../../server/api/routes/wiki.js";
+import { pickFuzzyMatch } from "../../src/wiki/server/engine.ts";
 
 describe("pickFuzzyMatch — wiki resolvePagePath fuzzy fallback (#1194)", () => {
   it("returns the unique candidate when only one slug fuzzy-matches", () => {

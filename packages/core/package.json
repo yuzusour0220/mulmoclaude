@@ -1,6 +1,6 @@
 {
   "name": "@mulmoclaude/core",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Shared server-side core for MulmoClaude and MulmoTerminal — the always-shipped-together subsystems consolidated behind subpath exports so the two hosts can't drift. Server-only except the browser-safe ./whisper/client, ./workspace-setup/slug and ./translation/client entries. All host specifics are injected.",
   "type": "module",
   "exports": {
@@ -45,6 +45,12 @@
       "import": "./dist/wiki/server/index.js",
       "require": "./dist/wiki/server/index.cjs",
       "default": "./dist/wiki/server/index.js"
+    },
+    "./wiki/paths": {
+      "types": "./dist/wiki/server/paths.d.ts",
+      "import": "./dist/wiki/paths.js",
+      "require": "./dist/wiki/paths.cjs",
+      "default": "./dist/wiki/paths.js"
     },
     "./feeds": {
       "types": "./dist/feeds/index.d.ts",
@@ -137,6 +143,7 @@
   },
   "dependencies": {
     "fast-xml-parser": "^5.9.3",
+    "js-yaml": "^5.2.0",
     "zod": "^4.4.3"
   },
   "peerDependencies": {

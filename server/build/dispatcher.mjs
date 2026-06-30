@@ -275,7 +275,7 @@ function isSafeSlug(slug) {
   return true;
 }
 
-// packages/core/dist/wiki/server/index.js
+// packages/core/dist/wiki/paths.js
 import path4 from "node:path";
 function wikiSlugFromAbsPath(absPath, pagesDir) {
   const rel = path4.relative(pagesDir, absPath);

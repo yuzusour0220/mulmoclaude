@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { __resetPageIndexCache, getPageIndex } from "../../server/api/routes/wiki/pageIndex.js";
+import { __resetPageIndexCache, getPageIndex } from "../../src/wiki/server/pageIndex.ts";
 
 // Bump a directory's mtime to the given ms epoch so tests can force
 // the cache-invalidation path without waiting on real mtime
@@ -83,5 +83,29 @@ describe("getPageIndex", () => {
     const second = await getPageIndex(dir);
     assert.equal(second.slugs.has("gamma"), false);
     assert.ok(second.slugs.has("delta"));
+  });
+
+  it("keys the cache per directory — two pages dirs with equal mtime don't cross-contaminate (#1876 Codex P2)", async () => {
+    const dirA = await mkdtemp(path.join(tmpdir(), "wiki-A-"));
+    const dirB = await mkdtemp(path.join(tmpdir(), "wiki-B-"));
+    try {
+      await writeFile(path.join(dirA, "alpha-page.md"), "a");
+      await writeFile(path.join(dirB, "beta-page.md"), "b");
+      // Force identical mtimes so a mtime-only cache would mistakenly
+      // serve A's map for B (the bug this guards against).
+      await setMtime(dirA, 1_700_000_000_000);
+      await setMtime(dirB, 1_700_000_000_000);
+
+      const idxA = await getPageIndex(dirA);
+      const idxB = await getPageIndex(dirB);
+
+      assert.ok(idxA.slugs.has("alpha-page"), "dir A resolves its own page");
+      assert.ok(idxB.slugs.has("beta-page"), "dir B resolves its own page");
+      assert.equal(idxB.slugs.has("alpha-page"), false, "dir B must NOT see dir A's page");
+      assert.equal(idxA.slugs.has("beta-page"), false, "dir A must NOT see dir B's page");
+    } finally {
+      await rm(dirA, { recursive: true, force: true });
+      await rm(dirB, { recursive: true, force: true });
+    }
   });
 });
