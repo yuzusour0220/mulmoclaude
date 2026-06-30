@@ -52,6 +52,7 @@ const ptBRMessages = {
       all: "Todas",
       unread: "Não lidas",
       bookmarked: "Favoritas",
+      longRunning: "De longa duração (24h+)",
       human: "Pessoa",
       scheduler: "Agendador",
       skill: "Skill",

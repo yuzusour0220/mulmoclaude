@@ -57,6 +57,7 @@ const zhMessages = {
       all: "全部",
       unread: "未读",
       bookmarked: "已收藏",
+      longRunning: "长期 (24h+)",
       human: "人工",
       scheduler: "调度器",
       skill: "技能",

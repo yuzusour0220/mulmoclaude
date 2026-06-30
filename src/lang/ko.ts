@@ -59,6 +59,7 @@ const koMessages = {
       all: "전체",
       unread: "읽지 않음",
       bookmarked: "북마크",
+      longRunning: "장기 (24h+)",
       human: "사람",
       scheduler: "스케줄러",
       skill: "스킬",

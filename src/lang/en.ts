@@ -74,6 +74,7 @@ const enMessages = {
       all: "All",
       unread: "Unread",
       bookmarked: "Bookmarked",
+      longRunning: "Long-running (24h+)",
       human: "Human",
       scheduler: "Scheduler",
       skill: "Skill",

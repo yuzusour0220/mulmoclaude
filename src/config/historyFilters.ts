@@ -10,6 +10,10 @@ export const HISTORY_FILTERS = {
   all: "all",
   unread: "unread",
   bookmarked: "bookmarked",
+  // Session-property filter (not an origin): conversations alive for
+  // 24h+ (updatedAt − startedAt). Lets a long-running chat be told
+  // apart from a one-shot.
+  longRunning: "longRunning",
   human: SESSION_ORIGINS.human,
   scheduler: SESSION_ORIGINS.scheduler,
   skill: SESSION_ORIGINS.skill,
@@ -25,6 +29,7 @@ export const HISTORY_FILTER_ORDER: readonly HistoryFilter[] = [
   HISTORY_FILTERS.all,
   HISTORY_FILTERS.unread,
   HISTORY_FILTERS.bookmarked,
+  HISTORY_FILTERS.longRunning,
   HISTORY_FILTERS.human,
   HISTORY_FILTERS.scheduler,
   HISTORY_FILTERS.skill,

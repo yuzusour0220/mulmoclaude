@@ -59,6 +59,7 @@ const jaMessages = {
       all: "すべて",
       unread: "未読",
       bookmarked: "ブックマーク",
+      longRunning: "長期 (24h+)",
       human: "手動",
       scheduler: "スケジューラ",
       skill: "スキル",

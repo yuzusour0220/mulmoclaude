@@ -57,6 +57,7 @@ const esMessages = {
       all: "Todas",
       unread: "No leídas",
       bookmarked: "Marcadas",
+      longRunning: "De larga duración (24h+)",
       human: "Persona",
       scheduler: "Programador",
       skill: "Skill",

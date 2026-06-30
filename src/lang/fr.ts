@@ -52,6 +52,7 @@ const frMessages = {
       all: "Toutes",
       unread: "Non lues",
       bookmarked: "Favoris",
+      longRunning: "Longue durée (24h+)",
       human: "Humain",
       scheduler: "Planificateur",
       skill: "Skill",

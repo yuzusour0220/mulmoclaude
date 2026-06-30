@@ -52,6 +52,7 @@ const deMessages = {
       all: "Alle",
       unread: "Ungelesen",
       bookmarked: "Gemerkt",
+      longRunning: "Langlaufend (24h+)",
       human: "Mensch",
       scheduler: "Scheduler",
       skill: "Skill",
