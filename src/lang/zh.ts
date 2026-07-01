@@ -7,6 +7,8 @@
 
 const zhMessages = {
   common: {
+    downloadZip: "ZIP",
+    downloadFailed: "下载失败",
     save: "保存",
     cancel: "取消",
     loading: "加载中...",

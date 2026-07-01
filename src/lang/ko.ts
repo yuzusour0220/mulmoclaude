@@ -8,6 +8,8 @@
 
 const koMessages = {
   common: {
+    downloadZip: "ZIP",
+    downloadFailed: "다운로드 실패",
     save: "저장",
     cancel: "취소",
     loading: "불러오는 중...",

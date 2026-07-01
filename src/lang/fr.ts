@@ -3,6 +3,8 @@
 
 const frMessages = {
   common: {
+    downloadZip: "ZIP",
+    downloadFailed: "Échec du téléchargement",
     save: "Enregistrer",
     cancel: "Annuler",
     loading: "Chargement...",

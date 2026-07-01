@@ -40,7 +40,17 @@
         <span class="material-icons text-base">{{ pdfDownloading ? "hourglass_empty" : "download" }}</span>
         {{ t("pluginTextResponse.pdf") }}
       </button>
+      <button
+        class="h-8 px-2.5 flex items-center gap-1 rounded border border-gray-300 text-gray-600 hover:bg-gray-50 text-sm disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+        :disabled="zipDownloading"
+        data-testid="text-response-zip-button"
+        @click="downloadZipFile"
+      >
+        <span class="material-icons text-base">{{ zipDownloading ? "hourglass_empty" : "folder_zip" }}</span>
+        {{ t("common.downloadZip") }}
+      </button>
       <span v-if="pdfError" class="text-xs text-red-500" :title="pdfError">{{ t("pluginTextResponse.pdfFailed") }}</span>
+      <span v-if="zipFailed" class="text-xs text-red-500">{{ t("common.downloadFailed") }}</span>
     </div>
     <div class="flex-1 overflow-hidden relative" @click.capture="openLinksInNewTab">
       <div class="text-response-container">
@@ -95,6 +105,7 @@ import { handleExternalLinkClick } from "../../utils/dom/externalLink";
 import { classifyWorkspacePath } from "../../utils/path/workspaceLinkRouter";
 import { useAppApi } from "../../composables/useAppApi";
 import { usePdfDownload } from "../../composables/usePdfDownload";
+import { useMarkdownZip } from "../../composables/useMarkdownZip";
 import { useClipboardCopy } from "../../composables/useClipboardCopy";
 import { buildPdfFilename } from "../../utils/files/filename";
 import { extractTextResponseTitle } from "./utils";
@@ -246,6 +257,7 @@ function openLinksInNewTab(event: MouseEvent): void {
 }
 
 const { pdfDownloading, pdfError, downloadPdf: rawDownloadPdf } = usePdfDownload();
+const { zipDownloading, zipFailed, downloadZip: rawDownloadZip } = useMarkdownZip();
 
 const editing = ref(false);
 
@@ -275,23 +287,29 @@ async function copyText() {
   await copy(props.selectedResult.data?.text ?? "");
 }
 
-async function downloadPdf() {
+// PDF and zip share the same source: display text and export source can
+// diverge (Files Explorer's .md preview pre-rewrites image refs to
+// `/api/files/raw?...` for the browser, which the server inliner can't
+// resolve back to disk), so prefer the original source when provided.
+function markdownExport(): { text: string; filename: string; baseDir?: string; stripFrontmatter?: boolean } {
   const { data } = props.selectedResult;
-  // Display text and PDF source can diverge: Files Explorer's .md
-  // preview pre-rewrites image refs to `/api/files/raw?...` for
-  // browser display, but the server PDF inliner can't resolve those
-  // back to disk. Use the original source when the caller passes it.
-  const pdfText = data?.pdfSourceText ?? data?.text ?? "";
-  const displayText = data?.text ?? "";
+  const text = data?.pdfSourceText ?? data?.text ?? "";
   const filename = buildPdfFilename({
-    name: extractTextResponseTitle(displayText),
+    name: extractTextResponseTitle(data?.text ?? ""),
     fallback: "chat",
     timestampMs: appApi.getResultTimestamp(props.selectedResult.uuid),
   });
-  await rawDownloadPdf(pdfText, filename, {
-    baseDir: data?.pdfBaseDir,
-    stripFrontmatter: data?.pdfStripFrontmatter,
-  });
+  return { text, filename, baseDir: data?.pdfBaseDir, stripFrontmatter: data?.pdfStripFrontmatter };
+}
+
+async function downloadPdf() {
+  const { text, filename, baseDir, stripFrontmatter } = markdownExport();
+  await rawDownloadPdf(text, filename, { baseDir, stripFrontmatter });
+}
+
+async function downloadZipFile() {
+  const { text, filename, baseDir, stripFrontmatter } = markdownExport();
+  await rawDownloadZip(text, filename, { baseDir, stripFrontmatter });
 }
 </script>
 

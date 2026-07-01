@@ -8,6 +8,8 @@
 
 const jaMessages = {
   common: {
+    downloadZip: "ZIP",
+    downloadFailed: "ダウンロードに失敗しました",
     save: "保存",
     cancel: "キャンセル",
     loading: "読み込み中...",
