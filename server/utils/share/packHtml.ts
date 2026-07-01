@@ -93,3 +93,16 @@ export function zipBundle(files: PackedFile[]): Promise<Buffer> {
   for (const file of files) zip.file(file.bundlePath, file.bytes);
   return zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE", compressionOptions: { level: 9 } });
 }
+
+function safeZipName(name: string): string {
+  const cleaned = name.replace(/[^\w.-]+/g, "_");
+  return `${cleaned || "share"}.zip`;
+}
+
+// One-call pack: bundle → zip → suggested download filename. Shared by
+// the HTTP route (streams the buffer) and the View dispatch (base64).
+export async function packHtmlZip(htmlRelPath: string): Promise<{ filename: string; zip: Buffer }> {
+  const bundle = await packHtmlBundle(htmlRelPath);
+  const zip = await zipBundle(bundle.files);
+  return { filename: safeZipName(bundle.name), zip };
+}

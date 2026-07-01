@@ -4,7 +4,7 @@ import { mkdir, writeFile, rm } from "fs/promises";
 import path from "path";
 import JSZip from "jszip";
 import { resolveWorkspacePath } from "../../../server/utils/files/workspace-io.js";
-import { packHtmlBundle, zipBundle, type PackedBundle, type PackedFile } from "../../../server/utils/share/packHtml.js";
+import { packHtmlBundle, zipBundle, packHtmlZip, type PackedBundle, type PackedFile } from "../../../server/utils/share/packHtml.js";
 
 const TOKEN = "__share_pack_test__";
 const HTML_REL = `artifacts/html/${TOKEN}/page.html`;
@@ -90,5 +90,15 @@ describe("zipBundle", () => {
     const foo = zip.file("assets/foo.png");
     assert.ok(foo, "asset in zip");
     assert.deepEqual(await foo.async("nodebuffer"), IMG_BYTES);
+  });
+});
+
+describe("packHtmlZip", () => {
+  it("returns a safe .zip filename and a valid zip buffer", async () => {
+    const { filename, zip } = await packHtmlZip(HTML_REL);
+    assert.equal(filename, "page.zip");
+    const loaded = await JSZip.loadAsync(zip);
+    assert.ok(loaded.file("index.html"), "index.html in zip");
+    assert.ok(loaded.file("assets/foo.png"), "asset in zip");
   });
 });
