@@ -131,6 +131,7 @@ const ptBRMessages = {
     connectFailed: "Falha ao conectar",
     disconnectFailed: "Falha ao desconectar",
     signInFailed: "Falha ao entrar com o Google",
+    statusFailed: "Falha ao carregar o status",
   },
   sidebarHeader: {
     home: "Ir para o chat mais recente",

@@ -133,6 +133,7 @@ const deMessages = {
     connectFailed: "Verbindung fehlgeschlagen",
     disconnectFailed: "Trennen fehlgeschlagen",
     signInFailed: "Google-Anmeldung fehlgeschlagen",
+    statusFailed: "Status konnte nicht geladen werden",
   },
   sidebarHeader: {
     home: "Zum neuesten Chat",

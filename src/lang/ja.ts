@@ -136,6 +136,7 @@ const jaMessages = {
     connectFailed: "接続に失敗しました",
     disconnectFailed: "切断に失敗しました",
     signInFailed: "Google サインインに失敗しました",
+    statusFailed: "状態の取得に失敗しました",
   },
   sidebarHeader: {
     home: "最新のチャットに移動",

@@ -133,6 +133,7 @@ const zhMessages = {
     connectFailed: "连接失败",
     disconnectFailed: "断开连接失败",
     signInFailed: "Google 登录失败",
+    statusFailed: "加载状态失败",
   },
   sidebarHeader: {
     home: "前往最新对话",

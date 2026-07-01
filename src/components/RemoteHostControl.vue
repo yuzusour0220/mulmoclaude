@@ -90,7 +90,12 @@ const rootRef = ref<HTMLElement | null>(null);
 
 const refreshStatus = async () => {
   const res = await apiGet<StatusResponse>(API_ROUTES.remoteHost.status);
-  if (res.ok) status.value = res.data.status;
+  if (res.ok) {
+    status.value = res.data.status;
+    error.value = null;
+  } else {
+    error.value = res.error || t("remoteHost.statusFailed");
+  }
 };
 
 const toggle = () => {
@@ -131,6 +136,8 @@ const onDisconnect = async () => {
       return;
     }
     status.value = res.data.status;
+  } catch (err) {
+    error.value = errorMessage(err, t("remoteHost.disconnectFailed"));
   } finally {
     busy.value = false;
   }

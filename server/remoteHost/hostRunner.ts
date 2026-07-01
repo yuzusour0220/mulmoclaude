@@ -99,6 +99,12 @@ export const startHostRunner = (channel: Channel, handlers: CommandHandlers, opt
     },
     (error) => {
       options.onEvent?.({ phase: "error", method: "listen", message: error.message });
+      // A Firestore onSnapshot error terminates the listener and it does not
+      // recover on its own. Stop advertising presence (clear the heartbeat +
+      // write online:false) so remotes see the host as offline instead of a
+      // live host that silently consumes no commands.
+      clearInterval(beat);
+      setDoc(presence, { online: false, updatedAt: serverTimestamp() }).catch(noop);
     },
   );
 

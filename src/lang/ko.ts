@@ -138,6 +138,7 @@ const koMessages = {
     connectFailed: "연결 실패",
     disconnectFailed: "연결 해제 실패",
     signInFailed: "Google 로그인 실패",
+    statusFailed: "상태를 불러오지 못했습니다",
   },
   sidebarHeader: {
     home: "최신 채팅으로 이동",

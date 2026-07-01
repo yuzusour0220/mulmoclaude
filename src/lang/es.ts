@@ -136,6 +136,7 @@ const esMessages = {
     connectFailed: "Error al conectar",
     disconnectFailed: "Error al desconectar",
     signInFailed: "Error al iniciar sesión con Google",
+    statusFailed: "Error al cargar el estado",
   },
   sidebarHeader: {
     home: "Ir al chat más reciente",

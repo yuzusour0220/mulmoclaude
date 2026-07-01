@@ -18,9 +18,22 @@ export interface RemoteHostStatus {
 }
 
 // The running host runner's stop() handle, or null when disconnected. Holding
-// it here (module scope) makes connect/disconnect idempotent and keeps the
-// single-host invariant — one runner at a time.
+// it here (module scope) keeps the single-host invariant — one runner at a time.
 let stopRunner: (() => void) | null = null;
+
+// Serialize connect/disconnect so overlapping requests can't both mutate
+// stopRunner (which would leak a second runner) or race auth against teardown.
+// Each transition runs only after the previous one settles; a failed transition
+// does not block the next (both handlers run the next op).
+let transition: Promise<unknown> = Promise.resolve();
+
+const noop = () => undefined;
+
+const serialize = <T>(operation: () => Promise<T>): Promise<T> => {
+  const next = transition.then(operation, operation);
+  transition = next.then(noop, noop);
+  return next;
+};
 
 const stopIfRunning = () => {
   if (stopRunner) {
@@ -32,24 +45,28 @@ const stopIfRunning = () => {
 export const status = (): RemoteHostStatus => ({ connected: stopRunner !== null, uid: currentUid() });
 
 /**
- * Connect: sign in with the browser-minted Google ID token, then start the host
- * runner (command loop + presence heartbeat). Reconnecting stops any existing
- * runner first so there is never more than one. Returns the resulting status.
+ * Connect: sign in with the browser-minted Google ID token, THEN start the host
+ * runner (command loop + presence heartbeat). Authentication happens before any
+ * teardown, so a failed connect (expired token, rejected credential) leaves an
+ * existing healthy session untouched rather than dropping it. Serialized against
+ * concurrent connect/disconnect. Returns the resulting status.
  */
-export const connect = async (idToken: string): Promise<RemoteHostStatus> => {
-  stopIfRunning();
-  const uid = await signInHost(idToken);
-  stopRunner = startHostRunner({ uid, hostId: HOST_ID }, handlers, {
-    onEvent: (event) => log.debug(PREFIX, `host event: ${event.phase} ${event.method}`, { event }),
+export const connect = (idToken: string): Promise<RemoteHostStatus> =>
+  serialize(async () => {
+    const uid = await signInHost(idToken);
+    stopIfRunning();
+    stopRunner = startHostRunner({ uid, hostId: HOST_ID }, handlers, {
+      onEvent: (event) => log.debug(PREFIX, `host event: ${event.phase} ${event.method}`, { event }),
+    });
+    log.info(PREFIX, `connected as ${uid}, host runner started (hostId=${HOST_ID})`);
+    return status();
   });
-  log.info(PREFIX, `connected as ${uid}, host runner started (hostId=${HOST_ID})`);
-  return status();
-};
 
 /** Disconnect: stop the runner (writes online:false + detaches), then signOut. */
-export const disconnect = async (): Promise<RemoteHostStatus> => {
-  stopIfRunning();
-  await signOutHost();
-  log.info(PREFIX, "disconnected, host runner stopped");
-  return status();
-};
+export const disconnect = (): Promise<RemoteHostStatus> =>
+  serialize(async () => {
+    stopIfRunning();
+    await signOutHost();
+    log.info(PREFIX, "disconnected, host runner stopped");
+    return status();
+  });

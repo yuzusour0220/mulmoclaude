@@ -131,6 +131,7 @@ const frMessages = {
     connectFailed: "Échec de la connexion",
     disconnectFailed: "Échec de la déconnexion",
     signInFailed: "Échec de la connexion Google",
+    statusFailed: "Échec du chargement de l'état",
   },
   sidebarHeader: {
     home: "Aller à la dernière conversation",

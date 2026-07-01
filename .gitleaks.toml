@@ -1,0 +1,22 @@
+# gitleaks config — extends the default ruleset and allowlists the public
+# Firebase web config.
+#
+# The Firebase Web SDK `apiKey` is a project *identifier*, not a credential: it
+# is shipped to every browser that loads the app, and access is gated by
+# Firestore security rules, not by keeping this value secret. gitleaks' default
+# `gcp-api-key` rule flags the `AIza…` literal; this allowlist scopes the
+# exception to the single dedicated config file so real secrets elsewhere still
+# fail the scan.
+#
+# See src/config/firebaseConfig.ts and
+# plans/feat-remote-host-firestore-list-collections.md (Firebase project section).
+title = "MulmoClaude gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Public Firebase web config (not a secret; gated by Firestore rules)"
+paths = [
+  '''src/config/firebaseConfig\.ts''',
+]

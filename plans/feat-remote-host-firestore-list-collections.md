@@ -53,7 +53,7 @@ scoped to that user's own `users/{uid}/…` subtree.
 
 Flow:
 
-```
+```text
 Toolbar control (browser)               MulmoClaude server (Node)
   Google sign-in (Firebase Web SDK)
   GoogleAuthProvider.credentialFromResult(result).idToken
@@ -120,7 +120,7 @@ projectId, …) is public and can live in a MulmoClaude config module + `.env`.
 
 ## Target structure (new files)
 
-```
+```text
 server/remoteHost/
   firebase.ts        # initializeApp + getAuth + getFirestore (default DB, Native mode)
   auth.ts            # connect(idToken) → signInWithCredential → uid; disconnect(); status()
@@ -147,13 +147,15 @@ Dependency: add `firebase` (web SDK) to `package.json` — used both in the brow
 
 ## Reuse vs. copy
 
-`commandChannel.ts`, `hostRunner.ts`, and `commandFormat.ts` are
-modular-`firebase/firestore` and run unchanged in Node. The server is **host-only**,
-so it needs those three but **not** the remote-side `callHost.ts` /
-`useHostPresence.ts`. Options: (1) copy the three into `server/remoteHost/` now
-(fastest, ~3 small files); (2) later extract the protocol into a shared package
-(e.g. `@mulmoclaude/…` or publish from `mulmoserver`). **Phase 1: copy.** Note the
-reuse for a future refactor; don't block phase 1 on packaging.
+`commandChannel.ts` and `hostRunner.ts` are modular-`firebase/firestore` and run
+unchanged in Node. The server is **host-only**, so it needs those two but **not**
+the remote-side `callHost.ts` / `useHostPresence.ts`. `commandFormat.ts` is
+**not** copied — its only host-side dependency was `errorMessage`, which already
+exists as the canonical `server/utils/errors.ts` helper (reused instead).
+Options: (1) copy the two into `server/remoteHost/` now (fastest); (2) later
+extract the protocol into a shared package (e.g. `@mulmoclaude/…` or publish from
+`mulmoserver`). **Phase 1: copy.** Note the reuse for a future refactor; don't
+block phase 1 on packaging.
 
 ## The `listCollections` handler
 

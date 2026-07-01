@@ -151,6 +151,7 @@ const enMessages = {
     connectFailed: "Connect failed",
     disconnectFailed: "Disconnect failed",
     signInFailed: "Google sign-in failed",
+    statusFailed: "Failed to load status",
   },
   sidebarHeader: {
     home: "Go to latest chat",
