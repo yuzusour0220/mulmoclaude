@@ -12,6 +12,9 @@ export interface UseSharePackHandle {
   packing: Ref<boolean>;
   packFailed: Ref<boolean>;
   downloadZip: (htmlPath: string) => Promise<void>;
+  /** Clear the failed flag — call on navigation so a stale error banner
+   *  doesn't carry over to the next file. */
+  reset: () => void;
 }
 
 function fallbackName(htmlPath: string): string {
@@ -62,5 +65,9 @@ export function useSharePack(): UseSharePackHandle {
     }
   }
 
-  return { packing, packFailed, downloadZip };
+  function reset(): void {
+    packFailed.value = false;
+  }
+
+  return { packing, packFailed, downloadZip, reset };
 }

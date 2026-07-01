@@ -301,13 +301,18 @@ const emit = defineEmits<{
 
 const systemDescriptor = computed(() => (props.selectedPath ? descriptorForPath(props.selectedPath) : null));
 
-const { packing, packFailed, downloadZip } = useSharePack();
+const { packing, packFailed, downloadZip, reset: resetSharePack } = useSharePack();
 // `htmlPreviewUrl` also matches `.htm`, but the pack route only accepts
 // canonical `.html`, so gate the button on `.html` to match server policy.
 const canDownloadZip = computed(() => Boolean(props.isHtml && props.htmlPreviewUrl && props.selectedPath?.toLowerCase().endsWith(".html")));
 function downloadHtmlZip() {
   if (props.selectedPath) void downloadZip(props.selectedPath);
 }
+// Drop a stale error banner when the user navigates to another file.
+watch(
+  () => props.selectedPath,
+  () => resetSharePack(),
+);
 
 const marpMode = computed(() => Boolean(props.mdFrontmatter && isMarpDocument(props.mdFrontmatter.meta)));
 
