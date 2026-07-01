@@ -367,6 +367,7 @@ const ptBRMessages = {
   fileContentRenderer: {
     download: "ZIP",
     downloadZip: "Baixar como zip autônomo (recursos incluídos)",
+    downloadError: "Falha no download",
     selectFile: "Selecione um arquivo",
     htmlPreview: "Pré-visualização HTML",
     pdfPreview: "Pré-visualização PDF",

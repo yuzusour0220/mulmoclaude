@@ -373,6 +373,7 @@ const deMessages = {
   fileContentRenderer: {
     download: "ZIP",
     downloadZip: "Als eigenständiges ZIP herunterladen (Assets gebündelt)",
+    downloadError: "Download fehlgeschlagen",
     selectFile: "Datei auswählen",
     htmlPreview: "HTML-Vorschau",
     pdfPreview: "PDF-Vorschau",

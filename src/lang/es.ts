@@ -375,6 +375,7 @@ const esMessages = {
   fileContentRenderer: {
     download: "ZIP",
     downloadZip: "Descargar como zip autónomo (recursos incluidos)",
+    downloadError: "Error al descargar",
     selectFile: "Selecciona un archivo",
     htmlPreview: "Vista previa HTML",
     pdfPreview: "Vista previa PDF",

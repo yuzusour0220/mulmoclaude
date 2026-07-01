@@ -363,6 +363,7 @@ const zhMessages = {
   fileContentRenderer: {
     download: "ZIP",
     downloadZip: "下载为自包含 zip(含资源)",
+    downloadError: "下载失败",
     selectFile: "请选择一个文件",
     htmlPreview: "HTML 预览",
     pdfPreview: "PDF 预览",

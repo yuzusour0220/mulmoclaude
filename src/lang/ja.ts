@@ -371,6 +371,7 @@ const jaMessages = {
   fileContentRenderer: {
     download: "ZIP",
     downloadZip: "自己完結zipでダウンロード（アセット同梱）",
+    downloadError: "ダウンロードに失敗しました",
     selectFile: "ファイルを選択してください",
     htmlPreview: "HTML プレビュー",
     pdfPreview: "PDF プレビュー",
