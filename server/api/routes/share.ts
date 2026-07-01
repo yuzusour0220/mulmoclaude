@@ -61,7 +61,7 @@ interface PackMarkdownBody {
 // route (`renderMarkdownHtml`). `baseDir` resolves relative image refs;
 // traversal is rejected downstream by the shared image resolver.
 router.post(API_ROUTES.share.packMarkdown, async (req: Request<object, unknown, PackMarkdownBody>, res: Response) => {
-  const body = req.body;
+  const { body } = req;
   if (!body || typeof body !== "object" || Array.isArray(body)) {
     badRequest(res, "request body must be a JSON object");
     return;
