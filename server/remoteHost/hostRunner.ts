@@ -23,6 +23,11 @@ export interface HostEvent {
 
 export interface HostRunnerOptions {
   onEvent?: (event: HostEvent) => void;
+  // Called once when the listener dies fatally (after presence has been set
+  // offline), so the lifecycle owner can reconcile its own state — e.g. clear
+  // the runner handle so status() no longer reports connected. NOT called on a
+  // normal stop().
+  onClosed?: () => void;
 }
 
 interface Claim {
@@ -105,6 +110,7 @@ export const startHostRunner = (channel: Channel, handlers: CommandHandlers, opt
       // live host that silently consumes no commands.
       clearInterval(beat);
       setDoc(presence, { online: false, updatedAt: serverTimestamp() }).catch(noop);
+      options.onClosed?.();
     },
   );
 
