@@ -20,7 +20,7 @@ import type http from "http";
 import { Router } from "express";
 import type { Request, Response } from "express";
 import { CHAT_SERVICE_ROUTES } from "@mulmobridge/protocol";
-import { createChatStateStore } from "./chat-state.js";
+import { createChatStateStore, isSafeSessionId } from "./chat-state.js";
 import { createCommandHandler } from "./commands.js";
 import { createRelay } from "./relay.js";
 import type { RelayFn } from "./relay.js";
@@ -146,6 +146,17 @@ export function createChatService(deps: ChatServiceDeps): ChatService {
 
     if (!chatSessionId) {
       badRequest(res, "chatSessionId is required");
+      return;
+    }
+    // Reject hostile / malformed sessionIds at the entry so they can't be
+    // persisted into transport state. Without this gate a caller could POST
+    // `{"chatSessionId": "../../etc/x"}`, the value would land in the state
+    // file, and a later `/history` command would read it back and hand it to
+    // `readSessionJsonl` — whose backing reader is documented as "internal
+    // fixed paths only, no `..` traversal guard". Also defended inside
+    // `connectSession` for defense-in-depth (issue #1896 follow-up to #1895).
+    if (!isSafeSessionId(chatSessionId)) {
+      badRequest(res, "chatSessionId has an unsafe format");
       return;
     }
 
