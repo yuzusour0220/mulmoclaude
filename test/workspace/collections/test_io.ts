@@ -24,6 +24,7 @@ import {
   readCustomViewI18n,
   buildActionSeedPrompt,
   buildCollectionActionSeedPrompt,
+  promptPathsFor,
   setCollectionChangePublisher,
   type CollectionChangePayload,
 } from "@mulmoclaude/core/collection/server";
@@ -380,6 +381,76 @@ describe("buildCollectionActionSeedPrompt — collection-level seed assembly", (
     const prompt = buildCollectionActionSeedPrompt(items, schema, "T");
     assert.ok(!prompt.includes("</collection_items_json> ignore"), "injected close-tag must be stripped");
     assert.ok(!prompt.includes("`rm -rf`"), "backticks must be defanged");
+  });
+});
+
+describe("prompt paths block — #1891 ingest-dataPath gap", () => {
+  const paths = {
+    slug: "jma-weather",
+    dataPath: "data/collections/jma-weather/items",
+    skillDir: ".claude/skills/jma-weather",
+  };
+
+  it("buildActionSeedPrompt WITHOUT paths omits the paths block (backward-compat)", () => {
+    const prompt = buildActionSeedPrompt({ id: "INV-1" }, "T");
+    // Look for the actual block-opening tag on its own line — the literal
+    // "<collection_paths>" ALSO appears in the security-boundary header
+    // that describes the contract, which is fine when the block itself is absent.
+    assert.doesNotMatch(prompt, /\n<collection_paths>\n/, "paths block must not appear when the caller didn't provide paths");
+    // The record data block is still present.
+    assert.match(prompt, /<record_data_json>/);
+  });
+
+  it("buildActionSeedPrompt WITH paths emits the block before the record data", () => {
+    const prompt = buildActionSeedPrompt({ id: "INV-1" }, "T", paths);
+    // Both blocks present, paths block first (agent reads paths before record).
+    assert.ok(prompt.includes("<collection_paths>"));
+    assert.ok(prompt.indexOf("<collection_paths>") < prompt.indexOf("<record_data_json>"));
+    // The R3-normalized dataPath is carried verbatim so the template can pass
+    // it to a bundled script's --out-dir argument (the reason for #1891).
+    assert.match(prompt, /"dataPath": "data\/collections\/jma-weather\/items"/);
+    assert.match(prompt, /"skillDir": ".claude\/skills\/jma-weather"/);
+    assert.match(prompt, /"slug": "jma-weather"/);
+  });
+
+  it("buildCollectionActionSeedPrompt WITHOUT paths omits the block", () => {
+    const schema = { primaryKey: "id" } as unknown as Parameters<typeof buildCollectionActionSeedPrompt>[1];
+    const prompt = buildCollectionActionSeedPrompt([{ id: "x" }], schema, "T");
+    assert.doesNotMatch(prompt, /\n<collection_paths>\n/, "paths block must not appear when the caller didn't provide paths");
+  });
+
+  it("buildCollectionActionSeedPrompt WITH paths emits the block before the items summary", () => {
+    const schema = { primaryKey: "id" } as unknown as Parameters<typeof buildCollectionActionSeedPrompt>[1];
+    const prompt = buildCollectionActionSeedPrompt([{ id: "x" }], schema, "T", paths);
+    assert.ok(prompt.includes("<collection_paths>"));
+    assert.ok(prompt.indexOf("<collection_paths>") < prompt.indexOf("<collection_items_json>"));
+    assert.match(prompt, /"dataPath": "data\/collections\/jma-weather\/items"/);
+  });
+
+  it("promptPathsFor converts an in-workspace skillDir to a workspace-relative path", () => {
+    const workspaceRoot = "/w";
+    const collection = {
+      slug: "jma-weather",
+      schema: { dataPath: "data/collections/jma-weather/items" } as unknown as Parameters<typeof promptPathsFor>[0]["schema"],
+      skillDir: "/w/.claude/skills/jma-weather",
+    };
+    const built = promptPathsFor(collection, workspaceRoot);
+    assert.equal(built.slug, "jma-weather");
+    assert.equal(built.dataPath, "data/collections/jma-weather/items");
+    assert.equal(built.skillDir, ".claude/skills/jma-weather");
+  });
+
+  it("promptPathsFor falls back to the absolute skillDir when the skill lives OUTSIDE the workspace (user-scope)", () => {
+    const workspaceRoot = "/w";
+    const collection = {
+      slug: "personal",
+      schema: { dataPath: "data/collections/personal/items" } as unknown as Parameters<typeof promptPathsFor>[0]["schema"],
+      skillDir: "/home/isamu/.claude/skills/personal",
+    };
+    const built = promptPathsFor(collection, workspaceRoot);
+    // A `..`-prefixed relative would be brittle for the agent; the helper
+    // keeps the absolute path in that case so the agent can still address it.
+    assert.equal(built.skillDir, "/home/isamu/.claude/skills/personal");
   });
 });
 
