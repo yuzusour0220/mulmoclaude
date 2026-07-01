@@ -894,6 +894,10 @@ const zhMessages = {
     marpSplitExit: "关闭源代码编辑器",
     marpSplitEditorLabel: "源代码",
   },
+  markdownMermaid: {
+    loadFailed: "⚠ Mermaid 加载失败: {error}",
+    renderFailed: "⚠ Mermaid 渲染失败: {error}",
+  },
   pluginTextResponse: {
     pdf: "PDF",
     pdfFailed: "⚠ PDF 失败",

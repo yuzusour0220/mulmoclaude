@@ -19,7 +19,7 @@
           </summary>
           <div class="border-t border-purple-200 p-4 bg-white rounded-b-lg">
             <!-- eslint-disable vue/no-v-html -- marked.parse output of the plugin-seeded prompt; trusted in-process render matching the standard textResponse path. Multi-line element so disable/enable pair (CLAUDE.md UI rule). -->
-            <div class="markdown-content prose prose-slate max-w-none" @click="openLinksInNewTab" v-html="renderedHtml"></div>
+            <div ref="markdownContainerRef" class="markdown-content prose prose-slate max-w-none" @click="openLinksInNewTab" v-html="renderedHtml"></div>
             <!-- eslint-enable vue/no-v-html -->
             <div v-if="messageAttachments.length > 0" class="space-y-3 mt-3" data-testid="text-response-seeded-attachments">
               <SentAttachmentChip v-for="path in messageAttachments" :key="path" :path="path" variant="block" />
@@ -54,6 +54,7 @@
                 </div>
                 <!-- eslint-disable vue/no-v-html -- marked.parse output of app-owned assistant response text; trusted in-process render. Multi-line element so disable/enable pair (CLAUDE.md UI rule) instead of -next-line. -->
                 <div
+                  ref="markdownContainerRef"
                   class="markdown-content prose prose-slate max-w-none leading-relaxed text-gray-900"
                   :data-testid="isAssistant ? 'text-response-assistant-body' : undefined"
                   v-html="renderedHtml"
@@ -93,6 +94,7 @@ import type { TextResponseData } from "./types";
 import SentAttachmentChip from "../../components/SentAttachmentChip.vue";
 import { handleExternalLinkClick } from "../../utils/dom/externalLink";
 import { classifyWorkspacePath } from "../../utils/path/workspaceLinkRouter";
+import { useMermaidRenderer } from "../../utils/markdown/useMermaid";
 import { useAppApi } from "../../composables/useAppApi";
 import { usePdfDownload } from "../../composables/usePdfDownload";
 import { useClipboardCopy } from "../../composables/useClipboardCopy";
@@ -202,6 +204,13 @@ const hasChanges = computed(() => editedText.value !== editorSource.value);
 // just below, but hoisted up here so `applyChanges` can close the
 // panel after a save without TDZ ordering trouble.
 const detailsEl = ref<HTMLDetailsElement>();
+
+// Container for the rendered markdown surface (seeded-turn card OR
+// assistant response body — only one mounts at a time via v-if/v-else,
+// so a single ref binds to whichever branch is live). Feeds the
+// mermaid post-render pass.
+const markdownContainerRef = ref<HTMLElement | null>(null);
+useMermaidRenderer(markdownContainerRef, renderedHtml);
 
 function applyChanges() {
   if (!hasChanges.value) return;

@@ -930,6 +930,10 @@ const enMessages = {
     marpSplitExit: "Hide source editor",
     marpSplitEditorLabel: "Source",
   },
+  markdownMermaid: {
+    loadFailed: "⚠ Mermaid failed to load: {error}",
+    renderFailed: "⚠ Mermaid render failed: {error}",
+  },
   pluginTextResponse: {
     pdf: "PDF",
     pdfFailed: "⚠ PDF failed",

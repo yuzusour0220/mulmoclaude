@@ -904,6 +904,10 @@ const jaMessages = {
     marpSplitExit: "ソースエディタを閉じる",
     marpSplitEditorLabel: "ソース",
   },
+  markdownMermaid: {
+    loadFailed: "⚠ Mermaid の読み込みに失敗しました: {error}",
+    renderFailed: "⚠ Mermaid の描画に失敗しました: {error}",
+  },
   pluginTextResponse: {
     pdf: "PDF",
     pdfFailed: "⚠ PDF 失敗",

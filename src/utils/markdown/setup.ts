@@ -19,6 +19,7 @@ import { wikiEmbedExtension } from "./wikiEmbeds";
 import { registerBuiltInWikiEmbeds, setEmbedLocaleProvider } from "./wikiEmbedHandlers";
 import { workspaceLinkifyExtension } from "./workspaceLinkify";
 import { markedHighlightExtension } from "./highlight";
+import { mermaidExtension } from "./mermaidExtension";
 
 let installed = false;
 
@@ -38,5 +39,11 @@ export function setupMarked(): void {
   // `workspaceLinkify.ts` for the detection contract (#1300).
   marked.use(workspaceLinkifyExtension);
   marked.use(markedHighlightExtension);
+  // Mermaid is a `code` renderer override, so it must land AFTER
+  // highlight — later `.use()` calls wrap earlier ones, and returning
+  // `false` from our override falls through to the highlight renderer
+  // underneath. That gives us: `mermaid` fence → placeholder; any
+  // other fence → highlight.js styling.
+  marked.use(mermaidExtension);
   installed = true;
 }

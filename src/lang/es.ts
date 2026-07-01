@@ -916,6 +916,10 @@ const esMessages = {
     marpSplitExit: "Cerrar el editor de la fuente",
     marpSplitEditorLabel: "Fuente",
   },
+  markdownMermaid: {
+    loadFailed: "⚠ Error al cargar Mermaid: {error}",
+    renderFailed: "⚠ Error al renderizar Mermaid: {error}",
+  },
   pluginTextResponse: {
     pdf: "PDF",
     pdfFailed: "⚠ Error de PDF",

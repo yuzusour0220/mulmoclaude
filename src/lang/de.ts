@@ -918,6 +918,10 @@ const deMessages = {
     marpSplitExit: "Quelleneditor schließen",
     marpSplitEditorLabel: "Quelle",
   },
+  markdownMermaid: {
+    loadFailed: "⚠ Mermaid konnte nicht geladen werden: {error}",
+    renderFailed: "⚠ Mermaid-Rendering fehlgeschlagen: {error}",
+  },
   pluginTextResponse: {
     pdf: "PDF",
     pdfFailed: "⚠ PDF fehlgeschlagen",
