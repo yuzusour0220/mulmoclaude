@@ -153,20 +153,39 @@ function unsupportedFiscalYearEndError(received: unknown): AccountingError {
   );
 }
 
-/** Narrow a free-form `fiscalYearEnd` input. Absent → default
- *  (back-compat with old callers and pre-field on-disk books); any
- *  other value must be a month number 1-12 or 400. */
-function narrowFiscalYearEnd(raw: number | undefined): FiscalYearEnd {
-  if (raw === undefined) return DEFAULT_FISCAL_YEAR_END;
-  if (!isFiscalYearEnd(raw)) throw unsupportedFiscalYearEndError(raw);
-  return raw;
+/** Coerce + validate a free-form `fiscalYearEnd` from any ingress path
+ *  (REST body, MCP tool args, direct callers). The service is the
+ *  validation boundary, so this is deliberately tolerant of input SHAPE
+ *  but strict about the resulting value:
+ *    - absent / null / empty string → `undefined` (field omitted; the
+ *      caller decides default-vs-no-op);
+ *    - a number, or a numeric string ("8") from a hand-rolled client →
+ *      that month;
+ *    - a legacy calendar-quarter token ("Q1".."Q4") from a stale client
+ *      → its closing month (same Q1→3 mapping the read side applies);
+ *    - anything else non-empty (a typo, garbage, an out-of-range or
+ *      non-integer number) → 400, echoing the ORIGINAL value so the
+ *      bad payload can't be silently mistaken for the default. */
+function coerceFiscalYearEndInput(raw: unknown): FiscalYearEnd | undefined {
+  if (raw === undefined || raw === null || raw === "") return undefined;
+  let month: unknown = raw;
+  if (typeof raw === "string") {
+    const trimmed = raw.trim();
+    if (trimmed === "") return undefined;
+    if (/^Q[1-4]$/.test(trimmed)) return resolveFiscalYearEnd(trimmed);
+    month = /^-?\d+$/.test(trimmed) ? Number(trimmed) : Number.NaN;
+  }
+  if (!isFiscalYearEnd(month)) throw unsupportedFiscalYearEndError(raw);
+  return month;
 }
 
-/** Boundary checks shared by updateBook. Throws on the first failure
- *  so the surrounding function stays under the cognitive-complexity
- *  threshold; each rule is also unit-testable independently via the
- *  service entry point. */
-function validateUpdateBookInput(input: { name?: string; country?: string; fiscalYearEnd?: number }): void {
+/** Boundary checks shared by updateBook (name / country only —
+ *  fiscalYearEnd is coerced + validated separately via
+ *  `coerceFiscalYearEndInput`). Throws on the first failure so the
+ *  surrounding function stays under the cognitive-complexity threshold;
+ *  each rule is also unit-testable independently via the service entry
+ *  point. */
+function validateUpdateBookInput(input: { name?: string; country?: string }): void {
   if (input.name !== undefined && (typeof input.name !== "string" || input.name.trim() === "")) {
     throw new AccountingError(400, "name must be a non-empty string when supplied");
   }
@@ -176,16 +195,10 @@ function validateUpdateBookInput(input: { name?: string; country?: string; fisca
   if (input.country !== undefined && input.country !== "" && !isSupportedCountryCode(input.country)) {
     throw unsupportedCountryError(input.country);
   }
-  // Fiscal-year end has no "clear" path — it always resolves to a
-  // closing month (back-compat reads default absent → December).
-  // Reject any supplied value that isn't a month number 1-12.
-  if (input.fiscalYearEnd !== undefined && !isFiscalYearEnd(input.fiscalYearEnd)) {
-    throw unsupportedFiscalYearEndError(input.fiscalYearEnd);
-  }
 }
 
 export async function createBook(
-  input: { id?: string; name: string; currency?: string; country?: string; fiscalYearEnd?: number },
+  input: { id?: string; name: string; currency?: string; country?: string; fiscalYearEnd?: unknown },
   workspaceRoot?: string,
 ): Promise<{ book: BookSummary }> {
   if (typeof input.name !== "string" || input.name.trim() === "") {
@@ -198,7 +211,7 @@ export async function createBook(
   if (input.country !== undefined && !isSupportedCountryCode(input.country)) {
     throw unsupportedCountryError(input.country);
   }
-  const fiscalYearEnd = narrowFiscalYearEnd(input.fiscalYearEnd);
+  const fiscalYearEnd = coerceFiscalYearEndInput(input.fiscalYearEnd) ?? DEFAULT_FISCAL_YEAR_END;
   const config = await loadOrInitConfig(workspaceRoot);
   // Auto-generate when no caller id is supplied — every book,
   // including the very first one, gets a generated id. Explicit
@@ -236,7 +249,7 @@ export async function createBook(
 }
 
 export async function updateBook(
-  input: { bookId: string; name?: string; country?: string; fiscalYearEnd?: number },
+  input: { bookId: string; name?: string; country?: string; fiscalYearEnd?: unknown },
   workspaceRoot?: string,
 ): Promise<{ book: BookSummary }> {
   const config = await loadOrInitConfig(workspaceRoot);
@@ -245,6 +258,9 @@ export async function updateBook(
     throw new AccountingError(404, `book ${JSON.stringify(input.bookId)} not found`);
   }
   validateUpdateBookInput(input);
+  // Coerce + validate up front so a malformed value 400s before any
+  // write (undefined = the field was omitted → leave it untouched).
+  const fiscalYearEnd = coerceFiscalYearEndInput(input.fiscalYearEnd);
   // Currency intentionally absent — once entries reference per-book
   // amounts, switching currency would silently re-interpret every
   // historical figure. Country / name / fiscalYearEnd are pure metadata;
@@ -254,7 +270,7 @@ export async function updateBook(
     ...target,
     ...(input.name !== undefined ? { name: input.name } : {}),
     ...(input.country !== undefined && input.country !== "" ? { country: input.country as SupportedCountryCode } : {}),
-    ...(input.fiscalYearEnd !== undefined ? { fiscalYearEnd: input.fiscalYearEnd as FiscalYearEnd } : {}),
+    ...(fiscalYearEnd !== undefined ? { fiscalYearEnd } : {}),
   };
   // Strip an explicitly-cleared country so the JSON file stays clean
   // (matches the createBook policy of omitting the field when unset).

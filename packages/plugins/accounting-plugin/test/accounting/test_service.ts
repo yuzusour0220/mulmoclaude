@@ -216,6 +216,33 @@ describe("books lifecycle", () => {
     // Non-integer month is rejected too.
     await assert.rejects(() => updateBook({ bookId: book.book.id, fiscalYearEnd: 8.5 }, root), AccountingError);
   });
+  it("coerces ingress fiscalYearEnd: numeric string and legacy Q token; rejects garbage", async () => {
+    const root = makeTmp();
+    // A hand-rolled client / stale caller may send a string.
+    const numeric = await createBook({ name: "Numeric", fiscalYearEnd: "8" }, root);
+    assert.equal(numeric.book.fiscalYearEnd, 8);
+    // A stale client posting the old calendar-quarter token migrates to
+    // its closing month (Q1 → March) instead of silently defaulting.
+    const legacy = await createBook({ name: "Legacy", fiscalYearEnd: "Q1" }, root);
+    assert.equal(legacy.book.fiscalYearEnd, 3);
+    const updated = await updateBook({ bookId: numeric.book.id, fiscalYearEnd: "Q4" }, root);
+    assert.equal(updated.book.fiscalYearEnd, 12);
+    // Garbage must 400, NOT be swallowed as the December default (create)
+    // or a silent no-op (update).
+    await assert.rejects(() => createBook({ name: "Junk", fiscalYearEnd: "abc" }, root), AccountingError);
+    await assert.rejects(() => updateBook({ bookId: numeric.book.id, fiscalYearEnd: "abc" }, root), AccountingError);
+    await assert.rejects(() => updateBook({ bookId: numeric.book.id, fiscalYearEnd: true }, root), AccountingError);
+  });
+  it("treats an empty-string fiscalYearEnd as omitted (no-op on update, default on create)", async () => {
+    const root = makeTmp();
+    // Empty string is the "field omitted" sentinel — create defaults to
+    // December, update leaves the existing value untouched.
+    const emptyBook = await createBook({ name: "Empty", fiscalYearEnd: "" }, root);
+    assert.equal(emptyBook.book.fiscalYearEnd, 12);
+    await updateBook({ bookId: emptyBook.book.id, fiscalYearEnd: 8 }, root);
+    const updated = await updateBook({ bookId: emptyBook.book.id, name: "Empty renamed", fiscalYearEnd: "" }, root);
+    assert.equal(updated.book.fiscalYearEnd, 8); // unchanged by the ""
+  });
 });
 
 describe("addEntries / listEntries", () => {

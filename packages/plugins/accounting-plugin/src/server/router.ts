@@ -65,17 +65,6 @@ interface OpenBookToolResult {
 type ActionRest = Omit<AccountingActionBody, "action">;
 type ActionHandler = (rest: ActionRest) => Promise<unknown>;
 
-/** Coerce an inbound `fiscalYearEnd` to a number. The UI select and
- *  the LLM tool (JSON-schema `number` enum) both send a number, but a
- *  numeric string ("8") from a hand-rolled client is accepted too so
- *  it isn't silently dropped to `undefined` (→ the December default).
- *  Range validation stays authoritative in the service layer. */
-function coerceFiscalYearEnd(raw: unknown): number | undefined {
-  if (typeof raw === "number") return raw;
-  if (typeof raw === "string" && raw.trim() !== "" && Number.isInteger(Number(raw))) return Number(raw);
-  return undefined;
-}
-
 // Each action is a tiny adapter that pulls the typed slice it needs
 // out of the loosely-typed body. Validation of the slice shape
 // itself lives inside the service layer (validateEntry,
@@ -132,7 +121,9 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
       name: String(rest.name ?? ""),
       currency: typeof rest.currency === "string" ? rest.currency : undefined,
       country: typeof rest.country === "string" ? rest.country : undefined,
-      fiscalYearEnd: coerceFiscalYearEnd(rest.fiscalYearEnd),
+      // Passed through raw — the service coerces + validates it (number,
+      // numeric string, or a legacy "Q1".."Q4" token), 400ing garbage.
+      fiscalYearEnd: rest.fiscalYearEnd,
     });
     return { bookId: result.book.id, ...result };
   },
@@ -141,7 +132,8 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
       bookId: String(rest.bookId ?? ""),
       name: typeof rest.name === "string" ? rest.name : undefined,
       country: typeof rest.country === "string" ? rest.country : undefined,
-      fiscalYearEnd: coerceFiscalYearEnd(rest.fiscalYearEnd),
+      // Passed through raw — the service coerces + validates it.
+      fiscalYearEnd: rest.fiscalYearEnd,
     });
     return { bookId: result.book.id, ...result };
   },
