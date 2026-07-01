@@ -32,11 +32,8 @@ const esMessages: AccountingMessages = {
       countryPlaceholder: "Selecciona un país…",
       countryHint: "El país define la jurisdicción fiscal para que el asistente pueda dar consejos específicos (T-number en Japón, ID de IVA en la UE, etc.).",
       fiscalYearEndLabel: "Cierre del ejercicio",
-      fiscalYearEndQ1: "31 de marzo (Q1)",
-      fiscalYearEndQ2: "30 de junio (Q2)",
-      fiscalYearEndQ3: "30 de septiembre (Q3)",
-      fiscalYearEndQ4: "31 de diciembre (Q4)",
-      fiscalYearEndHint: "Define el límite del ejercicio para los atajos de rango de fechas de este libro. Por defecto: 31 de diciembre (Q4 — año natural).",
+      fiscalYearEndHint:
+        "Define el límite del ejercicio para los atajos de rango de fechas de este libro. Elige el mes en cuyo último día cierra el ejercicio. Por defecto: diciembre (año natural).",
       placeholder: "Elige un libro…",
       firstRunHint:
         "Elige el nombre, la moneda, el país y el cierre de ejercicio de tu primer libro. La moneda se fija por libro y es difícil cambiarla una vez que empieces a registrar asientos.",

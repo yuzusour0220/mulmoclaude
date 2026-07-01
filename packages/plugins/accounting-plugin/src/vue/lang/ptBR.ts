@@ -32,11 +32,8 @@ const ptBRMessages: AccountingMessages = {
       countryPlaceholder: "Selecione um país…",
       countryHint: "O país define a jurisdição fiscal para que o assistente possa dar conselhos específicos (T-number no Japão, ID de IVA na UE, etc.).",
       fiscalYearEndLabel: "Encerramento do exercício",
-      fiscalYearEndQ1: "31 de março (Q1)",
-      fiscalYearEndQ2: "30 de junho (Q2)",
-      fiscalYearEndQ3: "30 de setembro (Q3)",
-      fiscalYearEndQ4: "31 de dezembro (Q4)",
-      fiscalYearEndHint: "Define o limite do exercício social usado pelos atalhos de período deste livro. Padrão: 31 de dezembro (Q4 — ano civil).",
+      fiscalYearEndHint:
+        "Define o limite do exercício social usado pelos atalhos de período deste livro. Escolha o mês em cujo último dia o exercício encerra. Padrão: dezembro (ano civil).",
       placeholder: "Selecione um livro…",
       firstRunHint:
         "Escolha o nome, a moeda, o país e o encerramento do exercício do seu primeiro livro. A moeda é definida por livro e fica difícil alterar depois de começar a lançar.",

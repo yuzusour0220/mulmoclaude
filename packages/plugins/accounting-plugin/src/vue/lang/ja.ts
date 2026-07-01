@@ -32,11 +32,8 @@ const jaMessages: AccountingMessages = {
       countryPlaceholder: "国を選択…",
       countryHint: "国を設定すると税の管轄が決まり、アシスタントが国別のアドバイス（日本のT番号、EUのVAT IDなど）を提供できます。",
       fiscalYearEndLabel: "会計年度末日",
-      fiscalYearEndQ1: "3月31日 (Q1)",
-      fiscalYearEndQ2: "6月30日 (Q2)",
-      fiscalYearEndQ3: "9月30日 (Q3)",
-      fiscalYearEndQ4: "12月31日 (Q4)",
-      fiscalYearEndHint: "この帳簿の日付範囲ショートカットで使う会計年度の境界を決めます。デフォルトは12月31日（Q4 — 暦年）。",
+      fiscalYearEndHint:
+        "この帳簿の日付範囲ショートカットで使う会計年度の境界を決めます。会計年度が終わる月（その月末日）を選びます。デフォルトは12月（暦年）。",
       placeholder: "帳簿を選択…",
       firstRunHint: "最初の帳簿の名前・通貨・国・会計年度末日を選んでください。通貨は帳簿ごとに固定で、仕訳を入力した後の変更は難しくなります。",
     },

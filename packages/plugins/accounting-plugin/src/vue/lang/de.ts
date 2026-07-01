@@ -33,12 +33,8 @@ const deMessages: AccountingMessages = {
       countryHint:
         "Das Land legt die Steuerjurisdiktion fest, damit der Assistent länderspezifische Hinweise geben kann (T-Nummer in Japan, USt-IdNr. in der EU usw.).",
       fiscalYearEndLabel: "Geschäftsjahresende",
-      fiscalYearEndQ1: "31. März (Q1)",
-      fiscalYearEndQ2: "30. Juni (Q2)",
-      fiscalYearEndQ3: "30. September (Q3)",
-      fiscalYearEndQ4: "31. Dezember (Q4)",
       fiscalYearEndHint:
-        "Bestimmt die Geschäftsjahresgrenze, die für die Datumsbereich-Schnellauswahl in diesem Buch verwendet wird. Standard: 31. Dezember (Q4 — Kalenderjahr).",
+        "Bestimmt die Geschäftsjahresgrenze, die für die Datumsbereich-Schnellauswahl in diesem Buch verwendet wird. Wähle den Monat, an dessen letztem Tag das Geschäftsjahr endet. Standard: Dezember (Kalenderjahr).",
       placeholder: "Buch auswählen…",
       firstRunHint:
         "Wählen Sie Name, Währung, Land und Geschäftsjahresende für Ihr erstes Buch. Die Währung ist pro Buch fest und nach den ersten Buchungen schwer zu ändern.",

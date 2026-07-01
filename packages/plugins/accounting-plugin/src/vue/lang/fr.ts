@@ -32,12 +32,8 @@ const frMessages: AccountingMessages = {
       countryPlaceholder: "Sélectionner un pays…",
       countryHint: "Le pays définit la juridiction fiscale afin que l'assistant puisse donner des conseils ciblés (T-number au Japon, ID TVA dans l'UE, etc.).",
       fiscalYearEndLabel: "Clôture de l'exercice",
-      fiscalYearEndQ1: "31 mars (Q1)",
-      fiscalYearEndQ2: "30 juin (Q2)",
-      fiscalYearEndQ3: "30 septembre (Q3)",
-      fiscalYearEndQ4: "31 décembre (Q4)",
       fiscalYearEndHint:
-        "Définit la limite de l'exercice utilisée par les raccourcis de plage de dates de ce livre. Par défaut : 31 décembre (Q4 — année civile).",
+        "Définit la limite de l'exercice utilisée par les raccourcis de plage de dates de ce livre. Choisissez le mois au dernier jour duquel l'exercice se clôture. Par défaut : décembre (année civile).",
       placeholder: "Sélectionner un livre…",
       firstRunHint:
         "Choisissez le nom, la devise, le pays et la clôture de l'exercice de votre premier livre. La devise est figée par livre et difficile à changer une fois les écritures commencées.",

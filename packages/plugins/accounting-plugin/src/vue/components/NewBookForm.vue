@@ -71,7 +71,8 @@ import {
   localizedCountryName,
   type SupportedCountryCode,
   DEFAULT_FISCAL_YEAR_END,
-  FISCAL_YEAR_ENDS,
+  FISCAL_YEAR_END_MONTHS,
+  fiscalYearEndMonthLabel,
   type FiscalYearEnd,
 } from "../../shared";
 
@@ -164,9 +165,9 @@ interface FiscalYearEndOption {
 }
 
 const fiscalYearEndOptions = computed<FiscalYearEndOption[]>(() =>
-  FISCAL_YEAR_ENDS.map((value) => ({
+  FISCAL_YEAR_END_MONTHS.map((value) => ({
     value,
-    label: t(`pluginAccounting.bookSwitcher.fiscalYearEnd${value}`),
+    label: fiscalYearEndMonthLabel(value, locale.value),
   })),
 );
 

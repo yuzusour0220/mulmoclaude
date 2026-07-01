@@ -30,11 +30,8 @@ const enMessages = {
       countryPlaceholder: "Select a country…",
       countryHint: "The country sets the tax jurisdiction so the assistant can give country-specific advice (T-number for Japan, VAT ID for the EU, etc.).",
       fiscalYearEndLabel: "Fiscal year end",
-      fiscalYearEndQ1: "March 31 (Q1)",
-      fiscalYearEndQ2: "June 30 (Q2)",
-      fiscalYearEndQ3: "September 30 (Q3)",
-      fiscalYearEndQ4: "December 31 (Q4)",
-      fiscalYearEndHint: "Determines the fiscal year boundary used by the date-range shortcuts in this book. Default is December 31 (Q4 — calendar year).",
+      fiscalYearEndHint:
+        "Determines the fiscal year boundary used by the date-range shortcuts in this book. Pick the month whose last day the fiscal year ends on. Default is December (calendar year).",
       placeholder: "Pick a book…",
       firstRunHint:
         "Pick a name, currency, country, and fiscal year end for your first book. The currency is set per-book and is hard to change once you start booking entries.",

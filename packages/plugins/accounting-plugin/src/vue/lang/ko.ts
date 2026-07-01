@@ -32,11 +32,8 @@ const koMessages: AccountingMessages = {
       countryPlaceholder: "국가 선택…",
       countryHint: "국가를 설정하면 세무 관할이 결정되어 어시스턴트가 국가별 안내(일본 T-번호, EU VAT ID 등)를 제공할 수 있습니다.",
       fiscalYearEndLabel: "회계연도 종료일",
-      fiscalYearEndQ1: "3월 31일 (Q1)",
-      fiscalYearEndQ2: "6월 30일 (Q2)",
-      fiscalYearEndQ3: "9월 30일 (Q3)",
-      fiscalYearEndQ4: "12월 31일 (Q4)",
-      fiscalYearEndHint: "이 장부의 날짜 범위 단축 메뉴에 사용되는 회계연도 경계를 결정합니다. 기본값은 12월 31일(Q4 — 달력 연도)입니다.",
+      fiscalYearEndHint:
+        "이 장부의 날짜 범위 단축 메뉴에 사용되는 회계연도 경계를 결정합니다. 회계연도가 끝나는 월(그 달의 마지막 날)을 선택하세요. 기본값은 12월(달력 연도)입니다.",
       placeholder: "장부 선택…",
       firstRunHint: "첫 장부의 이름, 통화, 국가, 회계연도 종료일을 선택하세요. 통화는 장부별로 설정되며 분개를 시작한 뒤에는 변경이 어렵습니다.",
     },
