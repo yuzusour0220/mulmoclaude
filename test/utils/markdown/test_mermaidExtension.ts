@@ -7,9 +7,22 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { Marked } from "marked";
 import { mermaidExtension } from "../../../src/utils/markdown/mermaidExtension";
+import { markedHighlightExtension } from "../../../src/utils/markdown/highlight";
 
 function markedWithMermaid(): Marked {
   const instance = new Marked();
+  instance.use(mermaidExtension);
+  return instance;
+}
+
+/** Mirrors the host `setupMarked()` order: highlight first (its
+ *  `walkTokens` mutates every code token's `text` to a highlight.js-
+ *  escaped string and stamps `escaped = true`), mermaid second (its
+ *  `code` renderer wraps highlight's). Used to lock down the
+ *  `token.escaped` double-encoding fix. */
+function markedWithHighlightAndMermaid(): Marked {
+  const instance = new Marked();
+  instance.use(markedHighlightExtension);
   instance.use(mermaidExtension);
   return instance;
 }
@@ -115,5 +128,31 @@ describe("mermaidExtension", () => {
     const source = "```mermaid   \ngraph TB\n  A-->B\n```\n";
     const html = markedWithMermaid().parse(source) as string;
     assert.match(html, /<pre class="mermaid" data-mermaid-pending="1">/);
+  });
+
+  it("does not double-encode quotes when composed with markedHighlight", () => {
+    // Regression: highlight's `walkTokens` rewrites `token.text` to a
+    // highlight.js-escaped form (mermaid falls to plaintext, so every
+    // `"` becomes `&quot;`) and stamps `token.escaped = true`. If our
+    // renderer blindly re-escapes, `&` in `&quot;` becomes `&amp;`,
+    // and the browser decodes `&amp;quot;` back to `&quot;` on parse
+    // — which mermaid.render then chokes on with a parse error at
+    // the exact spot the label opens. The renderer must honour
+    // `token.escaped` and pass through untouched.
+    const source = '```mermaid\ngraph TD\n  L3["レイヤー3: エンドユーザー"]\n```\n';
+    const html = markedWithHighlightAndMermaid().parse(source) as string;
+    // The raw string `&quot;` appears in the html (that's the escaped
+    // form of the quote inside <pre>) …
+    assert.match(html, /&quot;/);
+    // … but NEVER as `&amp;quot;` (the double-encoded form that
+    // would round-trip through the browser back to `&quot;` in
+    // textContent).
+    assert.doesNotMatch(html, /&amp;quot;/);
+    // Same guard for the `<br/>` case a Japanese mermaid diagram
+    // often carries in labels.
+    const withBr = '```mermaid\ngraph TD\n  A["one<br/>two"]\n```\n';
+    const brHtml = markedWithHighlightAndMermaid().parse(withBr) as string;
+    assert.match(brHtml, /&lt;br\/&gt;/);
+    assert.doesNotMatch(brHtml, /&amp;lt;br/);
   });
 });
