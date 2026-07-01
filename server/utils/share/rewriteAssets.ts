@@ -41,12 +41,19 @@ function safeAssetName(ref: string): string {
   return segment === "" || segment === "." || segment === ".." ? "asset" : segment;
 }
 
-// Assigns each unique originalRef a stable `assets/<name>`. Same ref →
-// same slot (dedup). A basename collision across different refs is
-// disambiguated by prefixing a short hash of the full ref, so two
-// `logo.png` from different dirs don't clobber each other.
+function splitSuffix(ref: string): { filePath: string; suffix: string } {
+  const cut = ref.search(/[?#]/);
+  return cut === -1 ? { filePath: ref, suffix: "" } : { filePath: ref.slice(0, cut), suffix: ref.slice(cut) };
+}
+
+// Maps a local ref to its `assets/<name>` slot. The bundled FILE is
+// keyed by the path with `?query`/`#fragment` stripped, so `a.png?v=1`
+// and `a.png?v=2` share one copy; but the rewritten URL keeps each
+// ref's suffix (an SVG `sprite.svg#icon` fragment must survive). A
+// basename collision across different dirs is disambiguated by a short
+// hash of the file path so two `logo.png` don't clobber each other.
 function createAssetMapper() {
-  const byRef = new Map<string, string>();
+  const byPath = new Map<string, string>();
   const usedNames = new Set<string>();
   const assets: AssetRef[] = [];
 
@@ -56,16 +63,21 @@ function createAssetMapper() {
     return (acc >>> 0).toString(36);
   };
 
-  const map = (originalRef: string): string => {
-    const existing = byRef.get(originalRef);
+  const bundlePathFor = (filePath: string): string => {
+    const existing = byPath.get(filePath);
     if (existing) return existing;
-    const base = safeAssetName(originalRef);
-    const name = usedNames.has(base) ? `${hash(originalRef)}-${base}` : base;
+    const base = safeAssetName(filePath);
+    const name = usedNames.has(base) ? `${hash(filePath)}-${base}` : base;
     usedNames.add(name);
     const bundlePath = `${ASSETS_DIR}/${name}`;
-    byRef.set(originalRef, bundlePath);
-    assets.push({ originalRef, bundlePath });
+    byPath.set(filePath, bundlePath);
+    assets.push({ originalRef: filePath, bundlePath });
     return bundlePath;
+  };
+
+  const map = (originalRef: string): string => {
+    const { filePath, suffix } = splitSuffix(originalRef);
+    return bundlePathFor(filePath) + suffix;
   };
 
   return { map, assets };
@@ -132,6 +144,7 @@ const URL_ATTRS: readonly { selector: string; attr: string }[] = [
   { selector: "audio[src]", attr: "src" },
   { selector: "video[src]", attr: "src" },
   { selector: "video[poster]", attr: "poster" },
+  { selector: "use[href]", attr: "href" },
 ];
 
 function rewriteAttrs(root: HTMLElement, map: (ref: string) => string): void {

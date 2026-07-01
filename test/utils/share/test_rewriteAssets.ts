@@ -73,6 +73,20 @@ describe("rewriteHtmlAssets", () => {
     assert.equal(assets[0].bundlePath, "assets/foo.png");
   });
 
+  it("preserves a #fragment on the rewritten url (svg sprite)", () => {
+    const { html, assets } = rewriteHtmlAssets(`<svg><use href="sprite.svg#icon"></use></svg>`);
+    assert.equal(assets[0].bundlePath, "assets/sprite.svg");
+    assert.match(html, /href="assets\/sprite\.svg#icon"/);
+  });
+
+  it("preserves ?query on the url and dedups the underlying file", () => {
+    const { html, assets } = rewriteHtmlAssets(`<img src="a.png?v=1"><img src="a.png?v=2">`);
+    assert.equal(assets.length, 1);
+    assert.equal(assets[0].bundlePath, "assets/a.png");
+    assert.match(html, /src="assets\/a\.png\?v=1"/);
+    assert.match(html, /src="assets\/a\.png\?v=2"/);
+  });
+
   it("sanitizes a backslash-containing ref to a safe bundle name (zip-slip)", () => {
     const { html, assets } = rewriteHtmlAssets(`<img src="..\\..\\evil.png">`);
     assert.equal(assets.length, 1);
