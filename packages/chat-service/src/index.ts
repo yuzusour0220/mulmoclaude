@@ -152,12 +152,26 @@ export function createChatService(deps: ChatServiceDeps): ChatService {
     // Resolve the target session's role BEFORE calling connectSession so the
     // persisted state's `roleId` tracks the new session's role — otherwise the
     // next relay's `startChat` would resume the new session under the previous
-    // role (#1888 / #1894). When the DI lookup returns null (unknown session
-    // or role not recorded), or when no `getSessionRole` was wired at all,
-    // fall back to the previous "session-id-only" behaviour: preserve the
-    // existing role. That keeps the route backward-compatible for hosts that
-    // haven't wired the resolver.
-    const resolvedRole = deps.getSessionRole ? await deps.getSessionRole(chatSessionId) : null;
+    // role (#1888 / #1894). Three fallback paths all treated as "preserve
+    // existing role":
+    //   1. No `getSessionRole` wired at all (backward compat for older hosts).
+    //   2. Resolver returns null (unknown / corrupt session metadata).
+    //   3. Resolver throws (host bug / timeout / IO error) — catch here so
+    //      the route can never bubble the failure as a 500 to the API caller
+    //      (codex review on #1895; the MulmoClaude host's resolver is
+    //      hardened but the DI contract doesn't require hosts to be).
+    let resolvedRole: string | null = null;
+    if (deps.getSessionRole) {
+      try {
+        resolvedRole = await deps.getSessionRole(chatSessionId);
+      } catch (err) {
+        logger.warn("chat-service", "getSessionRole threw; falling back to preserving existing role", {
+          chatSessionId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+        resolvedRole = null;
+      }
+    }
     const updated = await store.connectSession(transportId, externalChatId, chatSessionId, resolvedRole ?? undefined);
     if (!updated) {
       notFound(res, "No chat state found for this transport");

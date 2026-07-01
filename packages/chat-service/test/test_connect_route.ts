@@ -4,7 +4,7 @@
 // persisted bridge state's `roleId` tracks the new session's role, avoiding
 // the same drift the `/switch` command was hit by.
 
-import { describe, it, after } from "node:test";
+import { describe, it, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import express from "express";
@@ -113,9 +113,16 @@ async function startHarness(opts: HarnessOpts = {}): Promise<{ harness: Harness;
 }
 
 describe("POST /connect — role propagation (issue #1894)", () => {
+  // Every test brings up its own harness (fresh port + tmp transports dir);
+  // afterEach tears it down BEFORE the next `it()` re-assigns `currentShutdown`.
+  // A suite-level `after` would only close the last harness and leak the
+  // earlier ones' HTTP servers + tmp dirs (CodeRabbit review on #1895).
   let currentShutdown: (() => Promise<void>) | null = null;
-  after(async () => {
-    if (currentShutdown) await currentShutdown();
+  afterEach(async () => {
+    if (!currentShutdown) return;
+    const shutdown = currentShutdown;
+    currentShutdown = null;
+    await shutdown();
   });
 
   it("resolves the target session's role and stamps it into the persisted state", async () => {
@@ -186,7 +193,37 @@ describe("POST /connect — role propagation (issue #1894)", () => {
     assert.equal(response.status, 200);
 
     const state = await harness.readState("telegram", "chat-1");
+    assert.ok(state);
+    assert.equal(state?.sessionId, "any-session", "no resolver still repoints the session (only the role stays put)");
     assert.equal(state?.roleId, "general", "no resolver ⇒ preserve prior role (backward compat)");
+  });
+
+  it("preserves the previous role when the resolver throws (codex review on #1895)", async () => {
+    // Third fallback path documented in the /connect handler: a host-provided
+    // resolver that throws (bug, timeout, IO error) must be caught inside the
+    // route so an API caller sees a 200 with role preserved instead of a
+    // 500 bubble. The MulmoClaude host's resolver is already hardened, but
+    // the DI contract doesn't require every host to be — the route defends
+    // itself.
+    const { harness, shutdown } = await startHarness({
+      getSessionRole: async () => {
+        throw new Error("resolver blew up");
+      },
+    });
+    currentShutdown = shutdown;
+
+    await harness.seedState("telegram", "chat-1", "general", "sess-general");
+    const response = await fetch(`${harness.url}/api/transports/telegram/chats/chat-1/connect`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ chatSessionId: "some-session" }),
+    });
+    assert.equal(response.status, 200, "throw must not bubble as 500");
+
+    const state = await harness.readState("telegram", "chat-1");
+    assert.ok(state);
+    assert.equal(state?.sessionId, "some-session", "session should still be repointed");
+    assert.equal(state?.roleId, "general", "throw ⇒ preserve prior role, same as null-return path");
   });
 
   it("returns 404 when no chat state exists yet for the transport chat", async () => {
