@@ -369,6 +369,8 @@ const jaMessages = {
     closeFile: "ファイルを閉じる",
   },
   fileContentRenderer: {
+    download: "ZIP",
+    downloadZip: "自己完結zipでダウンロード（アセット同梱）",
     selectFile: "ファイルを選択してください",
     htmlPreview: "HTML プレビュー",
     pdfPreview: "PDF プレビュー",

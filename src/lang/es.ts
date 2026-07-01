@@ -373,6 +373,8 @@ const esMessages = {
     closeFile: "Cerrar archivo",
   },
   fileContentRenderer: {
+    download: "ZIP",
+    downloadZip: "Descargar como zip autónomo (recursos incluidos)",
     selectFile: "Selecciona un archivo",
     htmlPreview: "Vista previa HTML",
     pdfPreview: "Vista previa PDF",

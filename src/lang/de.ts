@@ -371,6 +371,8 @@ const deMessages = {
     closeFile: "Datei schließen",
   },
   fileContentRenderer: {
+    download: "ZIP",
+    downloadZip: "Als eigenständiges ZIP herunterladen (Assets gebündelt)",
     selectFile: "Datei auswählen",
     htmlPreview: "HTML-Vorschau",
     pdfPreview: "PDF-Vorschau",
