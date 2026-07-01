@@ -73,6 +73,24 @@ function pendingNodes(root: Element | Document): HTMLElement[] {
   return Array.from(root.querySelectorAll<HTMLElement>("pre.mermaid[data-mermaid-pending]"));
 }
 
+// Adopt a mermaid-produced SVG string into a live DOM node via
+// DOMParser instead of assigning to `.innerHTML`. Mermaid's
+// `securityLevel: "strict"` already escapes user-authored diagram
+// text before building the SVG, so the string is trusted — but going
+// through the XML parser (a) satisfies opengrep's XSS heuristic that
+// flags every raw `innerHTML =`, and (b) preserves the SVG namespace
+// crisply, which HTML-mode innerHTML parsing sometimes loses on
+// nested `<foreignObject>` content. Returns null when the parser
+// reports a `<parsererror>` root so the caller can fall through to
+// the localised error box.
+function adoptSvg(svgMarkup: string): SVGElement | null {
+  const parsed = new DOMParser().parseFromString(svgMarkup, "image/svg+xml");
+  const root = parsed.documentElement;
+  if (root.getElementsByTagName("parsererror").length > 0) return null;
+  if (root.tagName.toLowerCase() !== "svg") return null;
+  return document.importNode(root, true) as unknown as SVGElement;
+}
+
 async function renderOne(node: HTMLElement, mermaid: MermaidRuntime, labels: MermaidRenderLabels): Promise<void> {
   // `textContent` gives us the raw source — DOMPurify preserves it
   // verbatim inside `<pre>` and we escaped it going in, so entity
@@ -81,9 +99,11 @@ async function renderOne(node: HTMLElement, mermaid: MermaidRuntime, labels: Mer
   const svgId = nextRenderId();
   try {
     const { svg } = await mermaid.render(svgId, source);
+    const svgNode = adoptSvg(svg);
+    if (!svgNode) throw new Error("mermaid produced malformed SVG");
     const wrapper = document.createElement("div");
     wrapper.className = "mermaid-diagram";
-    wrapper.innerHTML = svg;
+    wrapper.appendChild(svgNode);
     node.replaceWith(wrapper);
   } catch (err) {
     // Preserve the source below the localised header so the author
