@@ -149,7 +149,16 @@ export function createChatService(deps: ChatServiceDeps): ChatService {
       return;
     }
 
-    const updated = await store.connectSession(transportId, externalChatId, chatSessionId);
+    // Resolve the target session's role BEFORE calling connectSession so the
+    // persisted state's `roleId` tracks the new session's role — otherwise the
+    // next relay's `startChat` would resume the new session under the previous
+    // role (#1888 / #1894). When the DI lookup returns null (unknown session
+    // or role not recorded), or when no `getSessionRole` was wired at all,
+    // fall back to the previous "session-id-only" behaviour: preserve the
+    // existing role. That keeps the route backward-compatible for hosts that
+    // haven't wired the resolver.
+    const resolvedRole = deps.getSessionRole ? await deps.getSessionRole(chatSessionId) : null;
+    const updated = await store.connectSession(transportId, externalChatId, chatSessionId, resolvedRole ?? undefined);
     if (!updated) {
       notFound(res, "No chat state found for this transport");
       return;

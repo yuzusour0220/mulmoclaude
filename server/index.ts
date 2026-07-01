@@ -66,7 +66,7 @@ import { announceOptionalDeps } from "./system/announceOptionalDeps.js";
 import { migrateLegacyBillingPresets } from "./workspace/billing-migration.js";
 import { APP_VERSION } from "./system/appVersion.js";
 import { createChatService } from "@mulmobridge/chat-service";
-import { readSessionJsonl } from "./utils/files/session-io.js";
+import { readSessionJsonl, readSessionMeta } from "./utils/files/session-io.js";
 import { onSessionEvent, initSessionStore } from "./events/session-store/index.js";
 import { initFileChangePublisher } from "./events/file-change.js";
 import { initCollectionChangePublisher } from "./events/collection-change.js";
@@ -699,6 +699,16 @@ async function listSessionsForBridge(opts: { limit: number; offset: number }) {
   }));
   return { sessions, total };
 }
+// Resolve a session's original roleId via its persisted metadata file.
+// Wired into the chat-service factory so the HTTP `/connect` route can
+// keep the bridge state's role in sync with the target session — same
+// drift-fix as `/switch` (#1888) applied to the API surface (#1894).
+// `readSessionMeta` is null-safe: missing or corrupt metadata returns
+// null, which the route treats as "preserve the previous role".
+async function getSessionRoleForBridge(sessionId: string): Promise<string | null> {
+  const meta = await readSessionMeta(sessionId);
+  return meta?.roleId ?? null;
+}
 async function getSessionHistoryForBridge(sessionId: string, opts: { limit: number; offset: number }) {
   const content = await readSessionJsonl(sessionId);
   if (!content) return { messages: [], total: 0 };
@@ -750,6 +760,7 @@ const chatService = createChatService({
   tokenProvider: getCurrentToken,
   listSessions: listSessionsForBridge,
   getSessionHistory: getSessionHistoryForBridge,
+  getSessionRole: getSessionRoleForBridge,
   listRegisteredSkills,
 });
 app.use(chatService.router);
