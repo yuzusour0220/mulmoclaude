@@ -8,7 +8,9 @@ export function saveBlob(blob: Blob, filename: string): void {
   anchor.href = url;
   anchor.download = filename;
   anchor.click();
-  URL.revokeObjectURL(url);
+  // Defer revocation to the next task: revoking synchronously right after
+  // click() can cancel the download in some browsers before the blob is read.
+  setTimeout(() => URL.revokeObjectURL(url));
 }
 
 export function filenameFromDisposition(header: string | null, fallback: string): string {

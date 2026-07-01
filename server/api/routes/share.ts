@@ -55,30 +55,46 @@ interface PackMarkdownBody {
   marp?: boolean;
 }
 
+// A shared markdown zip is opened directly by the recipient (unlike the
+// PDF path, which puppeteer renders once), so neutralize any script the
+// source markdown carries — `marked` passes raw HTML through. A strict
+// CSP blocks `<script>` / inline handlers / `javascript:` and plugins
+// without stripping content or touching images/styles.
+const SHARE_MARKDOWN_CSP = "script-src 'none'; object-src 'none'; base-uri 'none'";
+
+export function withScriptCsp(html: string): string {
+  return html.replace(/<head>/i, `<head><meta http-equiv="Content-Security-Policy" content="${SHARE_MARKDOWN_CSP}">`);
+}
+
+async function buildMarkdownZip(body: PackMarkdownBody): Promise<{ filename: string; zip: Buffer }> {
+  const markdown = typeof body.markdown === "string" ? body.markdown : "";
+  const baseDir = typeof body.baseDir === "string" ? body.baseDir : undefined;
+  const html = withScriptCsp(await renderMarkdownHtml({ markdown, baseDir, stripFrontmatter: body.stripFrontmatter === true, marp: body.marp === true }));
+  const zip = await zipBundle([{ bundlePath: "index.html", bytes: Buffer.from(html, "utf-8") }]);
+  const filename = typeof body.filename === "string" ? body.filename : "document";
+  return { filename: safeZipName(filename.replace(/\.(md|markdown|html?|pdf)$/i, "")), zip };
+}
+
 // POST /api/share/pack-markdown — render markdown (or a wiki page) to a
-// self-contained HTML (CSS inlined, images embedded as data URIs) and
-// return it zipped as index.html. Shares the render path with the PDF
-// route (`renderMarkdownHtml`). `baseDir` resolves relative image refs;
-// traversal is rejected downstream by the shared image resolver.
+// self-contained HTML (CSS inlined, images embedded as data URIs, scripts
+// neutralized) and return it zipped as index.html. Shares the render path
+// with the PDF route (`renderMarkdownHtml`). `baseDir` resolves relative
+// image refs; traversal is rejected downstream by the shared image resolver.
 router.post(API_ROUTES.share.packMarkdown, async (req: Request<object, unknown, PackMarkdownBody>, res: Response) => {
   const { body } = req;
   if (!body || typeof body !== "object" || Array.isArray(body)) {
     badRequest(res, "request body must be a JSON object");
     return;
   }
-  const markdown = typeof body.markdown === "string" ? body.markdown : "";
-  if (!markdown) {
+  if (typeof body.markdown !== "string" || !body.markdown) {
     badRequest(res, "markdown is required");
     return;
   }
-  const baseDir = typeof body.baseDir === "string" ? body.baseDir : undefined;
-  const filename = typeof body.filename === "string" ? body.filename : "document";
   try {
-    const html = await renderMarkdownHtml({ markdown, baseDir, stripFrontmatter: body.stripFrontmatter === true, marp: body.marp === true });
-    const zip = await zipBundle([{ bundlePath: "index.html", bytes: Buffer.from(html, "utf-8") }]);
+    const { filename, zip } = await buildMarkdownZip(body);
     log.info("share", "pack-markdown: ok", { bytes: zip.length, marp: body.marp === true });
     res.setHeader("Content-Type", "application/zip");
-    res.setHeader("Content-Disposition", `attachment; filename="${safeZipName(filename.replace(/\.(md|markdown|html?|pdf)$/i, ""))}"`);
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
     res.send(zip);
   } catch (err) {
     log.error("share", "pack-markdown: threw", { error: errorMessage(err) });

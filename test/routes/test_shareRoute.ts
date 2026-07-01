@@ -6,7 +6,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
-import { isPackablePath } from "../../server/api/routes/share.js";
+import { isPackablePath, withScriptCsp } from "../../server/api/routes/share.js";
 
 describe("isPackablePath", () => {
   it("accepts a canonical artifacts/html/*.html path", () => {
@@ -36,5 +36,15 @@ describe("isPackablePath", () => {
     assert.equal(isPackablePath("artifacts/html/./page.html"), false);
     assert.equal(isPackablePath("artifacts/html/a..b.html"), false);
     assert.equal(isPackablePath("artifacts/html/../../../../etc/passwd"), false);
+  });
+});
+
+describe("withScriptCsp", () => {
+  it("injects a script-blocking CSP so a shared markdown script can't run", () => {
+    const out = withScriptCsp("<!DOCTYPE html><html><head><style>x</style></head><body><script>alert(1)</script></body></html>");
+    assert.match(out, /<meta http-equiv="Content-Security-Policy"/);
+    assert.match(out, /script-src 'none'/);
+    // Content is preserved (not stripped) — the CSP neutralizes it at open time.
+    assert.match(out, /<style>x<\/style>/);
   });
 });

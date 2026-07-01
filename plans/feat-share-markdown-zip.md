@@ -20,10 +20,12 @@ Phase 2（S3）とは独立。
 ### Server
 - `server/api/routes/pdf.ts`: `renderMarkdownHtml(opts)`（marp/非marp両対応）を export し、
   `renderMarkdownPdf` はそれを `renderPdf` に渡すだけに簡素化。
-- `server/utils/share/packMarkdown.ts`（新）: `packMarkdownZip(opts)` = `renderMarkdownHtml` →
-  `zipBundle([{ bundlePath:"index.html", bytes }])` → 安全なファイル名。
-- `server/api/routes/share.ts`: `POST /api/share/pack-markdown`（body 検証: markdown 必須, baseDir/marp/stripFrontmatter）→ zip 配信。
+- `server/api/routes/share.ts`: `POST /api/share/pack-markdown`（body 検証: markdown 必須, baseDir/marp/stripFrontmatter）。
+  `renderMarkdownHtml` → **script無効化CSP注入(`withScriptCsp`)** → `zipBundle([{ bundlePath:"index.html", bytes }])` → 安全なファイル名。
+  （別utilは作らず share.ts 内の `buildMarkdownZip` に集約。）
 - `src/config/apiRoutes.ts`: `share.packMarkdown`。
+- **セキュリティ**: zip は受信者がHTMLを直接開くため、`marked` の raw HTML 通過による script を CSP
+  (`script-src 'none'; object-src 'none'; base-uri 'none'`) で無効化（PDF経路は puppeteer で1回描画のみなので不要）。
 
 ### Client
 - `src/composables/useMarkdownZip.ts`（新, `usePdfDownload` を鏡）: markdown/opts を POST → zip blob → DL。`packing`/`packFailed`/`reset`。
