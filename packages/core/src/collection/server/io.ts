@@ -192,10 +192,7 @@ export async function writeItem(dataDir: string, itemId: string, item: Collectio
 }
 
 export type DeleteItemResult =
-  | { kind: "ok"; itemId: string }
-  | { kind: "invalid-id"; itemId: string }
-  | { kind: "not-found"; itemId: string }
-  | { kind: "path-escape"; itemId: string };
+  { kind: "ok"; itemId: string } | { kind: "invalid-id"; itemId: string } | { kind: "not-found"; itemId: string } | { kind: "path-escape"; itemId: string };
 
 export async function deleteItem(dataDir: string, itemId: string, opts: IoOptions = {}): Promise<DeleteItemResult> {
   const safeId = safeRecordId(itemId);
@@ -425,7 +422,16 @@ export function promptPathsFor(collection: Pick<LoadedCollection, "slug" | "sche
 
 function formatPathsBlock(paths: CollectionPromptPaths | undefined): string {
   if (!paths) return "";
-  const json = JSON.stringify({ slug: paths.slug, dataPath: paths.dataPath, skillDir: paths.skillDir }, null, 2);
+  // Even though the three values are host-derived (post-R3 dataPath, validated
+  // slug, workspace-relative skillDir) and can't be user-writable in
+  // practice, run them through the same `sanitizeDeep` pipeline as record
+  // data — the prompt tells the agent to use these VERBATIM in shell / script
+  // invocations, so a hypothetical hostile character (a future contributor
+  // adds a source of these values that ISN'T load-time-validated) must not
+  // break the data-boundary framing or become a shell metacharacter. Cheap
+  // belt-and-suspenders; CodeRabbit review on #1897.
+  const sanitized = sanitizeDeep({ slug: paths.slug, dataPath: paths.dataPath, skillDir: paths.skillDir });
+  const json = JSON.stringify(sanitized, null, 2);
   return `<collection_paths>
 ${json}
 </collection_paths>
