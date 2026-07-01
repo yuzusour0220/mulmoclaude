@@ -19,6 +19,7 @@ import { wikiEmbedExtension } from "./wikiEmbeds";
 import { registerBuiltInWikiEmbeds, setEmbedLocaleProvider } from "./wikiEmbedHandlers";
 import { workspaceLinkifyExtension } from "./workspaceLinkify";
 import { markedHighlightExtension } from "./highlight";
+import { mermaidExtension } from "./mermaidExtension";
 
 let installed = false;
 
@@ -37,6 +38,11 @@ export function setupMarked(): void {
   // emitted as an inline-code span instead of a Markdown link. See
   // `workspaceLinkify.ts` for the detection contract (#1300).
   marked.use(workspaceLinkifyExtension);
+  // Register mermaid BEFORE the highlight extension so ```mermaid
+  // fences short-circuit into an html placeholder and never reach
+  // highlight.js (which would otherwise render them as escaped
+  // plaintext).
+  marked.use(mermaidExtension);
   marked.use(markedHighlightExtension);
   installed = true;
 }
