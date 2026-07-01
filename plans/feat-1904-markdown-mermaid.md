@@ -8,7 +8,7 @@ Scope confirmed via follow-up: **host + markdown-plugin** (all viewers), **lazy 
 
 ## Design
 
-Two components:
+Three components:
 
 1. **marked block extension** — matches `\`\`\`mermaid\n…\n\`\`\`` fences at the block level and short-circuits them into `<pre class="mermaid" data-mermaid-pending="1">SOURCE</pre>`. Registered BEFORE `markedHighlightExtension` so highlight.js never sees a mermaid fence (which it would otherwise render as plaintext).
 

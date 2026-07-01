@@ -14,18 +14,35 @@ type MermaidRuntime = typeof import("mermaid").default;
 let mermaidPromise: Promise<MermaidRuntime> | null = null;
 
 async function loadMermaid(): Promise<MermaidRuntime> {
-  if (!mermaidPromise) {
-    mermaidPromise = import("mermaid").then((mod) => {
-      const mermaid = mod.default;
-      // `startOnLoad: false` — we drive rendering explicitly per node
-      // instead of letting mermaid walk the document on DOMContentLoaded.
-      // `securityLevel: "strict"` — mermaid sanitises its own labels and
-      // will not execute user-authored HTML/JS in diagram text.
-      mermaid.initialize({ startOnLoad: false, securityLevel: "strict", theme: "default" });
-      return mermaid;
-    });
+  if (mermaidPromise) return mermaidPromise;
+  const attempt = import("mermaid").then((mod) => {
+    const mermaid = mod.default;
+    // `startOnLoad: false` — we drive rendering explicitly per node
+    // instead of letting mermaid walk the document on DOMContentLoaded.
+    // `securityLevel: "strict"` — mermaid sanitises its own labels and
+    // will not execute user-authored HTML/JS in diagram text.
+    mermaid.initialize({ startOnLoad: false, securityLevel: "strict", theme: "default" });
+    return mermaid;
+  });
+  // Share the in-flight promise with parallel callers, but drop the
+  // cache once it rejects so a transient failure (offline / stale
+  // chunk after a deploy / ad-blocker hiccup) can be retried by the
+  // next fence to render. Without this reset the module would be
+  // dead until the user reloaded.
+  attempt.catch(() => {
+    if (mermaidPromise === attempt) mermaidPromise = null;
+  });
+  mermaidPromise = attempt;
+  return attempt;
+}
+
+function placeLoadError(nodes: HTMLElement[], err: unknown): void {
+  for (const node of nodes) {
+    const errBox = document.createElement("pre");
+    errBox.className = "mermaid-error";
+    errBox.textContent = `Mermaid failed to load: ${String(err)}`;
+    node.replaceWith(errBox);
   }
-  return mermaidPromise;
 }
 
 // Distinct per-diagram DOM id. Two diagrams on one page must not collide
@@ -68,6 +85,17 @@ export async function renderMermaidNodes(root: Element | Document | null | undef
   if (!root) return;
   const nodes = pendingNodes(root);
   if (nodes.length === 0) return;
-  const mermaid = await loadMermaid();
+  let mermaid: MermaidRuntime;
+  try {
+    mermaid = await loadMermaid();
+  } catch (err) {
+    // The dynamic import failed (network / bundler / adblock). Swap
+    // every pending placeholder for a visible error box so the user
+    // sees WHY the diagram is missing instead of a raw code fence, and
+    // don't let the rejection escape as an unhandled promise (callers
+    // fire this via `void run()` in the composable).
+    placeLoadError(nodes, err);
+    return;
+  }
   await Promise.all(nodes.map((node) => renderOne(node, mermaid)));
 }
