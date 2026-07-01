@@ -41,13 +41,16 @@ describe("mermaidExtension", () => {
     assert.match(html, /<pre>?<code[^>]*language-ts/);
   });
 
-  it("falls back to plain marked when a mermaid fence is missing its closing ```", () => {
-    // Unterminated fence — the extension tokenizer returns undefined
-    // so marked's default block scanner handles it. The output
-    // shouldn't contain the mermaid placeholder class.
+  it("still routes an unterminated mermaid fence through the placeholder", () => {
+    // CommonMark: a code fence without a matching closer auto-closes
+    // at EOF. marked tokenises this as a normal code block with
+    // `lang="mermaid"`, so our renderer catches it. The eventual
+    // mermaid.render call will fail on the incomplete diagram source
+    // and swap to `.mermaid-error` at runtime, which is better UX
+    // than a silent plaintext block.
     const source = "```mermaid\ngraph TB\n  A-->B\n";
     const html = markedWithMermaid().parse(source) as string;
-    assert.doesNotMatch(html, /class="mermaid"/);
+    assert.match(html, /<pre class="mermaid"/);
   });
 
   it("handles an empty mermaid body without crashing", () => {
@@ -80,5 +83,37 @@ describe("mermaidExtension", () => {
     assert.match(html, /<pre class="mermaid" data-mermaid-pending="1">/);
     assert.match(html, /graph TB/);
     assert.match(html, /A--&gt;B/);
+  });
+
+  it("tokenises tilde-fence mermaid blocks (~~~mermaid)", () => {
+    // GFM permits `~~~` as an alternative to triple-backticks. marked
+    // tokenises both as the same `code` token with lang="mermaid",
+    // so our renderer catches this uniformly — no bespoke regex
+    // handling needed.
+    const source = "~~~mermaid\ngraph TB\n  A-->B\n~~~\n";
+    const html = markedWithMermaid().parse(source) as string;
+    assert.match(html, /<pre class="mermaid" data-mermaid-pending="1">/);
+    assert.match(html, /graph TB/);
+    assert.match(html, /A--&gt;B/);
+  });
+
+  it("tokenises mermaid fences nested inside a list item", () => {
+    // CommonMark: a fence inside a list item is indented to the
+    // list-item content column. marked handles the tokenisation; our
+    // renderer just needs `lang === "mermaid"` to hold, which it does.
+    const source = "- item text\n\n  ```mermaid\n  graph TB\n    A-->B\n  ```\n";
+    const html = markedWithMermaid().parse(source) as string;
+    assert.match(html, /<li>/);
+    assert.match(html, /<pre class="mermaid" data-mermaid-pending="1">/);
+    assert.match(html, /graph TB/);
+  });
+
+  it("preserves a trailing whitespace after the language tag", () => {
+    // A common author mistake: `\`\`\`mermaid  ` (trailing spaces).
+    // marked keeps them in `token.lang`; the renderer trims so the
+    // block still resolves to mermaid.
+    const source = "```mermaid   \ngraph TB\n  A-->B\n```\n";
+    const html = markedWithMermaid().parse(source) as string;
+    assert.match(html, /<pre class="mermaid" data-mermaid-pending="1">/);
   });
 });

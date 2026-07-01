@@ -1,57 +1,44 @@
-// A marked block-level extension that intercepts ```mermaid fences
-// before the code/highlight pipeline sees them and rewrites the block
-// into a `<pre class="mermaid" data-mermaid-pending="1">` placeholder.
-//
-// The actual diagram render is deferred to `mermaidRender.ts`, which
+// Marked `code` renderer override that intercepts fenced code blocks
+// whose language tag is `mermaid` and rewrites them into a
+// `<pre class="mermaid" data-mermaid-pending="1">` placeholder. The
+// diagram render itself is deferred to `mermaidRender.ts`, which
 // scans the placeholders in the DOM after Vue's v-html injects the
-// html. That two-step split keeps this extension pure (no runtime
-// deps beyond `marked`) so tests can assert the html shape without
-// booting a browser.
+// html. Two-step split keeps this file pure (no runtime deps beyond
+// `marked`) so tests can assert the html shape without booting a
+// browser.
 //
-// Registration order matters: this must land BEFORE
-// `markedHighlightExtension` in `setup.ts` so highlight.js never sees
-// the mermaid fence — otherwise `mermaid` becomes a "plaintext"
-// fallback highlight and the source text ends up escaped.
+// Why a renderer override and not a block tokenizer:
+//   - marked already handles every fence variation CommonMark / GFM
+//     permits (backticks vs tildes, LF vs CRLF, top-level vs indented
+//     inside a list item, up to 3 spaces of leading whitespace on the
+//     fence). Re-implementing that surface in a bespoke regex means
+//     silently falling back to plaintext on the edge cases the regex
+//     misses. Overriding the `code` renderer catches everything marked
+//     already tokenised as a code block, so no CommonMark variant is
+//     left behind.
+//
+// Registration order (see setup.ts): register AFTER
+// `markedHighlightExtension` so this renderer wraps highlight's — a
+// non-mermaid fence returns `false` from here and falls through to
+// highlight's code renderer unchanged, while a `mermaid` fence
+// short-circuits into the placeholder and never reaches highlight.
 
-import type { MarkedExtension, TokenizerAndRendererExtension } from "marked";
+import type { MarkedExtension, Tokens } from "marked";
 
-// `\r?\n` at every line-ending anchor so a Windows-authored source
-// (CRLF line endings) tokenises identically to a Unix source. Without
-// this the fence silently falls through to marked's default code
-// scanner and renders as a plaintext block.
-const MERMAID_FENCE = /^```mermaid[ \t]*\r?\n([\s\S]*?)\r?\n```(?:\r?\n|$)/;
-
-// DOMPurify's default policy already permits <pre> + class + data-*,
-// so the placeholder survives sanitisation on the viewers that call
-// `sanitizeMarkdownHtml`. `data-mermaid-pending` doubles as the query
-// selector `mermaidRender` uses AND as a guard so the runner only
-// touches nodes it hasn't already processed.
 function escapeHtml(text: string): string {
   return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
 
-const mermaidBlockExtension: TokenizerAndRendererExtension = {
-  name: "mermaidBlock",
-  level: "block",
-  start(src: string): number | undefined {
-    const idx = src.indexOf("```mermaid");
-    return idx === -1 ? undefined : idx;
-  },
-  tokenizer(src: string) {
-    const match = MERMAID_FENCE.exec(src);
-    if (!match) return undefined;
-    return {
-      type: "mermaidBlock",
-      raw: match[0],
-      text: match[1],
-    };
-  },
-  renderer(token) {
-    const source = typeof token.text === "string" ? token.text : "";
-    return `<pre class="mermaid" data-mermaid-pending="1">${escapeHtml(source)}</pre>\n`;
-  },
-};
-
 export const mermaidExtension: MarkedExtension = {
-  extensions: [mermaidBlockExtension],
+  renderer: {
+    code(token: Tokens.Code): string | false {
+      // marked v18 hands the whole token in — read `lang` from there.
+      // `lang` may carry trailing whitespace (`\`\`\`mermaid  `), so
+      // trim before comparing. Empty `lang` (indented 4-space blocks
+      // or plain triple-backtick with no tag) can never match here.
+      const lang = (token.lang ?? "").trim();
+      if (lang !== "mermaid") return false;
+      return `<pre class="mermaid" data-mermaid-pending="1">${escapeHtml(token.text)}</pre>\n`;
+    },
+  },
 };

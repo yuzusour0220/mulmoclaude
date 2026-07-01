@@ -38,11 +38,12 @@ export function setupMarked(): void {
   // emitted as an inline-code span instead of a Markdown link. See
   // `workspaceLinkify.ts` for the detection contract (#1300).
   marked.use(workspaceLinkifyExtension);
-  // Register mermaid BEFORE the highlight extension so ```mermaid
-  // fences short-circuit into an html placeholder and never reach
-  // highlight.js (which would otherwise render them as escaped
-  // plaintext).
-  marked.use(mermaidExtension);
   marked.use(markedHighlightExtension);
+  // Mermaid is a `code` renderer override, so it must land AFTER
+  // highlight — later `.use()` calls wrap earlier ones, and returning
+  // `false` from our override falls through to the highlight renderer
+  // underneath. That gives us: `mermaid` fence → placeholder; any
+  // other fence → highlight.js styling.
+  marked.use(mermaidExtension);
   installed = true;
 }
