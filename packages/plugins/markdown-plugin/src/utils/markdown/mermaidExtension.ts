@@ -6,7 +6,9 @@
 
 import type { MarkedExtension, TokenizerAndRendererExtension } from "marked";
 
-const MERMAID_FENCE = /^```mermaid[ \t]*\n([\s\S]*?)\n```(?:\n|$)/;
+// `\r?\n` at every line-ending anchor so a Windows-authored source
+// (CRLF line endings) tokenises identically to a Unix source.
+const MERMAID_FENCE = /^```mermaid[ \t]*\r?\n([\s\S]*?)\r?\n```(?:\r?\n|$)/;
 
 function escapeHtml(text: string): string {
   return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");

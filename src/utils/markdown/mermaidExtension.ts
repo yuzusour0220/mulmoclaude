@@ -15,7 +15,11 @@
 
 import type { MarkedExtension, TokenizerAndRendererExtension } from "marked";
 
-const MERMAID_FENCE = /^```mermaid[ \t]*\n([\s\S]*?)\n```(?:\n|$)/;
+// `\r?\n` at every line-ending anchor so a Windows-authored source
+// (CRLF line endings) tokenises identically to a Unix source. Without
+// this the fence silently falls through to marked's default code
+// scanner and renders as a plaintext block.
+const MERMAID_FENCE = /^```mermaid[ \t]*\r?\n([\s\S]*?)\r?\n```(?:\r?\n|$)/;
 
 // DOMPurify's default policy already permits <pre> + class + data-*,
 // so the placeholder survives sanitisation on the viewers that call

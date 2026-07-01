@@ -70,4 +70,15 @@ describe("mermaidExtension", () => {
     assert.doesNotMatch(html, /<pre class="mermaid"/);
     assert.match(html, /<code>mermaid graph TB<\/code>/);
   });
+
+  it("tokenises CRLF-line-ending mermaid fences (Windows-authored)", () => {
+    // Same fence as the first test but with \r\n line endings — the
+    // shape a Windows editor / git checkout with autocrlf=true would
+    // produce. Must produce the same placeholder as the LF case.
+    const source = "```mermaid\r\ngraph TB\r\n  A-->B\r\n```\r\n";
+    const html = markedWithMermaid().parse(source) as string;
+    assert.match(html, /<pre class="mermaid" data-mermaid-pending="1">/);
+    assert.match(html, /graph TB/);
+    assert.match(html, /A--&gt;B/);
+  });
 });
