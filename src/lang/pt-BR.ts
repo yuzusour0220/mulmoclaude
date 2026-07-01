@@ -902,6 +902,10 @@ const ptBRMessages = {
     marpSplitExit: "Fechar o editor de código",
     marpSplitEditorLabel: "Código",
   },
+  markdownMermaid: {
+    loadFailed: "⚠ Falha ao carregar o Mermaid: {error}",
+    renderFailed: "⚠ Falha ao renderizar o Mermaid: {error}",
+  },
   pluginTextResponse: {
     pdf: "PDF",
     pdfFailed: "⚠ Falha no PDF",

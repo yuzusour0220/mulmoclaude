@@ -6,12 +6,22 @@
 // each viewer re-implementing the plumbing.
 
 import { onMounted, watch, nextTick, type Ref } from "vue";
-import { renderMermaidNodes } from "./mermaidRender";
+import { useI18n } from "vue-i18n";
+import { renderMermaidNodes, type MermaidRenderLabels } from "./mermaidRender";
 
 export function useMermaidRenderer(containerRef: Ref<HTMLElement | null | undefined>, sourceRef: Ref<unknown>): void {
+  const { t } = useI18n();
+  // Resolve the two error-surface keys through the live i18n
+  // instance so the messages track locale changes. `t` is stable
+  // across the composable's lifetime, so building the labels once
+  // here (rather than re-building on every render) is safe.
+  const labels: MermaidRenderLabels = {
+    loadFailed: (error) => t("markdownMermaid.loadFailed", { error }),
+    renderFailed: (error) => t("markdownMermaid.renderFailed", { error }),
+  };
   const run = async (): Promise<void> => {
     await nextTick();
-    await renderMermaidNodes(containerRef.value ?? null);
+    await renderMermaidNodes(containerRef.value ?? null, labels);
   };
   onMounted(() => {
     void run();

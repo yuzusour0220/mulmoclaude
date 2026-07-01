@@ -901,6 +901,10 @@ const koMessages = {
     marpSplitExit: "소스 편집기 닫기",
     marpSplitEditorLabel: "소스",
   },
+  markdownMermaid: {
+    loadFailed: "⚠ Mermaid 로드 실패: {error}",
+    renderFailed: "⚠ Mermaid 렌더링 실패: {error}",
+  },
   pluginTextResponse: {
     pdf: "PDF",
     pdfFailed: "⚠ PDF 실패",

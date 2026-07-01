@@ -903,6 +903,10 @@ const frMessages = {
     marpSplitExit: "Fermer l'éditeur de source",
     marpSplitEditorLabel: "Source",
   },
+  markdownMermaid: {
+    loadFailed: "⚠ Échec du chargement de Mermaid : {error}",
+    renderFailed: "⚠ Échec du rendu Mermaid : {error}",
+  },
   pluginTextResponse: {
     pdf: "PDF",
     pdfFailed: "⚠ Échec PDF",

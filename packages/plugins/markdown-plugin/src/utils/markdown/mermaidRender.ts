@@ -6,6 +6,19 @@
 
 type MermaidRuntime = typeof import("mermaid").default;
 
+/** Localised strings the render pipeline surfaces when it fails.
+ *  See the host module (`src/utils/markdown/mermaidRender.ts`) for
+ *  the design rationale — kept in sync manually. */
+export interface MermaidRenderLabels {
+  loadFailed: (error: string) => string;
+  renderFailed: (error: string) => string;
+}
+
+const DEFAULT_LABELS: MermaidRenderLabels = {
+  loadFailed: (error) => `⚠ Mermaid failed to load: ${error}`,
+  renderFailed: (error) => `⚠ Mermaid render failed: ${error}`,
+};
+
 let mermaidPromise: Promise<MermaidRuntime> | null = null;
 
 async function loadMermaid(): Promise<MermaidRuntime> {
@@ -25,11 +38,12 @@ async function loadMermaid(): Promise<MermaidRuntime> {
   return attempt;
 }
 
-function placeLoadError(nodes: HTMLElement[], err: unknown): void {
+function placeLoadError(nodes: HTMLElement[], err: unknown, labels: MermaidRenderLabels): void {
+  const message = labels.loadFailed(String(err));
   for (const node of nodes) {
     const errBox = document.createElement("pre");
     errBox.className = "mermaid-error";
-    errBox.textContent = `Mermaid failed to load: ${String(err)}`;
+    errBox.textContent = message;
     node.replaceWith(errBox);
   }
 }
@@ -44,7 +58,7 @@ function pendingNodes(root: Element | Document): HTMLElement[] {
   return Array.from(root.querySelectorAll<HTMLElement>("pre.mermaid[data-mermaid-pending]"));
 }
 
-async function renderOne(node: HTMLElement, mermaid: MermaidRuntime): Promise<void> {
+async function renderOne(node: HTMLElement, mermaid: MermaidRuntime, labels: MermaidRenderLabels): Promise<void> {
   const source = node.textContent ?? "";
   const svgId = nextRenderId();
   try {
@@ -56,12 +70,12 @@ async function renderOne(node: HTMLElement, mermaid: MermaidRuntime): Promise<vo
   } catch (err) {
     const errBox = document.createElement("pre");
     errBox.className = "mermaid-error";
-    errBox.textContent = `Mermaid render failed: ${String(err)}\n---\n${source}`;
+    errBox.textContent = `${labels.renderFailed(String(err))}\n---\n${source}`;
     node.replaceWith(errBox);
   }
 }
 
-export async function renderMermaidNodes(root: Element | Document | null | undefined): Promise<void> {
+export async function renderMermaidNodes(root: Element | Document | null | undefined, labels: MermaidRenderLabels = DEFAULT_LABELS): Promise<void> {
   if (!root) return;
   const nodes = pendingNodes(root);
   if (nodes.length === 0) return;
@@ -69,8 +83,8 @@ export async function renderMermaidNodes(root: Element | Document | null | undef
   try {
     mermaid = await loadMermaid();
   } catch (err) {
-    placeLoadError(nodes, err);
+    placeLoadError(nodes, err, labels);
     return;
   }
-  await Promise.all(nodes.map((node) => renderOne(node, mermaid)));
+  await Promise.all(nodes.map((node) => renderOne(node, mermaid, labels)));
 }

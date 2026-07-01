@@ -11,6 +11,21 @@
 
 type MermaidRuntime = typeof import("mermaid").default;
 
+/** Localised strings the render pipeline surfaces when it fails.
+ *  Callers (composables) resolve `t("markdownMermaid.…")` at
+ *  component-setup time and hand the formatter down. Fallback
+ *  defaults keep the pure module testable without a Vue / i18n
+ *  runtime — they mirror the English text in `src/lang/en.ts`. */
+export interface MermaidRenderLabels {
+  loadFailed: (error: string) => string;
+  renderFailed: (error: string) => string;
+}
+
+const DEFAULT_LABELS: MermaidRenderLabels = {
+  loadFailed: (error) => `⚠ Mermaid failed to load: ${error}`,
+  renderFailed: (error) => `⚠ Mermaid render failed: ${error}`,
+};
+
 let mermaidPromise: Promise<MermaidRuntime> | null = null;
 
 async function loadMermaid(): Promise<MermaidRuntime> {
@@ -36,11 +51,12 @@ async function loadMermaid(): Promise<MermaidRuntime> {
   return attempt;
 }
 
-function placeLoadError(nodes: HTMLElement[], err: unknown): void {
+function placeLoadError(nodes: HTMLElement[], err: unknown, labels: MermaidRenderLabels): void {
+  const message = labels.loadFailed(String(err));
   for (const node of nodes) {
     const errBox = document.createElement("pre");
     errBox.className = "mermaid-error";
-    errBox.textContent = `Mermaid failed to load: ${String(err)}`;
+    errBox.textContent = message;
     node.replaceWith(errBox);
   }
 }
@@ -57,7 +73,7 @@ function pendingNodes(root: Element | Document): HTMLElement[] {
   return Array.from(root.querySelectorAll<HTMLElement>("pre.mermaid[data-mermaid-pending]"));
 }
 
-async function renderOne(node: HTMLElement, mermaid: MermaidRuntime): Promise<void> {
+async function renderOne(node: HTMLElement, mermaid: MermaidRuntime, labels: MermaidRenderLabels): Promise<void> {
   // `textContent` gives us the raw source — DOMPurify preserves it
   // verbatim inside `<pre>` and we escaped it going in, so entity
   // decoding is browser-native from the DOM read.
@@ -70,9 +86,11 @@ async function renderOne(node: HTMLElement, mermaid: MermaidRuntime): Promise<vo
     wrapper.innerHTML = svg;
     node.replaceWith(wrapper);
   } catch (err) {
+    // Preserve the source below the localised header so the author
+    // can see WHICH diagram broke.
     const errBox = document.createElement("pre");
     errBox.className = "mermaid-error";
-    errBox.textContent = `Mermaid render failed: ${String(err)}\n---\n${source}`;
+    errBox.textContent = `${labels.renderFailed(String(err))}\n---\n${source}`;
     node.replaceWith(errBox);
   }
 }
@@ -80,8 +98,10 @@ async function renderOne(node: HTMLElement, mermaid: MermaidRuntime): Promise<vo
 /** Render every unprocessed mermaid placeholder under `root`. Safe to
  *  call repeatedly — nodes get replaced on success (no `data-*` to
  *  match a second time) and gain an `.mermaid-error` class on failure.
- *  Returns once every discovered node has been resolved. */
-export async function renderMermaidNodes(root: Element | Document | null | undefined): Promise<void> {
+ *  Returns once every discovered node has been resolved. `labels`
+ *  defaults to English fallbacks so the pure module remains callable
+ *  from tests / node environments without an i18n runtime. */
+export async function renderMermaidNodes(root: Element | Document | null | undefined, labels: MermaidRenderLabels = DEFAULT_LABELS): Promise<void> {
   if (!root) return;
   const nodes = pendingNodes(root);
   if (nodes.length === 0) return;
@@ -94,8 +114,8 @@ export async function renderMermaidNodes(root: Element | Document | null | undef
     // sees WHY the diagram is missing instead of a raw code fence, and
     // don't let the rejection escape as an unhandled promise (callers
     // fire this via `void run()` in the composable).
-    placeLoadError(nodes, err);
+    placeLoadError(nodes, err, labels);
     return;
   }
-  await Promise.all(nodes.map((node) => renderOne(node, mermaid)));
+  await Promise.all(nodes.map((node) => renderOne(node, mermaid, labels)));
 }
