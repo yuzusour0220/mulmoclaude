@@ -140,6 +140,12 @@ const HOST_API_ROUTES = {
     upload: "/api/attachments",
   },
 
+  // Sharing: pack an HTML artifact + its referenced local assets into a
+  // self-contained zip (index.html + assets/), streamed as a download.
+  share: {
+    pack: "/api/share/pack",
+  },
+
   mcpTools: {
     list: "/api/mcp-tools",
     invoke: "/api/mcp-tools/:tool",
