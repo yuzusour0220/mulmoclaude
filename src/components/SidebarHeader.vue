@@ -22,6 +22,7 @@
         @test-query="(q) => emit('testQuery', q)"
       />
       <NotificationBell :force-close="lockPopupOpen" @update:open="onNotificationOpen" />
+      <RemoteHostControl />
       <button
         class="h-8 w-8 flex items-center justify-center rounded text-gray-400 hover:text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
         data-testid="today-journal-btn"
@@ -56,6 +57,7 @@ import { computed, onBeforeUnmount, onMounted, ref, type CSSProperties } from "v
 import { useI18n } from "vue-i18n";
 import LockStatusPopup from "./LockStatusPopup.vue";
 import NotificationBell from "./NotificationBell.vue";
+import RemoteHostControl from "./RemoteHostControl.vue";
 import { useClickOutside } from "../composables/useClickOutside";
 import { useLatestDaily } from "../composables/useLatestDaily";
 import logoUrl from "../assets/mulmo_bw.png";

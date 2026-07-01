@@ -146,6 +146,16 @@ const HOST_API_ROUTES = {
     pack: "/api/share/pack",
   },
 
+  // Remote host over Firestore (phase 1). The server signs in to Firebase as
+  // the user (connect, body carries a browser-minted Google idToken), runs the
+  // command-loop + presence heartbeat, and exposes its running state. See
+  // plans/feat-remote-host-firestore-list-collections.md.
+  remoteHost: {
+    connect: "/api/remote-host/connect",
+    disconnect: "/api/remote-host/disconnect",
+    status: "/api/remote-host/status",
+  },
+
   mcpTools: {
     list: "/api/mcp-tools",
     invoke: "/api/mcp-tools/:tool",
