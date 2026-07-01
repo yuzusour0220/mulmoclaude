@@ -9,11 +9,11 @@
 import { DocumentReference, onSnapshot, query, runTransaction, serverTimestamp, setDoc, updateDoc, where } from "firebase/firestore";
 
 import { errorMessage } from "../utils/errors.js";
-import { ONE_SECOND_MS } from "../utils/time.js";
+import { ONE_MINUTE_MS } from "../utils/time.js";
 import { Channel, Command, CommandHandler, CommandHandlers, JsonObject, commandsCollection, hostDoc } from "./commandChannel.js";
 import { firestore } from "./firebase.js";
 
-const heartbeatMs = 15 * ONE_SECOND_MS;
+const heartbeatMs = ONE_MINUTE_MS;
 
 export interface HostEvent {
   phase: "received" | "done" | "error";

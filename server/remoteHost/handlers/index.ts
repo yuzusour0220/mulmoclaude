@@ -1,9 +1,7 @@
-// Command-handler table for the remote-host runner.
-//
-// Phase 1a ships an EMPTY table: the connect → heartbeat presence loop is
-// testable without any capability (startHostRunner still heartbeats). Phase 1b
-// adds `listCollections` here (see the plan). Keep this the single place the
-// runner learns which methods it serves.
+// Command-handler table for the remote-host runner — the single place the
+// runner learns which methods it serves. Add a capability by importing its
+// handler and adding it here.
 import type { CommandHandlers } from "../commandChannel.js";
+import { listCollections } from "./listCollections.js";
 
-export const handlers: CommandHandlers = {};
+export const handlers: CommandHandlers = { listCollections };

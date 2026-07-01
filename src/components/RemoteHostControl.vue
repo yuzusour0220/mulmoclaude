@@ -119,6 +119,7 @@ const onConnect = async () => {
       return;
     }
     status.value = res.data.status;
+    open.value = false; // close the popover after a successful login
   } catch (err) {
     error.value = errorMessage(err, t("remoteHost.signInFailed"));
   } finally {
@@ -136,6 +137,7 @@ const onDisconnect = async () => {
       return;
     }
     status.value = res.data.status;
+    open.value = false; // close the popover after a successful logout
   } catch (err) {
     error.value = errorMessage(err, t("remoteHost.disconnectFailed"));
   } finally {
