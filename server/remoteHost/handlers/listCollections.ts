@@ -16,7 +16,9 @@ export interface ListCollectionsDeps {
 
 export const createListCollections =
   (deps: ListCollectionsDeps): CommandHandler =>
-  async () => {
+  // Handlers receive the command's params; listCollections takes none (the
+  // `__` prefix marks it intentionally unused per the lint config).
+  async (__params: JsonObject) => {
     const collections = (await deps.discover()).map(deps.toSummary);
     // CollectionSummary is plain JSON (slug/title/icon/source strings), so this
     // is safe — the cast only satisfies the channel's structural JsonValue type,
