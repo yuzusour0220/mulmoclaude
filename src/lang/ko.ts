@@ -369,6 +369,9 @@ const koMessages = {
     closeFile: "파일 닫기",
   },
   fileContentRenderer: {
+    download: "ZIP",
+    downloadZip: "자체 포함 zip으로 다운로드(에셋 포함)",
+    downloadError: "다운로드 실패",
     selectFile: "파일을 선택하세요",
     htmlPreview: "HTML 미리보기",
     pdfPreview: "PDF 미리보기",

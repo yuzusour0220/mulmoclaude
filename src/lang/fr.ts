@@ -367,6 +367,9 @@ const frMessages = {
     closeFile: "Fermer le fichier",
   },
   fileContentRenderer: {
+    download: "ZIP",
+    downloadZip: "Télécharger en zip autonome (ressources incluses)",
+    downloadError: "Échec du téléchargement",
     selectFile: "Sélectionnez un fichier",
     htmlPreview: "Aperçu HTML",
     pdfPreview: "Aperçu PDF",

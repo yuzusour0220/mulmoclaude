@@ -386,6 +386,9 @@ const enMessages = {
     closeFile: "Close file",
   },
   fileContentRenderer: {
+    download: "ZIP",
+    downloadZip: "Download as a self-contained zip (assets bundled)",
+    downloadError: "Download failed",
     selectFile: "Select a file",
     htmlPreview: "HTML preview",
     pdfPreview: "PDF preview",
