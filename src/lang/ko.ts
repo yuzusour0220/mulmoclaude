@@ -384,6 +384,9 @@ const koMessages = {
     closeFile: "파일 닫기",
   },
   fileContentRenderer: {
+    download: "ZIP",
+    downloadZip: "자체 포함 zip으로 다운로드(에셋 포함)",
+    downloadError: "다운로드 실패",
     selectFile: "파일을 선택하세요",
     htmlPreview: "HTML 미리보기",
     pdfPreview: "PDF 미리보기",
@@ -915,6 +918,10 @@ const koMessages = {
     marpSplitEnter: "소스를 나란히 편집",
     marpSplitExit: "소스 편집기 닫기",
     marpSplitEditorLabel: "소스",
+  },
+  markdownMermaid: {
+    loadFailed: "⚠ Mermaid 로드 실패: {error}",
+    renderFailed: "⚠ Mermaid 렌더링 실패: {error}",
   },
   pluginTextResponse: {
     pdf: "PDF",

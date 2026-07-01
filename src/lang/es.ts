@@ -388,6 +388,9 @@ const esMessages = {
     closeFile: "Cerrar archivo",
   },
   fileContentRenderer: {
+    download: "ZIP",
+    downloadZip: "Descargar como zip autónomo (recursos incluidos)",
+    downloadError: "Error al descargar",
     selectFile: "Selecciona un archivo",
     htmlPreview: "Vista previa HTML",
     pdfPreview: "Vista previa PDF",
@@ -927,6 +930,10 @@ const esMessages = {
     marpSplitEnter: "Editar la fuente junto a la vista previa",
     marpSplitExit: "Cerrar el editor de la fuente",
     marpSplitEditorLabel: "Fuente",
+  },
+  markdownMermaid: {
+    loadFailed: "⚠ Error al cargar Mermaid: {error}",
+    renderFailed: "⚠ Error al renderizar Mermaid: {error}",
   },
   pluginTextResponse: {
     pdf: "PDF",

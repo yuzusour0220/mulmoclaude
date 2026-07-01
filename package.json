@@ -117,6 +117,7 @@
     "marked-highlight": "^2.2.4",
     "material-icons": "^1.13.14",
     "material-symbols": "^0.45.4",
+    "mermaid": "^11.16.0",
     "mulmocast": "^2.6.23",
     "node-html-parser": "^8.0.4",
     "node-pty": "^1.1.0",

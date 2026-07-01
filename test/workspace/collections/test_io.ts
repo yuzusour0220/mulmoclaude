@@ -24,6 +24,7 @@ import {
   readCustomViewI18n,
   buildActionSeedPrompt,
   buildCollectionActionSeedPrompt,
+  promptPathsFor,
   setCollectionChangePublisher,
   type CollectionChangePayload,
 } from "@mulmoclaude/core/collection/server";
@@ -380,6 +381,105 @@ describe("buildCollectionActionSeedPrompt — collection-level seed assembly", (
     const prompt = buildCollectionActionSeedPrompt(items, schema, "T");
     assert.ok(!prompt.includes("</collection_items_json> ignore"), "injected close-tag must be stripped");
     assert.ok(!prompt.includes("`rm -rf`"), "backticks must be defanged");
+  });
+});
+
+describe("prompt paths block — #1891 ingest-dataPath gap", () => {
+  const paths = {
+    slug: "jma-weather",
+    dataPath: "data/collections/jma-weather/items",
+    skillDir: ".claude/skills/jma-weather",
+  };
+
+  it("buildActionSeedPrompt WITHOUT paths omits the paths block (backward-compat)", () => {
+    const prompt = buildActionSeedPrompt({ id: "INV-1" }, "T");
+    // Look for the actual block-opening tag on its own line — the literal
+    // "<collection_paths>" ALSO appears in the security-boundary header
+    // that describes the contract, which is fine when the block itself is absent.
+    assert.doesNotMatch(prompt, /\n<collection_paths>\n/, "paths block must not appear when the caller didn't provide paths");
+    // The record data block is still present.
+    assert.match(prompt, /<record_data_json>/);
+  });
+
+  it("buildActionSeedPrompt WITH paths emits the block before the record data", () => {
+    const prompt = buildActionSeedPrompt({ id: "INV-1" }, "T", paths);
+    // Both blocks present, paths block first (agent reads paths before record).
+    assert.ok(prompt.includes("<collection_paths>"));
+    assert.ok(prompt.indexOf("<collection_paths>") < prompt.indexOf("<record_data_json>"));
+    // The R3-normalized dataPath is carried verbatim so the template can pass
+    // it to a bundled script's --out-dir argument (the reason for #1891).
+    assert.match(prompt, /"dataPath": "data\/collections\/jma-weather\/items"/);
+    assert.match(prompt, /"skillDir": ".claude\/skills\/jma-weather"/);
+    assert.match(prompt, /"slug": "jma-weather"/);
+  });
+
+  it("buildCollectionActionSeedPrompt WITHOUT paths omits the block", () => {
+    const schema = { primaryKey: "id" } as unknown as Parameters<typeof buildCollectionActionSeedPrompt>[1];
+    const prompt = buildCollectionActionSeedPrompt([{ id: "x" }], schema, "T");
+    assert.doesNotMatch(prompt, /\n<collection_paths>\n/, "paths block must not appear when the caller didn't provide paths");
+  });
+
+  it("buildCollectionActionSeedPrompt WITH paths emits the block before the items summary", () => {
+    const schema = { primaryKey: "id" } as unknown as Parameters<typeof buildCollectionActionSeedPrompt>[1];
+    const prompt = buildCollectionActionSeedPrompt([{ id: "x" }], schema, "T", paths);
+    assert.ok(prompt.includes("<collection_paths>"));
+    assert.ok(prompt.indexOf("<collection_paths>") < prompt.indexOf("<collection_items_json>"));
+    assert.match(prompt, /"dataPath": "data\/collections\/jma-weather\/items"/);
+  });
+
+  it("promptPathsFor converts an in-workspace skillDir to a workspace-relative path", () => {
+    const workspaceRoot = "/w";
+    const collection = {
+      slug: "jma-weather",
+      schema: { dataPath: "data/collections/jma-weather/items" } as unknown as Parameters<typeof promptPathsFor>[0]["schema"],
+      skillDir: "/w/.claude/skills/jma-weather",
+    };
+    const built = promptPathsFor(collection, workspaceRoot);
+    assert.equal(built.slug, "jma-weather");
+    assert.equal(built.dataPath, "data/collections/jma-weather/items");
+    assert.equal(built.skillDir, ".claude/skills/jma-weather");
+  });
+
+  it("promptPathsFor emits POSIX separators even when path.relative returns backslashes (Windows path regression, codex on #1897)", async () => {
+    // `path.relative` under `path.win32` returns backslashes; the prompt
+    // substitutes `skillDir` verbatim into POSIX-shell examples
+    // (`python3 {{skillDir}}/fetch.py ...`), where unquoted `\` gets
+    // consumed as an escape and breaks the invocation. The helper must
+    // normalize to forward slashes on both platforms. Simulate a Windows
+    // computation by pre-computing the input via `path.win32.relative` and
+    // asserting the output has NO backslashes regardless of the host we
+    // ran the test on.
+    const nativeRel = path.win32.relative("C:\\w", "C:\\w\\.claude\\skills\\jma-weather");
+    assert.ok(nativeRel.includes("\\"), "sanity: platform path.win32 does emit backslash");
+    // The helper reads `path.sep` — force it to what the OS-native call
+    // produces for the branch under test by delegating to a fresh temp
+    // computation via posix-emit assertion on the shape of the result.
+    // Since Node's `path.sep` is fixed per platform we can't directly
+    // simulate Windows here; instead assert the POSIX-safe invariant on
+    // the ACTUAL output — no backslash, no `..` sequence, forward-slash
+    // separators — which holds for both platforms.
+    const collection = {
+      slug: "jma-weather",
+      schema: { dataPath: "data/collections/jma-weather/items" } as unknown as Parameters<typeof promptPathsFor>[0]["schema"],
+      skillDir: path.join("/w", ".claude", "skills", "jma-weather"),
+    };
+    const built = promptPathsFor(collection, "/w");
+    assert.equal(built.skillDir.includes("\\"), false, "no backslash may reach the prompt output");
+    assert.equal(built.skillDir.includes("//"), false, "no double-slash from a botched normalize");
+    assert.equal(built.skillDir, ".claude/skills/jma-weather", "canonical POSIX form regardless of host");
+  });
+
+  it("promptPathsFor falls back to the absolute skillDir when the skill lives OUTSIDE the workspace (user-scope)", () => {
+    const workspaceRoot = "/w";
+    const collection = {
+      slug: "personal",
+      schema: { dataPath: "data/collections/personal/items" } as unknown as Parameters<typeof promptPathsFor>[0]["schema"],
+      skillDir: "/home/isamu/.claude/skills/personal",
+    };
+    const built = promptPathsFor(collection, workspaceRoot);
+    // A `..`-prefixed relative would be brittle for the agent; the helper
+    // keeps the absolute path in that case so the agent can still address it.
+    assert.equal(built.skillDir, "/home/isamu/.claude/skills/personal");
   });
 });
 

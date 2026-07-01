@@ -382,6 +382,9 @@ const frMessages = {
     closeFile: "Fermer le fichier",
   },
   fileContentRenderer: {
+    download: "ZIP",
+    downloadZip: "Télécharger en zip autonome (ressources incluses)",
+    downloadError: "Échec du téléchargement",
     selectFile: "Sélectionnez un fichier",
     htmlPreview: "Aperçu HTML",
     pdfPreview: "Aperçu PDF",
@@ -917,6 +920,10 @@ const frMessages = {
     marpSplitEnter: "Modifier la source en parallèle de l'aperçu",
     marpSplitExit: "Fermer l'éditeur de source",
     marpSplitEditorLabel: "Source",
+  },
+  markdownMermaid: {
+    loadFailed: "⚠ Échec du chargement de Mermaid : {error}",
+    renderFailed: "⚠ Échec du rendu Mermaid : {error}",
   },
   pluginTextResponse: {
     pdf: "PDF",

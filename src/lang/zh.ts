@@ -376,6 +376,9 @@ const zhMessages = {
     closeFile: "关闭文件",
   },
   fileContentRenderer: {
+    download: "ZIP",
+    downloadZip: "下载为自包含 zip(含资源)",
+    downloadError: "下载失败",
     selectFile: "请选择一个文件",
     htmlPreview: "HTML 预览",
     pdfPreview: "PDF 预览",
@@ -905,6 +908,10 @@ const zhMessages = {
     marpSplitEnter: "并排编辑源代码",
     marpSplitExit: "关闭源代码编辑器",
     marpSplitEditorLabel: "源代码",
+  },
+  markdownMermaid: {
+    loadFailed: "⚠ Mermaid 加载失败: {error}",
+    renderFailed: "⚠ Mermaid 渲染失败: {error}",
   },
   pluginTextResponse: {
     pdf: "PDF",

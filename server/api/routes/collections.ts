@@ -26,6 +26,7 @@ import {
   readCustomViewI18n,
   buildActionSeedPrompt,
   buildCollectionActionSeedPrompt,
+  promptPathsFor,
   resolveCreateItemId,
   toDetail,
   toSummary,
@@ -351,7 +352,7 @@ router.post(API_ROUTES.collections.itemAction, async (req: Request<{ slug: strin
       return;
     }
     log.info("collections", "action seed built", { slug: collection.slug, itemId: req.params.itemId, actionId: action.id });
-    res.json({ prompt: buildActionSeedPrompt(record, template), role: action.role });
+    res.json({ prompt: buildActionSeedPrompt(record, template, promptPathsFor(collection, workspacePath)), role: action.role });
   } catch (err) {
     log.warn("collections", "action seed failed", {
       slug: collection.slug,
@@ -372,7 +373,7 @@ async function buildCollectionActionSeed(collection: LoadedCollection, action: C
   if (template === null) return null;
   const items = await listItems(collection.dataDir);
   log.info("collections", "collection action seed built", { slug: collection.slug, actionId: action.id, items: items.length });
-  return { prompt: buildCollectionActionSeedPrompt(items, collection.schema, template), role: action.role };
+  return { prompt: buildCollectionActionSeedPrompt(items, collection.schema, template, promptPathsFor(collection, workspacePath)), role: action.role };
 }
 
 // Like the per-record route but with no `itemId`: there is no record to read or

@@ -386,6 +386,9 @@ const deMessages = {
     closeFile: "Datei schließen",
   },
   fileContentRenderer: {
+    download: "ZIP",
+    downloadZip: "Als eigenständiges ZIP herunterladen (Assets gebündelt)",
+    downloadError: "Download fehlgeschlagen",
     selectFile: "Datei auswählen",
     htmlPreview: "HTML-Vorschau",
     pdfPreview: "PDF-Vorschau",
@@ -929,6 +932,10 @@ const deMessages = {
     marpSplitEnter: "Quelle neben der Vorschau bearbeiten",
     marpSplitExit: "Quelleneditor schließen",
     marpSplitEditorLabel: "Quelle",
+  },
+  markdownMermaid: {
+    loadFailed: "⚠ Mermaid konnte nicht geladen werden: {error}",
+    renderFailed: "⚠ Mermaid-Rendering fehlgeschlagen: {error}",
   },
   pluginTextResponse: {
     pdf: "PDF",

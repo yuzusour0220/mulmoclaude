@@ -380,6 +380,9 @@ const ptBRMessages = {
     closeFile: "Fechar arquivo",
   },
   fileContentRenderer: {
+    download: "ZIP",
+    downloadZip: "Baixar como zip autônomo (recursos incluídos)",
+    downloadError: "Falha no download",
     selectFile: "Selecione um arquivo",
     htmlPreview: "Pré-visualização HTML",
     pdfPreview: "Pré-visualização PDF",
@@ -916,6 +919,10 @@ const ptBRMessages = {
     marpSplitEnter: "Editar o código fonte ao lado da visualização",
     marpSplitExit: "Fechar o editor de código",
     marpSplitEditorLabel: "Código",
+  },
+  markdownMermaid: {
+    loadFailed: "⚠ Falha ao carregar o Mermaid: {error}",
+    renderFailed: "⚠ Falha ao renderizar o Mermaid: {error}",
   },
   pluginTextResponse: {
     pdf: "PDF",

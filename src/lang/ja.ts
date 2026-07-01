@@ -384,6 +384,9 @@ const jaMessages = {
     closeFile: "ファイルを閉じる",
   },
   fileContentRenderer: {
+    download: "ZIP",
+    downloadZip: "自己完結zipでダウンロード（アセット同梱）",
+    downloadError: "ダウンロードに失敗しました",
     selectFile: "ファイルを選択してください",
     htmlPreview: "HTML プレビュー",
     pdfPreview: "PDF プレビュー",
@@ -915,6 +918,10 @@ const jaMessages = {
     marpSplitEnter: "ソースを並べて編集",
     marpSplitExit: "ソースエディタを閉じる",
     marpSplitEditorLabel: "ソース",
+  },
+  markdownMermaid: {
+    loadFailed: "⚠ Mermaid の読み込みに失敗しました: {error}",
+    renderFailed: "⚠ Mermaid の描画に失敗しました: {error}",
   },
   pluginTextResponse: {
     pdf: "PDF",
