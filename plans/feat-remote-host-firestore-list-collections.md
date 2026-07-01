@@ -54,7 +54,7 @@ scoped to that user's own `users/{uid}/…` subtree.
 Flow:
 
 ```
-Settings page (browser)                 MulmoClaude server (Node)
+Toolbar control (browser)               MulmoClaude server (Node)
   Google sign-in (Firebase Web SDK)
   GoogleAuthProvider.credentialFromResult(result).idToken
         │  POST /api/remote-host/connect { idToken }   (localhost, express POST)
@@ -115,8 +115,8 @@ projectId, …) is public and can live in a MulmoClaude config module + `.env`.
   `users/{uid}/hosts/{hostId}` while running and writes `online:false` on stop —
   nothing extra to wire on the server. The mobile remote uses `useHostPresence` to
   show whether the `"mulmoclaude"` host is up and to fail fast when it isn't.
-- The settings-page **Connect/Disconnect** control is what starts/stops the host
-  loop, which in turn drives presence.
+- The top-level **toolbar** Connect/Disconnect control is what starts/stops the
+  host loop, which in turn drives presence.
 
 ## Target structure (new files)
 
@@ -125,23 +125,25 @@ server/remoteHost/
   firebase.ts        # initializeApp + getAuth + getFirestore (default DB, Native mode)
   auth.ts            # connect(idToken) → signInWithCredential → uid; disconnect(); status()
   hostRunner.ts      # ported from ../mulmoserver/src/firestore/hostRunner.ts (channel + presence)
-  commandChannel.ts  # ported types + Channel + commandsCollection(channel) + hostDoc(channel)
-  commandFormat.ts   # ported errorMessage (hostRunner dependency)
+  commandChannel.ts  # ported types + Channel + commandsCollection(channel) + hostDoc(channel) + HOST_ID
   handlers/
     index.ts         # CommandHandlers table: { listCollections }
     listCollections.ts  # calls discoverCollections()/toSummary() → { collections }
   index.ts           # startHostRunner wiring + lifecycle (start on connect, stop on disconnect)
+  # (commandFormat.ts NOT ported — reuse server/utils/errors.ts errorMessage)
 
 server/api/routes/remoteHost.ts   # POST /connect {idToken}, POST /disconnect, GET /status
   # register in server/index.ts; add path to src/config/apiRoutes.ts
 
-src/config/firebase.ts            # web SDK init for the settings page (browser)
-src/components/SettingsRemoteHostTab.vue  # Google login + Connect/Disconnect + status
-  # add tab into src/components/SettingsModal.vue
+src/config/firebaseConfig.ts      # pure public web-config (source of truth, no SDK init)
+src/config/firebase.ts            # browser web SDK init (firebaseApp, auth)
+src/components/RemoteHostControl.vue  # TOP-LEVEL TOOLBAR control: Google login + Connect/Disconnect + status
+  # mount in the App.vue top toolbar/chrome row (NOT in SettingsModal) — see docs/ui-controls.md + docs/ui-cheatsheet.md
 ```
 
 Dependency: add `firebase` (web SDK) to `package.json` — used both in the browser
-settings page and in the Node server (`signInWithCredential`, `onSnapshot`).
+(`signInWithPopup`, extract `idToken`) and in the Node server
+(`signInWithCredential`, `onSnapshot`).
 
 ## Reuse vs. copy
 
@@ -173,15 +175,57 @@ route, so the shape is known-good).
 
 ## Steps
 
-0. **Auth spike** (see Step 0 above). Gate everything on this succeeding.
-1. Add `firebase` dep; add `src/config/firebase.ts` (browser) + `server/remoteHost/firebase.ts` (Node) using the mulmoserver web config.
-2. Copy `commandChannel.ts` + `hostRunner.ts` + `commandFormat.ts` into `server/remoteHost/`. Define `const HOST_ID = "mulmoclaude"`.
-3. `server/remoteHost/auth.ts`: `connect(idToken)`, `disconnect()`, `status()` (holds the current uid + host unsubscribe).
-4. `server/remoteHost/handlers/listCollections.ts` + `handlers/index.ts`.
-5. `server/remoteHost/index.ts`: on connect, `startHostRunner({ uid, hostId: HOST_ID }, handlers)` (presence heartbeat comes for free); on disconnect, call the returned stop().
-6. `server/api/routes/remoteHost.ts` (connect/disconnect/status); register in `server/index.ts` + `src/config/apiRoutes.ts`.
-7. `src/components/SettingsRemoteHostTab.vue`: Google sign-in, extract `idToken`, POST to `/connect`, show connected uid + Connect/Disconnect; add the tab to `SettingsModal.vue`.
-8. Manual end-to-end: connect from settings → from a phone (or the mulmoserver client) signed in as the same account, `callHost({ uid, hostId: "mulmoclaude" }, "listCollections")` → returns this server's collections; the remote's presence indicator shows the host online.
+**Reordered (per request): ship a testable login-UI + live-heartbeat slice
+first (phase 1a), then the `listCollections` capability (phase 1b).** The
+handler is orthogonal to auth/presence, so it can follow once the connect →
+heartbeat loop is demonstrable from the browser.
+
+### Done
+
+0. ✅ **Auth spike** (see Step 0 above) — gate passed: `signInWithCredential` in
+   Node + live `onSnapshot` + queued-command round-trip + token reuse all proven.
+1. ✅ Added `firebase@12.15.0`; `src/config/firebaseConfig.ts` (pure public
+   config, source of truth) + `src/config/firebase.ts` (browser init) +
+   `server/remoteHost/firebase.ts` (Node init: `firebaseApp`, `auth`, `firestore`).
+2. ✅ Ported `commandChannel.ts` + `hostRunner.ts` into `server/remoteHost/`
+   (`db`→`firestore`, reuse `server/utils/errors.ts` `errorMessage` instead of
+   copying `commandFormat.ts`, heartbeat from `ONE_SECOND_MS`, exported
+   `HOST_ID = "mulmoclaude"`). Heartbeat code exists but is **not yet wired**.
+
+### Phase 1a — login UI + live heartbeat (testable slice)
+
+3. `server/remoteHost/auth.ts`: `connect(idToken)` → `signInWithCredential` → uid;
+   `disconnect()` (signOut + host stop); `status()` (holds current uid + the
+   host stop() handle).
+4. `server/remoteHost/index.ts`: on connect, `startHostRunner({ uid, hostId:
+   HOST_ID }, handlers)` — **this activates the presence heartbeat**; on
+   disconnect, call the returned stop() (writes `online:false` + detaches).
+   Pass a **minimal/empty handlers table for now** (the real `listCollections`
+   lands in phase 1b); an empty table still heartbeats and is enough to test.
+5. `server/api/routes/remoteHost.ts` (`POST /connect {idToken}`, `POST
+   /disconnect`, `GET /status`); register in `server/index.ts` + add the path to
+   `src/config/apiRoutes.ts`.
+6. `src/components/RemoteHostControl.vue` mounted in the **top-level toolbar**
+   (App.vue chrome row) — NOT in SettingsModal: Google sign-in, extract
+   `idToken`, POST to `/connect`, show connected uid + Connect/Disconnect +
+   status. Use a Material Icons control (no emoji) sized per `docs/ui-controls.md`;
+   respect the region naming / testid discipline in `docs/ui-cheatsheet.md` and
+   update the ASCII layout map there if the chrome row changes.
+7. **Test the slice**: connect from the toolbar → verify the presence doc
+   `users/{uid}/hosts/mulmoclaude` flips `online:true` and its `updatedAt`
+   refreshes every ~15s (watch via the Step 0 spike listener or the Firebase
+   console); disconnect → `online:false`. This exercises auth + route + UI +
+   heartbeat without any handler.
+
+### Phase 1b — the `listCollections` capability
+
+8. `server/remoteHost/handlers/listCollections.ts` (import `discoverCollections`,
+   `toSummary` from `@mulmoclaude/core/collection/server`) + `handlers/index.ts`;
+   swap the minimal table from step 4 for this real table.
+9. Manual end-to-end: with the host connected, from a phone (or the mulmoserver
+   client) signed in as the same account, `callHost({ uid, hostId: "mulmoclaude"
+   }, "listCollections")` → returns this server's collections; the remote's
+   presence indicator shows the host online.
 
 ## Security considerations
 
@@ -195,7 +239,7 @@ route, so the shape is known-good).
 - **Handoff transport: express POST** (a `/api/remote-host/connect` route). One-shot
   request/response fits "connect"; matches how MulmoClaude already exposes routes;
   simpler to secure than a socket event. (Socket push only if we later want the
-  server to notify the settings page of state changes.)
+  server to notify the toolbar control of state changes.)
 - **Channels: hardcoded `hostId`, no discovery** — `"mulmoclaude"` for this host.
 - **Presence: heartbeat** (built into `startHostRunner`).
 - **Copy the protocol files now**; extract a shared package later.
