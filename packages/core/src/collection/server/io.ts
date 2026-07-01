@@ -192,10 +192,7 @@ export async function writeItem(dataDir: string, itemId: string, item: Collectio
 }
 
 export type DeleteItemResult =
-  | { kind: "ok"; itemId: string }
-  | { kind: "invalid-id"; itemId: string }
-  | { kind: "not-found"; itemId: string }
-  | { kind: "path-escape"; itemId: string };
+  { kind: "ok"; itemId: string } | { kind: "invalid-id"; itemId: string } | { kind: "not-found"; itemId: string } | { kind: "path-escape"; itemId: string };
 
 export async function deleteItem(dataDir: string, itemId: string, opts: IoOptions = {}): Promise<DeleteItemResult> {
   const safeId = safeRecordId(itemId);
