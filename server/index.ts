@@ -67,7 +67,8 @@ import { announceOptionalDeps } from "./system/announceOptionalDeps.js";
 import { migrateLegacyBillingPresets } from "./workspace/billing-migration.js";
 import { APP_VERSION } from "./system/appVersion.js";
 import { createChatService } from "@mulmobridge/chat-service";
-import { readSessionJsonl } from "./utils/files/session-io.js";
+import { readSessionJsonl, readSessionMeta } from "./utils/files/session-io.js";
+import { resolveBridgeSessionRole } from "./api/bridge/sessionRole.js";
 import { onSessionEvent, initSessionStore } from "./events/session-store/index.js";
 import { initFileChangePublisher } from "./events/file-change.js";
 import { initCollectionChangePublisher } from "./events/collection-change.js";
@@ -701,6 +702,12 @@ async function listSessionsForBridge(opts: { limit: number; offset: number }) {
   }));
   return { sessions, total };
 }
+// See `resolveBridgeSessionRole` for the safe-id shape check + IO-error
+// degradation contract (extracted for direct unit testing under
+// test/server/api/bridge/test_sessionRole.ts; codex review on #1895).
+async function getSessionRoleForBridge(sessionId: string): Promise<string | null> {
+  return resolveBridgeSessionRole(sessionId, readSessionMeta);
+}
 async function getSessionHistoryForBridge(sessionId: string, opts: { limit: number; offset: number }) {
   const content = await readSessionJsonl(sessionId);
   if (!content) return { messages: [], total: 0 };
@@ -752,6 +759,7 @@ const chatService = createChatService({
   tokenProvider: getCurrentToken,
   listSessions: listSessionsForBridge,
   getSessionHistory: getSessionHistoryForBridge,
+  getSessionRole: getSessionRoleForBridge,
   listRegisteredSkills,
 });
 app.use(chatService.router);
