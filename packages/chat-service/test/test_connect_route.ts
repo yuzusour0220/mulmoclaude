@@ -226,6 +226,32 @@ describe("POST /connect — role propagation (issue #1894)", () => {
     assert.equal(state?.roleId, "general", "throw ⇒ preserve prior role, same as null-return path");
   });
 
+  it("returns 400 when the chatSessionId body value has an unsafe format (issue #1896)", async () => {
+    // /connect body values reach the persisted state file, and downstream
+    // commands like /history read that sessionId back into `readSessionJsonl`
+    // whose underlying reader has no traversal guard. Reject at the entry
+    // so the state file can never be poisoned in the first place.
+    const { harness, shutdown } = await startHarness({
+      getSessionRole: async () => "office",
+    });
+    currentShutdown = shutdown;
+
+    await harness.seedState("telegram", "chat-1", "general", "sess-original");
+
+    for (const hostile of ["../etc/passwd", "..", "chat/../../etc", "a/b"]) {
+      const response = await fetch(`${harness.url}/api/transports/telegram/chats/chat-1/connect`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ chatSessionId: hostile }),
+      });
+      assert.equal(response.status, 400, `hostile ${JSON.stringify(hostile)} must be rejected with 400`);
+      // The state file MUST stay on the original sessionId — no poisoning.
+      const state = await harness.readState("telegram", "chat-1");
+      assert.equal(state?.sessionId, "sess-original", `state must not be poisoned by ${JSON.stringify(hostile)}`);
+      assert.equal(state?.roleId, "general");
+    }
+  });
+
   it("returns 404 when no chat state exists yet for the transport chat", async () => {
     // The route was already 404 in this case; we just want to make sure the
     // new resolver path doesn't accidentally create a state or change the

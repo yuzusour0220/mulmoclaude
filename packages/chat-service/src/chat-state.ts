@@ -47,6 +47,21 @@ function isSafeId(id: string): boolean {
   return /^[\w.-]+$/.test(id) && id.length > 0 && id.length <= 200;
 }
 
+/** True iff `sessionId` is safe to persist into transport state and later
+ *  hand to session-metadata / event-log readers on the host side. Adds an
+ *  explicit `..` rejection on top of `isSafeId` — the safe-id character
+ *  class alone would accept the literal `..` and let a state file written
+ *  by `/connect` poison downstream commands (e.g. `/history` reading the
+ *  poisoned sessionId back through `readSessionJsonl`). Applied at the
+ *  `/connect` route entry AND inside `connectSession` as defense-in-depth
+ *  (issue #1896 follow-up to #1888 / #1895). */
+export function isSafeSessionId(sessionId: string): boolean {
+  if (typeof sessionId !== "string") return false;
+  if (!isSafeId(sessionId)) return false;
+  if (sessionId.includes("..")) return false;
+  return true;
+}
+
 // ── Factory ──────────────────────────────────────────────────
 
 export function createChatStateStore(opts: { transportsDir: string; logger: Logger }): ChatStateStore {
@@ -96,6 +111,18 @@ export function createChatStateStore(opts: { transportsDir: string; logger: Logg
   };
 
   const connectSession = async (transportId: string, externalChatId: string, chatSessionId: string, roleId?: string): Promise<TransportChatState | null> => {
+    // Defense-in-depth: even though the /connect route validates chatSessionId
+    // at entry, refuse to persist an unsafe value here too. Otherwise a caller
+    // that bypasses the route (test harness, alternate transport, direct store
+    // access) could still write a hostile sessionId into the state file — and
+    // downstream commands like /history would later read that back into
+    // path-traversing filesystem operations. Return null so the route surfaces
+    // it as 404 (same as "no state for this chat"); either way the caller
+    // can't succeed with a hostile input. Issue #1896.
+    if (!isSafeSessionId(chatSessionId)) {
+      logger.warn("chat-state", "refused to connect unsafe sessionId", { transportId, externalChatId });
+      return null;
+    }
     const existing = await getChatState(transportId, externalChatId);
     if (!existing) return null;
     const updated: TransportChatState = {
