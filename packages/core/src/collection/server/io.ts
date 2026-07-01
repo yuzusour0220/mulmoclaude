@@ -192,7 +192,10 @@ export async function writeItem(dataDir: string, itemId: string, item: Collectio
 }
 
 export type DeleteItemResult =
-  { kind: "ok"; itemId: string } | { kind: "invalid-id"; itemId: string } | { kind: "not-found"; itemId: string } | { kind: "path-escape"; itemId: string };
+  | { kind: "ok"; itemId: string }
+  | { kind: "invalid-id"; itemId: string }
+  | { kind: "not-found"; itemId: string }
+  | { kind: "path-escape"; itemId: string };
 
 export async function deleteItem(dataDir: string, itemId: string, opts: IoOptions = {}): Promise<DeleteItemResult> {
   const safeId = safeRecordId(itemId);
@@ -369,8 +372,15 @@ function sanitizeForPrompt(value: string): string {
   let prev: string;
   do {
     prev = current;
-    // eslint-disable-next-line sonarjs/super-linear-regex -- bounded tag strip, mirrors legacy escapeForPrompt
-    current = current.replace(/<[^>]*>/g, "");
+    // Bounded quantifier (`{0,10000}` instead of unbounded `*`) so CodeQL's
+    // js/polynomial-redos analyzer accepts the do/while + tag-strip pair as
+    // linear-time. Any single tag longer than 10k chars is a fabricated
+    // record value — well beyond the schema's field-length limits — and gets
+    // rejected as a non-match by the regex, which is the safe outcome
+    // (untouched content lands verbatim in the prompt where the passive-
+    // data framing keeps it out of the instruction stream). CodeQL alert on
+    // #1897.
+    current = current.replace(/<[^>]{0,10000}>/g, "");
   } while (current !== prev);
   return current.replace(/`/g, "'").replace(/\$\{/g, "\\${");
 }
@@ -416,7 +426,15 @@ export interface CollectionPromptPaths {
  *  collections, so it reflects what the host actually reads/writes. */
 export function promptPathsFor(collection: Pick<LoadedCollection, "slug" | "schema" | "skillDir">, workspaceRoot: string): CollectionPromptPaths {
   const rel = path.relative(workspaceRoot, collection.skillDir);
-  const skillDir = rel === "" || rel.startsWith("..") ? collection.skillDir : rel;
+  const raw = rel === "" || rel.startsWith("..") ? collection.skillDir : rel;
+  // POSIX separators unconditionally — the value goes into `<collection_paths>`
+  // and the prompt tells the agent to substitute it verbatim into shell / script
+  // invocations (`python3 {{skillDir}}/fetch.py ...`). On Windows `path.relative`
+  // returns backslashes (`.claude\skills\<slug>`) which POSIX shells consume as
+  // escape sequences and break the invocation. Every legitimate consumer (bash
+  // inside the sandbox, cross-platform CLIs) accepts forward slashes on both
+  // platforms, so the normalization is one-way safe. Codex review on #1897.
+  const skillDir = raw.split(path.sep).join("/");
   return { slug: collection.slug, dataPath: collection.schema.dataPath, skillDir };
 }
 

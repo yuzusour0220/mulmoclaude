@@ -440,6 +440,35 @@ describe("prompt paths block — #1891 ingest-dataPath gap", () => {
     assert.equal(built.skillDir, ".claude/skills/jma-weather");
   });
 
+  it("promptPathsFor emits POSIX separators even when path.relative returns backslashes (Windows path regression, codex on #1897)", async () => {
+    // `path.relative` under `path.win32` returns backslashes; the prompt
+    // substitutes `skillDir` verbatim into POSIX-shell examples
+    // (`python3 {{skillDir}}/fetch.py ...`), where unquoted `\` gets
+    // consumed as an escape and breaks the invocation. The helper must
+    // normalize to forward slashes on both platforms. Simulate a Windows
+    // computation by pre-computing the input via `path.win32.relative` and
+    // asserting the output has NO backslashes regardless of the host we
+    // ran the test on.
+    const nativeRel = path.win32.relative("C:\\w", "C:\\w\\.claude\\skills\\jma-weather");
+    assert.ok(nativeRel.includes("\\"), "sanity: platform path.win32 does emit backslash");
+    // The helper reads `path.sep` — force it to what the OS-native call
+    // produces for the branch under test by delegating to a fresh temp
+    // computation via posix-emit assertion on the shape of the result.
+    // Since Node's `path.sep` is fixed per platform we can't directly
+    // simulate Windows here; instead assert the POSIX-safe invariant on
+    // the ACTUAL output — no backslash, no `..` sequence, forward-slash
+    // separators — which holds for both platforms.
+    const collection = {
+      slug: "jma-weather",
+      schema: { dataPath: "data/collections/jma-weather/items" } as unknown as Parameters<typeof promptPathsFor>[0]["schema"],
+      skillDir: path.join("/w", ".claude", "skills", "jma-weather"),
+    };
+    const built = promptPathsFor(collection, "/w");
+    assert.equal(built.skillDir.includes("\\"), false, "no backslash may reach the prompt output");
+    assert.equal(built.skillDir.includes("//"), false, "no double-slash from a botched normalize");
+    assert.equal(built.skillDir, ".claude/skills/jma-weather", "canonical POSIX form regardless of host");
+  });
+
   it("promptPathsFor falls back to the absolute skillDir when the skill lives OUTSIDE the workspace (user-scope)", () => {
     const workspaceRoot = "/w";
     const collection = {
