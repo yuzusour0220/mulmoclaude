@@ -10,7 +10,7 @@
 // boot via `configureFeedsHost`, not imported directly — this module ships in a
 // shared package and must not reach into any host's session/routes layer.
 
-import { listItems, readSkillTemplate, buildCollectionActionSeedPrompt, type LoadedCollection } from "../../collection/server/index.js";
+import { listItems, promptPathsFor, readSkillTemplate, buildCollectionActionSeedPrompt, type LoadedCollection } from "../../collection/server/index.js";
 import { publish as publishNotifier, clear as clearNotifier } from "../../notifier/index.js";
 import { log, requireFeedsHost, type AgentWorkerResult, type AgentWorkerRunner } from "./host.js";
 import { readFeedState, writeFeedState, type FeedState } from "./state.js";
@@ -53,7 +53,12 @@ export async function refreshViaAgent(workspaceRoot: string, collection: LoadedC
   if (template === null) return result(slug, { errors: [`ingest template '${ingest.template}' could not be read`] });
 
   const items = await listItems(collection.dataDir, { workspaceRoot });
-  const message = buildCollectionActionSeedPrompt(items, collection.schema, template);
+  // Thread the canonical, host-normalized paths through the seed so the
+  // template can pass `--out-dir data/collections/<slug>/items` (etc.) into
+  // any bundled script instead of relying on the script's `argparse` default —
+  // which was written for the author's pre-import layout, NOT the R3-
+  // normalized location the host actually reads records from. Fixes #1891.
+  const message = buildCollectionActionSeedPrompt(items, collection.schema, template, promptPathsFor(collection, workspaceRoot));
 
   // The runner is injected, so guard its promise here to honour the
   // failure-isolated contract (a rejection must become an `errors` entry, not
