@@ -3,10 +3,15 @@
 // mermaid's `<foreignObject>`-nested HTML (issue #1916). Runs in
 // node:test with jsdom so the SVG parse path is exercised without
 // booting mermaid itself.
+//
+// Imports the real production `adoptSvg` from the host source so the
+// assertion tracks whatever the runtime does — inline duplicates go
+// stale (CodeRabbit review on #1917).
 
 import { describe, it, before } from "node:test";
 import assert from "node:assert/strict";
 import { JSDOM } from "jsdom";
+import { adoptSvg } from "../../../src/utils/markdown/mermaidRender";
 
 let dom: JSDOM;
 
@@ -22,26 +27,24 @@ const SAMPLE_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 60"
   </g>
 </svg>`;
 
-function adoptSvg(document: Document, DOMParserCtor: typeof DOMParser, svgMarkup: string): SVGElement | null {
-  const parsed = new DOMParserCtor().parseFromString(svgMarkup, "text/html");
-  const svgEl = parsed.body.querySelector("svg");
-  if (!svgEl) return null;
-  return document.importNode(svgEl, true) as unknown as SVGElement;
-}
-
 before(() => {
   dom = new JSDOM("<!doctype html><html><body></body></html>");
+  // adoptSvg reads the ambient `document` + `DOMParser` — point them at
+  // the jsdom window's globals so the production helper runs unmodified.
+  const win = dom.window as unknown as { document: Document; DOMParser: typeof DOMParser };
+  (globalThis as unknown as { document: Document }).document = win.document;
+  (globalThis as unknown as { DOMParser: typeof DOMParser }).DOMParser = win.DOMParser;
 });
 
 describe("adoptSvg (HTML5 mode)", () => {
   it("returns the svg root for a mermaid-shaped output", () => {
-    const svgEl = adoptSvg(dom.window.document, dom.window.DOMParser, SAMPLE_SVG);
+    const svgEl = adoptSvg(SAMPLE_SVG);
     assert.ok(svgEl, "expected an SVGElement");
     assert.equal(svgEl.tagName.toLowerCase(), "svg");
   });
 
   it("preserves the foreignObject subtree with its br tag", () => {
-    const svgEl = adoptSvg(dom.window.document, dom.window.DOMParser, SAMPLE_SVG);
+    const svgEl = adoptSvg(SAMPLE_SVG);
     assert.ok(svgEl);
     const foreign = svgEl.querySelector("foreignObject");
     assert.ok(foreign, "foreignObject preserved");
@@ -54,7 +57,7 @@ describe("adoptSvg (HTML5 mode)", () => {
 
   it("returns null for input without an svg root", () => {
     const notSvg = "<p>not an svg</p>";
-    const svgEl = adoptSvg(dom.window.document, dom.window.DOMParser, notSvg);
+    const svgEl = adoptSvg(notSvg);
     assert.equal(svgEl, null);
   });
 });

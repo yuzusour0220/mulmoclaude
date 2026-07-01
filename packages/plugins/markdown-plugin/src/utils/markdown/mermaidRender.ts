@@ -58,10 +58,12 @@ function pendingNodes(root: Element | Document): HTMLElement[] {
   return Array.from(root.querySelectorAll<HTMLElement>("pre.mermaid[data-mermaid-pending]"));
 }
 
-// Mirrors host `adoptSvg` — DOMParser adoption in HTML5 mode so
-// `<foreignObject>`-nested HTML in mermaid's SVG output parses
-// cleanly, and opengrep's `innerHTML =` XSS heuristic stays quiet.
-function adoptSvg(svgMarkup: string): SVGElement | null {
+/** Mirrors host `adoptSvg` — DOMParser adoption in HTML5 mode so
+ *  `<foreignObject>`-nested HTML in mermaid's SVG output parses
+ *  cleanly, and opengrep's `innerHTML =` XSS heuristic stays quiet.
+ *  Exported so `test/plugins/markdown/test_mermaidRender.ts` can
+ *  guard this copy independently of the host tests. */
+export function adoptSvg(svgMarkup: string): SVGElement | null {
   const parsed = new DOMParser().parseFromString(svgMarkup, "text/html");
   const svgEl = parsed.body.querySelector("svg");
   if (!svgEl) return null;
