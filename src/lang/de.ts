@@ -3,6 +3,8 @@
 
 const deMessages = {
   common: {
+    downloadZip: "ZIP",
+    downloadFailed: "Download fehlgeschlagen",
     save: "Speichern",
     cancel: "Abbrechen",
     loading: "Wird geladen...",

@@ -142,8 +142,11 @@ const HOST_API_ROUTES = {
 
   // Sharing: pack an HTML artifact + its referenced local assets into a
   // self-contained zip (index.html + assets/), streamed as a download.
+  // `packMarkdown` renders markdown / a wiki page to a self-contained
+  // HTML (images inlined) and zips that.
   share: {
     pack: "/api/share/pack",
+    packMarkdown: "/api/share/pack-markdown",
   },
 
   mcpTools: {

@@ -3,6 +3,8 @@
 
 const ptBRMessages = {
   common: {
+    downloadZip: "ZIP",
+    downloadFailed: "Falha no download",
     save: "Salvar",
     cancel: "Cancelar",
     loading: "Carregando...",

@@ -94,7 +94,7 @@ export function zipBundle(files: PackedFile[]): Promise<Buffer> {
   return zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE", compressionOptions: { level: 9 } });
 }
 
-function safeZipName(name: string): string {
+export function safeZipName(name: string): string {
   const cleaned = name.replace(/[^\w.-]+/g, "_");
   return `${cleaned || "share"}.zip`;
 }

@@ -7,6 +7,7 @@
 import { ref, type Ref } from "vue";
 import { API_ROUTES } from "../config/apiRoutes";
 import { apiFetchRaw } from "../utils/api";
+import { saveBlob, filenameFromDisposition } from "../utils/blobDownload";
 
 export interface UseSharePackHandle {
   packing: Ref<boolean>;
@@ -24,20 +25,6 @@ function fallbackName(htmlPath: string): string {
       .pop()
       ?.replace(/\.html?$/i, "") || "share";
   return `${base}.zip`;
-}
-
-function filenameFromDisposition(header: string | null, fallback: string): string {
-  const match = header ? /filename="?([^";]+)"?/.exec(header) : null;
-  return match ? match[1] : fallback;
-}
-
-function saveBlob(blob: Blob, filename: string): void {
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = filename;
-  anchor.click();
-  URL.revokeObjectURL(url);
 }
 
 export function useSharePack(): UseSharePackHandle {

@@ -23,6 +23,8 @@
 
 const enMessages = {
   common: {
+    downloadZip: "ZIP",
+    downloadFailed: "Download failed",
     save: "Save",
     cancel: "Cancel",
     loading: "Loading...",

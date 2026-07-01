@@ -8,6 +8,8 @@
 
 const esMessages = {
   common: {
+    downloadZip: "ZIP",
+    downloadFailed: "Error al descargar",
     save: "Guardar",
     cancel: "Cancelar",
     loading: "Cargando...",
