@@ -15,7 +15,11 @@ export const mermaidExtension: MarkedExtension = {
     code(token: Tokens.Code): string | false {
       const lang = (token.lang ?? "").trim();
       if (lang !== "mermaid") return false;
-      return `<pre class="mermaid" data-mermaid-pending="1">${escapeHtml(token.text)}</pre>\n`;
+      // Honour `token.escaped` so this extension composes cleanly
+      // with `markedHighlight`-style walkTokens hooks — see the host
+      // copy for the full rationale.
+      const html = token.escaped === true ? token.text : escapeHtml(token.text);
+      return `<pre class="mermaid" data-mermaid-pending="1">${html}</pre>\n`;
     },
   },
 };

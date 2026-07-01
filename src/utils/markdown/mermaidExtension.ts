@@ -38,7 +38,19 @@ export const mermaidExtension: MarkedExtension = {
       // or plain triple-backtick with no tag) can never match here.
       const lang = (token.lang ?? "").trim();
       if (lang !== "mermaid") return false;
-      return `<pre class="mermaid" data-mermaid-pending="1">${escapeHtml(token.text)}</pre>\n`;
+      // markedHighlight's `walkTokens` fires on EVERY code token —
+      // regardless of language — and rewrites `token.text` to an
+      // HTML-escaped, highlight.js-processed string (mermaid falls
+      // to `plaintext`, so no <span> tags land, but every `"` is
+      // now `&quot;`). It also stamps `token.escaped = true`. If we
+      // re-escape here, `&` in `&quot;` becomes `&amp;`, the browser
+      // decodes `&amp;quot;` back to `&quot;` on parse, and mermaid
+      // sees literal `&quot;` in its input — parse error. Honour
+      // the `escaped` flag: pass through when already escaped, escape
+      // ourselves when not (host code paths that don't wire highlight,
+      // and the plugin, still need our own escape).
+      const html = token.escaped === true ? token.text : escapeHtml(token.text);
+      return `<pre class="mermaid" data-mermaid-pending="1">${html}</pre>\n`;
     },
   },
 };
