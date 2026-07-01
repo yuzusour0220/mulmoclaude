@@ -74,21 +74,23 @@ function pendingNodes(root: Element | Document): HTMLElement[] {
 }
 
 // Adopt a mermaid-produced SVG string into a live DOM node via
-// DOMParser instead of assigning to `.innerHTML`. Mermaid's
-// `securityLevel: "strict"` already escapes user-authored diagram
-// text before building the SVG, so the string is trusted — but going
-// through the XML parser (a) satisfies opengrep's XSS heuristic that
-// flags every raw `innerHTML =`, and (b) preserves the SVG namespace
-// crisply, which HTML-mode innerHTML parsing sometimes loses on
-// nested `<foreignObject>` content. Returns null when the parser
-// reports a `<parsererror>` root so the caller can fall through to
-// the localised error box.
+// DOMParser (HTML5 mode) instead of assigning to `.innerHTML`.
+// Mermaid's `securityLevel: "strict"` already escapes user-authored
+// diagram text before building the SVG, so the string is trusted —
+// but going through the parser satisfies opengrep's XSS heuristic
+// that flags every raw `innerHTML =`. HTML5 mode (not `image/svg+xml`)
+// is required: mermaid's SVG contains `<foreignObject>` wrappers with
+// nested HTML content for labels (line-broken text via `<br>`, `<div>`,
+// etc.), which is well-formed HTML5 but NOT well-formed XML — the
+// XML parser drops a `<parsererror>` root and refuses. HTML5 mode
+// treats `<svg>` as a foreign-namespace root and correctly parses
+// the mixed subtree.
 function adoptSvg(svgMarkup: string): SVGElement | null {
-  const parsed = new DOMParser().parseFromString(svgMarkup, "image/svg+xml");
-  const root = parsed.documentElement;
-  if (root.getElementsByTagName("parsererror").length > 0) return null;
-  if (root.tagName.toLowerCase() !== "svg") return null;
-  return document.importNode(root, true) as unknown as SVGElement;
+  const parsed = new DOMParser().parseFromString(svgMarkup, "text/html");
+  // `<svg>` at the top level lands under `body` in HTML5 parsing.
+  const svgEl = parsed.body.querySelector("svg");
+  if (!svgEl) return null;
+  return document.importNode(svgEl, true) as unknown as SVGElement;
 }
 
 async function renderOne(node: HTMLElement, mermaid: MermaidRuntime, labels: MermaidRenderLabels): Promise<void> {

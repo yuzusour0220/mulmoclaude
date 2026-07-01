@@ -58,14 +58,14 @@ function pendingNodes(root: Element | Document): HTMLElement[] {
   return Array.from(root.querySelectorAll<HTMLElement>("pre.mermaid[data-mermaid-pending]"));
 }
 
-// Mirrors host `adoptSvg` — DOMParser adoption keeps the SVG
-// namespace exact and dodges opengrep's `innerHTML =` XSS heuristic.
+// Mirrors host `adoptSvg` — DOMParser adoption in HTML5 mode so
+// `<foreignObject>`-nested HTML in mermaid's SVG output parses
+// cleanly, and opengrep's `innerHTML =` XSS heuristic stays quiet.
 function adoptSvg(svgMarkup: string): SVGElement | null {
-  const parsed = new DOMParser().parseFromString(svgMarkup, "image/svg+xml");
-  const root = parsed.documentElement;
-  if (root.getElementsByTagName("parsererror").length > 0) return null;
-  if (root.tagName.toLowerCase() !== "svg") return null;
-  return document.importNode(root, true) as unknown as SVGElement;
+  const parsed = new DOMParser().parseFromString(svgMarkup, "text/html");
+  const svgEl = parsed.body.querySelector("svg");
+  if (!svgEl) return null;
+  return document.importNode(svgEl, true) as unknown as SVGElement;
 }
 
 async function renderOne(node: HTMLElement, mermaid: MermaidRuntime, labels: MermaidRenderLabels): Promise<void> {
