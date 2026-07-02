@@ -60,9 +60,12 @@ export const createStartChat =
     if (!slug) throw new Error("slug must be a non-empty, whitespace-free string");
     if (params.itemId != null && !itemId) throw new Error("itemId must be a non-empty, whitespace-free string when provided");
     if (!message) throw new Error("message is required");
-    // Feeds have no `/<slug>` command — refuse rather than seed a broken chat.
+    // Resolve the target so we never seed a `/<slug>` command that resolves to
+    // nothing: an unknown/stale slug (`null`) is rejected, and a feed
+    // (`source === "feed"`, no skill command) is refused.
     const target = await deps.loadCollection(slug);
-    if (target?.source === "feed") throw new Error("chat is not available for feeds");
+    if (!target) throw new Error(`collection '${slug}' not found`);
+    if (target.source === "feed") throw new Error("chat is not available for feeds");
     const result = await deps.spawn({
       message: composeMessage(slug, itemId, message),
       roleId: DEFAULT_ROLE_ID,

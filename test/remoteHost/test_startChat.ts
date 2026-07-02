@@ -11,10 +11,13 @@ import { composeMessage, createStartChat, type StartChatDeps } from "../../serve
 type SpawnArgs = Parameters<StartChatDeps["spawn"]>[0];
 type Loaded = Awaited<ReturnType<StartChatDeps["loadCollection"]>>;
 
-// Build stub deps. `loadResult` is what `loadCollection` resolves to: null
-// (default) ⇒ not a feed, so the chat proceeds; a `{ source }` object lets a
-// test simulate a feed. `calls` captures the spawn arguments.
-const makeDeps = (result: Awaited<ReturnType<StartChatDeps["spawn"]>>, loadResult: Loaded = null) => {
+const collection = { source: "user" } as unknown as Loaded;
+const feed = { source: "feed" } as unknown as Loaded;
+
+// Build stub deps. `loadResult` is what `loadCollection` resolves to: a normal
+// collection (default) ⇒ the chat proceeds; `feed` ⇒ refused; `null` ⇒ unknown
+// slug, rejected. `calls` captures the spawn arguments.
+const makeDeps = (result: Awaited<ReturnType<StartChatDeps["spawn"]>>, loadResult: Loaded = collection) => {
   const calls: SpawnArgs[] = [];
   const spawn = (async (args: SpawnArgs) => {
     calls.push(args);
@@ -23,8 +26,6 @@ const makeDeps = (result: Awaited<ReturnType<StartChatDeps["spawn"]>>, loadResul
   const loadCollection = (async () => loadResult) as StartChatDeps["loadCollection"];
   return { deps: { spawn, loadCollection } as StartChatDeps, calls };
 };
-
-const feed = { source: "feed" } as unknown as Loaded;
 
 describe("composeMessage", () => {
   it("prefixes the collection slash command for a whole-collection chat", () => {
@@ -55,6 +56,12 @@ describe("createStartChat", () => {
   it("refuses feeds (no /<slug> command) without spawning", async () => {
     const { deps, calls } = makeDeps({ ok: true, chatId: "chat-feed" }, feed);
     await assert.rejects(async () => createStartChat(deps)({ slug: "news", message: "summarize" }), /not available for feeds/);
+    assert.equal(calls.length, 0);
+  });
+
+  it("rejects an unknown slug (loadCollection returns null) without spawning", async () => {
+    const { deps, calls } = makeDeps({ ok: true, chatId: "chat-missing" }, null);
+    await assert.rejects(async () => createStartChat(deps)({ slug: "ghost", message: "hi" }), /collection 'ghost' not found/);
     assert.equal(calls.length, 0);
   });
 
