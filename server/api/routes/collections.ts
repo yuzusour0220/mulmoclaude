@@ -47,10 +47,13 @@ import {
   mutateRemoteView,
   mutateRemoteViewFailureMessage,
   remoteViewFailureMessage,
+  remoteViewItems,
+  remoteViewItemsFailureMessage,
   type MutateRemoteViewResult,
   type RemoteViewBuildResult,
+  type RemoteViewItemsResult,
 } from "../../workspace/collections/remoteView.js";
-import { normalizeMutate } from "@mulmoclaude/core/remote-view";
+import { clampLimit, clampOffset, normalizeFields, normalizeMutate } from "@mulmoclaude/core/remote-view";
 import { badRequest, notFound, conflict, forbidden, serverError } from "../../utils/httpError.js";
 import { errorMessage } from "../../utils/errors.js";
 import { log } from "../../system/logger/index.js";
@@ -564,6 +567,48 @@ router.post(API_ROUTES.collections.remoteViewMutate, async (req: Request<{ slug:
     res.json(result.op === "delete" ? { op: "delete", id: result.id } : { op: "update", item: result.item });
   } catch (err) {
     log.warn("collections", "remote-view mutate failed", { slug: req.params.slug, viewId: req.params.viewId, error: errorMessage(err) });
+    serverError(res, errorMessage(err));
+  }
+});
+
+/** A `fields` projection arrives as a CSV query string (`?fields=title,photo`)
+ *  or repeated params; hand `normalizeFields` an array either way. */
+function csvParam(value: unknown): string[] | undefined {
+  if (Array.isArray(value)) return value.map((entry) => String(entry));
+  if (typeof value === "string" && value.length > 0) return value.split(",");
+  return undefined;
+}
+
+/** Map a non-ok item-page build to its HTTP error (message shared with the
+ *  channel handler via `remoteViewItemsFailureMessage`). */
+function sendRemoteViewItemsFailure(res: Response, result: Exclude<RemoteViewItemsResult, { kind: "ok" }>, slug: string): void {
+  const message = remoteViewItemsFailureMessage(result, slug);
+  if (result.kind === "view-not-found") notFound(res, message);
+  else badRequest(res, message);
+}
+
+// One page of a mobile view's records with its declared `imageFields` inlined as
+// `data:` URL thumbnails — the desktop phone-frame preview's paging source.
+// Behind the global bearer. Same builder as the command channel's
+// `getRemoteViewItems`, so the preview pages the exact data (real thumbnails)
+// the phone will (plans/feat-remote-view-images.md).
+router.get(API_ROUTES.collections.remoteViewItems, async (req: Request<{ slug: string; viewId: string }>, res: Response) => {
+  try {
+    const { slug, viewId } = req.params;
+    const request = { offset: clampOffset(req.query.offset), limit: clampLimit(req.query.limit), fields: normalizeFields(csvParam(req.query.fields)) };
+    const collection = await loadCollection(slug);
+    if (!collection) {
+      notFound(res, `collection '${slug}' not found`);
+      return;
+    }
+    const result = await remoteViewItems(collection, viewId, request);
+    if (result.kind !== "ok") {
+      sendRemoteViewItemsFailure(res, result, slug);
+      return;
+    }
+    res.json({ page: result.page, inlined: result.inlined, omitted: result.omitted });
+  } catch (err) {
+    log.warn("collections", "remote-view items failed", { slug: req.params.slug, viewId: req.params.viewId, error: errorMessage(err) });
     serverError(res, errorMessage(err));
   }
 });
