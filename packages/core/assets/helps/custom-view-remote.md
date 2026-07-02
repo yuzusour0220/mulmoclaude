@@ -82,7 +82,10 @@ const page = await window.__MC_VIEW.getItems({
   is always included). List the columns your view actually renders.
 - The promise **rejects** on failure or after a 30 s timeout — catch it and
   show the message; don't fail silently.
-- Records come back with computed fields already resolved, like desktop.
+- **`derived` formulas that read only the record's own fields come back
+  resolved** (e.g. `won * 3 + drawn`). Formulas that dereference a `ref`
+  field, and `embed` fields, are NOT resolved on the phone — don't rely on
+  them; compute from base fields or omit.
 
 ### Starting a chat — `startChat`
 

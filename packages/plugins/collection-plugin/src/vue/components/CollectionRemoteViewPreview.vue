@@ -33,9 +33,9 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useCollectionI18n } from "../lang";
-import { errorMessage } from "@mulmoclaude/core/collection";
-import type { CollectionCustomView, CollectionItem } from "@mulmoclaude/core/collection";
-import { handleRemoteViewMessage, pageFromItems, REMOTE_VIEW_MAX_BYTES, type RemoteViewItem } from "@mulmoclaude/core/remote-view";
+import { deriveAll, errorMessage } from "@mulmoclaude/core/collection";
+import type { CollectionCustomView, CollectionItem, CollectionSchema } from "@mulmoclaude/core/collection";
+import { handleRemoteViewMessage, pageFromItems, REMOTE_VIEW_MAX_BYTES, type RemoteViewItem, type RemoteViewPage } from "@mulmoclaude/core/remote-view";
 import { collectionUi } from "../uiContext";
 
 const { t } = useCollectionI18n();
@@ -43,8 +43,9 @@ const { t } = useCollectionI18n();
 const props = defineProps<{
   slug: string;
   view: CollectionCustomView;
-  /** The schema's primary key — `projectItems` always keeps it. */
-  primaryKey: string;
+  /** The collection schema — the bridge derives computed fields from it and
+   *  `projectItems` always keeps its `primaryKey`. */
+  schema: CollectionSchema;
   /** The already-loaded records the bridge pages over. Deliberately the
    *  UNFILTERED list: the phone pages over the whole collection through the
    *  command channel, and the preview must behave identically. */
@@ -106,6 +107,18 @@ watch([() => props.slug, () => props.view.id, () => collectionUi().localeTag()],
 // fields-projected by the shared handler) and `startChat` relays. No
 // `onChange`, no `openItem`, no data plane: preview capability must equal
 // phone capability exactly (plans/feat-remote-custom-view.md, decision 5).
+//
+// `props.items` are the RAW detail records: derived formulas resolve at
+// render time on the desktop, so the bridge must derive them here — with an
+// empty ref cache, exactly like the channel's `deriveItems` — before paging.
+// The JSON round-trip then strips Vue's reactive proxies (postMessage
+// structured-clone throws DataCloneError on them) and matches what the
+// command channel does to a page anyway.
+function getPage(request: Parameters<typeof pageFromItems>[1]): RemoteViewPage {
+  const derived = props.items.map((item) => deriveAll(props.schema, item, {}) as RemoteViewItem);
+  return JSON.parse(JSON.stringify(pageFromItems(derived, request, props.schema.primaryKey))) as RemoteViewPage;
+}
+
 function onWindowMessage(event: MessageEvent): void {
   const target = event.source;
   if (!target || target !== iframeEl.value?.contentWindow) return;
@@ -113,7 +126,7 @@ function onWindowMessage(event: MessageEvent): void {
     event.data,
     {
       slug: props.slug,
-      getPage: (request) => pageFromItems(props.items as RemoteViewItem[], request, props.primaryKey),
+      getPage,
       onStartChat: (prompt, role) => emit("startChat", { prompt, role }),
     },
     // targetOrigin "*": the sandboxed document's origin is opaque, nothing

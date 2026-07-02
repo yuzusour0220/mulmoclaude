@@ -416,7 +416,7 @@
           v-if="activeCustomView.target === 'mobile'"
           :slug="collection.slug"
           :view="activeCustomView"
-          :primary-key="collection.schema.primaryKey"
+          :schema="collection.schema"
           :items="items"
           @start-chat="onCustomViewStartChat"
         />
