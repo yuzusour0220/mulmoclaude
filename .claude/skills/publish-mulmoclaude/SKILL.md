@@ -64,9 +64,13 @@ For each drifted package:
 # Bump in that package's package.json, then:
 yarn install
 yarn build:packages
-cd packages/<name> && npm publish --access public
+cd packages/<name> && npm publish --access public --registry https://registry.npmjs.org/
 # Tag + GitHub release: see §7.
 ```
+
+> MUST pass `--registry https://registry.npmjs.org/` on every `npm publish`
+> below. The environment's default registry is a private mirror, so
+> without it the package publishes to the wrong registry (or fails auth).
 
 Update mulmoclaude's refs to the new versions. If `chat-service` depends on `protocol`, bump its dep there too.
 
@@ -137,7 +141,7 @@ When iterating (known-broken 0.1.0 → fixed 0.1.1), keep the published version 
 ### 6. Publish
 
 ```bash
-cd packages/mulmoclaude && npm publish --access public
+cd packages/mulmoclaude && npm publish --access public --registry https://registry.npmjs.org/
 ```
 
 Verify:
