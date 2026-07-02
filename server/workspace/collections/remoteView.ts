@@ -172,10 +172,16 @@ async function updateViaView(
   // declared image fields inlined as `data:` URLs — so a view that merges the
   // result (as the help file recommends) doesn't clobber a good thumbnail with a
   // bare path. No projection here (the whole record is returned), so inline every
-  // declared image-type field; the single item easily fits the doc budget.
+  // declared image-type field. Budget the thumbnail against the serialized item
+  // (same as the page builder) so a record with large text/markdown fields can't
+  // push the mutate result over the command-document cap — over budget, the field
+  // stays a path (placeholder), never a doc-write failure.
   const item = result.item as RemoteViewItem;
   const imageFields = inlineFields(view, collection.schema, undefined);
-  if (imageFields.length > 0) await inlineImages([item], imageFields, clampImageMaxEdge(view.imageMaxEdge), deps.resolveThumbnail, REMOTE_VIEW_ITEMS_MAX_BYTES);
+  if (imageFields.length > 0) {
+    const budget = REMOTE_VIEW_ITEMS_MAX_BYTES - Buffer.byteLength(JSON.stringify(item), "utf8");
+    await inlineImages([item], imageFields, clampImageMaxEdge(view.imageMaxEdge), deps.resolveThumbnail, Math.max(0, budget));
+  }
   return { kind: "ok", op: "update", item: item as CollectionItem };
 }
 

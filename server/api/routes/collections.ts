@@ -608,7 +608,13 @@ router.get(API_ROUTES.collections.remoteViewItems, async (req: Request<{ slug: s
     }
     res.json({ page: result.page, inlined: result.inlined, omitted: result.omitted });
   } catch (err) {
-    log.warn("collections", "remote-view items failed", { slug: req.params.slug, viewId: req.params.viewId, error: errorMessage(err) });
+    // Strip CR/LF from request-derived params before logging (log-injection
+    // resistance, same convention as the view-i18n handler below).
+    log.warn("collections", "remote-view items failed", {
+      slug: req.params.slug.replace(/[\r\n]/g, " "),
+      viewId: req.params.viewId.replace(/[\r\n]/g, " "),
+      error: errorMessage(err),
+    });
     serverError(res, errorMessage(err));
   }
 });

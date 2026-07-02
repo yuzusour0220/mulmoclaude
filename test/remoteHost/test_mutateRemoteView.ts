@@ -4,6 +4,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
+import { REMOTE_VIEW_ITEMS_MAX_BYTES } from "@mulmoclaude/core/remote-view";
 import { createMutateRemoteView, mutateRemoteViewFailureMessage, type MutateRemoteViewDeps } from "../../server/workspace/collections/remoteView.js";
 import { createMutateRemoteViewHandler, type MutateRemoteViewHandlerDeps } from "../../server/remoteHost/handlers/mutateRemoteView.js";
 import { handlers } from "../../server/remoteHost/handlers/index.js";
@@ -68,6 +69,29 @@ describe("createMutateRemoteView", () => {
     if (result.kind !== "ok" || result.op !== "update") return;
     assert.equal(result.item.rating, "★★★");
     assert.match(String(result.item.poster), /^data:image\/jpeg;base64,/); // inlined, not the path
+  });
+
+  it("leaves the image as a path when the returned item is already over budget", async () => {
+    // A record with a huge text field (near the whole 900 KB doc budget) leaves
+    // no room for a thumbnail — the field must stay a path, not overflow the doc.
+    const withImage = collection([{ ...writableView, editableFields: ["rating"], imageFields: ["poster"] }]);
+    withImage.schema.fields = {
+      id: { type: "string" },
+      rating: { type: "string" },
+      poster: { type: "image" },
+      notes: { type: "text" },
+    } as unknown as typeof withImage.schema.fields;
+    const huge = "x".repeat(REMOTE_VIEW_ITEMS_MAX_BYTES);
+    const mutate = createMutateRemoteView(
+      deps({
+        readItem: (async () => ({ id: "t1", rating: "", poster: "images/a.png", notes: huge })) as unknown as MutateRemoteViewDeps["readItem"],
+        writeItem: (async (_dir: string, itemId: string, item: unknown) => ({ kind: "ok", itemId, item })) as unknown as MutateRemoteViewDeps["writeItem"],
+      }),
+    );
+    const result = await mutate(withImage, "phone", { op: "update", id: "t1", patch: { rating: "★" } });
+    assert.equal(result.kind, "ok");
+    if (result.kind !== "ok" || result.op !== "update") return;
+    assert.equal(result.item.poster, "images/a.png"); // left as path — no budget for a thumbnail
   });
 
   it("deletes a record when allowDelete is set", async () => {

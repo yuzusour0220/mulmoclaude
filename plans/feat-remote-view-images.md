@@ -157,7 +157,7 @@ JSON, same as the pagination clamps), reused by the host builder.
 
 ## Host builder result (discriminated, like the others)
 
-```
+```text
 { kind: "ok"; page: RemoteViewPage; inlined: number; omitted: number }
 | view-not-found | not-mobile
 ```
@@ -238,4 +238,3 @@ packages/plugins/collection-plugin/src/vue/
   with real photos → preview renders the thumbnails in the 390×844 frame → the
   size caption shows the inlined-image page cost → a huge `limit` degrades to
   fewer images, never an error.
-```
