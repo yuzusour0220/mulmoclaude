@@ -1019,44 +1019,31 @@ function handleSessionFinished(sessionId: string): void {
 //     throttling — WS keeps `connected` on the server but delivery stops
 //     while the tab is backgrounded, and there's no `disconnect` event to
 //     hook on reconnect)
-// Monotonic sequence guard so back-to-back triggers (reconnect fires
-// concurrent with a visibilitychange) can't let an older, slower
-// refreshSessionStates() response overwrite a newer isRunning=false with
-// stale state (CodeRabbit review). Every catch-up increments the token
-// before awaiting; when the await resolves, we drop the result unless
-// our token is still the latest.
-let catchUpSequence = 0;
-async function catchUpMissedEvents(reason: "reconnect" | "visibility"): Promise<void> {
+// refreshSessionStates() carries its own sequence guard inside
+// useSessionSync so concurrent catch-ups can't overwrite newer live state
+// with an older-but-slower response. refreshSessionTranscript() only
+// upgrades toolResults when the server view is strictly larger, so it's
+// already idempotent against interleaving.
+function catchUpMissedEvents(reason: "reconnect" | "visibility"): void {
   console.info(`[chat-ui] catching up after ${reason}`);
-  const token = ++catchUpSequence;
-  const currentId = currentSessionId.value;
-  const transcriptPromise = currentId
-    ? refreshSessionTranscript(currentId).catch((err) => {
-        console.warn("[chat-ui] refreshSessionTranscript failed:", err);
-      })
-    : Promise.resolve();
-  try {
-    await refreshSessionStates();
-    if (token !== catchUpSequence) {
-      // A later catch-up has already been scheduled; drop this result so
-      // its (potentially older) view of the world can't overwrite the newer one.
-      return;
-    }
-  } catch (err) {
+  refreshSessionStates().catch((err) => {
     console.warn("[chat-ui] refreshSessionStates failed:", err);
+  });
+  const currentId = currentSessionId.value;
+  if (currentId) {
+    refreshSessionTranscript(currentId).catch((err) => {
+      console.warn("[chat-ui] refreshSessionTranscript failed:", err);
+    });
   }
-  await transcriptPromise;
 }
 
 // Capture the unsubscribe so remount / HMR doesn't accumulate stale
 // module-level reconnect handlers (Codex review).
-const unsubReconnect = pubsubOnReconnect(() => {
-  void catchUpMissedEvents("reconnect");
-});
+const unsubReconnect = pubsubOnReconnect(() => catchUpMissedEvents("reconnect"));
 
 function handleVisibilityChange(): void {
   if (document.visibilityState === "visible") {
-    void catchUpMissedEvents("visibility");
+    catchUpMissedEvents("visibility");
   }
 }
 
