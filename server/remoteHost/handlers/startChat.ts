@@ -14,14 +14,22 @@
 // message + slug + optional itemId. The host runs the chat in its default role
 // (spawnSystemWorker → startChat requires a concrete roleId; empty is rejected).
 //
+// Feeds are refused: a feed (`source === "feed"`) has no `/<slug>` skill
+// command, so a slash-command seed would invoke nothing (see desktop
+// `CollectionView.buildChatSeed`). The mobile remote doesn't offer chat for
+// feeds; this is the host-side backstop so a stray feed slug can't produce a
+// broken chat.
+//
 // Factory (createStartChat) keeps composition/wiring unit-testable with the
-// spawner stubbed; the default export wires the real spawnSystemWorker.
+// engine + spawner stubbed; the default export wires the real ones.
 import { spawnSystemWorker } from "../../api/routes/agent.js";
+import { loadCollection } from "../../workspace/collections/index.js";
 import { DEFAULT_ROLE_ID } from "../../../src/config/roles.js";
 import type { CommandHandler, JsonObject, JsonValue } from "../commandChannel.js";
 
 export interface StartChatDeps {
   spawn: typeof spawnSystemWorker;
+  loadCollection: typeof loadCollection;
 }
 
 // Prefix the message with the collection's slash command. `itemId` scopes the
@@ -52,6 +60,9 @@ export const createStartChat =
     if (!slug) throw new Error("slug must be a non-empty, whitespace-free string");
     if (params.itemId != null && !itemId) throw new Error("itemId must be a non-empty, whitespace-free string when provided");
     if (!message) throw new Error("message is required");
+    // Feeds have no `/<slug>` command — refuse rather than seed a broken chat.
+    const target = await deps.loadCollection(slug);
+    if (target?.source === "feed") throw new Error("chat is not available for feeds");
     const result = await deps.spawn({
       message: composeMessage(slug, itemId, message),
       roleId: DEFAULT_ROLE_ID,
@@ -61,4 +72,4 @@ export const createStartChat =
     return { started: true, chatId: result.chatId };
   };
 
-export const startChat = createStartChat({ spawn: spawnSystemWorker });
+export const startChat = createStartChat({ spawn: spawnSystemWorker, loadCollection });

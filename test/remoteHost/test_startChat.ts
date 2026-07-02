@@ -1,22 +1,30 @@
 // Unit tests for the startChat remote-host handler: message composition (the
-// collection slash-command prefix, with/without itemId), coercion, and the
-// spawn wiring. The host spawner is stubbed so the test asserts what message it
-// receives — not that a real chat subprocess launches.
+// collection slash-command prefix, with/without itemId), coercion/validation,
+// feed refusal, and the spawn wiring. The host spawner + collection engine are
+// stubbed so the test asserts what message is spawned — not that a real chat
+// subprocess launches.
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
 import { composeMessage, createStartChat, type StartChatDeps } from "../../server/remoteHost/handlers/startChat.js";
 
 type SpawnArgs = Parameters<StartChatDeps["spawn"]>[0];
+type Loaded = Awaited<ReturnType<StartChatDeps["loadCollection"]>>;
 
-const captureSpawn = (result: Awaited<ReturnType<StartChatDeps["spawn"]>>) => {
+// Build stub deps. `loadResult` is what `loadCollection` resolves to: null
+// (default) ⇒ not a feed, so the chat proceeds; a `{ source }` object lets a
+// test simulate a feed. `calls` captures the spawn arguments.
+const makeDeps = (result: Awaited<ReturnType<StartChatDeps["spawn"]>>, loadResult: Loaded = null) => {
   const calls: SpawnArgs[] = [];
   const spawn = (async (args: SpawnArgs) => {
     calls.push(args);
     return result;
   }) as StartChatDeps["spawn"];
-  return { spawn, calls };
+  const loadCollection = (async () => loadResult) as StartChatDeps["loadCollection"];
+  return { deps: { spawn, loadCollection } as StartChatDeps, calls };
 };
+
+const feed = { source: "feed" } as unknown as Loaded;
 
 describe("composeMessage", () => {
   it("prefixes the collection slash command for a whole-collection chat", () => {
@@ -30,8 +38,8 @@ describe("composeMessage", () => {
 
 describe("createStartChat", () => {
   it("spawns a visible chat with the composed message and returns the chatId", async () => {
-    const { spawn, calls } = captureSpawn({ ok: true, chatId: "chat-1" });
-    const result = await createStartChat({ spawn })({ slug: "clients", itemId: "acme", message: "  hello  " });
+    const { deps, calls } = makeDeps({ ok: true, chatId: "chat-1" });
+    const result = await createStartChat(deps)({ slug: "clients", itemId: "acme", message: "  hello  " });
     assert.deepEqual(result, { started: true, chatId: "chat-1" });
     assert.equal(calls.length, 1);
     assert.equal(calls[0].message, "/clients id=acme hello");
@@ -39,39 +47,45 @@ describe("createStartChat", () => {
   });
 
   it("omits id= when itemId is absent or null", async () => {
-    const { spawn, calls } = captureSpawn({ ok: true, chatId: "chat-2" });
-    await createStartChat({ spawn })({ slug: "clients", message: "hi" });
+    const { deps, calls } = makeDeps({ ok: true, chatId: "chat-2" });
+    await createStartChat(deps)({ slug: "clients", message: "hi" });
     assert.equal(calls[0].message, "/clients hi");
   });
 
+  it("refuses feeds (no /<slug> command) without spawning", async () => {
+    const { deps, calls } = makeDeps({ ok: true, chatId: "chat-feed" }, feed);
+    await assert.rejects(async () => createStartChat(deps)({ slug: "news", message: "summarize" }), /not available for feeds/);
+    assert.equal(calls.length, 0);
+  });
+
   it("throws when slug is missing", async () => {
-    const { spawn } = captureSpawn({ ok: true, chatId: "chat-3" });
-    await assert.rejects(async () => createStartChat({ spawn })({ message: "hi" }), /slug must be a non-empty/);
+    const { deps } = makeDeps({ ok: true, chatId: "chat-3" });
+    await assert.rejects(async () => createStartChat(deps)({ message: "hi" }), /slug must be a non-empty/);
   });
 
   it("rejects a whitespace-only or whitespace-containing slug (malformed prefix)", async () => {
-    const { spawn } = captureSpawn({ ok: true, chatId: "chat-3b" });
-    await assert.rejects(async () => createStartChat({ spawn })({ slug: "   ", message: "hi" }), /slug must be a non-empty/);
-    await assert.rejects(async () => createStartChat({ spawn })({ slug: "a b", message: "hi" }), /slug must be a non-empty/);
+    const { deps } = makeDeps({ ok: true, chatId: "chat-3b" });
+    await assert.rejects(async () => createStartChat(deps)({ slug: "   ", message: "hi" }), /slug must be a non-empty/);
+    await assert.rejects(async () => createStartChat(deps)({ slug: "a b", message: "hi" }), /slug must be a non-empty/);
   });
 
   it("rejects a non-string slug", async () => {
-    const { spawn } = captureSpawn({ ok: true, chatId: "chat-3c" });
-    await assert.rejects(async () => createStartChat({ spawn })({ slug: 123, message: "hi" }), /slug must be a non-empty/);
+    const { deps } = makeDeps({ ok: true, chatId: "chat-3c" });
+    await assert.rejects(async () => createStartChat(deps)({ slug: 123, message: "hi" }), /slug must be a non-empty/);
   });
 
   it("rejects an itemId that is present but whitespace-containing", async () => {
-    const { spawn } = captureSpawn({ ok: true, chatId: "chat-3d" });
-    await assert.rejects(async () => createStartChat({ spawn })({ slug: "clients", itemId: "a b", message: "hi" }), /itemId must be a non-empty/);
+    const { deps } = makeDeps({ ok: true, chatId: "chat-3d" });
+    await assert.rejects(async () => createStartChat(deps)({ slug: "clients", itemId: "a b", message: "hi" }), /itemId must be a non-empty/);
   });
 
   it("throws when message is blank", async () => {
-    const { spawn } = captureSpawn({ ok: true, chatId: "chat-4" });
-    await assert.rejects(async () => createStartChat({ spawn })({ slug: "clients", message: "   " }), /message is required/);
+    const { deps } = makeDeps({ ok: true, chatId: "chat-4" });
+    await assert.rejects(async () => createStartChat(deps)({ slug: "clients", message: "   " }), /message is required/);
   });
 
   it("surfaces a spawn failure as a thrown error", async () => {
-    const { spawn } = captureSpawn({ ok: false, error: "too many background sessions" });
-    await assert.rejects(async () => createStartChat({ spawn })({ slug: "clients", message: "hi" }), /too many background sessions/);
+    const { deps } = makeDeps({ ok: false, error: "too many background sessions" });
+    await assert.rejects(async () => createStartChat(deps)({ slug: "clients", message: "hi" }), /too many background sessions/);
   });
 });
