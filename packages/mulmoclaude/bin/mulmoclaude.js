@@ -115,7 +115,8 @@ ${cliFlagHelpLines()}
 }
 
 if (args.includes("--version")) {
-  console.log("mulmoclaude 0.9.1");
+  const { version } = require(join(PKG_DIR, "package.json"));
+  console.log(`mulmoclaude ${version}`);
   process.exit(0);
 }
 
