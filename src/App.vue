@@ -320,7 +320,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick, onMounted, reactive } from "vue";
+import { ref, computed, watch, nextTick, onMounted, onScopeDispose, reactive } from "vue";
 import { useI18n } from "vue-i18n";
 import { v4 as uuidv4 } from "uuid";
 import { getPlugin } from "./tools";
@@ -425,7 +425,7 @@ const currentSessionId = ref("");
 // --- Debug beat (pub/sub) ---
 const { debugTitleStyle } = useDebugBeat();
 
-const { subscribe: pubsubSubscribe } = usePubSub();
+const { subscribe: pubsubSubscribe, onReconnect: pubsubOnReconnect } = usePubSub();
 
 // --- Routing ---
 const route = useRoute();
@@ -482,7 +482,7 @@ const pastedFiles = ref<PastedFile[]>([]);
 const activePane = ref<"sidebar" | "main">("sidebar");
 
 const { sessions, historyError, fetchSessions, setBookmark, deleteSession: deleteSessionFromHistory } = useSessionHistory();
-const { markSessionRead } = useSessionSync({
+const { markSessionRead, refreshSessionStates } = useSessionSync({
   sessionMap,
   currentSessionId,
   fetchSessions,
@@ -991,6 +991,16 @@ function hasPendingGenerations(sessionId: string): boolean {
 }
 
 function handleSessionFinished(sessionId: string): void {
+  // Trust the definitive server signal and flip the local indicator
+  // immediately (#1915 Fix A). Without this, the "thinking" spinner stays
+  // stuck until the `sessions` channel notification arrives via a separate
+  // socket.io frame — which can go missing on a network hiccup or on
+  // Safari's tab-throttling flow while the sessionChannel frame did land.
+  const session = sessionMap.get(sessionId);
+  if (session) {
+    session.isRunning = false;
+    session.statusMessage = "";
+  }
   refreshSessionTranscript(sessionId).catch((err) => {
     console.error("[handleSessionFinished] refresh failed:", err);
   });
@@ -1000,6 +1010,50 @@ function handleSessionFinished(sessionId: string): void {
     unsubscribeSession(sessionId);
   }
 }
+
+// After the client silently loses events, this pulls fresh state from the
+// server so the UI recovers without a page reload (#1915). Two trigger
+// surfaces:
+//   - socket.io reconnect (network hiccup, WS bounce)
+//   - document visibility flips to `visible` (Safari's silent tab
+//     throttling — WS keeps `connected` on the server but delivery stops
+//     while the tab is backgrounded, and there's no `disconnect` event to
+//     hook on reconnect)
+// refreshSessionStates() carries its own sequence guard inside
+// useSessionSync so concurrent catch-ups can't overwrite newer live state
+// with an older-but-slower response. refreshSessionTranscript() only
+// upgrades toolResults when the server view is strictly larger, so it's
+// already idempotent against interleaving.
+function catchUpMissedEvents(reason: "reconnect" | "visibility"): void {
+  console.info(`[chat-ui] catching up after ${reason}`);
+  refreshSessionStates().catch((err) => {
+    console.warn("[chat-ui] refreshSessionStates failed:", err);
+  });
+  const currentId = currentSessionId.value;
+  if (currentId) {
+    refreshSessionTranscript(currentId).catch((err) => {
+      console.warn("[chat-ui] refreshSessionTranscript failed:", err);
+    });
+  }
+}
+
+// Capture the unsubscribe so remount / HMR doesn't accumulate stale
+// module-level reconnect handlers (Codex review).
+const unsubReconnect = pubsubOnReconnect(() => catchUpMissedEvents("reconnect"));
+
+function handleVisibilityChange(): void {
+  if (document.visibilityState === "visible") {
+    catchUpMissedEvents("visibility");
+  }
+}
+
+onMounted(() => {
+  document.addEventListener("visibilitychange", handleVisibilityChange);
+});
+onScopeDispose(() => {
+  document.removeEventListener("visibilitychange", handleVisibilityChange);
+  unsubReconnect();
+});
 
 function createSessionEventHandler(session: ActiveSession, ctx: AgentEventContext): (data: unknown) => void {
   return (data: unknown) => {
