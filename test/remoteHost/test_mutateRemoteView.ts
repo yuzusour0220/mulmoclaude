@@ -96,11 +96,15 @@ describe("createMutateRemoteView", () => {
   });
 
   it("maps every failure kind to an actionable message", () => {
+    assert.match(mutateRemoteViewFailureMessage({ kind: "view-not-found", viewId: "phone" }, "todos"), /'phone' not found on collection 'todos'/);
+    assert.match(mutateRemoteViewFailureMessage({ kind: "not-mobile", viewId: "year" }, "todos"), /target: "mobile"/);
     assert.match(mutateRemoteViewFailureMessage({ kind: "not-writable", viewId: "phone" }, "todos"), /read-only — declare editableFields/);
     assert.match(mutateRemoteViewFailureMessage({ kind: "field-not-editable", field: "title" }, "todos"), /'title' is not editable/);
     assert.match(mutateRemoteViewFailureMessage({ kind: "delete-not-allowed" }, "todos"), /allowDelete: true/);
-    assert.match(mutateRemoteViewFailureMessage({ kind: "item-not-found", id: "t9" }, "todos"), /'t9' not found/);
     assert.match(mutateRemoteViewFailureMessage({ kind: "invalid-patch" }, "todos"), /non-empty object/);
+    assert.match(mutateRemoteViewFailureMessage({ kind: "item-not-found", id: "t9" }, "todos"), /'t9' not found/);
+    assert.match(mutateRemoteViewFailureMessage({ kind: "invalid-id", id: "bad/id" }, "todos"), /invalid item id: bad\/id/);
+    assert.match(mutateRemoteViewFailureMessage({ kind: "path-escape" }, "todos"), /escapes the workspace/);
   });
 });
 

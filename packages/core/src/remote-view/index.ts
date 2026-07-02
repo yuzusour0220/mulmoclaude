@@ -266,7 +266,20 @@ async function answerGetItems(requestId: string, request: RemoteViewPageRequest,
   }
 }
 
-async function answerMutate(requestId: string, request: RemoteViewMutateRequest, handlers: RemoteViewBridgeHandlers, reply: RemoteViewReply): Promise<void> {
+/** Validate + dispatch a `mc-remote-mutate` payload, replying on every path
+ *  (malformed request, read-only parent, handler success/throw). Split out of
+ *  `handleRemoteViewMessage` so that function stays under the 20-line limit. */
+async function answerMutate(
+  requestId: string,
+  msg: { op?: unknown; id?: unknown; patch?: unknown },
+  handlers: RemoteViewBridgeHandlers,
+  reply: RemoteViewReply,
+): Promise<void> {
+  const request = normalizeMutate(msg);
+  if (!request) {
+    reply({ type: REMOTE_VIEW_MESSAGES.mutateResult, requestId, ok: false, error: "invalid mutate request" });
+    return;
+  }
   if (!handlers.onMutate) {
     reply({ type: REMOTE_VIEW_MESSAGES.mutateResult, requestId, ok: false, error: "this view is read-only" });
     return;
@@ -311,12 +324,7 @@ export async function handleRemoteViewMessage(data: unknown, handlers: RemoteVie
     return true;
   }
   if (msg.type === REMOTE_VIEW_MESSAGES.mutate && typeof msg.requestId === "string") {
-    const request = normalizeMutate(msg);
-    if (!request) {
-      reply({ type: REMOTE_VIEW_MESSAGES.mutateResult, requestId: msg.requestId, ok: false, error: "invalid mutate request" });
-      return true;
-    }
-    await answerMutate(msg.requestId, request, handlers, reply);
+    await answerMutate(msg.requestId, msg, handlers, reply);
     return true;
   }
   if (msg.type !== REMOTE_VIEW_MESSAGES.getItems || typeof msg.requestId !== "string") return false;
