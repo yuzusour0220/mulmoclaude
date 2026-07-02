@@ -45,6 +45,16 @@ const REPO_ROOT_DEFAULT = process.cwd();
 const LAUNCHER_REL = "packages/mulmoclaude/package.json";
 const WORKSPACE_DIRS = ["packages", "packages/plugins", "packages/bridges", "packages/services"];
 
+// Peer deps where a lockstep (major.minor match) is enforced, not just
+// "satisfies launcher pin". A protocol contract like gui-chat-protocol has
+// semantic version boundaries that map to actual runtime handshake behaviour
+// — plugin peers are considered a source-of-truth for "what protocol version
+// this plugin was BUILT against", so a stale peer here is a real drift even if
+// runtime happens to still work. Non-protocol peers (zod, vue, express) are
+// intentionally kept wide by plugin authors and are only checked via the
+// looser `peer-dep-violation` invariant.
+const LOCKSTEP_PEER_DEPS = new Set(["gui-chat-protocol"]);
+
 async function readJson(filePath) {
   return JSON.parse(await readFile(filePath, "utf8"));
 }
@@ -135,9 +145,11 @@ export function satisfies(version, range) {
 
 // Emit findings; each finding = { kind, message } and the caller
 // decides fail vs warn. Kinds:
-//   root-launcher-mismatch  invariant 1
-//   workspace-source-drift  invariant 2
-//   peer-dep-violation      invariant 3 (#1920)
+//   root-launcher-mismatch  invariant 1 — root ↔ launcher common dep range identical
+//   workspace-source-drift  invariant 2 — workspace source satisfies launcher range
+//   peer-dep-violation      invariant 3 (#1920) — plugin peer dep satisfied by launcher pin
+//   workspace-lockstep      invariant 4 — launcher range lower bound == workspace source (strict ratchet)
+//   peer-dep-lockstep       invariant 5 — plugin peer dep lower bound major.minor == launcher pin major.minor
 //   skipped                 range unparseable → surface for triage
 export async function auditLauncherSync({ root = REPO_ROOT_DEFAULT } = {}) {
   const rootPkg = await readJson(path.join(root, "package.json"));
@@ -161,6 +173,12 @@ export async function auditLauncherSync({ root = REPO_ROOT_DEFAULT } = {}) {
   }
 
   // Invariant 2: workspace-source dep must satisfy launcher range.
+  // Invariant 4: launcher range lower bound MUST equal workspace source (strict
+  // ratchet). If a workspace pkg bumps from 0.1.4 → 0.1.5 without a matching
+  // launcher `^0.1.5` bump, npm still resolves the OLDER 0.1.4 for consumers of
+  // `mulmoclaude` (since `^0.1.4` accepts 0.1.4 as its lower bound). The strict
+  // ratchet forces the launcher to move in lockstep with the workspace so the
+  // published tarball always references the newest source.
   for (const [name, launcherRange] of Object.entries(launcherDeps)) {
     const ws = workspaces.get(name);
     if (!ws) continue;
@@ -176,6 +194,17 @@ export async function auditLauncherSync({ root = REPO_ROOT_DEFAULT } = {}) {
       findings.push({
         kind: "workspace-source-drift",
         message: `${name}: workspace source ${ws.version} does not satisfy launcher range "${launcherRange}" — bump launcher`,
+      });
+      continue;
+    }
+    const launcherLower = parseLowerBound(launcherRange);
+    if (!launcherLower) continue;
+    const wsVersion = parseVersion(ws.version);
+    if (!wsVersion) continue;
+    if (wsVersion[0] !== launcherLower[0] || wsVersion[1] !== launcherLower[1] || wsVersion[2] !== launcherLower[2]) {
+      findings.push({
+        kind: "workspace-lockstep",
+        message: `${name}: workspace source ${ws.version} is ahead of launcher range "${launcherRange}" (lower bound ${launcherLower.join(".")}) — bump the launcher range to match`,
       });
     }
   }
@@ -203,6 +232,24 @@ export async function auditLauncherSync({ root = REPO_ROOT_DEFAULT } = {}) {
         findings.push({
           kind: "peer-dep-violation",
           message: `${name}: peerDependency "${peerName}"="${peerRange}" is NOT satisfied by launcher pin "${launcherPeerRange}" — bump the plugin's peer range`,
+        });
+        continue;
+      }
+      // Invariant 5: for protocol-critical peer deps (LOCKSTEP_PEER_DEPS —
+      // currently just gui-chat-protocol), plugin peer major.minor MUST equal
+      // launcher pin major.minor. Satisfying alone (e.g. peer `^0.4.0` vs
+      // launcher `0.5.0`) leaves the plugin published against an OUTDATED
+      // protocol contract even if runtime happens to work. This is the direct
+      // enforcement of the user's "gui-chat-protocol update 時に必ず依存追従"
+      // requirement. Non-protocol peers (zod, vue, express) are kept wide by
+      // convention and checked only by the looser `peer-dep-violation` rule.
+      if (!LOCKSTEP_PEER_DEPS.has(peerName)) continue;
+      const peerLower = parseLowerBound(peerRange);
+      if (!peerLower) continue;
+      if (peerLower[0] !== launcherLower[0] || peerLower[1] !== launcherLower[1]) {
+        findings.push({
+          kind: "peer-dep-lockstep",
+          message: `${name}: peerDependency "${peerName}"="${peerRange}" (lower bound ${peerLower.join(".")}) does not match launcher pin "${launcherPeerRange}" major.minor (${launcherLower[0]}.${launcherLower[1]}) — bump the plugin's peer range in lockstep with the launcher`,
         });
       }
     }
