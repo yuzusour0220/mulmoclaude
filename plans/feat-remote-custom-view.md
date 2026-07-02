@@ -75,11 +75,11 @@ mulmoserver (which today has **zero** workspace-package deps) only needs a dumb
 `@mulmoclaude/core/remote-view` so the desktop preview uses it today and
 mulmoserver adopts it once the package is a dependency.
 
-### 3. CSP is *stricter* than desktop: `connect-src 'none'`
+### 3. CSP is _stricter_ than desktop: `connect-src 'none'`
 
 Data arrives via postMessage, so the view needs no network channel at all —
 the fetch/XHR/WebSocket/sendBeacon exfiltration surface disappears. What stays
-open (the phone has internet; only the *host* is unreachable):
+open (the phone has internet; only the _host_ is unreachable):
 
 - `script-src` / `style-src` / `font-src`: `'unsafe-inline'` + the same curated
   CDN allowlist as desktop views (Chart.js / D3 etc. still load). The allowlist
@@ -170,6 +170,12 @@ Registration example the help file teaches:
    keys are needed.
 5. Help file `custom-view-remote.md` (mobile-first example) + pointer lines in
    `index.md`, `collection-skills.md`, and `custom-view.md`; core → 0.6.0.
+   Plus a routing section in `server/prompts/system/system.md`: help files are
+   only read when something routes the agent to them — a live test showed a
+   "create a remote version of this view" request being satisfied by baking
+   records into a standalone HTML artifact because nothing in context said the
+   remote contract existed. The system prompt now names both contracts and the
+   trigger words (remote / mobile / phone / スマホ).
 6. `yarn format` / `lint` (--no-cache over new files) / `typecheck` / `build` /
    `test`; PR.
 

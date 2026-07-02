@@ -2,25 +2,14 @@
 //
 // The command channel writes the result INSIDE the command document, and
 // Firestore caps a document at 1 MiB. offset/limit slice the records; limit is
-// clamped to [1, MAX_LIMIT] (default 50) so a runaway page can't blow that
-// budget. Params arrive as JSON over the channel, so coerce defensively.
-import type { JsonObject, JsonValue } from "../commandChannel.js";
+// clamped to [1, MAX_PAGE_LIMIT] (default 50) so a runaway page can't blow
+// that budget. The clamps live in @mulmoclaude/core/remote-view (params arrive
+// as untyped JSON there too) so the record handlers and the remote-view bridge
+// serve identical page semantics — re-exported here for the handlers.
+import { clampLimit, clampOffset } from "@mulmoclaude/core/remote-view";
+import type { JsonObject } from "../commandChannel.js";
 
-const DEFAULT_LIMIT = 50;
-const MAX_LIMIT = 200;
-
-const toInt = (value: JsonValue): number | null => {
-  const num = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
-  return Number.isFinite(num) ? Math.floor(num) : null;
-};
-
-export const clampOffset = (value: JsonValue): number => Math.max(0, toInt(value) ?? 0);
-
-export const clampLimit = (value: JsonValue): number => {
-  const num = toInt(value);
-  if (num === null || num <= 0) return DEFAULT_LIMIT;
-  return Math.min(num, MAX_LIMIT);
-};
+export { clampLimit, clampOffset };
 
 // Build the paginated result. `detail` (a CollectionDetail) and `items`
 // (CollectionItem[]) are plain JSON, but their interfaces lack an index
