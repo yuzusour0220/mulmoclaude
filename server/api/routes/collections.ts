@@ -42,7 +42,15 @@ import type {
   LoadedCollection,
   RecordIssue,
 } from "../../workspace/collections/index.js";
-import { buildRemoteView, remoteViewFailureMessage, type RemoteViewBuildResult } from "../../workspace/collections/remoteView.js";
+import {
+  buildRemoteView,
+  mutateRemoteView,
+  mutateRemoteViewFailureMessage,
+  remoteViewFailureMessage,
+  type MutateRemoteViewResult,
+  type RemoteViewBuildResult,
+} from "../../workspace/collections/remoteView.js";
+import { normalizeMutate } from "@mulmoclaude/core/remote-view";
 import { badRequest, notFound, conflict, forbidden, serverError } from "../../utils/httpError.js";
 import { errorMessage } from "../../utils/errors.js";
 import { log } from "../../system/logger/index.js";
@@ -515,6 +523,47 @@ router.get(API_ROUTES.collections.remoteView, async (req: Request<{ slug: string
     res.json({ view: result.view, srcdoc: result.srcdoc, bytes: result.bytes });
   } catch (err) {
     log.warn("collections", "remote-view build failed", { slug: req.params.slug, error: errorMessage(err) });
+    serverError(res, errorMessage(err));
+  }
+});
+
+/** Map a non-ok mutate to its HTTP error (message shared with the channel
+ *  handler via `mutateRemoteViewFailureMessage`). */
+function sendMutateRemoteViewFailure(res: Response, result: Exclude<MutateRemoteViewResult, { kind: "ok" }>, slug: string): void {
+  const message = mutateRemoteViewFailureMessage(result, slug);
+  if (result.kind === "view-not-found" || result.kind === "item-not-found") notFound(res, message);
+  else if (result.kind === "not-writable" || result.kind === "delete-not-allowed" || result.kind === "field-not-editable" || result.kind === "path-escape")
+    forbidden(res, message);
+  else badRequest(res, message);
+}
+
+// Apply one update/delete on behalf of a mobile view — the desktop phone-frame
+// preview's write channel. Behind the global bearer. Same builder + policy as
+// the command channel's `mutateRemoteViewItem`, so a preview mutation runs the
+// EXACT enforcement the phone will (plans/feat-remote-writable-view.md).
+router.post(API_ROUTES.collections.remoteViewMutate, async (req: Request<{ slug: string; viewId: string }>, res: Response) => {
+  try {
+    const { slug, viewId } = req.params;
+    const body = (req.body ?? {}) as { op?: unknown; id?: unknown; patch?: unknown };
+    const request = normalizeMutate(body);
+    if (!request) {
+      badRequest(res, "invalid mutate request — expected { op: 'update'|'delete', id, patch? }");
+      return;
+    }
+    const collection = await loadCollection(slug);
+    if (!collection) {
+      notFound(res, `collection '${slug}' not found`);
+      return;
+    }
+    const result = await mutateRemoteView(collection, viewId, request);
+    if (result.kind !== "ok") {
+      sendMutateRemoteViewFailure(res, result, slug);
+      return;
+    }
+    log.info("collections", "remote-view mutate", { slug, viewId, op: result.op });
+    res.json(result.op === "delete" ? { op: "delete", id: result.id } : { op: "update", item: result.item });
+  } catch (err) {
+    log.warn("collections", "remote-view mutate failed", { slug: req.params.slug, viewId: req.params.viewId, error: errorMessage(err) });
     serverError(res, errorMessage(err));
   }
 });

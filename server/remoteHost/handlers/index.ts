@@ -8,6 +8,7 @@ import { getRemoteView } from "./getRemoteView.js";
 import { listCollections } from "./listCollections.js";
 import { listFeeds } from "./listFeeds.js";
 import { listShortcuts } from "./listShortcuts.js";
+import { mutateRemoteViewItem } from "./mutateRemoteView.js";
 import { startChat } from "./startChat.js";
 
 export const handlers: CommandHandlers = {
@@ -17,5 +18,6 @@ export const handlers: CommandHandlers = {
   listFeeds,
   getFeed,
   getRemoteView,
+  mutateRemoteViewItem,
   startChat,
 };

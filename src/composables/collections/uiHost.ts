@@ -13,6 +13,7 @@
 import {
   configureCollectionUi,
   type CollectionRemoteViewResult,
+  type CollectionRemoteViewMutateResult,
   type CollectionViewI18nResult,
   type CollectionViewToken,
   type RegistryListResponse,
@@ -58,6 +59,8 @@ const collectionActionUrl = (slug: string, actionId: string): string =>
   withSlug(API_ROUTES.collections.collectionAction, slug).replace(":actionId", encodeURIComponent(actionId));
 const viewDeleteUrl = (slug: string, viewId: string): string =>
   withSlug(API_ROUTES.collections.viewDelete, slug).replace(":viewId", encodeURIComponent(viewId));
+const remoteViewMutateUrl = (slug: string, viewId: string): string =>
+  withSlug(API_ROUTES.collections.remoteViewMutate, slug).replace(":viewId", encodeURIComponent(viewId));
 
 // ── Deferred app bindings (need a component context; set by App.vue setup) ──
 type StartChat = (prompt: string, role: string) => void;
@@ -100,6 +103,7 @@ configureCollectionUi({
   },
   fetchViewI18n: (slug, viewId, locale) => apiGet<CollectionViewI18nResult>(withSlug(API_ROUTES.collections.viewI18n, slug), { id: viewId, locale }),
   fetchRemoteView: (slug, viewId, locale) => apiGet<CollectionRemoteViewResult>(withSlug(API_ROUTES.collections.remoteView, slug), { id: viewId, locale }),
+  mutateRemoteView: (slug, viewId, request) => apiPost<CollectionRemoteViewMutateResult>(remoteViewMutateUrl(slug, viewId), request),
   buildViewSrcdoc: (html, boot) => buildCustomViewSrcdoc(html, boot),
 
   // record CRUD + actions

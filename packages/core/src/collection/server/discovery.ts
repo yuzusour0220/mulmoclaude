@@ -245,6 +245,13 @@ const CustomViewSchema = z.object({
     )
     .optional(),
   capabilities: z.array(z.enum(["read", "write"])).optional(),
+  // Mobile-only write policy (plans/feat-remote-writable-view.md). Default-deny:
+  // a `target: "mobile"` view may patch ONLY these fields via
+  // `__MC_VIEW.updateItem`, and may delete only when `allowDelete` is true. The
+  // host re-derives + enforces both on every mutate — never trusting the client.
+  // Ignored for desktop views (they use the token-scoped `capabilities` above).
+  editableFields: z.array(z.string().trim().min(1)).optional(),
+  allowDelete: z.boolean().optional(),
 });
 
 // Recurrence advance for `spawn.every`. `interval` is a positive integer

@@ -247,6 +247,15 @@ export interface CollectionCustomView {
    *  (`@mulmoclaude/core/remote-view` — no token, `connect-src 'none'`) and
    *  previewed on desktop inside a phone-sized frame. */
   target?: "desktop" | "mobile";
+  /** **Mobile-only** (ignored for desktop views, which use token-scoped
+   *  `capabilities`). The whitelist of field names a `target: "mobile"` view
+   *  may patch via `__MC_VIEW.updateItem(id, patch)`. Default-deny: absent or
+   *  empty ⇒ updates are refused host-side. Never include the primary key.
+   *  See plans/feat-remote-writable-view.md. */
+  editableFields?: string[];
+  /** **Mobile-only.** When `true`, a `target: "mobile"` view may remove a
+   *  record via `__MC_VIEW.deleteItem(id)`. Absent/`false` ⇒ deletes refused. */
+  allowDelete?: boolean;
 }
 
 /** A schema-declared, per-record action rendered as a button in the

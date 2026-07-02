@@ -9,6 +9,7 @@
 
 import type { Component } from "vue";
 import type { TranslateTransport } from "@mulmoclaude/core/translation/client";
+import type { RemoteViewMutateRequest } from "@mulmoclaude/core/remote-view";
 import type {
   CollectionDetailResponse,
   ItemMutationResponse,
@@ -96,6 +97,13 @@ export interface CollectionRemoteViewResult {
   srcdoc: string;
   bytes: number;
 }
+
+/** Server response for `mutateRemoteView` — the applied mutate echoed back:
+ *  the merged record for an update, the removed id for a delete. Mirrors the
+ *  command channel's `mutateRemoteViewItem` result so the phone-frame preview
+ *  and the phone client see the identical shape
+ *  (plans/feat-remote-writable-view.md). */
+export type CollectionRemoteViewMutateResult = { op: "update"; item: CollectionItem } | { op: "delete"; id: string };
 
 /** Server response shape for `fetchViewI18n` — already locale-picked + flat.
  *  `locale === ""` means no translations were available (view has no `i18n`
@@ -211,6 +219,14 @@ export interface CollectionUi {
    *  without the remote-view route omits it and mobile views are hidden from
    *  the view selector (purely additive, like `subscribeChanges`). */
   fetchRemoteView?: (slug: string, viewId: string, locale: string) => Promise<CollectionApiResult<CollectionRemoteViewResult>>;
+  /** Apply one update/delete requested by a mobile view, authorized by that
+   *  view's declared editableFields / allowDelete and enforced host-side
+   *  (`apiPost` over `API_ROUTES.collections.remoteViewMutate`, global bearer).
+   *  The phone-frame preview's write channel — same builder + policy the phone
+   *  client's `mutateRemoteViewItem` uses, so preview === phone. Optional +
+   *  paired with `fetchRemoteView`: a host without the remote-view surface omits
+   *  both. */
+  mutateRemoteView?: (slug: string, viewId: string, request: RemoteViewMutateRequest) => Promise<CollectionApiResult<CollectionRemoteViewMutateResult>>;
   /** Wrap a custom view's HTML in a sandboxed `<iframe srcdoc>` with the token +
    *  data URL injected and the host's CSP applied. Replaces the host's
    *  `buildCustomViewSrcdoc`. */

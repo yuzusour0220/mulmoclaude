@@ -65,4 +65,14 @@ describe("collection schema — custom views validation", () => {
     assert.equal(withViews([{ id: "year", label: "Year", file: "views/year.html", target: "desktop" }]).success, true);
     assert.equal(withViews([{ id: "tv", label: "TV", file: "views/tv.html", target: "tv" }]).success, false);
   });
+
+  it("accepts mobile editableFields / allowDelete, rejects wrong types", () => {
+    assert.equal(
+      withViews([{ id: "phone", label: "Phone", file: "views/phone.html", target: "mobile", editableFields: ["done"], allowDelete: true }]).success,
+      true,
+    );
+    assert.equal(withViews([{ id: "phone", label: "Phone", file: "views/phone.html", target: "mobile", editableFields: "done" }]).success, false);
+    assert.equal(withViews([{ id: "phone", label: "Phone", file: "views/phone.html", target: "mobile", editableFields: [""] }]).success, false);
+    assert.equal(withViews([{ id: "phone", label: "Phone", file: "views/phone.html", target: "mobile", allowDelete: "yes" }]).success, false);
+  });
 });

@@ -27,8 +27,11 @@ Same place as desktop views — the HTML lives under `views/` and must end in
   desktop view and is never served to the phone.
 - `id` / `label` / `icon` / `i18n` — as for desktop views. The selector icon
   defaults to `smartphone`.
-- **No `capabilities`** — remote views are **read-only** in this phase. There
-  is no write path; a button that should _do_ something uses `startChat`.
+- **Read-only by default.** A view with no `editableFields` and no `allowDelete`
+  cannot mutate anything — its `updateItem` / `deleteItem` reject. Declare a
+  write surface only when the user asks the view to _change_ data (toggle a
+  checkbox, delete a row); see **Writing records** below. For anything more
+  open-ended (compose a message, kick off a task) use `startChat`.
 
 Feed collections register theirs in `feeds/<slug>/schema.json` with the HTML
 at `feeds/<slug>/views/<name>.html`, like desktop views.
@@ -52,16 +55,20 @@ window.__MC_VIEW = {
   slug: "annual-plan", // this collection
   locale: "en", // active app locale ("" when no translations)
   target: "mobile",
-  protocol: 1,
+  protocol: 2,
+  writable: false, // true iff the view declared editableFields / allowDelete
   getItems: (opts) => Promise, // the ONLY way to read records — see below
+  updateItem: (id, patch) => Promise, // patch declared fields (see Writing records)
+  deleteItem: (id) => Promise, // remove a record (requires allowDelete)
   startChat: (prompt, role) => void, // draft a new chat for the user
   t: (key, named) => string, // vue-i18n-style dict lookup (same as desktop)
 };
 ```
 
 What is deliberately **absent** compared to the desktop contract: `token`,
-`dataUrl` (nothing to fetch), `onChange` (no live refresh yet — render on
-load), and `openItem` (no host record panel on the phone yet).
+`dataUrl` (nothing to fetch), `onChange` (no live refresh yet — re-call
+`getItems` after a mutate resolves), and `openItem` (no host record panel on
+the phone yet).
 
 ### Reading records — `getItems` (paginated, always)
 
@@ -86,6 +93,51 @@ const page = await window.__MC_VIEW.getItems({
   resolved** (e.g. `won * 3 + drawn`). Formulas that dereference a `ref`
   field, and `embed` fields, are NOT resolved on the phone — don't rely on
   them; compute from base fields or omit.
+
+### Writing records — `updateItem` / `deleteItem`
+
+A remote view may **change** data too — flip a todo's `done`, edit a status,
+delete a row — but only within a surface the view **declares** and the host
+**enforces**. Nothing is writable by default.
+
+**1. Declare the surface** in the `views[]` entry:
+
+```jsonc
+{
+  "id": "phone",
+  "label": "Todos",
+  "target": "mobile",
+  "file": "views/phone.html",
+  "editableFields": ["done"], // ONLY these fields may be patched
+  "allowDelete": true, // omit / false ⇒ deleteItem is refused
+}
+```
+
+**2. Call the methods** (both resolve/reject like `getItems`):
+
+```js
+const { item } = await window.__MC_VIEW.updateItem(id, { done: true });
+// patch is a partial record; the host merges it onto the stored record and
+// returns the merged { item }.
+
+const { id: removed } = await window.__MC_VIEW.deleteItem(id);
+```
+
+- **The host is the authority, not the view.** Every mutate is re-checked
+  server-side: a patch key not in `editableFields` (or the primary key) is
+  **refused**; `deleteItem` without `allowDelete` is **refused**. The promise
+  rejects with the reason — surface it. Declaring the surface honestly is how
+  you keep the blast radius small.
+- **No `writable` declaration ⇒ the methods reject** (`"this view is
+  read-only"`). Check `window.__MC_VIEW.writable` before showing edit affordances
+  if you want to degrade gracefully.
+- **`editableFields` never includes the primary key** — a record's id is fixed.
+- **Re-render after a mutate resolves.** There is no live `onChange` yet: either
+  optimistically update your local copy from the returned `item`, or re-call
+  `getItems` to refetch. The preview's real write also refreshes the desktop
+  collection, so you see the true result while iterating.
+- **Create is not available** in this phase — `updateItem` only patches an
+  existing record; use `startChat` to ask the agent to add a new one.
 
 ### Starting a chat — `startChat`
 
@@ -293,4 +345,85 @@ A phone-first record list: single column, 44px+ tap targets, paginated through
     </script>
   </body>
 </html>
+```
+
+## Example — writable todo (toggle `done`, delete)
+
+A phone-first todo list that **checks off** and **deletes** records. Schema has
+`title` (string) and `done` (boolean). Registration declares the write surface:
+`{ "id": "phone", "label": "Todos", "target": "mobile", "file": "views/phone.html", "editableFields": ["done"], "allowDelete": true }`.
+
+The core of `views/phone.html` (styles/`<head>` as above):
+
+```html
+<div id="list"></div>
+<script>
+  var items = [];
+
+  function row(item) {
+    var el = document.createElement("div");
+    el.className = "card";
+    el.innerHTML =
+      '<label class="meta"><input type="checkbox" data-toggle="' +
+      item.id +
+      '"' +
+      (item.done ? " checked" : "") +
+      ' style="width:22px;height:22px"><b></b>' +
+      '<button class="chat" data-del="' +
+      item.id +
+      '" style="margin-left:auto">Delete</button></label>';
+    el.querySelector("b").textContent = item.title || item.id;
+    if (item.done) el.style.opacity = 0.5;
+    return el;
+  }
+
+  function render() {
+    var list = document.getElementById("list");
+    list.innerHTML = "";
+    items.forEach(function (item) {
+      list.appendChild(row(item));
+    });
+  }
+
+  async function load() {
+    var page = await window.__MC_VIEW.getItems({ offset: 0, limit: 200, fields: ["title", "done"] });
+    items = page.items;
+    render();
+  }
+
+  document.getElementById("list").addEventListener("change", async function (e) {
+    var id = e.target.dataset.toggle;
+    if (!id) return;
+    try {
+      // Host merges the patch and returns the merged record; reflect it.
+      var res = await window.__MC_VIEW.updateItem(id, { done: e.target.checked });
+      var i = items.findIndex(function (r) {
+        return String(r.id) === id;
+      });
+      if (i >= 0) items[i] = res.item;
+      render();
+    } catch (err) {
+      e.target.checked = !e.target.checked; // revert on refusal
+      alert(err.message);
+    }
+  });
+
+  document.getElementById("list").addEventListener("click", async function (e) {
+    var id = e.target.dataset.del;
+    if (!id) return;
+    try {
+      await window.__MC_VIEW.deleteItem(id);
+      items = items.filter(function (r) {
+        return String(r.id) !== id;
+      });
+      render();
+    } catch (err) {
+      alert(err.message);
+    }
+  });
+
+  load().catch(function (err) {
+    document.getElementById("list").innerHTML = '<div class="err">' + err.message + "</div>";
+  });
+</script>
 ```
