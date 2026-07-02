@@ -8,9 +8,69 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 ## [Unreleased]
 
+---
+
+## [0.9.2] - 2026-07-02
+
+Two threads dominate this release: a **critical fresh-install regression on npm** (#1920 — bundled plugins silently dropped by `ERESOLVE overriding peer dependency`), and the first two phases of a **mobile remote channel** so a companion app can browse a workspace over Firestore. Plus share-as-zip landing in three phases, mermaid diagrams inside markdown finally rendering as diagrams, session-role continuity across `/switch` and HTTP `/connect`, a wiki-engine extraction into `@mulmoclaude/core/wiki`, and a new CI gate that catches the class of drift that caused #1920 in the first place. 30 PRs merged since 0.9.1.
+
+### Added
+
+- **Mobile remote — Firestore command channel, phase 1a** ([#1909](https://github.com/receptron/mulmoclaude/pull/1909)) — login UI, presence heartbeat (60 s), and host runner lifecycle (`connect` / `disconnect`, atomic status transitions, listener-death → offline reconciliation). Commands live under `users/{uid}/hosts/mulmoclaude/commands` and are isolated per user by the standard `request.auth.uid == uid` Firestore rule.
+- **Phase 1b — `listCollections` handler + popover auto-close** ([#1914](https://github.com/receptron/mulmoclaude/pull/1914)) — the mobile remote can list a workspace's collections; the connect popover auto-closes on connect / disconnect.
+- **Phase 2 — read-only paginated data handlers** ([#1918](https://github.com/receptron/mulmoclaude/pull/1918)) — `getCollection(slug, offset?, limit?)`, `getFeed(slug, offset?, limit?)` (identical shape so mobile reuses one card renderer), `listShortcuts()`, `listFeeds()`. Pagination is mandatory because Firestore caps a single command document at 1 MiB; `limit` clamped to `[1, 200]` (default 50).
+- **Phase 2 — `startChat` handler** ([#1922](https://github.com/receptron/mulmoclaude/pull/1922)) — the mobile remote can start a chat targeting either a collection or a specific record. Rejects unknown slugs before spawning; refuses feeds (no slash-command surface); validates slug / itemId as whitespace-free string tokens.
+- **Share as zip — phase 1** ([#1892](https://github.com/receptron/mulmoclaude/pull/1892)) — bundle an HTML artifact + its assets (images, CSS, JS) into one self-contained zip.
+- **Share as zip — phase 1b** ([#1901](https://github.com/receptron/mulmoclaude/pull/1901)) — Download (zip) button in the HTML view.
+- **Share as zip — phase 1c** ([#1907](https://github.com/receptron/mulmoclaude/pull/1907)) — Download (zip) in the file-explorer HTML preview.
+- **Share as zip — phase 3** ([#1910](https://github.com/receptron/mulmoclaude/pull/1910)) — markdown pages and wiki pages export as self-contained HTML zips, so a shared markdown note travels with its images and diagrams intact.
+- **Mermaid fenced blocks render as diagrams** ([#1906](https://github.com/receptron/mulmoclaude/pull/1906), tracking [#1904](https://github.com/receptron/mulmoclaude/issues/1904)) — ` ```mermaid ` in any markdown-rendered surface (chat, wiki, markdown plugin) draws the diagram instead of showing raw source.
+- **Session query counter + long-running (24 h+) filter** ([#1885](https://github.com/receptron/mulmoclaude/pull/1885)) — per-user query counter and a picker filter to isolate multi-day sessions.
+- **Exclude scheduler sessions from long-running filter** ([#1887](https://github.com/receptron/mulmoclaude/pull/1887), tracking [#1886](https://github.com/receptron/mulmoclaude/issues/1886)) — background scheduler-triggered sessions no longer clutter the long-running view.
+- **`chat-index` summaries use Sonnet + wider input window** ([#1884](https://github.com/receptron/mulmoclaude/pull/1884)) — better summaries for long chats.
+- **Accounting: any month-end as fiscal year end** ([#1890](https://github.com/receptron/mulmoclaude/pull/1890)) — previously locked to quarter-end months; now any month.
+
+### Changed
+
+- **Wiki engine extracted into `@mulmoclaude/core/wiki`** ([#1875](https://github.com/receptron/mulmoclaude/pull/1875)) — pure engine (parse, link resolution, backlinks, snapshot policy) moved into shared core so mulmoclaude, mulmoserver, and downstream tools all share one implementation.
+- **Wiki fs / YAML server read-engine extracted into `@mulmoclaude/core/wiki/server`** ([#1876](https://github.com/receptron/mulmoclaude/pull/1876)) — follow-up to #1875 that finishes the extraction on the server side.
+- **`CHAT_DIR` sourced from `WORKSPACE_DIRS`** ([#1903](https://github.com/receptron/mulmoclaude/pull/1903), tracking [#1902](https://github.com/receptron/mulmoclaude/issues/1902)) — one single source of truth for the chat directory path.
+- **`publish-mulmoclaude` skill pins the public npm registry** ([#1924](https://github.com/receptron/mulmoclaude/pull/1924)) — avoids install-time picking up a scope-override registry.
+- Routine dependency + tooling updates: [#1872](https://github.com/receptron/mulmoclaude/pull/1872), [#1873](https://github.com/receptron/mulmoclaude/pull/1873), [#1877](https://github.com/receptron/mulmoclaude/pull/1877), [#1919](https://github.com/receptron/mulmoclaude/pull/1919).
+
+### Fixed
+
+- **Bundled plugins fail to load on fresh install ([#1920](https://github.com/receptron/mulmoclaude/issues/1920) / [#1921](https://github.com/receptron/mulmoclaude/pull/1921))** — `mulmoclaude@0.9.1` pinned `gui-chat-protocol@0.4.0` but three bundled plugins declared `peerDependencies.gui-chat-protocol: ^0.3.0`. npm papered over the conflict with a silent `ERESOLVE overriding peer dependency` override; the plugins then failed their runtime handshake and were dropped from the registered plugin set (`[plugins/preset] loaded requested=4 succeeded=1`, followed by `mcp__mulmoclaude__handlePermission not found`). All 8 workspace plugins (`form`, `markdown`, `spotify`, `email`, `recipe-book`, `bookmarks`, `debug`, `edgar`) bumped their `gui-chat-protocol` peer dep to `^0.4.0` with a patch bump. Enormous thanks to [@drippinghydrangea-a11y](https://github.com/drippinghydrangea-a11y) for the extremely detailed reproduction that pinpointed the peer-dep gap.
+- **Bridge chat turns serialize per external chat** ([#1879](https://github.com/receptron/mulmoclaude/pull/1879), tracking [#1878](https://github.com/receptron/mulmoclaude/issues/1878)) — two rapid messages from the same external chat no longer race each other into the same session.
+- **`/switch` preserves session role** ([#1893](https://github.com/receptron/mulmoclaude/pull/1893), tracking [#1888](https://github.com/receptron/mulmoclaude/issues/1888)) — reconnecting an existing chat via `/switch` no longer resets its role to the default.
+- **HTTP `/connect` resolves target session's role** ([#1895](https://github.com/receptron/mulmoclaude/pull/1895), tracking [#1894](https://github.com/receptron/mulmoclaude/issues/1894)) — when a bridge reconnects a chat by session ID, the role is looked up server-side instead of being redeclared client-side.
+- **`/connect` rejects unsafe `chatSessionId`** ([#1905](https://github.com/receptron/mulmoclaude/pull/1905)) — defense-in-depth follow-up to [#1895](https://github.com/receptron/mulmoclaude/pull/1895) — early reject at the handler entry point with a matching test.
+- **Canonical `dataPath` threaded into ingest / action seed prompts** ([#1897](https://github.com/receptron/mulmoclaude/pull/1897), tracking [#1891](https://github.com/receptron/mulmoclaude/issues/1891)) — action templates and ingest steps now receive the collection's canonical `dataPath` instead of re-deriving it, with cross-platform (Windows POSIX) + ReDoS defenses in the sanitiser.
+- **Mermaid quoted labels + HTML in SVG labels** ([#1917](https://github.com/receptron/mulmoclaude/pull/1917), tracking [#1916](https://github.com/receptron/mulmoclaude/issues/1916)) — fixed a double-encoding bug that made `<foo>` in Mermaid labels arrive at the renderer as `&lt;foo&gt;`; unlocked HTML fragments inside labels.
+- **Duplicate close-comments on auto-triaged PRs** ([#1871](https://github.com/receptron/mulmoclaude/pull/1871), follow-up to [#1869](https://github.com/receptron/mulmoclaude/issues/1869)) — CI no longer double-comments when the auto-triager closes a PR.
+
+### Internal
+
+- **New CI gate — root ↔ launcher deps + plugin peer dep sync** ([#1923](https://github.com/receptron/mulmoclaude/pull/1923)) — every PR that touches `packages/mulmoclaude/package.json`, the root `package.json`, or any plugin's `peerDependencies` runs an auditor with three invariants: (1) root ↔ launcher common deps have identical version ranges, (2) launcher `@mulmoclaude/*` / `@mulmobridge/*` ranges satisfy the workspace source version, (3) bundle-target plugin `peerDependencies` are satisfied by the launcher's pins. The gate catches the exact class of drift that caused #1920.
+
 ### Removed
 
-- **Shared-package version-bump CI guard** — the `Shared package version bump` workflow (and its `scripts/check-shared-pkg-bumps.mjs`) required every PR touching a shared `@mulmoclaude/*` package to also bump that package's `version`. In practice this forced every core-touching PR to edit the same `version` line, so any two such PRs raced into a merge conflict on it. The guard is removed; keeping shared packages bumped before publish is now a convention (see CLAUDE.md), not a CI gate. (Reverts the guard added in #1737 / #1788.)
+- **Shared-package version-bump CI guard** — the `Shared package version bump` workflow (and its `scripts/check-shared-pkg-bumps.mjs`) required every PR touching a shared `@mulmoclaude/*` package to also bump that package's `version`. In practice this forced every core-touching PR to edit the same `version` line, so any two such PRs raced into a merge conflict on it. The guard is removed; keeping shared packages bumped before publish is now a convention (see CLAUDE.md), not a CI gate. (Reverts the guard added in [#1737](https://github.com/receptron/mulmoclaude/pull/1737) / [#1788](https://github.com/receptron/mulmoclaude/pull/1788).)
+
+### Cascade publishes
+
+- `@mulmoclaude/form-plugin` 0.1.3 → 0.1.4
+- `@mulmoclaude/markdown-plugin` 0.1.7 → 0.1.10
+- `@mulmoclaude/spotify-plugin` 0.1.0 → 0.1.1
+- `@mulmoclaude/email-plugin` 0.1.3 → 0.1.4
+- `@mulmoclaude/recipe-book-plugin` 0.1.0 → 0.1.1
+- `@mulmoclaude/bookmarks-plugin` 0.1.0 → 0.1.1
+- `@mulmoclaude/debug-plugin` 0.2.0 → 0.2.1
+- `@mulmoclaude/edgar-plugin` 0.1.1 → 0.1.2
+
+### Known cosmetic issue
+
+- `npx mulmoclaude@0.9.2 --version` prints `mulmoclaude 0.9.1` — the version string was hardcoded in `bin/mulmoclaude.js` and missed the sync bump. All runtime behaviour is correct. [#1925](https://github.com/receptron/mulmoclaude/pull/1925) makes the CLI read the version from `package.json` at runtime; the next release will pick it up.
 
 ---
 
