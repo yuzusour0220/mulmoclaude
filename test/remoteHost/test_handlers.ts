@@ -8,8 +8,8 @@ import { handlers } from "../../server/remoteHost/handlers/index.js";
 import { createListCollections, type ListCollectionsDeps } from "../../server/remoteHost/handlers/listCollections.js";
 
 describe("remote-host handler registry", () => {
-  it("exposes every phase-1/2 handler", () => {
-    for (const name of ["listCollections", "getCollection", "listShortcuts", "listFeeds", "getFeed"]) {
+  it("exposes every registered handler", () => {
+    for (const name of ["listCollections", "getCollection", "listShortcuts", "listFeeds", "getFeed", "startChat"]) {
       assert.equal(typeof handlers[name], "function", `missing handler: ${name}`);
     }
   });
