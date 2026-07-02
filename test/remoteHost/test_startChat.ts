@@ -46,7 +46,23 @@ describe("createStartChat", () => {
 
   it("throws when slug is missing", async () => {
     const { spawn } = captureSpawn({ ok: true, chatId: "chat-3" });
-    await assert.rejects(async () => createStartChat({ spawn })({ message: "hi" }), /slug is required/);
+    await assert.rejects(async () => createStartChat({ spawn })({ message: "hi" }), /slug must be a non-empty/);
+  });
+
+  it("rejects a whitespace-only or whitespace-containing slug (malformed prefix)", async () => {
+    const { spawn } = captureSpawn({ ok: true, chatId: "chat-3b" });
+    await assert.rejects(async () => createStartChat({ spawn })({ slug: "   ", message: "hi" }), /slug must be a non-empty/);
+    await assert.rejects(async () => createStartChat({ spawn })({ slug: "a b", message: "hi" }), /slug must be a non-empty/);
+  });
+
+  it("rejects a non-string slug", async () => {
+    const { spawn } = captureSpawn({ ok: true, chatId: "chat-3c" });
+    await assert.rejects(async () => createStartChat({ spawn })({ slug: 123, message: "hi" }), /slug must be a non-empty/);
+  });
+
+  it("rejects an itemId that is present but whitespace-containing", async () => {
+    const { spawn } = captureSpawn({ ok: true, chatId: "chat-3d" });
+    await assert.rejects(async () => createStartChat({ spawn })({ slug: "clients", itemId: "a b", message: "hi" }), /itemId must be a non-empty/);
   });
 
   it("throws when message is blank", async () => {

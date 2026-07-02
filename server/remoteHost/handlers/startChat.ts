@@ -18,7 +18,7 @@
 // spawner stubbed; the default export wires the real spawnSystemWorker.
 import { spawnSystemWorker } from "../../api/routes/agent.js";
 import { DEFAULT_ROLE_ID } from "../../../src/config/roles.js";
-import type { CommandHandler, JsonObject } from "../commandChannel.js";
+import type { CommandHandler, JsonObject, JsonValue } from "../commandChannel.js";
 
 export interface StartChatDeps {
   spawn: typeof spawnSystemWorker;
@@ -32,14 +32,25 @@ export const composeMessage = (slug: string, itemId: string, message: string): s
   return `${prefix} ${message}`;
 };
 
+// slug and itemId become single tokens in the slash command (`/<slug>`,
+// `id=<itemId>`), so a whitespace-containing or non-string value would break
+// the command parse (e.g. `/   hello`). Accept only a trimmed, whitespace-free
+// string; anything else ⇒ "" so the caller rejects it.
+const asToken = (value: JsonValue): string => {
+  if (typeof value !== "string") return "";
+  const trimmed = value.trim();
+  return /\s/.test(trimmed) ? "" : trimmed;
+};
+
 export const createStartChat =
   (deps: StartChatDeps): CommandHandler =>
   async (params: JsonObject) => {
-    // Params arrive as JSON over the channel — coerce defensively.
-    const slug = String(params.slug ?? "");
-    const itemId = params.itemId == null ? "" : String(params.itemId);
-    const message = String(params.message ?? "").trim();
-    if (!slug) throw new Error("slug is required");
+    // Params arrive as JSON over the channel — coerce/validate defensively.
+    const slug = asToken(params.slug);
+    const itemId = asToken(params.itemId);
+    const message = (typeof params.message === "string" ? params.message : "").trim();
+    if (!slug) throw new Error("slug must be a non-empty, whitespace-free string");
+    if (params.itemId != null && !itemId) throw new Error("itemId must be a non-empty, whitespace-free string when provided");
     if (!message) throw new Error("message is required");
     const result = await deps.spawn({
       message: composeMessage(slug, itemId, message),
