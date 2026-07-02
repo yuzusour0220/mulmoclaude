@@ -35,7 +35,15 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useCollectionI18n } from "../lang";
 import { deriveAll, errorMessage } from "@mulmoclaude/core/collection";
 import type { CollectionCustomView, CollectionItem, CollectionSchema } from "@mulmoclaude/core/collection";
-import { handleRemoteViewMessage, pageFromItems, REMOTE_VIEW_MAX_BYTES, type RemoteViewItem, type RemoteViewPage } from "@mulmoclaude/core/remote-view";
+import {
+  handleRemoteViewMessage,
+  pageFromItems,
+  REMOTE_VIEW_MAX_BYTES,
+  type RemoteViewItem,
+  type RemoteViewMutateRequest,
+  type RemoteViewMutateResult,
+  type RemoteViewPage,
+} from "@mulmoclaude/core/remote-view";
 import { collectionUi } from "../uiContext";
 
 const { t } = useCollectionI18n();
@@ -119,6 +127,20 @@ function getPage(request: Parameters<typeof pageFromItems>[1]): RemoteViewPage {
   return JSON.parse(JSON.stringify(pageFromItems(derived, request, props.schema.primaryKey))) as RemoteViewPage;
 }
 
+// A preview mutation is a REAL host write, through the same builder + policy the
+// phone will run (plans/feat-remote-writable-view.md, decision 4). The write
+// publishes a collection-change event, so the parent's live subscription
+// refetches `props.items` and the view's next `getItems` reflects it. A refused
+// mutate (read-only / non-editable field / …) throws the host's message, which
+// the bridge relays to the view as `ok: false`.
+async function onMutate(request: RemoteViewMutateRequest): Promise<RemoteViewMutateResult> {
+  const binding = collectionUi();
+  if (!binding.mutateRemoteView) throw new Error("mutateRemoteView is not wired on this host");
+  const resp = await binding.mutateRemoteView(props.slug, props.view.id, request);
+  if (!resp.ok) throw new Error(resp.error);
+  return resp.data.op === "update" ? { item: resp.data.item as RemoteViewItem } : { id: resp.data.id };
+}
+
 function onWindowMessage(event: MessageEvent): void {
   const target = event.source;
   if (!target || target !== iframeEl.value?.contentWindow) return;
@@ -127,6 +149,7 @@ function onWindowMessage(event: MessageEvent): void {
     {
       slug: props.slug,
       getPage,
+      onMutate,
       onStartChat: (prompt, role) => emit("startChat", { prompt, role }),
     },
     // targetOrigin "*": the sandboxed document's origin is opaque, nothing

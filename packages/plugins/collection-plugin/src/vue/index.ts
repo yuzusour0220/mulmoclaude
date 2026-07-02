@@ -31,6 +31,7 @@ export {
   type CollectionViewHtmlResult,
   type CollectionViewI18nResult,
   type CollectionRemoteViewResult,
+  type CollectionRemoteViewMutateResult,
   type CollectionViewSrcdocBoot,
   type CollectionActionResult,
   type CollectionRefreshResult,

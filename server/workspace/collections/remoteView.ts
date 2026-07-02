@@ -10,8 +10,17 @@
 // its status; the channel handler converts non-ok to a thrown error via
 // `remoteViewFailureMessage`. Factory keeps the mapping unit-testable with the
 // engine stubbed.
-import { buildRemoteViewSrcdoc, REMOTE_VIEW_MAX_BYTES } from "@mulmoclaude/core/remote-view";
-import { readCustomViewHtml, readCustomViewI18n, type LoadedCollection } from "./index.js";
+import { buildRemoteViewSrcdoc, REMOTE_VIEW_MAX_BYTES, type RemoteViewMutateRequest } from "@mulmoclaude/core/remote-view";
+import {
+  deleteItem,
+  readCustomViewHtml,
+  readCustomViewI18n,
+  readItem,
+  writeItem,
+  type CollectionCustomView,
+  type CollectionItem,
+  type LoadedCollection,
+} from "./index.js";
 
 export interface RemoteViewInfo {
   id: string;
@@ -43,7 +52,10 @@ export const createBuildRemoteView =
     const html = await deps.readCustomViewHtml(collection, view.file);
     if (html === null) return { kind: "file-missing", file: view.file };
     const i18n = view.i18n ? await deps.readCustomViewI18n(collection, view.i18n, locale) : { locale: "", dict: {} };
-    const srcdoc = buildRemoteViewSrcdoc(html, { slug: collection.slug, locale: i18n.locale, dict: i18n.dict });
+    // `writable` gates the client-side updateItem/deleteItem install; the host
+    // re-derives + enforces the actual policy on every mutate (createMutateRemoteView).
+    const writable = isWritableView(view);
+    const srcdoc = buildRemoteViewSrcdoc(html, { slug: collection.slug, locale: i18n.locale, dict: i18n.dict, writable });
     const bytes = Buffer.byteLength(srcdoc, "utf8");
     if (bytes > REMOTE_VIEW_MAX_BYTES) return { kind: "too-large", bytes };
     return { kind: "ok", view: { id: view.id, label: view.label, ...(view.icon ? { icon: view.icon } : {}), target: "mobile" }, srcdoc, bytes };
@@ -58,4 +70,100 @@ export function remoteViewFailureMessage(result: Exclude<RemoteViewBuildResult, 
   if (result.kind === "not-mobile") return `custom view '${result.viewId}' is not a mobile view — declare target: "mobile" in its views[] entry`;
   if (result.kind === "file-missing") return `view file '${result.file}' not found — author it at data/skills/${slug}/${result.file}`;
   return `mobile view srcdoc is ${result.bytes} bytes — over the ${REMOTE_VIEW_MAX_BYTES}-byte command-channel budget; slim the HTML`;
+}
+
+// ── Mutate (phase 4 — plans/feat-remote-writable-view.md) ──
+// A `target: "mobile"` view's update/delete, authorized by its OWN declared
+// surface (editableFields / allowDelete) and enforced HOST-side — the client is
+// never trusted. Shared by the `mutateRemoteViewItem` channel handler (phone)
+// and the `…/remote-view/:viewId/mutate` HTTP route (desktop preview), so both
+// transports apply identical policy. Discriminated result (not throw) mirrors
+// the build result above.
+
+/** True when a mobile view declared ANY write surface. Also gates the srcdoc's
+ *  `writable` boot flag so the client only exposes methods the host will honor. */
+function isWritableView(view: CollectionCustomView): boolean {
+  return (view.editableFields?.length ?? 0) > 0 || view.allowDelete === true;
+}
+
+export type MutateRemoteViewResult =
+  | { kind: "ok"; op: "update"; item: CollectionItem }
+  | { kind: "ok"; op: "delete"; id: string }
+  | { kind: "view-not-found"; viewId: string }
+  | { kind: "not-mobile"; viewId: string }
+  | { kind: "not-writable"; viewId: string }
+  | { kind: "field-not-editable"; field: string }
+  | { kind: "delete-not-allowed" }
+  | { kind: "invalid-patch" }
+  | { kind: "item-not-found"; id: string }
+  | { kind: "invalid-id"; id: string }
+  | { kind: "path-escape" };
+
+export interface MutateRemoteViewDeps {
+  readItem: typeof readItem;
+  writeItem: typeof writeItem;
+  deleteItem: typeof deleteItem;
+}
+
+export const createMutateRemoteView =
+  (deps: MutateRemoteViewDeps) =>
+  async (collection: LoadedCollection, viewId: string, request: RemoteViewMutateRequest): Promise<MutateRemoteViewResult> => {
+    const view = (collection.schema.views ?? []).find((entry) => entry.id === viewId);
+    if (!view) return { kind: "view-not-found", viewId };
+    if (view.target !== "mobile") return { kind: "not-mobile", viewId };
+    if (!isWritableView(view)) return { kind: "not-writable", viewId };
+    return request.op === "delete"
+      ? deleteViaView(deps, collection, view.allowDelete === true, request.id)
+      : updateViaView(deps, collection, view.editableFields ?? [], request);
+  };
+
+async function deleteViaView(deps: MutateRemoteViewDeps, collection: LoadedCollection, allowDelete: boolean, itemId: string): Promise<MutateRemoteViewResult> {
+  if (!allowDelete) return { kind: "delete-not-allowed" };
+  const result = await deps.deleteItem(collection.dataDir, itemId, { slug: collection.slug });
+  if (result.kind === "invalid-id") return { kind: "invalid-id", id: result.itemId };
+  if (result.kind === "path-escape") return { kind: "path-escape" };
+  if (result.kind === "not-found") return { kind: "item-not-found", id: result.itemId };
+  return { kind: "ok", op: "delete", id: result.itemId };
+}
+
+async function updateViaView(
+  deps: MutateRemoteViewDeps,
+  collection: LoadedCollection,
+  editableFields: string[],
+  request: Extract<RemoteViewMutateRequest, { op: "update" }>,
+): Promise<MutateRemoteViewResult> {
+  const { primaryKey } = collection.schema;
+  const patchKeys = Object.keys(request.patch);
+  if (patchKeys.length === 0) return { kind: "invalid-patch" };
+  const allowed = new Set(editableFields);
+  // The primary key is never patchable (it is the record id — renaming it would
+  // desync the file name from the record) even if an author listed it.
+  const offending = patchKeys.find((key) => key === primaryKey || !allowed.has(key));
+  if (offending) return { kind: "field-not-editable", field: offending };
+  const existing = await deps.readItem(collection.dataDir, request.id, { slug: collection.slug });
+  if (!existing) return { kind: "item-not-found", id: request.id };
+  const merged: CollectionItem = { ...existing, ...request.patch, [primaryKey]: request.id };
+  const result = await deps.writeItem(collection.dataDir, request.id, merged, { slug: collection.slug });
+  if (result.kind === "invalid-id") return { kind: "invalid-id", id: result.itemId };
+  if (result.kind === "path-escape") return { kind: "path-escape" };
+  if (result.kind === "conflict") return { kind: "item-not-found", id: result.itemId }; // unreachable: refuseOverwrite is false
+  return { kind: "ok", op: "update", item: result.item };
+}
+
+export const mutateRemoteView = createMutateRemoteView({ readItem, writeItem, deleteItem });
+
+/** Message per non-ok mutate kind — shared by the channel handler (throws) and
+ *  the HTTP route (sends with the matching status). */
+export function mutateRemoteViewFailureMessage(result: Exclude<MutateRemoteViewResult, { kind: "ok" }>, slug: string): string {
+  if (result.kind === "view-not-found") return `custom view '${result.viewId}' not found on collection '${slug}'`;
+  if (result.kind === "not-mobile") return `custom view '${result.viewId}' is not a mobile view — declare target: "mobile" in its views[] entry`;
+  if (result.kind === "not-writable")
+    return `mobile view '${result.viewId}' is read-only — declare editableFields and/or allowDelete in its views[] entry to allow writes`;
+  if (result.kind === "field-not-editable")
+    return `field '${result.field}' is not editable from this view — add it to the view's editableFields (the primary key is never editable)`;
+  if (result.kind === "delete-not-allowed") return `this view may not delete records — set allowDelete: true in its views[] entry`;
+  if (result.kind === "invalid-patch") return `update patch must be a non-empty object of field changes`;
+  if (result.kind === "item-not-found") return `item '${result.id}' not found in collection '${slug}'`;
+  if (result.kind === "invalid-id") return `invalid item id: ${result.id}`;
+  return `data directory for collection '${slug}' escapes the workspace`;
 }

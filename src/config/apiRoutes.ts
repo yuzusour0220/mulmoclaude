@@ -299,6 +299,13 @@ const HOST_API_ROUTES = {
      *  `getRemoteView`, so the desktop phone-frame preview renders the exact
      *  artifact the phone receives (plans/feat-remote-custom-view.md). */
     remoteView: "/api/collections/:slug/remote-view",
+    /** POST { op: "update"|"delete", id, patch? } → apply one mutate on behalf
+     *  of a `target: "mobile"` view, authorized by that view's declared
+     *  editableFields / allowDelete and enforced host-side (global-bearer auth).
+     *  The desktop phone-frame preview's write channel — same builder the
+     *  command channel's `mutateRemoteViewItem` uses, so preview === phone
+     *  (plans/feat-remote-writable-view.md). */
+    remoteViewMutate: "/api/collections/:slug/remote-view/:viewId/mutate",
     /** GET ?id=<viewId>&locale=<tag> → translation dict for one custom view
      *  (global-bearer auth) → { locale, dict }. `dict` is the host-picked
      *  flat map for the requested locale (fallback `"en"`, else `{}`); the
