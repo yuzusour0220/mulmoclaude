@@ -201,6 +201,123 @@ describe("auditLauncherSync — invariant 3: plugin peer dep vs launcher pin (#1
   });
 });
 
+describe("auditLauncherSync — invariant 4: workspace-source strict lockstep", () => {
+  it("flags when workspace source is AHEAD of launcher range lower bound", async () => {
+    const root = makeFakeRepo({
+      root: { name: "monorepo", dependencies: {} },
+      launcher: { name: "mulmoclaude", dependencies: { "@mulmoclaude/foo-plugin": "^0.1.4" } },
+      workspaces: [{ dir: "packages/plugins/foo-plugin", pkg: { name: "@mulmoclaude/foo-plugin", version: "0.1.5" } }],
+    });
+    try {
+      const findings = await sync.auditLauncherSync({ root });
+      const lockstep = findings.filter((finding) => finding.kind === "workspace-lockstep");
+      assert.equal(lockstep.length, 1);
+      assert.match(lockstep[0].message, /foo-plugin.*0\.1\.5.*\^0\.1\.4/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("passes when workspace source equals launcher range lower bound", async () => {
+    const root = makeFakeRepo({
+      root: { name: "monorepo", dependencies: {} },
+      launcher: { name: "mulmoclaude", dependencies: { "@mulmoclaude/foo-plugin": "^0.1.5" } },
+      workspaces: [{ dir: "packages/plugins/foo-plugin", pkg: { name: "@mulmoclaude/foo-plugin", version: "0.1.5" } }],
+    });
+    try {
+      const findings = await sync.auditLauncherSync({ root });
+      assert.deepEqual(findings, []);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("auditLauncherSync — invariant 5: gui-chat-protocol peer dep lockstep", () => {
+  it("flags a bundled plugin whose gui-chat-protocol peer lags a minor behind launcher (>=1.x)", async () => {
+    // For 0.y.z, invariant 3 (peer-dep-violation) already catches minor drift
+    // because caret ranges are strict on minor when major=0. Invariant 5 only
+    // adds independent value once the protocol reaches 1.0+, where the caret
+    // range widens to full-minor. This test uses 1.x.x to exercise invariant 5
+    // alone.
+    const root = makeFakeRepo({
+      root: { name: "monorepo", dependencies: {} },
+      launcher: {
+        name: "mulmoclaude",
+        dependencies: {
+          "@mulmoclaude/foo-plugin": "^0.1.5",
+          "gui-chat-protocol": "1.5.0",
+        },
+      },
+      workspaces: [
+        {
+          dir: "packages/plugins/foo-plugin",
+          pkg: { name: "@mulmoclaude/foo-plugin", version: "0.1.5", peerDependencies: { "gui-chat-protocol": "^1.4.0" } },
+        },
+      ],
+    });
+    try {
+      const findings = await sync.auditLauncherSync({ root });
+      const lockstep = findings.filter((finding) => finding.kind === "peer-dep-lockstep");
+      assert.equal(lockstep.length, 1);
+      assert.match(lockstep[0].message, /foo-plugin.*gui-chat-protocol.*\^1\.4\.0.*1\.5\.0/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("does NOT enforce lockstep for non-protocol peers (zod / vue / express)", async () => {
+    const root = makeFakeRepo({
+      root: { name: "monorepo", dependencies: {} },
+      launcher: {
+        name: "mulmoclaude",
+        dependencies: {
+          "@mulmoclaude/foo-plugin": "^0.1.5",
+          zod: "^4.4.3",
+        },
+      },
+      workspaces: [
+        {
+          dir: "packages/plugins/foo-plugin",
+          pkg: { name: "@mulmoclaude/foo-plugin", version: "0.1.5", peerDependencies: { zod: "^4.3.6" } },
+        },
+      ],
+    });
+    try {
+      const findings = await sync.auditLauncherSync({ root });
+      const lockstep = findings.filter((finding) => finding.kind === "peer-dep-lockstep");
+      assert.equal(lockstep.length, 0, "zod (non-protocol peer) should not trigger lockstep");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("passes when gui-chat-protocol peer lower bound major.minor matches launcher pin", async () => {
+    const root = makeFakeRepo({
+      root: { name: "monorepo", dependencies: {} },
+      launcher: {
+        name: "mulmoclaude",
+        dependencies: {
+          "@mulmoclaude/foo-plugin": "^0.1.5",
+          "gui-chat-protocol": "1.5.0",
+        },
+      },
+      workspaces: [
+        {
+          dir: "packages/plugins/foo-plugin",
+          pkg: { name: "@mulmoclaude/foo-plugin", version: "0.1.5", peerDependencies: { "gui-chat-protocol": "^1.5.0" } },
+        },
+      ],
+    });
+    try {
+      const findings = await sync.auditLauncherSync({ root });
+      assert.deepEqual(findings, []);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("auditLauncherSync — repo self-check", () => {
   it("finds no failing findings against the real repo (post PR #1921)", async () => {
     const repoRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..", "..", "..");
