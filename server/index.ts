@@ -938,7 +938,10 @@ function maybeForceChatIndexBackfill(): void {
   // debugging the indexer itself.
   if (!env.chatIndexForceRunOnStartup) return;
   log.info("chat-index", "CHAT_INDEX_FORCE_RUN_ON_STARTUP=1 — running now");
-  backfillAllSessions()
+  // The startup switch is opt-in and its whole point is "regenerate
+  // every summary now"; pass `force: true` so it doesn't silently
+  // become a no-op after #1929's content-changed gate lands.
+  backfillAllSessions({ force: true })
     .then((result) => {
       log.info("chat-index", "startup backfill complete", {
         indexed: result.indexed,

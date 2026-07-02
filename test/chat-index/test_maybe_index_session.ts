@@ -1,7 +1,7 @@
 import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { readFile, utimes } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { maybeIndexSession, backfillAllSessions, __resetForTests } from "../../server/workspace/chat-index/index.js";
@@ -328,11 +328,69 @@ describe("backfillAllSessions", () => {
     assert.equal(stub.calls, 1);
 
     // Second pass via backfill with the same now() — a normal
-    // maybeIndexSession call would be skipped by freshness, but
-    // backfill sets force: true.
+    // maybeIndexSession call would be skipped by freshness. After
+    // #1929, backfill no longer forces by default (the hourly
+    // scheduler tick would otherwise re-summarise every session on
+    // every tick); opt in explicitly here so the test still
+    // exercises the force path.
     const result = await backfillAllSessions({
       workspaceRoot: workspace,
       deps: { summarize: stub.fn, now: () => 0 },
+      force: true,
+    });
+    assert.equal(result.indexed, 1);
+    assert.equal(stub.calls, 2);
+  });
+
+  it("without force, skips sessions whose jsonl hasn't been touched since the last index (#1929)", async () => {
+    seedSession("cold-1");
+    // Pin the jsonl mtime BEFORE the first index runs. If the mtime
+    // ended up newer than `indexedAt` (real wall clock), the
+    // content-changed gate would fire on the second backfill.
+    await utimes(join(workspace, CHAT_REL, "cold-1.jsonl"), 0.1, 0.1);
+
+    const stub = stubSummarize();
+
+    // Prime the index once via a forced backfill.
+    await backfillAllSessions({
+      workspaceRoot: workspace,
+      deps: { summarize: stub.fn, now: () => 1000 },
+      force: true,
+    });
+    assert.equal(stub.calls, 1);
+
+    // Simulate the next scheduler tick an hour later — jsonl mtime
+    // hasn't moved, so nothing should be re-summarised. Without the
+    // #1929 fix this would fire another CLI call.
+    const result = await backfillAllSessions({
+      workspaceRoot: workspace,
+      deps: { summarize: stub.fn, now: () => 1000 + 60 * 60 * 1000 },
+    });
+    assert.equal(result.indexed, 0);
+    assert.equal(result.skipped, 1);
+    assert.equal(stub.calls, 1);
+  });
+
+  it("without force, re-indexes sessions whose jsonl mtime moved forward (#1929)", async () => {
+    seedSession("warm-2");
+    await utimes(join(workspace, CHAT_REL, "warm-2.jsonl"), 0.1, 0.1);
+
+    const stub = stubSummarize();
+
+    await backfillAllSessions({
+      workspaceRoot: workspace,
+      deps: { summarize: stub.fn, now: () => 1000 },
+      force: true,
+    });
+    assert.equal(stub.calls, 1);
+
+    // Simulate a new turn landing: bump jsonl mtime past the entry's
+    // `indexedAt`. A non-force backfill should now pick it up.
+    await utimes(join(workspace, CHAT_REL, "warm-2.jsonl"), 5000, 5000);
+
+    const result = await backfillAllSessions({
+      workspaceRoot: workspace,
+      deps: { summarize: stub.fn, now: () => 1000 + 60 * 60 * 1000 },
     });
     assert.equal(result.indexed, 1);
     assert.equal(stub.calls, 2);

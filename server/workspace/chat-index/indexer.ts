@@ -8,7 +8,7 @@
 // at a `mkdtempSync` directory without touching the real
 // ~/mulmoclaude.
 
-import { readdir, readFile, rm } from "node:fs/promises";
+import { readdir, readFile, rm, stat } from "node:fs/promises";
 import { defaultSummarize, loadJsonlInput, type SummarizeFn } from "./summarizer.js";
 import { chatDirFor, indexEntryPathFor, manifestPathFor, sessionJsonlPathFor, sessionMetaPathFor } from "./paths.js";
 import type { ChatIndexEntry, ChatIndexManifest } from "./types.js";
@@ -22,6 +22,12 @@ import { isRecord } from "../../utils/types.js";
 // — long enough that a single conversation doesn't re-summarize
 // every turn, short enough that a user who leaves for lunch and
 // comes back sees the title refresh.
+//
+// Complementary to the content-change gate below: `isFresh` says
+// "we JUST indexed, don't retry mid-conversation", while
+// `sessionJsonlChangedSinceIndex` says "the jsonl hasn't been
+// touched since we last indexed, no work to do". Both run when
+// `force` is false; `force: true` bypasses both.
 export const MIN_INDEX_INTERVAL_MS = 15 * ONE_MINUTE_MS;
 
 // Injection points for tests. Defaults are the production spawn +
@@ -30,10 +36,13 @@ export interface IndexerDeps {
   summarize?: SummarizeFn;
   now?: () => number;
   minIntervalMs?: number;
-  // Bypass the `isFresh` freshness throttle. Used by the
-  // backfill helper and the debug trigger endpoint so a manual
-  // "rebuild everything" run doesn't silently skip entries that
-  // happen to be within the 15-minute window.
+  // Bypass both the `isFresh` freshness throttle AND the content-
+  // changed gate (`sessionJsonlChangedSinceIndex`). Used by the
+  // manual rebuild endpoint and the `CHAT_INDEX_FORCE_RUN_ON_STARTUP`
+  // startup path so "regenerate everything" semantics keep working
+  // even when the summariser is unchanged — e.g. the summariser
+  // prompt was edited and existing summaries are stale by design,
+  // not by content.
   force?: boolean;
 }
 
@@ -138,6 +147,46 @@ export async function isFresh(workspaceRoot: string, sessionId: string, now: num
   }
 }
 
+// Returns true when the session's jsonl was written / appended AFTER
+// its last index entry — i.e. there IS new content to summarize.
+//
+// Complements `isFresh`: without this gate, the hourly scheduler
+// tick re-summarizes every session even when nothing new was
+// written since the last index (issue #1929). With it, the tick's
+// per-session cost drops to O(stat + file read) for unchanged
+// sessions and only spends a Claude CLI call on the ones that
+// actually saw a new turn.
+//
+// Return-value contract, for each unknown state:
+//  - Entry file missing/malformed → true (we've never captured this
+//    session; index it).
+//  - Jsonl file missing → false (nothing to reindex; the caller
+//    would return null downstream anyway, but we short-circuit).
+//  - Otherwise → jsonl mtime > entry.indexedAt.
+export async function sessionJsonlChangedSinceIndex(workspaceRoot: string, sessionId: string): Promise<boolean> {
+  let indexedMs: number | null = null;
+  try {
+    const raw = await readFile(indexEntryPathFor(workspaceRoot, sessionId), "utf-8");
+    const entry: unknown = JSON.parse(raw);
+    if (isRecord(entry)) {
+      const { indexedAt } = entry as Record<string, unknown>;
+      if (typeof indexedAt === "string") {
+        const parsedMs = Date.parse(indexedAt);
+        if (!Number.isNaN(parsedMs)) indexedMs = parsedMs;
+      }
+    }
+  } catch {
+    return true;
+  }
+  if (indexedMs === null) return true;
+  try {
+    const info = await stat(sessionJsonlPathFor(workspaceRoot, sessionId));
+    return info.mtimeMs > indexedMs;
+  } catch {
+    return false;
+  }
+}
+
 // --- session metadata ----------------------------------------------
 
 interface SessionMeta {
@@ -184,8 +233,17 @@ export async function indexSession(workspaceRoot: string, sessionId: string, dep
   const minInterval = deps.minIntervalMs ?? MIN_INDEX_INTERVAL_MS;
   const force = deps.force === true;
 
-  if (!force && (await isFresh(workspaceRoot, sessionId, now, minInterval))) {
-    return null;
+  if (!force) {
+    if (await isFresh(workspaceRoot, sessionId, now, minInterval)) {
+      return null;
+    }
+    // Second gate: even past the freshness window, if the jsonl has
+    // NOT been written since the last index there's no new content
+    // to summarize. Cuts idle scheduler tick cost from O(sessions)
+    // Claude CLI calls to O(actual updates) — see #1929.
+    if (!(await sessionJsonlChangedSinceIndex(workspaceRoot, sessionId))) {
+      return null;
+    }
   }
 
   const input = await loadJsonlInput(sessionJsonlPathFor(workspaceRoot, sessionId));

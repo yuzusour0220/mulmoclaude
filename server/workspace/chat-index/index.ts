@@ -99,6 +99,12 @@ export async function backfillAllSessions(
   opts: {
     workspaceRoot?: string;
     deps?: IndexerDeps;
+    // Opt-in to "regenerate every summary, even those still current".
+    // Default false — the scheduled tick uses that so unchanged
+    // sessions cost only a stat + entry read, not a Claude CLI call.
+    // The manual rebuild endpoint and CHAT_INDEX_FORCE_RUN_ON_STARTUP
+    // opt in explicitly, matching their debug / rollout intent (#1929).
+    force?: boolean;
   } = {},
 ): Promise<BackfillResult> {
   const workspaceRoot = opts.workspaceRoot ?? defaultWorkspacePath;
@@ -108,6 +114,7 @@ export async function backfillAllSessions(
     indexed: 0,
     skipped: 0,
   };
+  const force = opts.force === true;
   for (const sessionId of ids) {
     if (disabled) {
       result.skipped++;
@@ -116,7 +123,7 @@ export async function backfillAllSessions(
     try {
       const entry = await indexSession(workspaceRoot, sessionId, {
         ...(opts.deps ?? {}),
-        force: true,
+        ...(force ? { force: true } : {}),
       });
       if (entry) {
         result.indexed++;
