@@ -158,12 +158,15 @@ export async function isFresh(workspaceRoot: string, sessionId: string, now: num
 // actually saw a new turn.
 //
 // Return-value contract, for each unknown state:
+//  - Hostile / malformed sessionId → false (skip; something upstream
+//    handed us a value that could escape the chat dir via `..`).
 //  - Entry file missing/malformed → true (we've never captured this
 //    session; index it).
 //  - Jsonl file missing → false (nothing to reindex; the caller
 //    would return null downstream anyway, but we short-circuit).
 //  - Otherwise → jsonl mtime > entry.indexedAt.
 export async function sessionJsonlChangedSinceIndex(workspaceRoot: string, sessionId: string): Promise<boolean> {
+  if (!isSafeSessionId(sessionId)) return false;
   let indexedMs: number | null = null;
   try {
     const raw = await readFile(indexEntryPathFor(workspaceRoot, sessionId), "utf-8");
@@ -185,6 +188,19 @@ export async function sessionJsonlChangedSinceIndex(workspaceRoot: string, sessi
   } catch {
     return false;
   }
+}
+
+// Path-traversal guard for session IDs used to derive on-disk paths.
+// Same shape as `server/api/bridge/sessionRole.ts`'s
+// `SAFE_SESSION_ID_RE` — kept local here so the workspace layer
+// doesn't need to reach uphill into the routes layer. Rejects any id
+// containing `..` (belt-and-suspenders — a whole-string `..` passes
+// the class alone) so `path.join(dir, "<id>.jsonl")` cannot escape
+// the chat dir even if a route handler forwards an unvalidated URL
+// param down to us.
+const SAFE_SESSION_ID_RE = /^[\w.-]{1,200}$/;
+function isSafeSessionId(sessionId: string): boolean {
+  return SAFE_SESSION_ID_RE.test(sessionId) && !sessionId.includes("..");
 }
 
 // --- session metadata ----------------------------------------------

@@ -419,6 +419,17 @@ describe("sessionJsonlChangedSinceIndex", () => {
     writeFileSync(indexEntryPathFor(workspace, "mtime-e"), JSON.stringify({ indexedAt: new Date(0).toISOString() }));
     assert.equal(await sessionJsonlChangedSinceIndex(workspace, "mtime-e"), false);
   });
+
+  it("returns false for a hostile sessionId (path-traversal guard)", async () => {
+    // The path-traversal guard runs BEFORE any file access, so a
+    // caller handing us `..` / `../etc/passwd` never opens a file
+    // outside the chat dir. Codeql flagged this in #1930 review;
+    // pin the behaviour here.
+    assert.equal(await sessionJsonlChangedSinceIndex(workspace, ".."), false);
+    assert.equal(await sessionJsonlChangedSinceIndex(workspace, "foo..bar"), false);
+    assert.equal(await sessionJsonlChangedSinceIndex(workspace, "a/b"), false);
+    assert.equal(await sessionJsonlChangedSinceIndex(workspace, ""), false);
+  });
 });
 
 describe("indexSession — content-unchanged skip (issue #1929)", () => {
