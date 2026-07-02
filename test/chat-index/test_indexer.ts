@@ -1,10 +1,10 @@
 import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { readFile, utimes } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { indexSession, readManifest, isFresh, MIN_INDEX_INTERVAL_MS } from "../../server/workspace/chat-index/indexer.js";
+import { indexSession, readManifest, isFresh, sessionJsonlChangedSinceIndex, MIN_INDEX_INTERVAL_MS } from "../../server/workspace/chat-index/indexer.js";
 import { indexEntryPathFor, manifestPathFor } from "../../server/workspace/chat-index/paths.js";
 import type { SummaryResult } from "../../server/workspace/chat-index/types.js";
 
@@ -368,5 +368,163 @@ describe("isFresh", () => {
     writeFileSync(indexEntryPathFor(workspace, "x"), JSON.stringify({ indexedAt: new Date(0).toISOString() }));
     const out = await isFresh(workspace, "x", MIN_INDEX_INTERVAL_MS + 1, MIN_INDEX_INTERVAL_MS);
     assert.equal(out, false);
+  });
+});
+
+describe("sessionJsonlChangedSinceIndex", () => {
+  // A workspace-local jsonl path built by mirroring `chatDirFor`
+  // (`conversations/chat`) — same shape the real indexer uses.
+  const jsonlPathFor = (sessionId: string) => join(workspace, CHAT_REL, `${sessionId}.jsonl`);
+  // Utility: freeze the jsonl mtime to a chosen seconds-since-epoch
+  // so the mtime comparison against `indexedAt` is deterministic
+  // instead of racing wall-clock disk timestamps.
+  const setJsonlMtime = async (sessionId: string, epochSeconds: number) => utimes(jsonlPathFor(sessionId), epochSeconds, epochSeconds);
+
+  it("returns true when no entry file exists (never indexed)", async () => {
+    seedSession("mtime-a");
+    assert.equal(await sessionJsonlChangedSinceIndex(workspace, "mtime-a"), true);
+  });
+
+  it("returns true when the entry file is malformed", async () => {
+    seedSession("mtime-b");
+    mkdirSync(join(workspace, CHAT_REL, "index"), { recursive: true });
+    writeFileSync(indexEntryPathFor(workspace, "mtime-b"), "{ not json");
+    assert.equal(await sessionJsonlChangedSinceIndex(workspace, "mtime-b"), true);
+  });
+
+  it("returns false when jsonl mtime is older than the entry's indexedAt (content unchanged)", async () => {
+    seedSession("mtime-c");
+    // Freeze the jsonl at t=100ms (0.1s) so it can't be newer than
+    // the entry we stamp below at t=1000ms.
+    await setJsonlMtime("mtime-c", 0.1);
+    mkdirSync(join(workspace, CHAT_REL, "index"), { recursive: true });
+    writeFileSync(indexEntryPathFor(workspace, "mtime-c"), JSON.stringify({ indexedAt: new Date(1000).toISOString() }));
+    assert.equal(await sessionJsonlChangedSinceIndex(workspace, "mtime-c"), false);
+  });
+
+  it("returns true when jsonl mtime is newer than the entry's indexedAt (new turn arrived)", async () => {
+    seedSession("mtime-d");
+    // Jsonl bumped forward to t=2000s (2_000_000ms epoch), long after
+    // the entry we stamp at t=1000ms.
+    await setJsonlMtime("mtime-d", 2000);
+    mkdirSync(join(workspace, CHAT_REL, "index"), { recursive: true });
+    writeFileSync(indexEntryPathFor(workspace, "mtime-d"), JSON.stringify({ indexedAt: new Date(1000).toISOString() }));
+    assert.equal(await sessionJsonlChangedSinceIndex(workspace, "mtime-d"), true);
+  });
+
+  it("returns false when the jsonl is missing (nothing to reindex)", async () => {
+    // Entry file exists but no jsonl companion — an inconsistency
+    // that shouldn't happen at rest, but the helper must not throw.
+    mkdirSync(join(workspace, CHAT_REL, "index"), { recursive: true });
+    writeFileSync(indexEntryPathFor(workspace, "mtime-e"), JSON.stringify({ indexedAt: new Date(0).toISOString() }));
+    assert.equal(await sessionJsonlChangedSinceIndex(workspace, "mtime-e"), false);
+  });
+
+  it("returns false for a hostile sessionId (path-traversal guard)", async () => {
+    // The path-traversal guard runs BEFORE any file access, so a
+    // caller handing us `..` / `../etc/passwd` never opens a file
+    // outside the chat dir. Codeql flagged this in #1930 review;
+    // pin the behaviour here.
+    assert.equal(await sessionJsonlChangedSinceIndex(workspace, ".."), false);
+    assert.equal(await sessionJsonlChangedSinceIndex(workspace, "foo..bar"), false);
+    assert.equal(await sessionJsonlChangedSinceIndex(workspace, "a/b"), false);
+    assert.equal(await sessionJsonlChangedSinceIndex(workspace, ""), false);
+  });
+});
+
+describe("indexSession — hostile sessionId is rejected (defence-in-depth)", () => {
+  // Codex review on #1930: the sanitizer was previously only wired
+  // into `sessionJsonlChangedSinceIndex`. `indexSession` still fed
+  // raw `sessionId` into `readSessionMeta` / `writeJsonAtomic` /
+  // `loadJsonlInput`, and `force: true` short-circuited the one
+  // helper that WAS guarded. Sanitize once at the public entry —
+  // and force MUST NOT bypass — so any of those downstream sinks
+  // is safe even against a hostile caller.
+
+  it("returns null for `..` (traversal via basename mismatch)", async () => {
+    const stub = makeStubSummarize();
+    const result = await indexSession(workspace, "..", { summarize: stub.fn, now: () => 0 });
+    assert.equal(result, null);
+    assert.equal(stub.calls.length, 0);
+  });
+
+  it("returns null for a slash-containing id (would escape the chat dir)", async () => {
+    const stub = makeStubSummarize();
+    const result = await indexSession(workspace, "a/b", { summarize: stub.fn, now: () => 0 });
+    assert.equal(result, null);
+    assert.equal(stub.calls.length, 0);
+  });
+
+  it("returns null for `foo..bar` (basename passes, `..`-substring rejects)", async () => {
+    const stub = makeStubSummarize();
+    const result = await indexSession(workspace, "foo..bar", { summarize: stub.fn, now: () => 0 });
+    assert.equal(result, null);
+    assert.equal(stub.calls.length, 0);
+  });
+
+  it("force: true does NOT bypass the sanitizer", async () => {
+    const stub = makeStubSummarize();
+    const result = await indexSession(workspace, "../evil", {
+      summarize: stub.fn,
+      now: () => 0,
+      force: true,
+    });
+    assert.equal(result, null);
+    assert.equal(stub.calls.length, 0);
+  });
+});
+
+describe("indexSession — content-unchanged skip (issue #1929)", () => {
+  const jsonlPathFor = (sessionId: string) => join(workspace, CHAT_REL, `${sessionId}.jsonl`);
+  const setJsonlMtime = async (sessionId: string, epochSeconds: number) => utimes(jsonlPathFor(sessionId), epochSeconds, epochSeconds);
+
+  it("skips a session whose jsonl mtime hasn't moved since the last index", async () => {
+    seedSession("skip-unchanged");
+    // Freeze jsonl mtime at 100ms so the first-index-at-1000ms entry
+    // guarantees jsonl.mtime <= indexedAt on the second call.
+    await setJsonlMtime("skip-unchanged", 0.1);
+    const stub = makeStubSummarize();
+
+    await indexSession(workspace, "skip-unchanged", { summarize: stub.fn, now: () => 1000 });
+    assert.equal(stub.calls.length, 1);
+
+    // Jump past the freshness window so isFresh returns false; the
+    // ONLY remaining reason to skip is the content-unchanged gate.
+    await indexSession(workspace, "skip-unchanged", { summarize: stub.fn, now: () => MIN_INDEX_INTERVAL_MS + 10_000 });
+    assert.equal(stub.calls.length, 1);
+  });
+
+  it("re-indexes a session whose jsonl mtime moved forward", async () => {
+    seedSession("resume-changed");
+    await setJsonlMtime("resume-changed", 0.1);
+    const stub = makeStubSummarize();
+
+    await indexSession(workspace, "resume-changed", { summarize: stub.fn, now: () => 1000 });
+    assert.equal(stub.calls.length, 1);
+
+    // Simulate a new turn: bump the jsonl mtime past the entry's
+    // indexedAt. Time-jump past the freshness window too so this
+    // isn't just testing isFresh.
+    await setJsonlMtime("resume-changed", 5000);
+    await indexSession(workspace, "resume-changed", { summarize: stub.fn, now: () => MIN_INDEX_INTERVAL_MS + 10_000 });
+    assert.equal(stub.calls.length, 2);
+  });
+
+  it("force: true bypasses the content-unchanged gate", async () => {
+    seedSession("force-through");
+    await setJsonlMtime("force-through", 0.1);
+    const stub = makeStubSummarize();
+
+    await indexSession(workspace, "force-through", { summarize: stub.fn, now: () => 1000 });
+    assert.equal(stub.calls.length, 1);
+
+    // Jsonl still at 100ms — content-unchanged gate would skip, but
+    // force says "regenerate anyway".
+    await indexSession(workspace, "force-through", {
+      summarize: stub.fn,
+      now: () => MIN_INDEX_INTERVAL_MS + 10_000,
+      force: true,
+    });
+    assert.equal(stub.calls.length, 2);
   });
 });

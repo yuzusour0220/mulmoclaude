@@ -8,7 +8,8 @@
 // at a `mkdtempSync` directory without touching the real
 // ~/mulmoclaude.
 
-import { readdir, readFile, rm } from "node:fs/promises";
+import { readdir, readFile, rm, stat } from "node:fs/promises";
+import path from "node:path";
 import { defaultSummarize, loadJsonlInput, type SummarizeFn } from "./summarizer.js";
 import { chatDirFor, indexEntryPathFor, manifestPathFor, sessionJsonlPathFor, sessionMetaPathFor } from "./paths.js";
 import type { ChatIndexEntry, ChatIndexManifest } from "./types.js";
@@ -22,6 +23,12 @@ import { isRecord } from "../../utils/types.js";
 // — long enough that a single conversation doesn't re-summarize
 // every turn, short enough that a user who leaves for lunch and
 // comes back sees the title refresh.
+//
+// Complementary to the content-change gate below: `isFresh` says
+// "we JUST indexed, don't retry mid-conversation", while
+// `sessionJsonlChangedSinceIndex` says "the jsonl hasn't been
+// touched since we last indexed, no work to do". Both run when
+// `force` is false; `force: true` bypasses both.
 export const MIN_INDEX_INTERVAL_MS = 15 * ONE_MINUTE_MS;
 
 // Injection points for tests. Defaults are the production spawn +
@@ -30,10 +37,13 @@ export interface IndexerDeps {
   summarize?: SummarizeFn;
   now?: () => number;
   minIntervalMs?: number;
-  // Bypass the `isFresh` freshness throttle. Used by the
-  // backfill helper and the debug trigger endpoint so a manual
-  // "rebuild everything" run doesn't silently skip entries that
-  // happen to be within the 15-minute window.
+  // Bypass both the `isFresh` freshness throttle AND the content-
+  // changed gate (`sessionJsonlChangedSinceIndex`). Used by the
+  // manual rebuild endpoint and the `CHAT_INDEX_FORCE_RUN_ON_STARTUP`
+  // startup path so "regenerate everything" semantics keep working
+  // even when the summariser is unchanged — e.g. the summariser
+  // prompt was edited and existing summaries are stale by design,
+  // not by content.
   force?: boolean;
 }
 
@@ -110,32 +120,104 @@ export async function updateManifest(workspaceRoot: string, mutator: (m: ChatInd
 // disk. Both removals tolerate "missing" — sessions that were never
 // indexed have no entry to prune.
 export async function removeSessionFromIndex(workspaceRoot: string, sessionId: string): Promise<void> {
-  await rm(indexEntryPathFor(workspaceRoot, sessionId), { force: true });
+  const safeId = safeSessionIdOrNull(sessionId);
+  if (safeId === null) return;
+  await rm(indexEntryPathFor(workspaceRoot, safeId), { force: true });
   await updateManifest(workspaceRoot, (manifest) => ({
     ...manifest,
-    entries: manifest.entries.filter((entry) => entry.id !== sessionId),
+    entries: manifest.entries.filter((entry) => entry.id !== safeId),
   }));
 }
 
 // --- freshness check ------------------------------------------------
 
+// Shared parsing of `<indexDir>/<sessionId>.json` → `indexedAt` as
+// milliseconds since epoch. Returns null on any failure (file
+// missing, unreadable, JSON parse error, wrong shape, unparseable
+// timestamp) so callers can each pick their own "no entry" semantic
+// (skip vs reindex vs throttle) without duplicating the read.
+// Exported so `isFresh` / `sessionJsonlChangedSinceIndex` share one
+// canonical parse — CodeRabbit review on #1930.
+export async function readIndexedAtMs(workspaceRoot: string, sessionId: string): Promise<number | null> {
+  const safeId = safeSessionIdOrNull(sessionId);
+  if (safeId === null) return null;
+  try {
+    const raw = await readFile(indexEntryPathFor(workspaceRoot, safeId), "utf-8");
+    const entry: unknown = JSON.parse(raw);
+    if (!isRecord(entry)) return null;
+    const { indexedAt } = entry as Record<string, unknown>;
+    if (typeof indexedAt !== "string") return null;
+    const parsed = Date.parse(indexedAt);
+    return Number.isNaN(parsed) ? null : parsed;
+  } catch {
+    return null;
+  }
+}
+
 // A session is "fresh" when its per-session index file exists and
 // was written less than `minIntervalMs` ago. Fresh sessions are
 // skipped so a long conversation doesn't spam the CLI on every
-// turn.
+// turn. Delegates disk / parse work to `readIndexedAtMs` so the
+// two throttles stay in lockstep on entry-file semantics.
 export async function isFresh(workspaceRoot: string, sessionId: string, now: number, minIntervalMs: number): Promise<boolean> {
+  const indexedMs = await readIndexedAtMs(workspaceRoot, sessionId);
+  if (indexedMs === null) return false;
+  return now - indexedMs < minIntervalMs;
+}
+
+// Returns true when the session's jsonl was written / appended AFTER
+// its last index entry — i.e. there IS new content to summarize.
+//
+// Complements `isFresh`: without this gate, the hourly scheduler
+// tick re-summarizes every session even when nothing new was
+// written since the last index (issue #1929). With it, the tick's
+// per-session cost drops to O(stat + file read) for unchanged
+// sessions and only spends a Claude CLI call on the ones that
+// actually saw a new turn.
+//
+// Return-value contract, for each unknown state:
+//  - Hostile / malformed sessionId → false (skip; something upstream
+//    handed us a value that could escape the chat dir via `..`).
+//  - Entry file missing/malformed → true (we've never captured this
+//    session; index it).
+//  - Jsonl file missing → false (nothing to reindex; the caller
+//    would return null downstream anyway, but we short-circuit).
+//  - Otherwise → jsonl mtime > entry.indexedAt.
+export async function sessionJsonlChangedSinceIndex(workspaceRoot: string, sessionId: string): Promise<boolean> {
+  const safeId = safeSessionIdOrNull(sessionId);
+  if (safeId === null) return false;
+  const indexedMs = await readIndexedAtMs(workspaceRoot, safeId);
+  if (indexedMs === null) return true;
   try {
-    const raw = await readFile(indexEntryPathFor(workspaceRoot, sessionId), "utf-8");
-    const entry: unknown = JSON.parse(raw);
-    if (!isRecord(entry)) return false;
-    const { indexedAt } = entry as Record<string, unknown>;
-    if (typeof indexedAt !== "string") return false;
-    const indexedTimestamp = Date.parse(indexedAt);
-    if (Number.isNaN(indexedTimestamp)) return false;
-    return now - indexedTimestamp < minIntervalMs;
+    const info = await stat(sessionJsonlPathFor(workspaceRoot, safeId));
+    return info.mtimeMs > indexedMs;
   } catch {
     return false;
   }
+}
+
+// Path-traversal guard for session IDs used to derive on-disk paths.
+// Two-step check so both a static analyser (CodeQL taints
+// `sessionId` as a possible route-param input) AND a human reader
+// can convince themselves the derived path stays inside the chat
+// dir:
+//
+//   1. `path.basename()` collapses any `..` / separator to the last
+//      segment. CodeQL recognises this as a barrier — a value whose
+//      taint originates upstream is neutralised here.
+//   2. `SAFE_SESSION_ID_RE` narrows the character class further
+//      (word chars, `.`, `-`, up to 200 long) and rejects any
+//      `..` substring, mirroring `server/api/bridge/sessionRole.ts`.
+//
+// Returns the cleaned id on success (identical to the input for
+// legit ids) or `null` on any hostile / malformed input.
+const SAFE_SESSION_ID_RE = /^[\w.-]{1,200}$/;
+export function safeSessionIdOrNull(sessionId: string): string | null {
+  const basename = path.basename(sessionId);
+  if (basename !== sessionId) return null;
+  if (!SAFE_SESSION_ID_RE.test(basename)) return null;
+  if (basename.includes("..")) return null;
+  return basename;
 }
 
 // --- session metadata ----------------------------------------------
@@ -146,8 +228,14 @@ interface SessionMeta {
 }
 
 async function readSessionMeta(workspaceRoot: string, sessionId: string): Promise<SessionMeta> {
+  // Defence-in-depth: only `indexSession` calls this (with an
+  // already-sanitized id), but a future caller wiring the helper
+  // into a new code path shouldn't be able to escape the chat dir
+  // by mistake.
+  const safeId = safeSessionIdOrNull(sessionId);
+  if (safeId === null) return {};
   try {
-    const raw = await readFile(sessionMetaPathFor(workspaceRoot, sessionId), "utf-8");
+    const raw = await readFile(sessionMetaPathFor(workspaceRoot, safeId), "utf-8");
     const parsed: unknown = JSON.parse(raw);
     if (!isRecord(parsed)) return {};
     const metaRecord = parsed as Record<string, unknown>;
@@ -161,11 +249,22 @@ async function readSessionMeta(workspaceRoot: string, sessionId: string): Promis
 }
 
 // List every session id that has a .jsonl file in the workspace
-// chat dir. Used by the backfill helper.
+// chat dir. Used by the backfill helper. Filenames from disk are
+// filtered through `safeSessionIdOrNull` so a stray file with a
+// hostile name (`.` / `..` / a slash-containing name that survived
+// readdir on some FS) can never flow through the backfill loop
+// into `indexSession`.
 export async function listSessionIds(workspaceRoot: string): Promise<string[]> {
   try {
     const files = await readdir(chatDirFor(workspaceRoot));
-    return files.filter((fileName) => fileName.endsWith(".jsonl")).map((fileName) => fileName.slice(0, -".jsonl".length));
+    const ids: string[] = [];
+    for (const fileName of files) {
+      if (!fileName.endsWith(".jsonl")) continue;
+      const stem = fileName.slice(0, -".jsonl".length);
+      const safeId = safeSessionIdOrNull(stem);
+      if (safeId !== null) ids.push(safeId);
+    }
+    return ids;
   } catch {
     return [];
   }
@@ -175,27 +274,43 @@ export async function listSessionIds(workspaceRoot: string): Promise<string[]> {
 
 // Index (or re-index) a single session. Returns the entry on
 // success, or null if the session was skipped (fresh, empty,
-// missing). The only exception that escapes is
+// missing, or hostile id). The only exception that escapes is
 // `ClaudeCliNotFoundError` — the caller uses it to disable the
 // module for the rest of the process lifetime.
+//
+// `sessionId` is sanitized at entry (`safeSessionIdOrNull`) and the
+// resulting `safeId` is threaded through every downstream file
+// access, so `force: true` — a debug / rollout knob — cannot become
+// a path-injection escape hatch (Codex review on #1930).
 export async function indexSession(workspaceRoot: string, sessionId: string, deps: IndexerDeps = {}): Promise<ChatIndexEntry | null> {
+  const safeId = safeSessionIdOrNull(sessionId);
+  if (safeId === null) return null;
   const summarize = deps.summarize ?? defaultSummarize;
   const now = (deps.now ?? Date.now)();
   const minInterval = deps.minIntervalMs ?? MIN_INDEX_INTERVAL_MS;
   const force = deps.force === true;
 
-  if (!force && (await isFresh(workspaceRoot, sessionId, now, minInterval))) {
-    return null;
+  if (!force) {
+    if (await isFresh(workspaceRoot, safeId, now, minInterval)) {
+      return null;
+    }
+    // Second gate: even past the freshness window, if the jsonl has
+    // NOT been written since the last index there's no new content
+    // to summarize. Cuts idle scheduler tick cost from O(sessions)
+    // Claude CLI calls to O(actual updates) — see #1929.
+    if (!(await sessionJsonlChangedSinceIndex(workspaceRoot, safeId))) {
+      return null;
+    }
   }
 
-  const input = await loadJsonlInput(sessionJsonlPathFor(workspaceRoot, sessionId));
+  const input = await loadJsonlInput(sessionJsonlPathFor(workspaceRoot, safeId));
   if (!input.trim()) return null;
 
   const summary = await summarize(input);
-  const meta = await readSessionMeta(workspaceRoot, sessionId);
+  const meta = await readSessionMeta(workspaceRoot, safeId);
 
   const entry: ChatIndexEntry = {
-    id: sessionId,
+    id: safeId,
     roleId: meta.roleId ?? DEFAULT_ROLE_ID,
     startedAt: meta.startedAt ?? new Date(now).toISOString(),
     indexedAt: new Date(now).toISOString(),
@@ -207,12 +322,12 @@ export async function indexSession(workspaceRoot: string, sessionId: string, dep
   // Per-session file is written first so partial progress survives
   // a crash between the two writes: the next run can still observe
   // the fresh entry via isFresh and skip it.
-  await writeJsonAtomic(indexEntryPathFor(workspaceRoot, sessionId), entry);
+  await writeJsonAtomic(indexEntryPathFor(workspaceRoot, safeId), entry);
 
   // Upsert into manifest under the in-process lock: replace any
   // prior entry with the same id, sort newest-first by startedAt.
   await updateManifest(workspaceRoot, (current) => {
-    const filtered = current.entries.filter((entryItem) => entryItem.id !== sessionId);
+    const filtered = current.entries.filter((entryItem) => entryItem.id !== safeId);
     filtered.push(entry);
     filtered.sort((leftEntry, rightEntry) => Date.parse(rightEntry.startedAt) - Date.parse(leftEntry.startedAt));
     return { version: 1, entries: filtered };
