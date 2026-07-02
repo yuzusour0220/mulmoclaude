@@ -1019,24 +1019,44 @@ function handleSessionFinished(sessionId: string): void {
 //     throttling — WS keeps `connected` on the server but delivery stops
 //     while the tab is backgrounded, and there's no `disconnect` event to
 //     hook on reconnect)
-function catchUpMissedEvents(reason: "reconnect" | "visibility"): void {
+// Monotonic sequence guard so back-to-back triggers (reconnect fires
+// concurrent with a visibilitychange) can't let an older, slower
+// refreshSessionStates() response overwrite a newer isRunning=false with
+// stale state (CodeRabbit review). Every catch-up increments the token
+// before awaiting; when the await resolves, we drop the result unless
+// our token is still the latest.
+let catchUpSequence = 0;
+async function catchUpMissedEvents(reason: "reconnect" | "visibility"): Promise<void> {
   console.info(`[chat-ui] catching up after ${reason}`);
-  refreshSessionStates().catch((err) => {
-    console.warn("[chat-ui] refreshSessionStates failed:", err);
-  });
+  const token = ++catchUpSequence;
   const currentId = currentSessionId.value;
-  if (currentId) {
-    refreshSessionTranscript(currentId).catch((err) => {
-      console.warn("[chat-ui] refreshSessionTranscript failed:", err);
-    });
+  const transcriptPromise = currentId
+    ? refreshSessionTranscript(currentId).catch((err) => {
+        console.warn("[chat-ui] refreshSessionTranscript failed:", err);
+      })
+    : Promise.resolve();
+  try {
+    await refreshSessionStates();
+    if (token !== catchUpSequence) {
+      // A later catch-up has already been scheduled; drop this result so
+      // its (potentially older) view of the world can't overwrite the newer one.
+      return;
+    }
+  } catch (err) {
+    console.warn("[chat-ui] refreshSessionStates failed:", err);
   }
+  await transcriptPromise;
 }
 
-pubsubOnReconnect(() => catchUpMissedEvents("reconnect"));
+// Capture the unsubscribe so remount / HMR doesn't accumulate stale
+// module-level reconnect handlers (Codex review).
+const unsubReconnect = pubsubOnReconnect(() => {
+  void catchUpMissedEvents("reconnect");
+});
 
 function handleVisibilityChange(): void {
   if (document.visibilityState === "visible") {
-    catchUpMissedEvents("visibility");
+    void catchUpMissedEvents("visibility");
   }
 }
 
@@ -1045,6 +1065,7 @@ onMounted(() => {
 });
 onScopeDispose(() => {
   document.removeEventListener("visibilitychange", handleVisibilityChange);
+  unsubReconnect();
 });
 
 function createSessionEventHandler(session: ActiveSession, ctx: AgentEventContext): (data: unknown) => void {
