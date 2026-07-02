@@ -432,6 +432,48 @@ describe("sessionJsonlChangedSinceIndex", () => {
   });
 });
 
+describe("indexSession — hostile sessionId is rejected (defence-in-depth)", () => {
+  // Codex review on #1930: the sanitizer was previously only wired
+  // into `sessionJsonlChangedSinceIndex`. `indexSession` still fed
+  // raw `sessionId` into `readSessionMeta` / `writeJsonAtomic` /
+  // `loadJsonlInput`, and `force: true` short-circuited the one
+  // helper that WAS guarded. Sanitize once at the public entry —
+  // and force MUST NOT bypass — so any of those downstream sinks
+  // is safe even against a hostile caller.
+
+  it("returns null for `..` (traversal via basename mismatch)", async () => {
+    const stub = makeStubSummarize();
+    const result = await indexSession(workspace, "..", { summarize: stub.fn, now: () => 0 });
+    assert.equal(result, null);
+    assert.equal(stub.calls.length, 0);
+  });
+
+  it("returns null for a slash-containing id (would escape the chat dir)", async () => {
+    const stub = makeStubSummarize();
+    const result = await indexSession(workspace, "a/b", { summarize: stub.fn, now: () => 0 });
+    assert.equal(result, null);
+    assert.equal(stub.calls.length, 0);
+  });
+
+  it("returns null for `foo..bar` (basename passes, `..`-substring rejects)", async () => {
+    const stub = makeStubSummarize();
+    const result = await indexSession(workspace, "foo..bar", { summarize: stub.fn, now: () => 0 });
+    assert.equal(result, null);
+    assert.equal(stub.calls.length, 0);
+  });
+
+  it("force: true does NOT bypass the sanitizer", async () => {
+    const stub = makeStubSummarize();
+    const result = await indexSession(workspace, "../evil", {
+      summarize: stub.fn,
+      now: () => 0,
+      force: true,
+    });
+    assert.equal(result, null);
+    assert.equal(stub.calls.length, 0);
+  });
+});
+
 describe("indexSession — content-unchanged skip (issue #1929)", () => {
   const jsonlPathFor = (sessionId: string) => join(workspace, CHAT_REL, `${sessionId}.jsonl`);
   const setJsonlMtime = async (sessionId: string, epochSeconds: number) => utimes(jsonlPathFor(sessionId), epochSeconds, epochSeconds);
