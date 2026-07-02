@@ -937,6 +937,8 @@ const frMessages = {
     cancel: "Annuler",
     seededByPlugin: "depuis {pkg}",
     seededByPluginTooltip: "Ce message a été généré par le plugin {pkg}, et non envoyé par vous.",
+    truncatedForRender:
+      "Ce message est exceptionnellement long ({total} caractères au total). Seule la première partie est affichée — {omitted} caractères masqués pour garder l'onglet réactif. Utilisez « Copier » pour obtenir le texte complet.",
   },
   pluginSkill: {
     noDescription: "(aucune description)",
