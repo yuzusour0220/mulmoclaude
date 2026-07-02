@@ -137,6 +137,9 @@ const { id: removed } = await window.__MC_VIEW.deleteItem(id);
   optimistically update your local copy from the returned `item`, or re-call
   `getItems` to refetch. The preview's real write also refreshes the desktop
   collection, so you see the true result while iterating.
+- **The returned `item` is shaped like a `getItems` item** — the view's declared
+  `imageFields` come back inlined as `data:` URLs (not bare paths), so merging the
+  result (`items[i] = { ...items[i], ...res.item }`) keeps thumbnails intact.
 - **Create is not available** in this phase — `updateItem` only patches an
   existing record; use `startChat` to ask the agent to add a new one.
 

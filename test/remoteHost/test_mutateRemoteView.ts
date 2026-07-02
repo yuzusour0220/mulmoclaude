@@ -27,6 +27,10 @@ const deps = (overrides: Partial<MutateRemoteViewDeps> = {}): MutateRemoteViewDe
   readItem: (async () => ({ ...record })) as unknown as MutateRemoteViewDeps["readItem"],
   writeItem: (async (_dir: string, itemId: string, item: unknown) => ({ kind: "ok", itemId, item })) as unknown as MutateRemoteViewDeps["writeItem"],
   deleteItem: (async (_dir: string, itemId: string) => ({ kind: "ok", itemId })) as unknown as MutateRemoteViewDeps["deleteItem"],
+  // A declared-image view inlines the returned item's image fields; the default
+  // view here declares none, so this is only exercised by the dedicated test below.
+  resolveThumbnail: (async (relPath: string) =>
+    `data:image/jpeg;base64,${Buffer.from(relPath).toString("base64")}`) as MutateRemoteViewDeps["resolveThumbnail"],
   ...overrides,
 });
 
@@ -45,6 +49,25 @@ describe("createMutateRemoteView", () => {
     assert.deepEqual(result, { kind: "ok", op: "update", item: { id: "t1", title: "buy milk", done: true } });
     // The patch merges — untouched fields survive, id is pinned to the URL id.
     assert.deepEqual(written, { id: "t1", title: "buy milk", done: true });
+  });
+
+  it("inlines the view's declared image fields on the returned update item", async () => {
+    // Regression: the returned item must be shaped like a getItems item (image
+    // fields as data: URLs), else a view that merges the result clobbers its
+    // inlined thumbnail with a bare path and the image disappears.
+    const withImage = collection([{ ...writableView, editableFields: ["rating"], imageFields: ["poster"] }]);
+    withImage.schema.fields = { id: { type: "string" }, rating: { type: "string" }, poster: { type: "image" } } as unknown as typeof withImage.schema.fields;
+    const mutate = createMutateRemoteView(
+      deps({
+        readItem: (async () => ({ id: "t1", rating: "", poster: "images/a.png" })) as unknown as MutateRemoteViewDeps["readItem"],
+        writeItem: (async (_dir: string, itemId: string, item: unknown) => ({ kind: "ok", itemId, item })) as unknown as MutateRemoteViewDeps["writeItem"],
+      }),
+    );
+    const result = await mutate(withImage, "phone", { op: "update", id: "t1", patch: { rating: "★★★" } });
+    assert.equal(result.kind, "ok");
+    if (result.kind !== "ok" || result.op !== "update") return;
+    assert.equal(result.item.rating, "★★★");
+    assert.match(String(result.item.poster), /^data:image\/jpeg;base64,/); // inlined, not the path
   });
 
   it("deletes a record when allowDelete is set", async () => {

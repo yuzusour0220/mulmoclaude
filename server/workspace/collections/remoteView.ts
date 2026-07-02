@@ -118,6 +118,7 @@ export interface MutateRemoteViewDeps {
   readItem: typeof readItem;
   writeItem: typeof writeItem;
   deleteItem: typeof deleteItem;
+  resolveThumbnail: typeof resolveThumbnail;
 }
 
 export const createMutateRemoteView =
@@ -127,9 +128,7 @@ export const createMutateRemoteView =
     if (!view) return { kind: "view-not-found", viewId };
     if (view.target !== "mobile") return { kind: "not-mobile", viewId };
     if (!isWritableView(view)) return { kind: "not-writable", viewId };
-    return request.op === "delete"
-      ? deleteViaView(deps, collection, view.allowDelete === true, request.id)
-      : updateViaView(deps, collection, view.editableFields ?? [], request);
+    return request.op === "delete" ? deleteViaView(deps, collection, view.allowDelete === true, request.id) : updateViaView(deps, collection, view, request);
   };
 
 async function deleteViaView(deps: MutateRemoteViewDeps, collection: LoadedCollection, allowDelete: boolean, itemId: string): Promise<MutateRemoteViewResult> {
@@ -144,13 +143,13 @@ async function deleteViaView(deps: MutateRemoteViewDeps, collection: LoadedColle
 async function updateViaView(
   deps: MutateRemoteViewDeps,
   collection: LoadedCollection,
-  editableFields: string[],
+  view: CollectionCustomView,
   request: Extract<RemoteViewMutateRequest, { op: "update" }>,
 ): Promise<MutateRemoteViewResult> {
   const { primaryKey } = collection.schema;
   const patchKeys = Object.keys(request.patch);
   if (patchKeys.length === 0) return { kind: "invalid-patch" };
-  const allowed = new Set(editableFields);
+  const allowed = new Set(view.editableFields ?? []);
   // The primary key is never patchable (it is the record id — renaming it would
   // desync the file name from the record) even if an author listed it.
   const offending = patchKeys.find((key) => key === primaryKey || !allowed.has(key));
@@ -169,10 +168,18 @@ async function updateViaView(
   if (result.kind === "invalid-id") return { kind: "invalid-id", id: result.itemId };
   if (result.kind === "path-escape") return { kind: "path-escape" };
   if (result.kind === "conflict") return { kind: "item-not-found", id: result.itemId }; // unreachable: refuseOverwrite is false
-  return { kind: "ok", op: "update", item: result.item };
+  // The returned item must be shaped like a `getItems` item — with the view's
+  // declared image fields inlined as `data:` URLs — so a view that merges the
+  // result (as the help file recommends) doesn't clobber a good thumbnail with a
+  // bare path. No projection here (the whole record is returned), so inline every
+  // declared image-type field; the single item easily fits the doc budget.
+  const item = result.item as RemoteViewItem;
+  const imageFields = inlineFields(view, collection.schema, undefined);
+  if (imageFields.length > 0) await inlineImages([item], imageFields, clampImageMaxEdge(view.imageMaxEdge), deps.resolveThumbnail, REMOTE_VIEW_ITEMS_MAX_BYTES);
+  return { kind: "ok", op: "update", item: item as CollectionItem };
 }
 
-export const mutateRemoteView = createMutateRemoteView({ readItem, writeItem, deleteItem });
+export const mutateRemoteView = createMutateRemoteView({ readItem, writeItem, deleteItem, resolveThumbnail });
 
 // ── Item pages with inlined image thumbnails (phase 5 — plans/feat-remote-view-images.md) ──
 // A mobile view's `getItems`, view-aware so it can inline the `imageFields` its
@@ -209,7 +216,7 @@ async function inlineImages(
   items: RemoteViewItem[],
   fields: string[],
   maxEdge: number,
-  deps: RemoteViewItemsDeps,
+  resolve: typeof resolveThumbnail,
   budget: number,
 ): Promise<{ inlined: number; omitted: number }> {
   let used = 0;
@@ -219,7 +226,7 @@ async function inlineImages(
     for (const field of fields) {
       const value = item[field];
       if (typeof value !== "string" || value.length === 0 || value.startsWith("data:")) continue;
-      const dataUrl = used < budget ? await deps.resolveThumbnail(value, maxEdge) : null;
+      const dataUrl = used < budget ? await resolve(value, maxEdge) : null;
       if (dataUrl && used + dataUrl.length <= budget) {
         item[field] = dataUrl;
         used += dataUrl.length;
@@ -247,7 +254,7 @@ export const createRemoteViewItems =
     // Budget the thumbnails against what's left of the doc after the (tiny,
     // path-only) base JSON, so the serialized page stays under the cap.
     const budget = REMOTE_VIEW_ITEMS_MAX_BYTES - Buffer.byteLength(JSON.stringify(page), "utf8");
-    const { inlined, omitted } = await inlineImages(page.items, fields, clampImageMaxEdge(view.imageMaxEdge), deps, Math.max(0, budget));
+    const { inlined, omitted } = await inlineImages(page.items, fields, clampImageMaxEdge(view.imageMaxEdge), deps.resolveThumbnail, Math.max(0, budget));
     return { kind: "ok", page, inlined, omitted };
   };
 
