@@ -7,6 +7,7 @@ import { getFeed } from "./getFeed.js";
 import { listCollections } from "./listCollections.js";
 import { listFeeds } from "./listFeeds.js";
 import { listShortcuts } from "./listShortcuts.js";
+import { startChat } from "./startChat.js";
 
 export const handlers: CommandHandlers = {
   listCollections,
@@ -14,4 +15,5 @@ export const handlers: CommandHandlers = {
   listShortcuts,
   listFeeds,
   getFeed,
+  startChat,
 };
