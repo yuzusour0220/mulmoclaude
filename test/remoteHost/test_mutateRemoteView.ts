@@ -64,6 +64,13 @@ describe("createMutateRemoteView", () => {
     });
   });
 
+  it("reports invalid-id for an unsafe id on update (not a masked item-not-found)", async () => {
+    // readItem/writeItem stubs are never reached — the safeRecordId preflight
+    // classifies `bad/id` before any IO, matching the delete path's behaviour.
+    const result = await createMutateRemoteView(deps())(collection([writableView]), "phone", { op: "update", id: "bad/id", patch: { done: true } });
+    assert.deepEqual(result, { kind: "invalid-id", id: "bad/id" });
+  });
+
   it("refuses an empty patch and a missing record", async () => {
     assert.deepEqual(await createMutateRemoteView(deps())(collection([writableView]), "phone", { op: "update", id: "t1", patch: {} }), {
       kind: "invalid-patch",

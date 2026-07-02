@@ -16,6 +16,7 @@ import {
   readCustomViewHtml,
   readCustomViewI18n,
   readItem,
+  safeRecordId,
   writeItem,
   type CollectionCustomView,
   type CollectionItem,
@@ -140,6 +141,13 @@ async function updateViaView(
   // desync the file name from the record) even if an author listed it.
   const offending = patchKeys.find((key) => key === primaryKey || !allowed.has(key));
   if (offending) return { kind: "field-not-editable", field: offending };
+  // Classify a bad id BEFORE readItem — which returns null for an unsafe id, a
+  // path-escape, AND a genuinely-missing record alike — so update reports the
+  // same explicit `invalid-id` the delete path does (via deleteItem) instead of
+  // masking it as a 404. (A valid id whose dataDir escapes the workspace can
+  // hold no record, so it still resolves to item-not-found; a real write is
+  // additionally refused by writeItem's own containment guard below.)
+  if (safeRecordId(request.id) === null) return { kind: "invalid-id", id: request.id };
   const existing = await deps.readItem(collection.dataDir, request.id, { slug: collection.slug });
   if (!existing) return { kind: "item-not-found", id: request.id };
   const merged: CollectionItem = { ...existing, ...request.patch, [primaryKey]: request.id };

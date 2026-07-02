@@ -16,6 +16,7 @@ export {
   readItem,
   writeItem,
   deleteItem,
+  safeRecordId,
   generateItemId,
   resolveCreateItemId,
   readSkillTemplate,
