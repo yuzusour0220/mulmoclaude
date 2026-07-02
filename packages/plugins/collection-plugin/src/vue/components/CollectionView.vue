@@ -1369,9 +1369,14 @@ async function loadCollection(slug: string): Promise<void> {
   // A `?selected=<id>` deep link opens that record in read-only
   // mode once its items are available. Guard against a stale load:
   // only act if we're still on the slug that triggered this fetch.
+  // Deliberately DON'T force calendar view here: the earlier
+  // `maybeOpenCalendarForSelected` behaviour also wrote "calendar" to
+  // localStorage, permanently overriding the user's table/kanban
+  // preference for that collection. Deep-linked records open in the
+  // user's saved view; if they want the calendar day popup, they can
+  // switch to calendar from the header (#1675).
   if (collection.value?.slug === slug) {
     syncViewToSelected();
-    maybeOpenCalendarForSelected();
   }
   maybeAutoRefreshFeed(slug);
 }
@@ -2141,18 +2146,6 @@ function onDayClose(): void {
   openDay.value = null;
   if (editing.value) closeEditor();
   closeView();
-}
-
-/** Deep-link entry: a `?selected=<id>` link to a calendar-capable collection
- *  opens in calendar view with the popup focused on the record's day. Runs
- *  on load / slug change only (not on in-app selection), so table users
- *  aren't forced into the calendar. */
-function maybeOpenCalendarForSelected(): void {
-  if (embedded.value || !hasCalendar.value || !viewing.value) return;
-  const day = dayOfItem(viewing.value);
-  if (!day) return;
-  view.value = "calendar";
-  openDay.value = day;
 }
 
 /** Kanban card dropped in a column → set the record's group field to the
