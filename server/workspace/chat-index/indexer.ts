@@ -9,6 +9,7 @@
 // ~/mulmoclaude.
 
 import { readdir, readFile, rm, stat } from "node:fs/promises";
+import path from "node:path";
 import { defaultSummarize, loadJsonlInput, type SummarizeFn } from "./summarizer.js";
 import { chatDirFor, indexEntryPathFor, manifestPathFor, sessionJsonlPathFor, sessionMetaPathFor } from "./paths.js";
 import type { ChatIndexEntry, ChatIndexManifest } from "./types.js";
@@ -166,10 +167,11 @@ export async function isFresh(workspaceRoot: string, sessionId: string, now: num
 //    would return null downstream anyway, but we short-circuit).
 //  - Otherwise → jsonl mtime > entry.indexedAt.
 export async function sessionJsonlChangedSinceIndex(workspaceRoot: string, sessionId: string): Promise<boolean> {
-  if (!isSafeSessionId(sessionId)) return false;
+  const safeId = safeSessionIdOrNull(sessionId);
+  if (safeId === null) return false;
   let indexedMs: number | null = null;
   try {
-    const raw = await readFile(indexEntryPathFor(workspaceRoot, sessionId), "utf-8");
+    const raw = await readFile(indexEntryPathFor(workspaceRoot, safeId), "utf-8");
     const entry: unknown = JSON.parse(raw);
     if (isRecord(entry)) {
       const { indexedAt } = entry as Record<string, unknown>;
@@ -183,7 +185,7 @@ export async function sessionJsonlChangedSinceIndex(workspaceRoot: string, sessi
   }
   if (indexedMs === null) return true;
   try {
-    const info = await stat(sessionJsonlPathFor(workspaceRoot, sessionId));
+    const info = await stat(sessionJsonlPathFor(workspaceRoot, safeId));
     return info.mtimeMs > indexedMs;
   } catch {
     return false;
@@ -191,16 +193,27 @@ export async function sessionJsonlChangedSinceIndex(workspaceRoot: string, sessi
 }
 
 // Path-traversal guard for session IDs used to derive on-disk paths.
-// Same shape as `server/api/bridge/sessionRole.ts`'s
-// `SAFE_SESSION_ID_RE` — kept local here so the workspace layer
-// doesn't need to reach uphill into the routes layer. Rejects any id
-// containing `..` (belt-and-suspenders — a whole-string `..` passes
-// the class alone) so `path.join(dir, "<id>.jsonl")` cannot escape
-// the chat dir even if a route handler forwards an unvalidated URL
-// param down to us.
+// Two-step check so both a static analyser (CodeQL taints
+// `sessionId` as a possible route-param input) AND a human reader
+// can convince themselves the derived path stays inside the chat
+// dir:
+//
+//   1. `path.basename()` collapses any `..` / separator to the last
+//      segment. CodeQL recognises this as a barrier — a value whose
+//      taint originates upstream is neutralised here.
+//   2. `SAFE_SESSION_ID_RE` narrows the character class further
+//      (word chars, `.`, `-`, up to 200 long) and rejects any
+//      `..` substring, mirroring `server/api/bridge/sessionRole.ts`.
+//
+// Returns the cleaned id on success (identical to the input for
+// legit ids) or `null` on any hostile / malformed input.
 const SAFE_SESSION_ID_RE = /^[\w.-]{1,200}$/;
-function isSafeSessionId(sessionId: string): boolean {
-  return SAFE_SESSION_ID_RE.test(sessionId) && !sessionId.includes("..");
+function safeSessionIdOrNull(sessionId: string): string | null {
+  const basename = path.basename(sessionId);
+  if (basename !== sessionId) return null;
+  if (!SAFE_SESSION_ID_RE.test(basename)) return null;
+  if (basename.includes("..")) return null;
+  return basename;
 }
 
 // --- session metadata ----------------------------------------------
