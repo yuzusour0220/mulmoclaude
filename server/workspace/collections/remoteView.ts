@@ -10,9 +10,21 @@
 // its status; the channel handler converts non-ok to a thrown error via
 // `remoteViewFailureMessage`. Factory keeps the mapping unit-testable with the
 // engine stubbed.
-import { buildRemoteViewSrcdoc, REMOTE_VIEW_MAX_BYTES, type RemoteViewMutateRequest } from "@mulmoclaude/core/remote-view";
+import {
+  buildRemoteViewSrcdoc,
+  clampImageMaxEdge,
+  pageFromItems,
+  REMOTE_VIEW_ITEMS_MAX_BYTES,
+  REMOTE_VIEW_MAX_BYTES,
+  type RemoteViewItem,
+  type RemoteViewMutateRequest,
+  type RemoteViewPage,
+  type RemoteViewPageRequest,
+} from "@mulmoclaude/core/remote-view";
+import { deriveAll } from "@mulmoclaude/core/collection";
 import {
   deleteItem,
+  listItems,
   readCustomViewHtml,
   readCustomViewI18n,
   readItem,
@@ -20,8 +32,10 @@ import {
   writeItem,
   type CollectionCustomView,
   type CollectionItem,
+  type CollectionSchema,
   type LoadedCollection,
 } from "./index.js";
+import { resolveThumbnail } from "../../utils/files/thumbnail-store.js";
 
 export interface RemoteViewInfo {
   id: string;
@@ -104,6 +118,7 @@ export interface MutateRemoteViewDeps {
   readItem: typeof readItem;
   writeItem: typeof writeItem;
   deleteItem: typeof deleteItem;
+  resolveThumbnail: typeof resolveThumbnail;
 }
 
 export const createMutateRemoteView =
@@ -113,9 +128,7 @@ export const createMutateRemoteView =
     if (!view) return { kind: "view-not-found", viewId };
     if (view.target !== "mobile") return { kind: "not-mobile", viewId };
     if (!isWritableView(view)) return { kind: "not-writable", viewId };
-    return request.op === "delete"
-      ? deleteViaView(deps, collection, view.allowDelete === true, request.id)
-      : updateViaView(deps, collection, view.editableFields ?? [], request);
+    return request.op === "delete" ? deleteViaView(deps, collection, view.allowDelete === true, request.id) : updateViaView(deps, collection, view, request);
   };
 
 async function deleteViaView(deps: MutateRemoteViewDeps, collection: LoadedCollection, allowDelete: boolean, itemId: string): Promise<MutateRemoteViewResult> {
@@ -130,13 +143,13 @@ async function deleteViaView(deps: MutateRemoteViewDeps, collection: LoadedColle
 async function updateViaView(
   deps: MutateRemoteViewDeps,
   collection: LoadedCollection,
-  editableFields: string[],
+  view: CollectionCustomView,
   request: Extract<RemoteViewMutateRequest, { op: "update" }>,
 ): Promise<MutateRemoteViewResult> {
   const { primaryKey } = collection.schema;
   const patchKeys = Object.keys(request.patch);
   if (patchKeys.length === 0) return { kind: "invalid-patch" };
-  const allowed = new Set(editableFields);
+  const allowed = new Set(view.editableFields ?? []);
   // The primary key is never patchable (it is the record id — renaming it would
   // desync the file name from the record) even if an author listed it.
   const offending = patchKeys.find((key) => key === primaryKey || !allowed.has(key));
@@ -155,10 +168,110 @@ async function updateViaView(
   if (result.kind === "invalid-id") return { kind: "invalid-id", id: result.itemId };
   if (result.kind === "path-escape") return { kind: "path-escape" };
   if (result.kind === "conflict") return { kind: "item-not-found", id: result.itemId }; // unreachable: refuseOverwrite is false
-  return { kind: "ok", op: "update", item: result.item };
+  // The returned item must be shaped like a `getItems` item — with the view's
+  // declared image fields inlined as `data:` URLs — so a view that merges the
+  // result (as the help file recommends) doesn't clobber a good thumbnail with a
+  // bare path. No projection here (the whole record is returned), so inline every
+  // declared image-type field. Budget the thumbnail against the serialized item
+  // (same as the page builder) so a record with large text/markdown fields can't
+  // push the mutate result over the command-document cap — over budget, the field
+  // stays a path (placeholder), never a doc-write failure.
+  const item = result.item as RemoteViewItem;
+  const imageFields = inlineFields(view, collection.schema, undefined);
+  if (imageFields.length > 0) {
+    const budget = REMOTE_VIEW_ITEMS_MAX_BYTES - Buffer.byteLength(JSON.stringify(item), "utf8");
+    await inlineImages([item], imageFields, clampImageMaxEdge(view.imageMaxEdge), deps.resolveThumbnail, Math.max(0, budget));
+  }
+  return { kind: "ok", op: "update", item: item as CollectionItem };
 }
 
-export const mutateRemoteView = createMutateRemoteView({ readItem, writeItem, deleteItem });
+export const mutateRemoteView = createMutateRemoteView({ readItem, writeItem, deleteItem, resolveThumbnail });
+
+// ── Item pages with inlined image thumbnails (phase 5 — plans/feat-remote-view-images.md) ──
+// A mobile view's `getItems`, view-aware so it can inline the `imageFields` its
+// declaration whitelists: derive computed fields → slice/project (the phase-2
+// page semantics) → replace each declared image-type field's workspace path with
+// a downscaled `data:` URL thumbnail, within a per-page byte budget so the 1 MiB
+// command doc is never risked. Shared by the `getRemoteViewItems` channel handler
+// (phone) and the `…/remote-view/:viewId/items` HTTP route (desktop preview).
+
+export type RemoteViewItemsResult =
+  { kind: "ok"; page: RemoteViewPage; inlined: number; omitted: number } | { kind: "view-not-found"; viewId: string } | { kind: "not-mobile"; viewId: string };
+
+export interface RemoteViewItemsDeps {
+  listItems: typeof listItems;
+  resolveThumbnail: typeof resolveThumbnail;
+}
+
+/** The declared image fields that are actually inlineable this page: image-type
+ *  in the schema AND kept by the request's `fields` projection (a projection
+ *  that dropped the column ships no image bytes). A declared non-image field is
+ *  ignored, not an error. */
+function inlineFields(view: CollectionCustomView, schema: CollectionSchema, requested: string[] | undefined): string[] {
+  const declared = view.imageFields ?? [];
+  if (declared.length === 0) return [];
+  const kept = requested ? new Set([schema.primaryKey, ...requested]) : null;
+  return declared.filter((name) => schema.fields[name]?.type === "image" && (kept === null || kept.has(name)));
+}
+
+/** Replace declared image paths with thumbnail `data:` URLs in place, stopping
+ *  once the accumulated thumbnail bytes would exceed `budget` — a field left as
+ *  its path (over budget, unresolvable, or already inlined) counts as `omitted`
+ *  and the view renders it as a placeholder. */
+async function inlineImages(
+  items: RemoteViewItem[],
+  fields: string[],
+  maxEdge: number,
+  resolve: typeof resolveThumbnail,
+  budget: number,
+): Promise<{ inlined: number; omitted: number }> {
+  let used = 0;
+  let inlined = 0;
+  let omitted = 0;
+  for (const item of items) {
+    for (const field of fields) {
+      const value = item[field];
+      if (typeof value !== "string" || value.length === 0 || value.startsWith("data:")) continue;
+      const dataUrl = used < budget ? await resolve(value, maxEdge) : null;
+      if (dataUrl && used + dataUrl.length <= budget) {
+        item[field] = dataUrl;
+        used += dataUrl.length;
+        inlined += 1;
+      } else {
+        omitted += 1;
+      }
+    }
+  }
+  return { inlined, omitted };
+}
+
+export const createRemoteViewItems =
+  (deps: RemoteViewItemsDeps) =>
+  async (collection: LoadedCollection, viewId: string, request: RemoteViewPageRequest): Promise<RemoteViewItemsResult> => {
+    const view = (collection.schema.views ?? []).find((entry) => entry.id === viewId);
+    if (!view) return { kind: "view-not-found", viewId };
+    if (view.target !== "mobile") return { kind: "not-mobile", viewId };
+    // Derive record-local formulas with an empty ref cache — same as the phase-2
+    // channel handlers and the preview, so `getItems` numbers match the desktop.
+    const derived = (await deps.listItems(collection.dataDir)).map((item) => deriveAll(collection.schema, item, {}) as RemoteViewItem);
+    const page = pageFromItems(derived, request, collection.schema.primaryKey);
+    const fields = inlineFields(view, collection.schema, request.fields);
+    if (fields.length === 0) return { kind: "ok", page, inlined: 0, omitted: 0 };
+    // Budget the thumbnails against what's left of the doc after the (tiny,
+    // path-only) base JSON, so the serialized page stays under the cap.
+    const budget = REMOTE_VIEW_ITEMS_MAX_BYTES - Buffer.byteLength(JSON.stringify(page), "utf8");
+    const { inlined, omitted } = await inlineImages(page.items, fields, clampImageMaxEdge(view.imageMaxEdge), deps.resolveThumbnail, Math.max(0, budget));
+    return { kind: "ok", page, inlined, omitted };
+  };
+
+export const remoteViewItems = createRemoteViewItems({ listItems, resolveThumbnail });
+
+/** Message per non-ok item-page kind — shared by the channel handler (throws)
+ *  and the HTTP route (sends with the matching status). */
+export function remoteViewItemsFailureMessage(result: Exclude<RemoteViewItemsResult, { kind: "ok" }>, slug: string): string {
+  if (result.kind === "not-mobile") return `custom view '${result.viewId}' is not a mobile view — declare target: "mobile" in its views[] entry`;
+  return `custom view '${result.viewId}' not found on collection '${slug}'`;
+}
 
 /** Message per non-ok mutate kind — shared by the channel handler (throws) and
  *  the HTTP route (sends with the matching status). */

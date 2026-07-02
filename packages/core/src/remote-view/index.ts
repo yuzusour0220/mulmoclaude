@@ -40,6 +40,17 @@ export const MAX_PAGE_LIMIT = 200;
  *  command document (1 MiB total), so leave envelope headroom. */
 export const REMOTE_VIEW_MAX_BYTES = 900_000;
 
+/** Hard cap on ONE `getItems` page (phase 5 — plans/feat-remote-view-images.md).
+ *  Same 1 MiB command-document envelope as the srcdoc: when a view inlines image
+ *  fields as `data:` URLs, the host stops inlining once the serialized page would
+ *  exceed this, leaving the remaining image fields as their original path (which
+ *  the view renders as a placeholder). Guards the doc-write from ever failing. */
+export const REMOTE_VIEW_ITEMS_MAX_BYTES = 900_000;
+
+/** Default longest-edge (px) a remote view's inlined image thumbnail is
+ *  downscaled to; a view may override via `imageMaxEdge`. */
+export const DEFAULT_IMAGE_MAX_EDGE = 512;
+
 /** In-iframe `getItems` timeout — matches the remote client's `callHost`
  *  response timeout so the two layers give up together. */
 const GET_ITEMS_TIMEOUT_MS = 30_000;
@@ -73,6 +84,14 @@ export const clampLimit = (value: unknown): number => {
   const num = toInt(value);
   if (num === null || num <= 0) return DEFAULT_PAGE_LIMIT;
   return Math.min(num, MAX_PAGE_LIMIT);
+};
+
+/** Clamp an `imageMaxEdge` (arrives as untyped schema/JSON) to [64, 1024];
+ *  default 512. Keeps a runaway edge from defeating the thumbnail's purpose. */
+export const clampImageMaxEdge = (value: unknown): number => {
+  const num = toInt(value);
+  if (num === null || num <= 0) return DEFAULT_IMAGE_MAX_EDGE;
+  return Math.min(Math.max(num, 64), 1024);
 };
 
 /** Coerce a `fields` projection list from untyped message JSON. */

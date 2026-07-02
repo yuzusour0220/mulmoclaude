@@ -9,7 +9,7 @@
 
 import type { Component } from "vue";
 import type { TranslateTransport } from "@mulmoclaude/core/translation/client";
-import type { RemoteViewMutateRequest } from "@mulmoclaude/core/remote-view";
+import type { RemoteViewMutateRequest, RemoteViewPage, RemoteViewPageRequest } from "@mulmoclaude/core/remote-view";
 import type {
   CollectionDetailResponse,
   ItemMutationResponse,
@@ -104,6 +104,18 @@ export interface CollectionRemoteViewResult {
  *  and the phone client see the identical shape
  *  (plans/feat-remote-writable-view.md). */
 export type CollectionRemoteViewMutateResult = { op: "update"; item: CollectionItem } | { op: "delete"; id: string };
+
+/** Server response for `fetchRemoteViewItems` — one page of a mobile view's
+ *  records with its declared `imageFields` already inlined as `data:` URL
+ *  thumbnails host-side. `inlined` / `omitted` count how many images fit the
+ *  per-page byte budget (surfaced while the user iterates on the view).
+ *  Mirrors the command channel's `getRemoteViewItems` result so preview ===
+ *  phone (plans/feat-remote-view-images.md). */
+export interface CollectionRemoteViewItemsResult {
+  page: RemoteViewPage;
+  inlined: number;
+  omitted: number;
+}
 
 /** Server response shape for `fetchViewI18n` — already locale-picked + flat.
  *  `locale === ""` means no translations were available (view has no `i18n`
@@ -227,6 +239,13 @@ export interface CollectionUi {
    *  paired with `fetchRemoteView`: a host without the remote-view surface omits
    *  both. */
   mutateRemoteView?: (slug: string, viewId: string, request: RemoteViewMutateRequest) => Promise<CollectionApiResult<CollectionRemoteViewMutateResult>>;
+  /** Page a mobile view's records with its declared `imageFields` inlined as
+   *  `data:` URL thumbnails host-side (`apiGet` over
+   *  `API_ROUTES.collections.remoteViewItems`, global bearer) — the phone-frame
+   *  preview's paging source (it cannot resize/read the workspace itself, so it
+   *  fetches the same host page the phone will). Optional + paired with
+   *  `fetchRemoteView`. */
+  fetchRemoteViewItems?: (slug: string, viewId: string, request: RemoteViewPageRequest) => Promise<CollectionApiResult<CollectionRemoteViewItemsResult>>;
   /** Wrap a custom view's HTML in a sandboxed `<iframe srcdoc>` with the token +
    *  data URL injected and the host's CSP applied. Replaces the host's
    *  `buildCustomViewSrcdoc`. */

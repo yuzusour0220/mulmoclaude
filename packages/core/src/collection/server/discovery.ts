@@ -252,6 +252,14 @@ const CustomViewSchema = z.object({
   // Ignored for desktop views (they use the token-scoped `capabilities` above).
   editableFields: z.array(z.string().trim().min(1)).optional(),
   allowDelete: z.boolean().optional(),
+  // Mobile-only image inlining (plans/feat-remote-view-images.md). A
+  // `target: "mobile"` view can't reach the host's localhost, so an `image`-type
+  // field's workspace path is unrenderable on the phone; listing it here makes
+  // the host inline it as a downscaled `data:` URL thumbnail in getItems pages.
+  // Opt-in (absent ⇒ none), projection- and budget-bounded host-side. Ignored
+  // for desktop views (they resolve via /api/files/raw).
+  imageFields: z.array(z.string().trim().min(1)).optional(),
+  imageMaxEdge: z.number().int().min(1).optional(),
 });
 
 // Recurrence advance for `spawn.every`. `interval` is a positive integer

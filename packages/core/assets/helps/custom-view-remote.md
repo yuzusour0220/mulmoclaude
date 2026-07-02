@@ -86,7 +86,8 @@ const page = await window.__MC_VIEW.getItems({
   Render the first page, then offer a **"Load more"** affordance while
   `items.length < total` (see the example).
 - **Always pass `fields`.** The projection keeps pages small (the primary key
-  is always included). List the columns your view actually renders.
+  is always included). List the columns your view actually renders — including
+  any `image`-type field you want inlined (see **Displaying images**).
 - The promise **rejects** on failure or after a 30 s timeout — catch it and
   show the message; don't fail silently.
 - **`derived` formulas that read only the record's own fields come back
@@ -136,8 +137,57 @@ const { id: removed } = await window.__MC_VIEW.deleteItem(id);
   optimistically update your local copy from the returned `item`, or re-call
   `getItems` to refetch. The preview's real write also refreshes the desktop
   collection, so you see the true result while iterating.
+- **The returned `item` is shaped like a `getItems` item** — the view's declared
+  `imageFields` come back inlined as `data:` URLs (not bare paths), so merging the
+  result (`items[i] = { ...items[i], ...res.item }`) keeps thumbnails intact.
 - **Create is not available** in this phase — `updateItem` only patches an
   existing record; use `startChat` to ask the agent to add a new one.
+
+### Displaying images — `imageFields`
+
+A collection's `image`-type field holds a **workspace path** (`data/attachments/…`,
+`artifacts/images/…`) that the phone can't fetch. To render it, list the field in
+the view's **`imageFields`** and the host inlines it as a **downscaled JPEG
+`data:` URL thumbnail** inside each `getItems` page — the value your view reads is
+then a ready-to-use `data:` URL, not a path.
+
+**1. Declare the image fields** in the `views[]` entry:
+
+```jsonc
+{
+  "id": "gallery",
+  "label": "Gallery",
+  "target": "mobile",
+  "file": "views/gallery.html",
+  "imageFields": ["photo"], // inline these image-type fields as thumbnails
+  "imageMaxEdge": 384        // optional longest-edge px (default 512, clamped [64, 1024])
+}
+```
+
+**2. Render the value as an image**, and **request the field** so it survives the
+projection (a field you don't list in `fields` is never inlined):
+
+```js
+const page = await window.__MC_VIEW.getItems({ offset: 0, limit: 20, fields: ["title", "photo"] });
+// page.items[0].photo === "data:image/jpeg;base64,…"  → <img src="…">
+```
+
+- **Only `image`-type fields listed in `imageFields` are inlined.** A non-image
+  field name is ignored; a field the page's `fields` projection dropped is not
+  inlined (so paging without the image column costs nothing).
+- **Thumbnails are downscaled**, longest edge `imageMaxEdge` (default 512). Keep
+  it small and keep pages small (`limit`): every inlined image travels inside the
+  size-capped page. The host enforces a **per-page byte budget** — once a page is
+  full, further images are **left as their original path** (which renders as a
+  broken/placeholder `<img>`), never dropped silently but never overflowing the
+  channel either. Fewer, smaller images per page = more reliably rendered.
+- **A field may come back as a path, not a `data:` URL** (over budget, missing
+  file, or an undecodable source). Handle both: `onerror` a placeholder, or check
+  for the `data:` prefix before rendering.
+- **Cost**: inlined thumbnails are the one thing that grows a page's bytes;
+  they're opt-in per view and per projection precisely so a view pays only for the
+  images it shows. The preview's caption reports `N images (M over budget)` so you
+  can size `imageMaxEdge` / `limit` against the budget while iterating.
 
 ### Starting a chat — `startChat`
 
@@ -190,8 +240,11 @@ than desktop views:
   HTML anyway (see the size budget).
 - **`<img>` / `<audio>` / `<video>` may load any `https:` URL** (plus `data:`
   / `blob:`) — a record's public image/media URL renders. A **workspace file
-  path does not** (it lives on this machine, which the phone can't reach):
-  treat `image`-type fields as desktop-only and skip or placeholder them.
+  path does not** by itself (it lives on this machine, which the phone can't
+  reach) — but the host **can inline a workspace `image`-type field** as a
+  downscaled `data:` URL thumbnail when the view declares it in `imageFields`;
+  see **Displaying images** below. `audio` / `video` and non-declared image
+  paths stay desktop-only (skip or placeholder them).
 - **Outbound links**: `<a href="…" target="_blank" rel="noopener">` opens
   normally; a same-tab `<a href>` is blocked by the sandbox.
 - No cookies, no `localStorage`, no parent access — and no token exists in
@@ -424,6 +477,57 @@ The core of `views/phone.html` (styles/`<head>` as above):
 
   load().catch(function (err) {
     document.getElementById("list").innerHTML = '<div class="err">' + err.message + "</div>";
+  });
+</script>
+```
+
+## Example — image gallery (inlined thumbnails)
+
+A phone-first photo grid. Schema has `title` (string) and `photo` (image, a
+workspace path). Registration declares the image field + a small edge:
+`{ "id": "gallery", "label": "Gallery", "target": "mobile", "file": "views/gallery.html", "imageFields": ["photo"], "imageMaxEdge": 384 }`.
+`getItems` must **request `photo`** (else it isn't inlined); the host returns it
+as a `data:` URL, and a small `limit` keeps each page under the byte budget.
+
+The core of `views/gallery.html` (styles/`<head>` as in the first example):
+
+```html
+<div id="grid" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px"></div>
+<button id="more" class="more" hidden>Load more</button>
+<script>
+  var loaded = [];
+  var total = 0;
+  var PAGE = 20; // small: every inlined thumbnail travels inside the page
+
+  function tile(item) {
+    var el = document.createElement("div");
+    el.className = "card";
+    var src = typeof item.photo === "string" && item.photo.indexOf("data:") === 0 ? item.photo : "";
+    el.innerHTML =
+      '<img loading="lazy" alt="" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:10px;background:#e2e8f0">' + "<b></b>";
+    if (src) el.querySelector("img").src = src; // else leave the placeholder background
+    el.querySelector("b").textContent = item.title || item.id;
+    return el;
+  }
+
+  async function loadMore() {
+    var page = await window.__MC_VIEW.getItems({ offset: loaded.length, limit: PAGE, fields: ["title", "photo"] });
+    total = page.total;
+    loaded = loaded.concat(page.items);
+    var grid = document.getElementById("grid");
+    page.items.forEach(function (item) {
+      grid.appendChild(tile(item));
+    });
+    document.getElementById("more").hidden = loaded.length >= total;
+  }
+
+  document.getElementById("more").onclick = function () {
+    loadMore().catch(function (e) {
+      alert(e.message);
+    });
+  };
+  loadMore().catch(function (e) {
+    document.getElementById("grid").innerHTML = '<div class="err">' + e.message + "</div>";
   });
 </script>
 ```

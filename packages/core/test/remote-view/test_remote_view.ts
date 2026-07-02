@@ -5,10 +5,12 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  DEFAULT_IMAGE_MAX_EDGE,
   REMOTE_VIEW_MESSAGES,
   REMOTE_VIEW_PROTOCOL,
   buildRemoteViewCsp,
   buildRemoteViewSrcdoc,
+  clampImageMaxEdge,
   clampLimit,
   clampOffset,
   handleRemoteViewMessage,
@@ -91,6 +93,15 @@ describe("clamps + projection", () => {
     assert.deepEqual(normalizeFields(["title", " ", 3, "start"]), ["title", "start"]);
     assert.equal(normalizeFields([]), undefined);
     assert.equal(normalizeFields("title"), undefined);
+  });
+
+  it("clampImageMaxEdge defaults and bounds the thumbnail edge to [64, 1024]", () => {
+    assert.equal(clampImageMaxEdge(undefined), DEFAULT_IMAGE_MAX_EDGE);
+    assert.equal(clampImageMaxEdge(0), DEFAULT_IMAGE_MAX_EDGE);
+    assert.equal(clampImageMaxEdge(-10), DEFAULT_IMAGE_MAX_EDGE);
+    assert.equal(clampImageMaxEdge(16), 64);
+    assert.equal(clampImageMaxEdge(9999), 1024);
+    assert.equal(clampImageMaxEdge("384"), 384);
   });
 
   it("projectItems keeps the primary key and only the listed fields", () => {

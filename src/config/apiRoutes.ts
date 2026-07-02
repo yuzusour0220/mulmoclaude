@@ -306,6 +306,13 @@ const HOST_API_ROUTES = {
      *  command channel's `mutateRemoteViewItem` uses, so preview === phone
      *  (plans/feat-remote-writable-view.md). */
     remoteViewMutate: "/api/collections/:slug/remote-view/:viewId/mutate",
+    /** GET ?offset&limit&fields=<csv> → one page of a `target: "mobile"` view's
+     *  records with its declared `imageFields` inlined as `data:` URL thumbnails
+     *  (global-bearer auth) → { page, inlined, omitted }. Same builder as the
+     *  command channel's `getRemoteViewItems`, so the desktop phone-frame preview
+     *  pages the exact data (incl. real thumbnails) the phone will
+     *  (plans/feat-remote-view-images.md). */
+    remoteViewItems: "/api/collections/:slug/remote-view/:viewId/items",
     /** GET ?id=<viewId>&locale=<tag> → translation dict for one custom view
      *  (global-bearer auth) → { locale, dict }. `dict` is the host-picked
      *  flat map for the requested locale (fallback `"en"`, else `{}`); the
