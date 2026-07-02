@@ -53,6 +53,13 @@ describe("extractTextResponseTitle", () => {
 });
 
 describe("truncateForRender", () => {
+  it("holds the preview <= cap invariant so truncation math never overshoots", () => {
+    assert.ok(
+      RENDER_TRUNCATE_PREVIEW_CHARS <= RENDER_TRUNCATE_CHARS,
+      `RENDER_TRUNCATE_PREVIEW_CHARS (${RENDER_TRUNCATE_PREVIEW_CHARS}) must be <= RENDER_TRUNCATE_CHARS (${RENDER_TRUNCATE_CHARS})`,
+    );
+  });
+
   it("returns the text unchanged when under the cap", () => {
     const text = "Normal reply.";
     const result = truncateForRender(text);

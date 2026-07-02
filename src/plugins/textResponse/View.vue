@@ -18,6 +18,18 @@
             <span class="material-icons text-gray-400 text-base shrink-0 group-open:rotate-180 transition-transform">expand_more</span>
           </summary>
           <div class="border-t border-purple-200 p-4 bg-white rounded-b-lg">
+            <div
+              v-if="truncationInfo.wasTruncated"
+              class="mb-3 p-3 rounded border border-amber-300 bg-amber-50 text-amber-900 text-sm"
+              data-testid="text-response-seeded-truncation-banner"
+            >
+              {{
+                t("pluginTextResponse.truncatedForRender", {
+                  omitted: truncationInfo.omittedChars.toLocaleString(locale),
+                  total: truncationInfo.originalChars.toLocaleString(locale),
+                })
+              }}
+            </div>
             <!-- eslint-disable vue/no-v-html -- marked.parse output of the plugin-seeded prompt; trusted in-process render matching the standard textResponse path. Multi-line element so disable/enable pair (CLAUDE.md UI rule). -->
             <div ref="markdownContainerRef" class="markdown-content prose prose-slate max-w-none" @click="openLinksInNewTab" v-html="renderedHtml"></div>
             <!-- eslint-enable vue/no-v-html -->
@@ -69,8 +81,8 @@
                 >
                   {{
                     t("pluginTextResponse.truncatedForRender", {
-                      omitted: truncationInfo.omittedChars.toLocaleString(),
-                      total: truncationInfo.originalChars.toLocaleString(),
+                      omitted: truncationInfo.omittedChars.toLocaleString(locale),
+                      total: truncationInfo.originalChars.toLocaleString(locale),
                     })
                   }}
                 </div>
@@ -124,7 +136,7 @@ import { useClipboardCopy } from "../../composables/useClipboardCopy";
 import { buildPdfFilename } from "../../utils/files/filename";
 import { extractTextResponseTitle, truncateForRender } from "./utils";
 
-const { t } = useI18n();
+const { t, locale } = useI18n();
 const appApi = useAppApi();
 
 const props = withDefaults(
