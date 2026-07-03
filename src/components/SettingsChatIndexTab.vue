@@ -29,7 +29,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { apiGet, apiPut } from "../utils/api";
+import { apiGet, apiPut, type ApiResult } from "../utils/api";
 import { API_ROUTES } from "../config/apiRoutes";
 
 const CHAT_INDEX_MODES = ["off", "haiku", "sonnet"] as const;
@@ -80,8 +80,6 @@ async function load(): Promise<void> {
 async function save(): Promise<void> {
   if (saving.value) return;
   if (modeDraft.value === storedMode.value) return;
-  // Capture the submitted value before await — a concurrent draft change
-  // would otherwise overwrite `storedMode` with a not-yet-saved value.
   const requested = modeDraft.value;
   saving.value = true;
   errorMessage.value = "";
@@ -92,16 +90,23 @@ async function save(): Promise<void> {
   const payload = { chatIndex: requested === "off" ? null : requested };
   const response = await apiPut<unknown>(API_ROUTES.config.settings, payload);
   saving.value = false;
+  applySaveOutcome(response, requested);
+}
+
+// On failure with drift, respect the user's newer selection and retry.
+// On failure without drift, revert modeDraft so re-selecting the same
+// option fires @change again — otherwise the select value hasn't
+// changed and the user is stuck with no way to retry.
+function applySaveOutcome(response: ApiResult<unknown>, requested: ChatIndexMode): void {
   if (!response.ok) {
     errorMessage.value = response.error || t("settingsModal.chatIndexTab.saveError");
+    if (modeDraft.value !== requested) void save();
+    else modeDraft.value = storedMode.value;
     return;
   }
   storedMode.value = requested;
   emit("saved");
-  // If the user changed the draft while we were in flight, re-trigger.
-  if (modeDraft.value !== requested) {
-    void save();
-  }
+  if (modeDraft.value !== requested) void save();
 }
 
 watch(

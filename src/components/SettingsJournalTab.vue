@@ -29,7 +29,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { apiGet, apiPut } from "../utils/api";
+import { apiGet, apiPut, type ApiResult } from "../utils/api";
 import { API_ROUTES } from "../config/apiRoutes";
 
 const JOURNAL_MODES = ["off", "haiku", "sonnet"] as const;
@@ -88,15 +88,23 @@ async function save(): Promise<void> {
   const payload = { journal: requested === "off" ? null : requested };
   const response = await apiPut<unknown>(API_ROUTES.config.settings, payload);
   saving.value = false;
+  applySaveOutcome(response, requested);
+}
+
+// On failure with drift, respect the user's newer selection and retry.
+// On failure without drift, revert modeDraft so re-selecting the same
+// option fires @change again — otherwise the select value hasn't
+// changed and the user is stuck with no way to retry.
+function applySaveOutcome(response: ApiResult<unknown>, requested: JournalMode): void {
   if (!response.ok) {
     errorMessage.value = response.error || t("settingsModal.journalTab.saveError");
+    if (modeDraft.value !== requested) void save();
+    else modeDraft.value = storedMode.value;
     return;
   }
   storedMode.value = requested;
   emit("saved");
-  if (modeDraft.value !== requested) {
-    void save();
-  }
+  if (modeDraft.value !== requested) void save();
 }
 
 watch(
