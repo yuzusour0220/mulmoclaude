@@ -234,11 +234,22 @@ distinct from "the ref actually resolves" (clientId is a valid slug AND
      so the user can fill them in later.
    - **not a valid slug** (contains uppercase, spaces, `&`, `.`, etc.) →
      (a) generate the slug (lowercase, spaces → `-`, drop punctuation,
-     collapse repeat hyphens), (b) create `data/clients/items/<slug>.json`
-     with `id: <slug>`, `name: <original display value>`, other fields
-     blank, (c) rewrite the raw display value inside every affected
-     `data/worklog/items/*.json` to the new slug in the `clientId` field
-     (preserve every other field untouched).
+     collapse repeat hyphens); (b) **check for slug collisions BEFORE
+     writing anything**: if `data/clients/items/<slug>.json` already
+     exists AND its `name` field does not match the display value being
+     reconciled, stop and disambiguate — either append a numeric suffix
+     (`acme-corp-2`) after confirming the new client is genuinely
+     distinct, or ask the user which client the worklog entries belong
+     to. Do **not** silently overwrite an existing client. Also stop
+     when two different display values in the current inventory
+     slugify to the same slug (e.g. `"ACME Corp"` and `"Acme Corp."`);
+     ask the user whether they're the same client (merge to one slug)
+     or distinct (assign each a suffixed slug). (c) create
+     `data/clients/items/<slug>.json` with `id: <slug>`, `name:
+     <original display value>`, other fields blank; (d) rewrite the raw
+     display value inside every affected `data/worklog/items/*.json`
+     to the new slug in the `clientId` field (preserve every other
+     field untouched).
 3. **Report** what changed: how many client records were created and how
    many worklog `clientId` values were rewritten. Do not summarise the
    raw records — point at `/collections/clients` and `/collections/worklog`.
