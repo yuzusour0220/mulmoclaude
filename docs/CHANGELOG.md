@@ -10,6 +10,47 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 ---
 
+## [0.9.3] - 2026-07-03
+
+Two threads dominate this release: **writable remote custom views for the mobile companion** (phase 3–5 of the remote-view work — mobile-optimised LLM-generated views, update/delete over the Firestore channel, and inlined workspace image thumbnails so the phone doesn't reach localhost) and a **batch of correctness fixes** across chat UI, long-message rendering, collection deep-links, notification icon clashes, and the billing recipe. Plus the new CI gate that enforces launcher ↔ shared-package sync (root cause of #1920). 38 non-merge commits since 0.9.2.
+
+### Added
+
+- **Remote custom views — phase 3** ([#1932](https://github.com/receptron/mulmoclaude/pull/1932)) — collection views can now specify `target: "mobile"`, and the desktop shows a phone-frame preview. `getRemoteView` handler lets the mobile companion (mulmoserver) fetch these views over the Firestore command channel.
+- **Remote custom views — phase 4** ([#1933](https://github.com/receptron/mulmoclaude/pull/1933)) — writable mobile views: `mutateRemoteView` handler supports update/delete of records from the phone, with derived-field resolution + clone-safe preview pages so edits round-trip cleanly.
+- **Remote custom views — phase 5** ([#1938](https://github.com/receptron/mulmoclaude/pull/1938)) — workspace image thumbnails inlined into the mobile response (via `sharp`), so the phone never has to reach localhost. Includes thumbnail budget mutation, invalid-id reporting on update, and log hygiene per review.
+
+### Changed
+
+- **launcher-sync CI gate — strict lockstep** ([#1927](https://github.com/receptron/mulmoclaude/pull/1927)) — added invariants 4 (launcher range lower bound == workspace source, strict) and 5 (`gui-chat-protocol` peer dep major.minor == launcher pin major.minor) to `scripts/mulmoclaude/launcherSync.mjs`. Enforces the class of drift that caused [#1920](https://github.com/receptron/mulmoclaude/issues/1920) at PR time.
+- **`bin/mulmoclaude.js` reads version from `package.json`** ([#1925](https://github.com/receptron/mulmoclaude/pull/1925)) — no more hardcoded string that silently drifts every publish. `--version` now always matches the shipped `package.json`.
+- **Chat-index scheduler skips unchanged sessions** ([#1930](https://github.com/receptron/mulmoclaude/pull/1930), tracking [#1929](https://github.com/receptron/mulmoclaude/issues/1929)) — before this fix, the hourly `system:chat-index` scheduler re-summarised every session every hour regardless of whether the jsonl had changed. Now only sessions whose jsonl mtime is newer than the last index get re-processed; the CLI call rate drops from `O(sessions × 24)` to `O(actually-touched sessions × 24)` per day on a busy workspace.
+- **billing-clients-worklog recipe reconciles pre-existing data** ([#1941](https://github.com/receptron/mulmoclaude/pull/1941), tracking [#1626](https://github.com/receptron/mulmoclaude/issues/1626)) — the recipe now includes a mandatory reconcile step that inventories existing worklog rows, slugifies non-slug `clientId` values (with slug-contract enforcement + empty/oversize fallbacks + collision detection), and rewrites worklog rows in lockstep. Prevents the "setup looks done but ref links break" trap when a user has legacy worklog data with display-name `clientId` values.
+- **Session role icons** ([#1942](https://github.com/receptron/mulmoclaude/pull/1942), tracking [#1684](https://github.com/receptron/mulmoclaude/issues/1684)) — General → `auto_awesome`, Debug → `bug_report`, unknown-role fallback → `smart_toy`. Was `star` on all three, colliding with the PinToggle's ★ (favourite) glyph for collection shortcuts.
+
+### Fixed
+
+- **Chat UI silently loses events mid-turn** ([#1934](https://github.com/receptron/mulmoclaude/pull/1934), tracking [#1915](https://github.com/receptron/mulmoclaude/issues/1915)) — three complementary fixes so the "考え中…" indicator can never stick when the server actually finished. Immediate `isRunning=false` on `session_finished`, new `usePubSub().onReconnect()` API for socket.io reconnect catch-up, and a `document.visibilitychange` handler that covers Safari's silent tab throttling (WS stays "connected" server-side while delivery stops client-side).
+- **Safari freezes on model degenerate-repetition output** ([#1936](https://github.com/receptron/mulmoclaude/pull/1936), tracking [#1863](https://github.com/receptron/mulmoclaude/issues/1863)) — cap the string fed into `marked()` at 100k chars in the text-response view. Opus 4.8's repeat-word bug could produce 30k `<p>` elements per message; Safari's layout/paint froze for minutes. Now shows a truncation banner + preview slice; the full raw text is still one click away via the Copy button. Localised across all 8 locales.
+- **`?selected=<id>` deep-link no longer forces calendar view** ([#1939](https://github.com/receptron/mulmoclaude/pull/1939), tracking [#1675](https://github.com/receptron/mulmoclaude/issues/1675)) — Bell-notification deep-links now open the record modal in the user's saved view mode (table / kanban / calendar) instead of always switching to calendar and writing "calendar" into localStorage. e2e tests updated to assert the new contract.
+- **`sharp` was missing from launcher `dependencies`** ([#1938](https://github.com/receptron/mulmoclaude/pull/1938)) — the remote-view thumbnail flow added a `sharp` import to `server/*` but the launcher `package.json` never declared it, so `npx mulmoclaude` would `ERR_MODULE_NOT_FOUND` on the first thumbnail request. `deps.mjs` gate would have caught it; adding the entry closes the gap.
+- **CodeQL false-positive in remote-view sessionId sanitisation** ([#1937](https://github.com/receptron/mulmoclaude/pull/1937)) — switched to `path.basename` as the CodeQL-recognised path sanitizer; sessionId is now sanitised at every entry point.
+- **`chat-index` scheduler interval relaxed to 6h** ([#1931](https://github.com/receptron/mulmoclaude/pull/1931)) — hourly was excessive given the skip-unchanged optimisation; 6h keeps the summary fresh enough for the picker without CLI cost.
+
+### Internal
+
+- **Root ↔ launcher ↔ plugin peer dep sync gate** ([#1923](https://github.com/receptron/mulmoclaude/pull/1923)) — new `scripts/mulmoclaude/launcherSync.mjs` audits every PR for three invariants (root ↔ launcher common dep range identical, workspace source satisfies launcher range, plugin `peerDependencies` satisfied by launcher pins). Catches the [#1920](https://github.com/receptron/mulmoclaude/issues/1920) class of bug at PR time.
+- **CHANGELOG.md for 0.9.2 with PR / issue links** ([#1926](https://github.com/receptron/mulmoclaude/pull/1926)) — retroactive entry documenting the 30 PRs shipped in 0.9.2.
+- **Fix plan archived** ([#1935](https://github.com/receptron/mulmoclaude/pull/1935)) — `plans/fix-1915-chat-ui-stuck-mid-turn.md` → `plans/done/` after merge.
+
+### Cascade publishes
+
+- `@mulmoclaude/core` 0.7.0 → 0.7.1 → 0.8.0 → 0.8.1
+- `@mulmoclaude/collection-plugin` 0.6.0 → 0.7.0
+- `@mulmobridge/client` 0.1.4 → 0.1.5
+
+---
+
 ## [0.9.2] - 2026-07-02
 
 Two threads dominate this release: a **critical fresh-install regression on npm** (#1920 — bundled plugins silently dropped by `ERESOLVE overriding peer dependency`), and the first two phases of a **mobile remote channel** so a companion app can browse a workspace over Firestore. Plus share-as-zip landing in three phases, mermaid diagrams inside markdown finally rendering as diagrams, session-role continuity across `/switch` and HTTP `/connect`, a wiki-engine extraction into `@mulmoclaude/core/wiki`, and a new CI gate that catches the class of drift that caused #1920 in the first place. 30 PRs merged since 0.9.1.
