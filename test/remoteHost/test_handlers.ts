@@ -9,7 +9,7 @@ import { createListCollections, type ListCollectionsDeps } from "../../server/re
 
 describe("remote-host handler registry", () => {
   it("exposes every registered handler", () => {
-    for (const name of ["listCollections", "getCollection", "listShortcuts", "listFeeds", "getFeed", "startChat"]) {
+    for (const name of ["listCollections", "getCollection", "listShortcuts", "listSkills", "listFeeds", "getFeed", "startChat"]) {
       assert.equal(typeof handlers[name], "function", `missing handler: ${name}`);
     }
   });
@@ -35,6 +35,16 @@ describe("createListCollections", () => {
         { slug: "beta", title: "BETA", icon: "folder", source: "preset" },
       ],
     });
+  });
+
+  it("excludes feeds — feeds are served by listFeeds, not listCollections", async () => {
+    const discover = (async () => [
+      { slug: "alpha", source: "project" },
+      { slug: "news", source: "feed" },
+    ]) as unknown as ListCollectionsDeps["discover"];
+    const toSummary = ((col: { slug: string; source: string }) => ({ slug: col.slug, source: col.source })) as unknown as ListCollectionsDeps["toSummary"];
+    const handler = createListCollections({ discover, toSummary });
+    assert.deepEqual(await handler({}), { collections: [{ slug: "alpha", source: "project" }] });
   });
 
   it("returns an empty list when discovery finds nothing", async () => {
