@@ -233,6 +233,7 @@ const jaMessages = {
       model: "モデル",
       voice: "音声",
       chatIndex: "チャットインデックス",
+      journal: "ジャーナル",
       skills: "スキル",
       roles: "ロール",
     },
@@ -307,6 +308,24 @@ const jaMessages = {
         off: "インデックス作成: オフ",
         haiku: "Haiku でインデックス作成中",
         sonnet: "Sonnet でインデックス作成中",
+      },
+      loadError: "設定の読み込みに失敗しました",
+      saveError: "保存に失敗しました",
+    },
+    journalTab: {
+      description:
+        "ジャーナル日次パスの設定です。最近のチャットセッションを journal/*.md に要約し、恒久メモリ（memory.md）を抽出します。デフォルトは off。自動化系セッション（scheduler / system worker）はこの設定に関わらず常に除外されます。",
+      modeLabel: "ジャーナルのモデル",
+      helperText: "Haiku は安価。Sonnet は日次/トピックまとめの質が高くなります。毎時のパスはここが on の時のみ実行されます。",
+      mode: {
+        off: "オフ",
+        haiku: "Haiku",
+        sonnet: "Sonnet",
+      },
+      status: {
+        off: "ジャーナル: オフ",
+        haiku: "Haiku でジャーナル実行中",
+        sonnet: "Sonnet でジャーナル実行中",
       },
       loadError: "設定の読み込みに失敗しました",
       saveError: "保存に失敗しました",

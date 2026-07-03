@@ -268,6 +268,32 @@ describe("PUT /config/settings", () => {
     putSettingsHandler({ body: { chatIndex: "opus" } } as Request, res);
     assert.equal(state.status, 400);
   });
+
+  it("sets journal from a patch and roundtrips it", () => {
+    configMod.saveSettings({ extraAllowedTools: ["mcp__keep"] });
+    const { state, res } = mockRes();
+    putSettingsHandler({ body: { journal: "sonnet" } } as Request, res);
+    assert.equal(state.status, 200);
+    const persisted = configMod.loadSettings();
+    assert.equal(persisted.journal, "sonnet");
+    assert.deepEqual(persisted.extraAllowedTools, ["mcp__keep"]);
+  });
+
+  it("clears journal when the patch sends null", () => {
+    configMod.saveSettings({ extraAllowedTools: ["mcp__keep"], journal: "haiku" });
+    const { state, res } = mockRes();
+    putSettingsHandler({ body: { journal: null } } as Request, res);
+    assert.equal(state.status, 200);
+    const persisted = configMod.loadSettings();
+    assert.equal(persisted.journal, undefined);
+    assert.deepEqual(persisted.extraAllowedTools, ["mcp__keep"]);
+  });
+
+  it("rejects unknown journal values with 400", () => {
+    const { state, res } = mockRes();
+    putSettingsHandler({ body: { journal: "opus" } } as Request, res);
+    assert.equal(state.status, 400);
+  });
 });
 
 describe("PUT /config (atomic)", () => {

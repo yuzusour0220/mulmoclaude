@@ -236,6 +236,7 @@ const koMessages = {
       model: "모델",
       voice: "음성",
       chatIndex: "채팅 인덱스",
+      journal: "저널",
       skills: "스킬",
       roles: "역할",
     },
@@ -307,6 +308,24 @@ const koMessages = {
         off: "인덱싱: 꺼짐",
         haiku: "Haiku 로 인덱싱 중",
         sonnet: "Sonnet 으로 인덱싱 중",
+      },
+      loadError: "설정을 불러오지 못했습니다",
+      saveError: "저장에 실패했습니다",
+    },
+    journalTab: {
+      description:
+        "일일 저널 자동 생성 설정입니다. 최근 채팅 세션을 journal/*.md 로 요약하고 지속 메모(memory.md)를 추출합니다. 기본값은 off. 자동화 세션(scheduler / 시스템 워커)은 이 설정과 무관하게 항상 제외됩니다.",
+      modeLabel: "저널 모델",
+      helperText: "Haiku 가 더 저렴하고, Sonnet 은 일일/주제 요약 품질이 더 좋습니다. 매시 실행은 이 설정이 켜져 있을 때만 동작합니다.",
+      mode: {
+        off: "꺼짐",
+        haiku: "Haiku",
+        sonnet: "Sonnet",
+      },
+      status: {
+        off: "저널: 꺼짐",
+        haiku: "Haiku 로 저널 실행 중",
+        sonnet: "Sonnet 으로 저널 실행 중",
       },
       loadError: "설정을 불러오지 못했습니다",
       saveError: "저장에 실패했습니다",

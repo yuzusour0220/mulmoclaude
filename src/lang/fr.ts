@@ -230,6 +230,7 @@ const frMessages = {
       model: "Modèle",
       voice: "Voix",
       chatIndex: "Index du chat",
+      journal: "Journal",
       skills: "Skills",
       roles: "Rôles",
     },
@@ -304,6 +305,25 @@ const frMessages = {
         off: "Indexation DÉSACTIVÉE",
         haiku: "Indexation avec Haiku",
         sonnet: "Indexation avec Sonnet",
+      },
+      loadError: "Échec du chargement des paramètres",
+      saveError: "Échec de l'enregistrement",
+    },
+    journalTab: {
+      description:
+        "Journal quotidien automatisé — résume les sessions de chat récentes dans journal/*.md et extrait des notes de mémoire persistante. Désactivé par défaut. Les sessions d'automatisation (scheduler / workers système) sont toujours exclues, quel que soit ce réglage.",
+      modeLabel: "Modèle du journal",
+      helperText:
+        "Haiku est moins cher ; Sonnet produit des résumés quotidiens et thématiques plus riches. Le passage horaire ne s'exécute que lorsque c'est activé.",
+      mode: {
+        off: "Désactivé",
+        haiku: "Haiku",
+        sonnet: "Sonnet",
+      },
+      status: {
+        off: "Journal DÉSACTIVÉ",
+        haiku: "Journal en cours avec Haiku",
+        sonnet: "Journal en cours avec Sonnet",
       },
       loadError: "Échec du chargement des paramètres",
       saveError: "Échec de l'enregistrement",

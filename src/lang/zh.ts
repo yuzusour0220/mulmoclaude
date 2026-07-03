@@ -231,6 +231,7 @@ const zhMessages = {
       model: "模型",
       voice: "语音",
       chatIndex: "聊天索引",
+      journal: "日志",
       skills: "技能",
       roles: "角色",
     },
@@ -301,6 +302,24 @@ const zhMessages = {
         off: "索引已关闭",
         haiku: "使用 Haiku 建立索引中",
         sonnet: "使用 Sonnet 建立索引中",
+      },
+      loadError: "加载设置失败",
+      saveError: "保存失败",
+    },
+    journalTab: {
+      description:
+        "自动化每日日志 — 将近期聊天会话摘要为 journal/*.md，并抽取持久化记忆笔记。默认关闭。自动化会话（scheduler / 系统 worker）无论此设置如何都会始终排除。",
+      modeLabel: "日志模型",
+      helperText: "Haiku 更便宜；Sonnet 生成的每日/主题摘要更丰富。仅在此设置开启时每小时的轮次才会运行。",
+      mode: {
+        off: "关闭",
+        haiku: "Haiku",
+        sonnet: "Sonnet",
+      },
+      status: {
+        off: "日志已关闭",
+        haiku: "使用 Haiku 运行日志中",
+        sonnet: "使用 Sonnet 运行日志中",
       },
       loadError: "加载设置失败",
       saveError: "保存失败",

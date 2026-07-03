@@ -172,6 +172,10 @@ router.put(API_ROUTES.config.settings, (req: Request<unknown, unknown, AppSettin
   if (body.chatIndex === null) {
     delete merged.chatIndex;
   }
+  // Journal null-sentinel — mirrors chatIndex / effortLevel.
+  if (body.journal === null) {
+    delete merged.journal;
+  }
   if (!runSaveOrFail(res, () => saveSettings(merged), "saveSettings failed")) {
     return;
   }

@@ -422,9 +422,28 @@ export function advanceJournalState(prev: JournalState, justCompleted: readonly 
 }
 
 // Malformed sessions are logged and skipped so one bad jsonl can't crash the pass.
+// Origins the journal pass intentionally skips (mirror of the chat-index
+// filter added in #1944). `system` sessions are hidden host workers
+// (thumbnail generation, background exports); `scheduler` sessions are
+// automation-driven with prompts the user did not author. Neither
+// surfaces content worth summarising into a personal daily journal.
+const NON_INDEXED_ORIGINS: ReadonlySet<string> = new Set(["system", "scheduler"]);
+
+async function isEligibleForJournalByOrigin(sessionId: string, workspaceRoot: string): Promise<boolean> {
+  try {
+    const meta = await readSessionMetaIO(sessionId, workspaceRoot);
+    if (meta && typeof meta.origin === "string" && NON_INDEXED_ORIGINS.has(meta.origin)) return false;
+  } catch {
+    // meta unreadable → treat as eligible; the excerpt loader will
+    // still bail if the jsonl itself is malformed.
+  }
+  return true;
+}
+
 async function loadDirtySessionExcerpts(chatDir: string, dirty: readonly string[], workspaceRoot: string): Promise<Map<string, Map<string, SessionExcerpt>>> {
   const perSession = new Map<string, Map<string, SessionExcerpt>>();
   for (const sessionId of dirty) {
+    if (!(await isEligibleForJournalByOrigin(sessionId, workspaceRoot))) continue;
     try {
       const excerpts = await loadSessionExcerptsByDate(chatDir, sessionId, workspaceRoot);
       if (excerpts.size > 0) perSession.set(sessionId, excerpts);

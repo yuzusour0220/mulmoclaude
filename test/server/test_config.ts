@@ -105,6 +105,21 @@ describe("isAppSettingsPatch", () => {
     assert.equal(mod.isAppSettingsPatch({ chatIndex: "" }), false);
     assert.equal(mod.isAppSettingsPatch({ chatIndex: 42 }), false);
   });
+
+  // Same null-sentinel + strict-value contract for `journal` (follow-up
+  // to #1944, mirroring chatIndex).
+  it("accepts every known journal mode and the null clear-sentinel", () => {
+    for (const mode of mod.JOURNAL_MODES) {
+      assert.ok(mod.isAppSettingsPatch({ journal: mode }), `expected ${mode} to be accepted`);
+    }
+    assert.ok(mod.isAppSettingsPatch({ journal: null }));
+  });
+
+  it("rejects unknown journal values on the patch path", () => {
+    assert.equal(mod.isAppSettingsPatch({ journal: "opus" }), false);
+    assert.equal(mod.isAppSettingsPatch({ journal: "" }), false);
+    assert.equal(mod.isAppSettingsPatch({ journal: 42 }), false);
+  });
 });
 
 describe("normaliseAppSettingsPatch", () => {
@@ -128,6 +143,15 @@ describe("normaliseAppSettingsPatch", () => {
   it("preserves a present chatIndex", () => {
     assert.deepEqual(mod.normaliseAppSettingsPatch({ chatIndex: "haiku" }), { chatIndex: "haiku" });
     assert.deepEqual(mod.normaliseAppSettingsPatch({ chatIndex: "sonnet" }), { chatIndex: "sonnet" });
+  });
+
+  it("strips null journal", () => {
+    assert.deepEqual(mod.normaliseAppSettingsPatch({ journal: null }), {});
+  });
+
+  it("preserves a present journal", () => {
+    assert.deepEqual(mod.normaliseAppSettingsPatch({ journal: "haiku" }), { journal: "haiku" });
+    assert.deepEqual(mod.normaliseAppSettingsPatch({ journal: "sonnet" }), { journal: "sonnet" });
   });
 });
 
@@ -430,6 +454,20 @@ describe("saveSettings", () => {
     const parsed = JSON.parse(raw);
     assert.equal("chatIndex" in parsed, false);
   });
+
+  it("persists journal and roundtrips it through loadSettings", () => {
+    mod.saveSettings({ extraAllowedTools: [], journal: "haiku" });
+    assert.deepEqual(mod.loadSettings(), { extraAllowedTools: [], journal: "haiku" });
+    mod.saveSettings({ extraAllowedTools: [], journal: "sonnet" });
+    assert.deepEqual(mod.loadSettings(), { extraAllowedTools: [], journal: "sonnet" });
+  });
+
+  it("omits journal when unset so settings.json stays default-clean", () => {
+    mod.saveSettings({ extraAllowedTools: [] });
+    const raw = readFileSync(mod.settingsPath(), "utf-8");
+    const parsed = JSON.parse(raw);
+    assert.equal("journal" in parsed, false);
+  });
 });
 
 // #1944: the resolver is the single choke point every reader
@@ -445,5 +483,17 @@ describe("chatIndexMode resolver", () => {
     assert.equal(mod.chatIndexMode({ extraAllowedTools: [], chatIndex: "haiku" }), "haiku");
     assert.equal(mod.chatIndexMode({ extraAllowedTools: [], chatIndex: "sonnet" }), "sonnet");
     assert.equal(mod.chatIndexMode({ extraAllowedTools: [], chatIndex: "off" }), "off");
+  });
+});
+
+describe("journalMode resolver", () => {
+  it("returns 'off' when the field is undefined (default)", () => {
+    assert.equal(mod.journalMode({ extraAllowedTools: [] }), "off");
+  });
+
+  it("returns the stored value when set", () => {
+    assert.equal(mod.journalMode({ extraAllowedTools: [], journal: "haiku" }), "haiku");
+    assert.equal(mod.journalMode({ extraAllowedTools: [], journal: "sonnet" }), "sonnet");
+    assert.equal(mod.journalMode({ extraAllowedTools: [], journal: "off" }), "off");
   });
 });

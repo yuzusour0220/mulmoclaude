@@ -232,6 +232,7 @@ const deMessages = {
       model: "Modell",
       voice: "Sprache",
       chatIndex: "Chat-Index",
+      journal: "Journal",
       skills: "Skills",
       roles: "Rollen",
     },
@@ -308,6 +309,25 @@ const deMessages = {
         off: "Indizierung ist AUS",
         haiku: "Indizierung läuft mit Haiku",
         sonnet: "Indizierung läuft mit Sonnet",
+      },
+      loadError: "Einstellungen konnten nicht geladen werden",
+      saveError: "Speichern fehlgeschlagen",
+    },
+    journalTab: {
+      description:
+        "Automatisiertes Tages-Journal — fasst kürzliche Chat-Sessions in journal/*.md zusammen und extrahiert dauerhafte Memory-Notizen. Standardmäßig aus. Automatisierungs-Sessions (Scheduler / System-Worker) werden unabhängig von dieser Einstellung immer ausgeschlossen.",
+      modeLabel: "Journal-Modell",
+      helperText:
+        "Haiku ist günstiger; Sonnet liefert reichhaltigere Tages- und Themen-Zusammenfassungen. Der stündliche Lauf startet nur, wenn dies gesetzt ist.",
+      mode: {
+        off: "Aus",
+        haiku: "Haiku",
+        sonnet: "Sonnet",
+      },
+      status: {
+        off: "Journal ist AUS",
+        haiku: "Journal läuft mit Haiku",
+        sonnet: "Journal läuft mit Sonnet",
       },
       loadError: "Einstellungen konnten nicht geladen werden",
       saveError: "Speichern fehlgeschlagen",

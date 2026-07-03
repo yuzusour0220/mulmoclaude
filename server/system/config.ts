@@ -35,6 +35,15 @@ export type EffortLevel = (typeof EFFORT_LEVELS)[number];
 export const CHAT_INDEX_MODES = ["off", "haiku", "sonnet"] as const;
 export type ChatIndexMode = (typeof CHAT_INDEX_MODES)[number];
 
+// Journal daily-pass setting (follow-up to #1944). Same three states as
+// chat-index: "off" disables both the turn-end hook and the hourly
+// scheduled pass; "haiku" / "sonnet" pick the Claude model the archivist
+// CLI spawns for its summary calls. Default (undefined) is "off" so a
+// fresh workspace doesn't burn CLI budget until the user opts in from
+// Settings → Journal.
+export const JOURNAL_MODES = ["off", "haiku", "sonnet"] as const;
+export type JournalMode = (typeof JOURNAL_MODES)[number];
+
 export interface AppSettings {
   // Extra tool names appended to BASE_ALLOWED_TOOLS in
   // server/agent/config.ts#buildCliArgs. Typical entries are
@@ -83,6 +92,16 @@ export interface AppSettings {
   // session. Non-user origins (`system`, `scheduler`) are always
   // skipped regardless of this value — see `indexer.ts`.
   chatIndex?: ChatIndexMode;
+
+  // Journal daily-pass mode (follow-up to #1944). Ships "off" by
+  // default: the archivist that summarizes chat sessions into
+  // journal/*.md stays disabled until the user opts in from Settings →
+  // Journal. Flipping to "haiku" / "sonnet" enables the run and picks
+  // the Claude model the archivist CLI spawns. The turn-end hook
+  // (`maybeRunJournal` in the agent finally block) and the hourly
+  // `system:journal` scheduled task both honour this — off short-
+  // circuits before the interval gate is even consulted.
+  journal?: JournalMode;
 }
 
 const DEFAULT_SETTINGS: AppSettings = { extraAllowedTools: [] };
@@ -118,6 +137,10 @@ function isChatIndexMode(value: unknown): value is ChatIndexMode {
   return typeof value === "string" && (CHAT_INDEX_MODES as readonly string[]).includes(value);
 }
 
+function isJournalMode(value: unknown): value is JournalMode {
+  return typeof value === "string" && (JOURNAL_MODES as readonly string[]).includes(value);
+}
+
 function isVoiceInputSettings(value: unknown): value is { enabled: boolean; model?: string } {
   if (!isRecord(value)) return false;
   if (typeof value.enabled !== "boolean") return false;
@@ -133,10 +156,11 @@ export function isAppSettings(value: unknown): value is AppSettings {
   if (value.effortLevel !== undefined && !isEffortLevel(value.effortLevel)) return false;
   if (value.voiceInput !== undefined && !isVoiceInputSettings(value.voiceInput)) return false;
   if (value.chatIndex !== undefined && !isChatIndexMode(value.chatIndex)) return false;
+  if (value.journal !== undefined && !isJournalMode(value.journal)) return false;
   return true;
 }
 
-// isAppSettingsPatch adds a null sentinel to `chatIndex` (see below).
+// isAppSettingsPatch adds a null sentinel to `chatIndex` / `journal` (see below).
 
 /** A PUT-payload validator: every field optional, but if present
  *  it must match the AppSettings shape. Distinct from
@@ -154,21 +178,25 @@ export function isAppSettings(value: unknown): value is AppSettings {
  *  but lets nullable fields carry `null` as a "clear me" sentinel —
  *  callers normalise via `normaliseAppSettingsPatch` before merging
  *  into the storage shape (#1323). */
-export type AppSettingsPatch = Partial<Omit<AppSettings, "effortLevel" | "chatIndex">> & {
+export type AppSettingsPatch = Partial<Omit<AppSettings, "effortLevel" | "chatIndex" | "journal">> & {
   effortLevel?: EffortLevel | null;
   chatIndex?: ChatIndexMode | null;
+  journal?: JournalMode | null;
 };
 
 /** Convert a wire patch to the storage-shape patch by dropping any
  *  `null` sentinels (which mean "clear" for the corresponding field). */
 export function normaliseAppSettingsPatch(patch: AppSettingsPatch): Partial<AppSettings> {
-  const { effortLevel, chatIndex, ...rest } = patch;
+  const { effortLevel, chatIndex, journal, ...rest } = patch;
   const out: Partial<AppSettings> = { ...rest };
   if (effortLevel !== null && effortLevel !== undefined) {
     out.effortLevel = effortLevel;
   }
   if (chatIndex !== null && chatIndex !== undefined) {
     out.chatIndex = chatIndex;
+  }
+  if (journal !== null && journal !== undefined) {
+    out.journal = journal;
   }
   return out;
 }
@@ -179,6 +207,7 @@ export function normaliseAppSettingsPatch(patch: AppSettingsPatch): Partial<AppS
 const isOptionalString = (value: unknown): boolean => value === undefined || typeof value === "string";
 const isOptionalNullableEffortLevel = (value: unknown): boolean => value === undefined || value === null || isEffortLevel(value);
 const isOptionalNullableChatIndexMode = (value: unknown): boolean => value === undefined || value === null || isChatIndexMode(value);
+const isOptionalNullableJournalMode = (value: unknown): boolean => value === undefined || value === null || isJournalMode(value);
 
 export function isAppSettingsPatch(value: unknown): value is AppSettingsPatch {
   if (!isRecord(value)) return false;
@@ -188,6 +217,7 @@ export function isAppSettingsPatch(value: unknown): value is AppSettingsPatch {
   if (!isOptionalNullableEffortLevel(value.effortLevel)) return false;
   if (value.voiceInput !== undefined && !isVoiceInputSettings(value.voiceInput)) return false;
   if (!isOptionalNullableChatIndexMode(value.chatIndex)) return false;
+  if (!isOptionalNullableJournalMode(value.journal)) return false;
   return true;
 }
 
@@ -224,6 +254,9 @@ function cloneAppSettings(settings: AppSettings): AppSettings {
   if (settings.chatIndex !== undefined) {
     copy.chatIndex = settings.chatIndex;
   }
+  if (settings.journal !== undefined) {
+    copy.journal = settings.journal;
+  }
   return copy;
 }
 
@@ -233,6 +266,14 @@ function cloneAppSettings(settings: AppSettings): AppSettings {
  *  returned literal string to decide skip vs pick a model. */
 export function chatIndexMode(settings: AppSettings): ChatIndexMode {
   return settings.chatIndex ?? "off";
+}
+
+/** Journal mode with the documented "undefined → off" default, so
+ *  every reader (turn-end hook, hourly scheduler, force-startup
+ *  switch, Settings tab) resolves the same way. Callers switch on
+ *  the returned literal string to decide skip vs pick a model. */
+export function journalMode(settings: AppSettings): JournalMode {
+  return settings.journal ?? "off";
 }
 
 /** Read the photo-exif auto-capture flag with the documented
@@ -286,6 +327,9 @@ export function saveSettings(settings: AppSettings): void {
   }
   if (settings.chatIndex !== undefined) {
     payload.chatIndex = settings.chatIndex;
+  }
+  if (settings.journal !== undefined) {
+    payload.journal = settings.journal;
   }
   const serialised = JSON.stringify(payload, null, 2);
   writeFileAtomicSync(settingsPath(), `${serialised}\n`, { mode: 0o600 });

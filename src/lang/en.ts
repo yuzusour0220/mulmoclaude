@@ -250,6 +250,7 @@ const enMessages = {
       model: "Model",
       voice: "Voice",
       chatIndex: "Chat index",
+      journal: "Journal",
       skills: "Skills",
       roles: "Roles",
     },
@@ -324,6 +325,24 @@ const enMessages = {
         off: "Indexing is OFF",
         haiku: "Indexing with Haiku",
         sonnet: "Indexing with Sonnet",
+      },
+      loadError: "Failed to load settings",
+      saveError: "Failed to save",
+    },
+    journalTab: {
+      description:
+        "Automated daily journal — summarises recent chat sessions into journal/*.md and extracts durable memory notes. Ships off. Automation sessions (scheduler / system workers) are always excluded regardless of this setting.",
+      modeLabel: "Journal model",
+      helperText: "Haiku is cheaper; Sonnet produces richer daily / topic summaries. The hourly pass runs only when this is set.",
+      mode: {
+        off: "Off",
+        haiku: "Haiku",
+        sonnet: "Sonnet",
+      },
+      status: {
+        off: "Journal is OFF",
+        haiku: "Journal running with Haiku",
+        sonnet: "Journal running with Sonnet",
       },
       loadError: "Failed to load settings",
       saveError: "Failed to save",
