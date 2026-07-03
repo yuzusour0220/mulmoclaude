@@ -74,17 +74,24 @@ export async function buildDailyPassPlan(state: JournalState, deps: DailyPassDep
   const { dirty } = findDirtySessions(eligible, state.processedSessions);
   if (dirty.length === 0) return null;
 
-  const perSessionExcerpts = await loadDirtySessionExcerpts(chatDir, dirty, workspaceRoot);
+  const dirtyMetaById = new Map(eligible.map((sessionMeta) => [sessionMeta.id, sessionMeta]));
+  const { journalDirty, silentlyProcessed } = await partitionDirtyByOrigin(dirty, dirtyMetaById, workspaceRoot);
+
+  const perSessionExcerpts = await loadDirtySessionExcerpts(chatDir, journalDirty, workspaceRoot);
   const { dayBuckets, sessionToDays } = buildDayBuckets(perSessionExcerpts);
 
   const existingTopics = await readAllTopics(workspaceRoot);
   const newTopicsSeen = new Set<string>(state.knownTopics);
   // Do NOT bump lastDailyRunAt here — outer runner does it after optimization, so partial progress isn't a complete pass.
+  // Silently mark origin-filtered dirty sessions as processed at their current
+  // mtime so they don't reappear as dirty on every pass. Without this, a
+  // workspace with many automation sessions pays an O(N) meta re-read on
+  // every hourly run.
   const initialNextState: JournalState = {
     ...state,
+    processedSessions: applyProcessed(state.processedSessions, silentlyProcessed),
     knownTopics: [...newTopicsSeen].sort(),
   };
-  const dirtyMetaById = new Map(eligible.map((sessionMeta) => [sessionMeta.id, sessionMeta]));
   const orderedDays = [...dayBuckets.keys()].sort();
 
   return {
@@ -440,10 +447,34 @@ async function isEligibleForJournalByOrigin(sessionId: string, workspaceRoot: st
   return true;
 }
 
+interface DirtyPartition {
+  journalDirty: string[];
+  // origin-filtered dirty sessions — marked processed at their current mtime
+  // so the next pass doesn't re-inspect them.
+  silentlyProcessed: SessionFileMeta[];
+}
+
+async function partitionDirtyByOrigin(
+  dirty: readonly string[],
+  dirtyMetaById: ReadonlyMap<string, SessionFileMeta>,
+  workspaceRoot: string,
+): Promise<DirtyPartition> {
+  const journalDirty: string[] = [];
+  const silentlyProcessed: SessionFileMeta[] = [];
+  for (const sessionId of dirty) {
+    if (await isEligibleForJournalByOrigin(sessionId, workspaceRoot)) {
+      journalDirty.push(sessionId);
+      continue;
+    }
+    const meta = dirtyMetaById.get(sessionId);
+    if (meta) silentlyProcessed.push(meta);
+  }
+  return { journalDirty, silentlyProcessed };
+}
+
 async function loadDirtySessionExcerpts(chatDir: string, dirty: readonly string[], workspaceRoot: string): Promise<Map<string, Map<string, SessionExcerpt>>> {
   const perSession = new Map<string, Map<string, SessionExcerpt>>();
   for (const sessionId of dirty) {
-    if (!(await isEligibleForJournalByOrigin(sessionId, workspaceRoot))) continue;
     try {
       const excerpts = await loadSessionExcerptsByDate(chatDir, sessionId, workspaceRoot);
       if (excerpts.size > 0) perSession.set(sessionId, excerpts);
