@@ -238,6 +238,36 @@ describe("PUT /config/settings", () => {
     putSettingsHandler({ body: { effortLevel: "ultra" } } as Request, res);
     assert.equal(state.status, 400);
   });
+
+  // #1944: the chatIndex patch lifecycle mirrors effortLevel's — set,
+  // clear via null, reject garbage. Round-tripping via loadSettings
+  // catches the first-round bug where the mode was accepted but
+  // silently dropped on write.
+  it("sets chatIndex from a patch and roundtrips it", () => {
+    configMod.saveSettings({ extraAllowedTools: ["mcp__keep"] });
+    const { state, res } = mockRes();
+    putSettingsHandler({ body: { chatIndex: "haiku" } } as Request, res);
+    assert.equal(state.status, 200);
+    const persisted = configMod.loadSettings();
+    assert.equal(persisted.chatIndex, "haiku");
+    assert.deepEqual(persisted.extraAllowedTools, ["mcp__keep"]);
+  });
+
+  it("clears chatIndex when the patch sends null", () => {
+    configMod.saveSettings({ extraAllowedTools: ["mcp__keep"], chatIndex: "sonnet" });
+    const { state, res } = mockRes();
+    putSettingsHandler({ body: { chatIndex: null } } as Request, res);
+    assert.equal(state.status, 200);
+    const persisted = configMod.loadSettings();
+    assert.equal(persisted.chatIndex, undefined);
+    assert.deepEqual(persisted.extraAllowedTools, ["mcp__keep"]);
+  });
+
+  it("rejects unknown chatIndex values with 400", () => {
+    const { state, res } = mockRes();
+    putSettingsHandler({ body: { chatIndex: "opus" } } as Request, res);
+    assert.equal(state.status, 400);
+  });
 });
 
 describe("PUT /config (atomic)", () => {

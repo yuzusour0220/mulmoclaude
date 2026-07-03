@@ -23,6 +23,18 @@ import { isRecord, isStringArray, isStringRecord } from "../utils/types.js";
 export const EFFORT_LEVELS = ["low", "medium", "high", "xhigh", "max"] as const;
 export type EffortLevel = (typeof EFFORT_LEVELS)[number];
 
+// Chat-index summarizer setting (#1944). "off" disables the whole
+// AI-title / summary / keywords background indexer; "haiku" / "sonnet"
+// select the Claude model the summarizer spawns. Default (undefined)
+// is treated as "off" — indexing is opt-in from Settings → Chat index
+// so a fresh workspace doesn't burn CLI budget on scheduler/system
+// automation sessions the user may never look at (see #1929 / #1944
+// for the cost analysis). The origin filter (system + scheduler
+// sessions always skipped) is enforced separately and does NOT
+// depend on this setting.
+export const CHAT_INDEX_MODES = ["off", "haiku", "sonnet"] as const;
+export type ChatIndexMode = (typeof CHAT_INDEX_MODES)[number];
+
 export interface AppSettings {
   // Extra tool names appended to BASE_ALLOWED_TOOLS in
   // server/agent/config.ts#buildCliArgs. Typical entries are
@@ -63,6 +75,14 @@ export interface AppSettings {
     enabled: boolean;
     model?: string;
   };
+
+  // Chat-index summarizer mode (#1944). Ships "off" by default: the
+  // background AI-title / summary / keywords indexer stays disabled
+  // until the user opts in from Settings → Chat index. Flipping to
+  // "haiku" or "sonnet" selects the model the summarizer spawns per
+  // session. Non-user origins (`system`, `scheduler`) are always
+  // skipped regardless of this value — see `indexer.ts`.
+  chatIndex?: ChatIndexMode;
 }
 
 const DEFAULT_SETTINGS: AppSettings = { extraAllowedTools: [] };
@@ -94,6 +114,10 @@ function isEffortLevel(value: unknown): value is EffortLevel {
   return typeof value === "string" && (EFFORT_LEVELS as readonly string[]).includes(value);
 }
 
+function isChatIndexMode(value: unknown): value is ChatIndexMode {
+  return typeof value === "string" && (CHAT_INDEX_MODES as readonly string[]).includes(value);
+}
+
 function isVoiceInputSettings(value: unknown): value is { enabled: boolean; model?: string } {
   if (!isRecord(value)) return false;
   if (typeof value.enabled !== "boolean") return false;
@@ -108,8 +132,11 @@ export function isAppSettings(value: unknown): value is AppSettings {
   if (value.photoExif !== undefined && !isPhotoExifSettings(value.photoExif)) return false;
   if (value.effortLevel !== undefined && !isEffortLevel(value.effortLevel)) return false;
   if (value.voiceInput !== undefined && !isVoiceInputSettings(value.voiceInput)) return false;
+  if (value.chatIndex !== undefined && !isChatIndexMode(value.chatIndex)) return false;
   return true;
 }
+
+// isAppSettingsPatch adds a null sentinel to `chatIndex` (see below).
 
 /** A PUT-payload validator: every field optional, but if present
  *  it must match the AppSettings shape. Distinct from
@@ -127,28 +154,40 @@ export function isAppSettings(value: unknown): value is AppSettings {
  *  but lets nullable fields carry `null` as a "clear me" sentinel —
  *  callers normalise via `normaliseAppSettingsPatch` before merging
  *  into the storage shape (#1323). */
-export type AppSettingsPatch = Partial<Omit<AppSettings, "effortLevel">> & {
+export type AppSettingsPatch = Partial<Omit<AppSettings, "effortLevel" | "chatIndex">> & {
   effortLevel?: EffortLevel | null;
+  chatIndex?: ChatIndexMode | null;
 };
 
 /** Convert a wire patch to the storage-shape patch by dropping any
  *  `null` sentinels (which mean "clear" for the corresponding field). */
 export function normaliseAppSettingsPatch(patch: AppSettingsPatch): Partial<AppSettings> {
-  const { effortLevel, ...rest } = patch;
+  const { effortLevel, chatIndex, ...rest } = patch;
   const out: Partial<AppSettings> = { ...rest };
   if (effortLevel !== null && effortLevel !== undefined) {
     out.effortLevel = effortLevel;
   }
+  if (chatIndex !== null && chatIndex !== undefined) {
+    out.chatIndex = chatIndex;
+  }
   return out;
 }
+
+// Split each field's optional-with-null-sentinel validation into its own
+// mini-helper so `isAppSettingsPatch` stays under the cognitive-complexity
+// ceiling as new nullable fields land.
+const isOptionalString = (value: unknown): boolean => value === undefined || typeof value === "string";
+const isOptionalNullableEffortLevel = (value: unknown): boolean => value === undefined || value === null || isEffortLevel(value);
+const isOptionalNullableChatIndexMode = (value: unknown): boolean => value === undefined || value === null || isChatIndexMode(value);
 
 export function isAppSettingsPatch(value: unknown): value is AppSettingsPatch {
   if (!isRecord(value)) return false;
   if (value.extraAllowedTools !== undefined && !isStringArray(value.extraAllowedTools)) return false;
-  if (value.googleMapsApiKey !== undefined && typeof value.googleMapsApiKey !== "string") return false;
+  if (!isOptionalString(value.googleMapsApiKey)) return false;
   if (value.photoExif !== undefined && !isPhotoExifSettings(value.photoExif)) return false;
-  if (value.effortLevel !== undefined && value.effortLevel !== null && !isEffortLevel(value.effortLevel)) return false;
+  if (!isOptionalNullableEffortLevel(value.effortLevel)) return false;
   if (value.voiceInput !== undefined && !isVoiceInputSettings(value.voiceInput)) return false;
+  if (!isOptionalNullableChatIndexMode(value.chatIndex)) return false;
   return true;
 }
 
@@ -182,7 +221,18 @@ function cloneAppSettings(settings: AppSettings): AppSettings {
       copy.voiceInput.model = settings.voiceInput.model;
     }
   }
+  if (settings.chatIndex !== undefined) {
+    copy.chatIndex = settings.chatIndex;
+  }
   return copy;
+}
+
+/** Chat-index mode with the documented "undefined → off" default, so
+ *  every reader (indexer, backfill scheduler, force-startup switch,
+ *  Settings tab) resolves the same way. Callers switch on the
+ *  returned literal string to decide skip vs pick a model. */
+export function chatIndexMode(settings: AppSettings): ChatIndexMode {
+  return settings.chatIndex ?? "off";
 }
 
 /** Read the photo-exif auto-capture flag with the documented
@@ -233,6 +283,9 @@ export function saveSettings(settings: AppSettings): void {
     if (settings.voiceInput.model !== undefined) {
       payload.voiceInput.model = settings.voiceInput.model;
     }
+  }
+  if (settings.chatIndex !== undefined) {
+    payload.chatIndex = settings.chatIndex;
   }
   const serialised = JSON.stringify(payload, null, 2);
   writeFileAtomicSync(settingsPath(), `${serialised}\n`, { mode: 0o600 });

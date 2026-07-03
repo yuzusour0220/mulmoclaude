@@ -229,6 +229,7 @@ const frMessages = {
       photos: "Photos",
       model: "Modèle",
       voice: "Voix",
+      chatIndex: "Index du chat",
       skills: "Skills",
       roles: "Rôles",
     },
@@ -286,6 +287,24 @@ const frMessages = {
       ready: "Modèle prêt",
       downloadError: "Échec du téléchargement du modèle.",
       retry: "Réessayer",
+      loadError: "Échec du chargement des paramètres",
+      saveError: "Échec de l'enregistrement",
+    },
+    chatIndexTab: {
+      description:
+        "Titres et résumés générés par IA pour l'historique du chat. Désactivé par défaut — les sessions d'automatisation (scheduler / workers système) sont toujours ignorées même quand c'est activé ; les sessions humaines ne paient qu'un appel au résumeur à la fin de chaque tour.",
+      modeLabel: "Modèle de l'index de chat",
+      helperText: "Haiku est moins cher ; Sonnet donne des titres plus précis pour de longues sessions changeant de sujet.",
+      mode: {
+        off: "Désactivé",
+        haiku: "Haiku",
+        sonnet: "Sonnet",
+      },
+      status: {
+        off: "Indexation DÉSACTIVÉE",
+        haiku: "Indexation avec Haiku",
+        sonnet: "Indexation avec Sonnet",
+      },
       loadError: "Échec du chargement des paramètres",
       saveError: "Échec de l'enregistrement",
     },

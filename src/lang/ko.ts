@@ -235,6 +235,7 @@ const koMessages = {
       photos: "사진",
       model: "모델",
       voice: "음성",
+      chatIndex: "채팅 인덱스",
       skills: "스킬",
       roles: "역할",
     },
@@ -289,6 +290,24 @@ const koMessages = {
       ready: "모델 준비 완료",
       downloadError: "모델 다운로드에 실패했습니다.",
       retry: "다시 시도",
+      loadError: "설정을 불러오지 못했습니다",
+      saveError: "저장에 실패했습니다",
+    },
+    chatIndexTab: {
+      description:
+        "채팅 기록의 AI 제목/요약 자동 생성을 설정합니다. 기본값은 off 이며, 자동화 계열 세션(scheduler / 시스템 워커)은 on 상태여도 항상 제외됩니다. 사람 세션만 턴 종료 시 요약이 한 번 실행됩니다.",
+      modeLabel: "채팅 인덱스 모델",
+      helperText: "Haiku 가 더 저렴하고, Sonnet 은 길고 주제가 바뀌는 세션에서 더 정확한 제목을 만듭니다.",
+      mode: {
+        off: "꺼짐",
+        haiku: "Haiku",
+        sonnet: "Sonnet",
+      },
+      status: {
+        off: "인덱싱: 꺼짐",
+        haiku: "Haiku 로 인덱싱 중",
+        sonnet: "Sonnet 으로 인덱싱 중",
+      },
       loadError: "설정을 불러오지 못했습니다",
       saveError: "저장에 실패했습니다",
     },

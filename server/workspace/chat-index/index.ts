@@ -17,6 +17,7 @@ import { workspacePath as defaultWorkspacePath } from "../workspace.js";
 import { ClaudeCliNotFoundError } from "../journal/archivist-cli.js";
 import { indexSession, listSessionIds, type IndexerDeps } from "./indexer.js";
 import { log } from "../../system/logger/index.js";
+import { chatIndexMode as resolveChatIndexMode, loadSettings } from "../../system/config.js";
 
 // Per-session lock. Indexing different sessions in parallel is
 // fine; indexing the same session twice concurrently would just
@@ -56,11 +57,20 @@ export async function maybeIndexSession(opts: MaybeIndexSessionOptions): Promise
   if (!force && opts.activeSessionIds?.has(sessionId)) return;
   if (running.has(sessionId)) return;
 
-  // Thread `force` through the indexer via IndexerDeps so the
-  // freshness throttle is also bypassed on forced runs.
+  // Resolve chat-index mode from settings unless the caller passed one
+  // explicitly (tests do; production callers don't). "off" short-
+  // circuits before we take the per-session lock so a disabled
+  // indexer stays a zero-work path.
+  const mode = opts.deps?.mode ?? resolveChatIndexMode(loadSettings());
+  if (mode === "off") return;
+
+  // Thread `force` + `mode` through the indexer via IndexerDeps so the
+  // freshness throttle is also bypassed on forced runs and the summarizer
+  // picks the right model.
   const effectiveDeps: IndexerDeps = {
     ...(opts.deps ?? {}),
     ...(force ? { force: true } : {}),
+    mode,
   };
 
   running.add(sessionId);
@@ -108,6 +118,14 @@ export async function backfillAllSessions(
   } = {},
 ): Promise<BackfillResult> {
   const workspaceRoot = opts.workspaceRoot ?? defaultWorkspacePath;
+  // Resolve mode once for the whole walk (settings don't change mid-tick
+  // and re-reading per session would burn ~N syscalls for no benefit).
+  // "off" short-circuits the walk entirely — the sessions get counted
+  // as skipped instead of paying for a listing.
+  const mode = opts.deps?.mode ?? resolveChatIndexMode(loadSettings());
+  if (mode === "off") {
+    return { total: 0, indexed: 0, skipped: 0 };
+  }
   const ids = await listSessionIds(workspaceRoot);
   const result: BackfillResult = {
     total: ids.length,
@@ -124,6 +142,7 @@ export async function backfillAllSessions(
       const entry = await indexSession(workspaceRoot, sessionId, {
         ...(opts.deps ?? {}),
         ...(force ? { force: true } : {}),
+        mode,
       });
       if (entry) {
         result.indexed++;

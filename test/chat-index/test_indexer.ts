@@ -31,6 +31,7 @@ function seedSession(
     startedAt?: string;
     userMessages?: string[];
     assistantMessages?: string[];
+    origin?: string;
   } = {},
 ): string {
   const {
@@ -38,9 +39,12 @@ function seedSession(
     startedAt = "2026-04-12T10:00:00.000Z",
     userMessages = ["Can you help me plan a project?"],
     assistantMessages = ["Sure — tell me what it's about."],
+    origin,
   } = opts;
   const chatDir = join(workspace, CHAT_REL);
-  writeFileSync(join(chatDir, `${sessionId}.json`), JSON.stringify({ roleId, startedAt }));
+  const metaPayload: Record<string, string> = { roleId, startedAt };
+  if (origin !== undefined) metaPayload.origin = origin;
+  writeFileSync(join(chatDir, `${sessionId}.json`), JSON.stringify(metaPayload));
   const lines: string[] = [];
   for (let i = 0; i < Math.max(userMessages.length, assistantMessages.length); i++) {
     if (userMessages[i] !== undefined) {
@@ -95,6 +99,7 @@ describe("indexSession — happy path", () => {
     });
 
     const entry = await indexSession(workspace, "sess-A", {
+      mode: "haiku",
       summarize: stub.fn,
       now: () => Date.parse("2026-04-12T10:05:00.000Z"),
     });
@@ -127,6 +132,7 @@ describe("indexSession — freshness throttle", () => {
 
     // First run to seed the index entry at t=0.
     await indexSession(workspace, "sess-B", {
+      mode: "haiku",
       summarize: stub.fn,
       now: () => 0,
     });
@@ -134,6 +140,7 @@ describe("indexSession — freshness throttle", () => {
 
     // Second run 5 min later — still inside the 15-min window.
     const result = await indexSession(workspace, "sess-B", {
+      mode: "haiku",
       summarize: stub.fn,
       now: () => 5 * 60 * 1000,
     });
@@ -146,6 +153,7 @@ describe("indexSession — freshness throttle", () => {
     const stub = makeStubSummarize();
 
     await indexSession(workspace, "sess-C", {
+      mode: "haiku",
       summarize: stub.fn,
       now: () => 0,
     });
@@ -153,6 +161,7 @@ describe("indexSession — freshness throttle", () => {
 
     // Advance beyond the window.
     const result = await indexSession(workspace, "sess-C", {
+      mode: "haiku",
       summarize: stub.fn,
       now: () => MIN_INDEX_INTERVAL_MS + 1,
     });
@@ -166,6 +175,7 @@ describe("indexSession — freshness throttle", () => {
 
     // Seed a fresh entry at t=0.
     await indexSession(workspace, "sess-force", {
+      mode: "haiku",
       summarize: stub.fn,
       now: () => 0,
     });
@@ -174,6 +184,7 @@ describe("indexSession — freshness throttle", () => {
     // Second call 1 second later — normally skipped, but
     // force: true re-indexes anyway.
     const refreshed = await indexSession(workspace, "sess-force", {
+      mode: "haiku",
       summarize: stub.fn,
       now: () => 1000,
       force: true,
@@ -187,12 +198,14 @@ describe("indexSession — freshness throttle", () => {
     const stub = makeStubSummarize();
 
     await indexSession(workspace, "sess-D", {
+      mode: "haiku",
       summarize: stub.fn,
       now: () => 0,
       minIntervalMs: 1000,
     });
     // 500 ms later — still fresh under the 1000 ms window.
     const skipped = await indexSession(workspace, "sess-D", {
+      mode: "haiku",
       summarize: stub.fn,
       now: () => 500,
       minIntervalMs: 1000,
@@ -200,6 +213,7 @@ describe("indexSession — freshness throttle", () => {
     assert.equal(skipped, null);
     // 2000 ms later — window elapsed.
     const refreshed = await indexSession(workspace, "sess-D", {
+      mode: "haiku",
       summarize: stub.fn,
       now: () => 2000,
       minIntervalMs: 1000,
@@ -212,6 +226,7 @@ describe("indexSession — skip conditions", () => {
   it("returns null for a missing jsonl", async () => {
     const stub = makeStubSummarize();
     const result = await indexSession(workspace, "no-such-session", {
+      mode: "haiku",
       summarize: stub.fn,
       now: () => 0,
     });
@@ -223,6 +238,7 @@ describe("indexSession — skip conditions", () => {
     seedSession("sess-E", { userMessages: [], assistantMessages: [] });
     const stub = makeStubSummarize();
     const result = await indexSession(workspace, "sess-E", {
+      mode: "haiku",
       summarize: stub.fn,
       now: () => 0,
     });
@@ -242,6 +258,7 @@ describe("indexSession — skip conditions", () => {
     writeFileSync(join(chatDir, "sess-F.jsonl"), `${JSON.stringify({ source: "tool", type: "tool_result", message: "x" })}\n`);
     const stub = makeStubSummarize();
     const result = await indexSession(workspace, "sess-F", {
+      mode: "haiku",
       summarize: stub.fn,
       now: () => 0,
     });
@@ -259,6 +276,7 @@ describe("indexSession — manifest upsert and ordering", () => {
       keywords: ["a"],
     });
     await indexSession(workspace, "sess-G", {
+      mode: "haiku",
       summarize: firstStub.fn,
       now: () => 0,
     });
@@ -270,6 +288,7 @@ describe("indexSession — manifest upsert and ordering", () => {
       keywords: ["b"],
     });
     await indexSession(workspace, "sess-G", {
+      mode: "haiku",
       summarize: secondStub.fn,
       now: () => MIN_INDEX_INTERVAL_MS + 1,
     });
@@ -286,14 +305,17 @@ describe("indexSession — manifest upsert and ordering", () => {
 
     const stub = makeStubSummarize();
     await indexSession(workspace, "oldest", {
+      mode: "haiku",
       summarize: stub.fn,
       now: () => 0,
     });
     await indexSession(workspace, "newest", {
+      mode: "haiku",
       summarize: stub.fn,
       now: () => 0,
     });
     await indexSession(workspace, "middle", {
+      mode: "haiku",
       summarize: stub.fn,
       now: () => 0,
     });
@@ -316,6 +338,7 @@ describe("indexSession — error propagation", () => {
     await assert.rejects(
       () =>
         indexSession(workspace, "sess-H", {
+          mode: "haiku",
           summarize: failing,
           now: () => 0,
         }),
@@ -443,21 +466,21 @@ describe("indexSession — hostile sessionId is rejected (defence-in-depth)", ()
 
   it("returns null for `..` (traversal via basename mismatch)", async () => {
     const stub = makeStubSummarize();
-    const result = await indexSession(workspace, "..", { summarize: stub.fn, now: () => 0 });
+    const result = await indexSession(workspace, "..", { mode: "haiku", summarize: stub.fn, now: () => 0 });
     assert.equal(result, null);
     assert.equal(stub.calls.length, 0);
   });
 
   it("returns null for a slash-containing id (would escape the chat dir)", async () => {
     const stub = makeStubSummarize();
-    const result = await indexSession(workspace, "a/b", { summarize: stub.fn, now: () => 0 });
+    const result = await indexSession(workspace, "a/b", { mode: "haiku", summarize: stub.fn, now: () => 0 });
     assert.equal(result, null);
     assert.equal(stub.calls.length, 0);
   });
 
   it("returns null for `foo..bar` (basename passes, `..`-substring rejects)", async () => {
     const stub = makeStubSummarize();
-    const result = await indexSession(workspace, "foo..bar", { summarize: stub.fn, now: () => 0 });
+    const result = await indexSession(workspace, "foo..bar", { mode: "haiku", summarize: stub.fn, now: () => 0 });
     assert.equal(result, null);
     assert.equal(stub.calls.length, 0);
   });
@@ -465,6 +488,7 @@ describe("indexSession — hostile sessionId is rejected (defence-in-depth)", ()
   it("force: true does NOT bypass the sanitizer", async () => {
     const stub = makeStubSummarize();
     const result = await indexSession(workspace, "../evil", {
+      mode: "haiku",
       summarize: stub.fn,
       now: () => 0,
       force: true,
@@ -485,12 +509,12 @@ describe("indexSession — content-unchanged skip (issue #1929)", () => {
     await setJsonlMtime("skip-unchanged", 0.1);
     const stub = makeStubSummarize();
 
-    await indexSession(workspace, "skip-unchanged", { summarize: stub.fn, now: () => 1000 });
+    await indexSession(workspace, "skip-unchanged", { mode: "haiku", summarize: stub.fn, now: () => 1000 });
     assert.equal(stub.calls.length, 1);
 
     // Jump past the freshness window so isFresh returns false; the
     // ONLY remaining reason to skip is the content-unchanged gate.
-    await indexSession(workspace, "skip-unchanged", { summarize: stub.fn, now: () => MIN_INDEX_INTERVAL_MS + 10_000 });
+    await indexSession(workspace, "skip-unchanged", { mode: "haiku", summarize: stub.fn, now: () => MIN_INDEX_INTERVAL_MS + 10_000 });
     assert.equal(stub.calls.length, 1);
   });
 
@@ -499,14 +523,14 @@ describe("indexSession — content-unchanged skip (issue #1929)", () => {
     await setJsonlMtime("resume-changed", 0.1);
     const stub = makeStubSummarize();
 
-    await indexSession(workspace, "resume-changed", { summarize: stub.fn, now: () => 1000 });
+    await indexSession(workspace, "resume-changed", { mode: "haiku", summarize: stub.fn, now: () => 1000 });
     assert.equal(stub.calls.length, 1);
 
     // Simulate a new turn: bump the jsonl mtime past the entry's
     // indexedAt. Time-jump past the freshness window too so this
     // isn't just testing isFresh.
     await setJsonlMtime("resume-changed", 5000);
-    await indexSession(workspace, "resume-changed", { summarize: stub.fn, now: () => MIN_INDEX_INTERVAL_MS + 10_000 });
+    await indexSession(workspace, "resume-changed", { mode: "haiku", summarize: stub.fn, now: () => MIN_INDEX_INTERVAL_MS + 10_000 });
     assert.equal(stub.calls.length, 2);
   });
 
@@ -515,16 +539,116 @@ describe("indexSession — content-unchanged skip (issue #1929)", () => {
     await setJsonlMtime("force-through", 0.1);
     const stub = makeStubSummarize();
 
-    await indexSession(workspace, "force-through", { summarize: stub.fn, now: () => 1000 });
+    await indexSession(workspace, "force-through", { mode: "haiku", summarize: stub.fn, now: () => 1000 });
     assert.equal(stub.calls.length, 1);
 
     // Jsonl still at 100ms — content-unchanged gate would skip, but
     // force says "regenerate anyway".
     await indexSession(workspace, "force-through", {
+      mode: "haiku",
       summarize: stub.fn,
       now: () => MIN_INDEX_INTERVAL_MS + 10_000,
       force: true,
     });
     assert.equal(stub.calls.length, 2);
+  });
+});
+
+describe("indexSession — chat-index mode + origin filter (#1944)", () => {
+  it("returns null without touching the summarizer when mode is 'off'", async () => {
+    seedSession("sess-off");
+    const stub = makeStubSummarize();
+
+    const result = await indexSession(workspace, "sess-off", {
+      mode: "off",
+      summarize: stub.fn,
+      now: () => Date.parse("2026-04-12T10:05:00.000Z"),
+    });
+
+    assert.equal(result, null);
+    assert.equal(stub.calls.length, 0, "off mode must skip before the summarizer runs");
+  });
+
+  it("skips a system-origin session even when mode is 'sonnet' and force is true", async () => {
+    seedSession("sess-system", { origin: "system" });
+    const stub = makeStubSummarize();
+
+    const result = await indexSession(workspace, "sess-system", {
+      mode: "sonnet",
+      summarize: stub.fn,
+      now: () => Date.parse("2026-04-12T10:05:00.000Z"),
+      force: true,
+    });
+
+    assert.equal(result, null);
+    assert.equal(stub.calls.length, 0, "system origin must skip regardless of mode / force");
+  });
+
+  it("skips a scheduler-origin session for the same reason", async () => {
+    seedSession("sess-sched", { origin: "scheduler" });
+    const stub = makeStubSummarize();
+
+    const result = await indexSession(workspace, "sess-sched", {
+      mode: "sonnet",
+      summarize: stub.fn,
+      now: () => Date.parse("2026-04-12T10:05:00.000Z"),
+      force: true,
+    });
+
+    assert.equal(result, null);
+    assert.equal(stub.calls.length, 0);
+  });
+
+  it("passes the chosen model down to the summarizer when mode is 'haiku'", async () => {
+    seedSession("sess-haiku");
+    const receivedModels: (string | undefined)[] = [];
+    const trackingSummarize = async (_input: string, opts?: { model?: string }) => {
+      receivedModels.push(opts?.model);
+      return { title: "t", summary: "s", keywords: ["k"] };
+    };
+
+    const result = await indexSession(workspace, "sess-haiku", {
+      mode: "haiku",
+      summarize: trackingSummarize,
+      now: () => Date.parse("2026-04-12T10:05:00.000Z"),
+    });
+
+    assert.ok(result !== null);
+    assert.deepEqual(receivedModels, ["haiku"]);
+  });
+
+  it("passes the chosen model down to the summarizer when mode is 'sonnet'", async () => {
+    seedSession("sess-sonnet");
+    const receivedModels: (string | undefined)[] = [];
+    const trackingSummarize = async (_input: string, opts?: { model?: string }) => {
+      receivedModels.push(opts?.model);
+      return { title: "t", summary: "s", keywords: ["k"] };
+    };
+
+    const result = await indexSession(workspace, "sess-sonnet", {
+      mode: "sonnet",
+      summarize: trackingSummarize,
+      now: () => Date.parse("2026-04-12T10:05:00.000Z"),
+    });
+
+    assert.ok(result !== null);
+    assert.deepEqual(receivedModels, ["sonnet"]);
+  });
+
+  it("indexes human-origin sessions normally when mode is on", async () => {
+    // Explicitly seed with `origin: "human"` (or leave undefined; both
+    // should be treated as indexable — only `system` / `scheduler` are
+    // in the NON_INDEXED_ORIGINS set).
+    seedSession("sess-human", { origin: "human" });
+    const stub = makeStubSummarize();
+
+    const result = await indexSession(workspace, "sess-human", {
+      mode: "haiku",
+      summarize: stub.fn,
+      now: () => Date.parse("2026-04-12T10:05:00.000Z"),
+    });
+
+    assert.ok(result !== null);
+    assert.equal(stub.calls.length, 1);
   });
 });

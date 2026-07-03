@@ -229,6 +229,7 @@ const ptBRMessages = {
       photos: "Fotos",
       model: "Modelo",
       voice: "Voz",
+      chatIndex: "Índice de chat",
       skills: "Skills",
       roles: "Papéis",
     },
@@ -285,6 +286,24 @@ const ptBRMessages = {
       ready: "Modelo pronto",
       downloadError: "Falha ao baixar o modelo.",
       retry: "Tentar novamente",
+      loadError: "Falha ao carregar as configurações",
+      saveError: "Falha ao salvar",
+    },
+    chatIndexTab: {
+      description:
+        "Títulos e resumos gerados por IA para o histórico do chat. Sai desativado por padrão — sessões de automação (scheduler / workers do sistema) sempre são ignoradas mesmo quando ativado; sessões humanas pagam apenas uma chamada ao sumarizador ao terminar cada turno.",
+      modeLabel: "Modelo do índice de chat",
+      helperText: "Haiku é mais barato; Sonnet dá títulos mais precisos em sessões longas que mudam de assunto.",
+      mode: {
+        off: "Desativado",
+        haiku: "Haiku",
+        sonnet: "Sonnet",
+      },
+      status: {
+        off: "Indexação DESATIVADA",
+        haiku: "Indexando com Haiku",
+        sonnet: "Indexando com Sonnet",
+      },
       loadError: "Falha ao carregar as configurações",
       saveError: "Falha ao salvar",
     },

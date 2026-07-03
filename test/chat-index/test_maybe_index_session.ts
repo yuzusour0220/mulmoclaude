@@ -64,7 +64,7 @@ describe("maybeIndexSession — active session guard", () => {
       sessionId: "live-sess",
       activeSessionIds: new Set(["live-sess", "other"]),
       workspaceRoot: workspace,
-      deps: { summarize: stub.fn, now: () => 0 },
+      deps: { mode: "haiku", summarize: stub.fn, now: () => 0 },
     });
 
     assert.equal(stub.calls, 0);
@@ -79,7 +79,7 @@ describe("maybeIndexSession — active session guard", () => {
       sessionId: "done-sess",
       activeSessionIds: new Set(["other"]),
       workspaceRoot: workspace,
-      deps: { summarize: stub.fn, now: () => 0 },
+      deps: { mode: "haiku", summarize: stub.fn, now: () => 0 },
     });
 
     assert.equal(stub.calls, 1);
@@ -106,7 +106,7 @@ describe("maybeIndexSession — per-session lock", () => {
     const first = maybeIndexSession({
       sessionId: "slow-sess",
       workspaceRoot: workspace,
-      deps: { summarize: slowSummarize, now: () => 0 },
+      deps: { mode: "haiku", summarize: slowSummarize, now: () => 0 },
     });
     // Call again while `first` is still blocked on the gate. This
     // second call should short-circuit via the in-process lock.
@@ -114,6 +114,7 @@ describe("maybeIndexSession — per-session lock", () => {
       sessionId: "slow-sess",
       workspaceRoot: workspace,
       deps: {
+        mode: "haiku",
         summarize: async () => {
           throw new Error("second call should not run summarize");
         },
@@ -137,12 +138,12 @@ describe("maybeIndexSession — per-session lock", () => {
       maybeIndexSession({
         sessionId: "sess-1",
         workspaceRoot: workspace,
-        deps: { summarize: stub.fn, now: () => 0 },
+        deps: { mode: "haiku", summarize: stub.fn, now: () => 0 },
       }),
       maybeIndexSession({
         sessionId: "sess-2",
         workspaceRoot: workspace,
-        deps: { summarize: stub.fn, now: () => 0 },
+        deps: { mode: "haiku", summarize: stub.fn, now: () => 0 },
       }),
     ]);
 
@@ -162,7 +163,7 @@ describe("maybeIndexSession — claude CLI missing sentinel", () => {
     await maybeIndexSession({
       sessionId: "sess-miss-1",
       workspaceRoot: workspace,
-      deps: { summarize: throwing, now: () => 0 },
+      deps: { mode: "haiku", summarize: throwing, now: () => 0 },
     });
 
     // Second call should be a no-op: even though we hand it a
@@ -172,7 +173,7 @@ describe("maybeIndexSession — claude CLI missing sentinel", () => {
     await maybeIndexSession({
       sessionId: "sess-miss-2",
       workspaceRoot: workspace,
-      deps: { summarize: workingStub.fn, now: () => 0 },
+      deps: { mode: "haiku", summarize: workingStub.fn, now: () => 0 },
     });
     assert.equal(workingStub.calls, 0);
   });
@@ -190,7 +191,7 @@ describe("maybeIndexSession — unexpected error swallowing", () => {
     await maybeIndexSession({
       sessionId: "sess-err",
       workspaceRoot: workspace,
-      deps: { summarize: failing, now: () => 0 },
+      deps: { mode: "haiku", summarize: failing, now: () => 0 },
     });
   });
 
@@ -203,7 +204,7 @@ describe("maybeIndexSession — unexpected error swallowing", () => {
     await maybeIndexSession({
       sessionId: "sess-err-1",
       workspaceRoot: workspace,
-      deps: { summarize: failing, now: () => 0 },
+      deps: { mode: "haiku", summarize: failing, now: () => 0 },
     });
 
     // Subsequent call with a working summarizer should still run.
@@ -211,7 +212,7 @@ describe("maybeIndexSession — unexpected error swallowing", () => {
     await maybeIndexSession({
       sessionId: "sess-err-2",
       workspaceRoot: workspace,
-      deps: { summarize: stub.fn, now: () => 0 },
+      deps: { mode: "haiku", summarize: stub.fn, now: () => 0 },
     });
     assert.equal(stub.calls, 1);
   });
@@ -226,7 +227,7 @@ describe("maybeIndexSession — force option", () => {
       sessionId: "live-force",
       activeSessionIds: new Set(["live-force"]),
       workspaceRoot: workspace,
-      deps: { summarize: stub.fn, now: () => 0 },
+      deps: { mode: "haiku", summarize: stub.fn, now: () => 0 },
       force: true,
     });
 
@@ -241,7 +242,7 @@ describe("maybeIndexSession — force option", () => {
     await maybeIndexSession({
       sessionId: "fresh-force",
       workspaceRoot: workspace,
-      deps: { summarize: stub.fn, now: () => 0 },
+      deps: { mode: "haiku", summarize: stub.fn, now: () => 0 },
     });
     assert.equal(stub.calls, 1);
 
@@ -249,7 +250,7 @@ describe("maybeIndexSession — force option", () => {
     await maybeIndexSession({
       sessionId: "fresh-force",
       workspaceRoot: workspace,
-      deps: { summarize: stub.fn, now: () => 500 },
+      deps: { mode: "haiku", summarize: stub.fn, now: () => 500 },
     });
     assert.equal(stub.calls, 1);
 
@@ -257,7 +258,7 @@ describe("maybeIndexSession — force option", () => {
     await maybeIndexSession({
       sessionId: "fresh-force",
       workspaceRoot: workspace,
-      deps: { summarize: stub.fn, now: () => 500 },
+      deps: { mode: "haiku", summarize: stub.fn, now: () => 500 },
       force: true,
     });
     assert.equal(stub.calls, 2);
@@ -273,7 +274,7 @@ describe("backfillAllSessions", () => {
 
     const result = await backfillAllSessions({
       workspaceRoot: workspace,
-      deps: { summarize: stub.fn, now: () => 0 },
+      deps: { mode: "haiku", summarize: stub.fn, now: () => 0 },
     });
 
     assert.equal(result.total, 3);
@@ -286,7 +287,7 @@ describe("backfillAllSessions", () => {
     const stub = stubSummarize();
     const result = await backfillAllSessions({
       workspaceRoot: workspace,
-      deps: { summarize: stub.fn, now: () => 0 },
+      deps: { mode: "haiku", summarize: stub.fn, now: () => 0 },
     });
     assert.equal(result.total, 0);
     assert.equal(result.indexed, 0);
@@ -307,7 +308,7 @@ describe("backfillAllSessions", () => {
 
     const result = await backfillAllSessions({
       workspaceRoot: workspace,
-      deps: { summarize: mixedSummarize, now: () => 0 },
+      deps: { mode: "haiku", summarize: mixedSummarize, now: () => 0 },
     });
 
     assert.equal(result.total, 3);
@@ -323,7 +324,7 @@ describe("backfillAllSessions", () => {
     await maybeIndexSession({
       sessionId: "warm-1",
       workspaceRoot: workspace,
-      deps: { summarize: stub.fn, now: () => 0 },
+      deps: { mode: "haiku", summarize: stub.fn, now: () => 0 },
     });
     assert.equal(stub.calls, 1);
 
@@ -335,7 +336,7 @@ describe("backfillAllSessions", () => {
     // exercises the force path.
     const result = await backfillAllSessions({
       workspaceRoot: workspace,
-      deps: { summarize: stub.fn, now: () => 0 },
+      deps: { mode: "haiku", summarize: stub.fn, now: () => 0 },
       force: true,
     });
     assert.equal(result.indexed, 1);
@@ -354,7 +355,7 @@ describe("backfillAllSessions", () => {
     // Prime the index once via a forced backfill.
     await backfillAllSessions({
       workspaceRoot: workspace,
-      deps: { summarize: stub.fn, now: () => 1000 },
+      deps: { mode: "haiku", summarize: stub.fn, now: () => 1000 },
       force: true,
     });
     assert.equal(stub.calls, 1);
@@ -364,7 +365,7 @@ describe("backfillAllSessions", () => {
     // #1929 fix this would fire another CLI call.
     const result = await backfillAllSessions({
       workspaceRoot: workspace,
-      deps: { summarize: stub.fn, now: () => 1000 + 60 * 60 * 1000 },
+      deps: { mode: "haiku", summarize: stub.fn, now: () => 1000 + 60 * 60 * 1000 },
     });
     assert.equal(result.indexed, 0);
     assert.equal(result.skipped, 1);
@@ -379,7 +380,7 @@ describe("backfillAllSessions", () => {
 
     await backfillAllSessions({
       workspaceRoot: workspace,
-      deps: { summarize: stub.fn, now: () => 1000 },
+      deps: { mode: "haiku", summarize: stub.fn, now: () => 1000 },
       force: true,
     });
     assert.equal(stub.calls, 1);
@@ -390,9 +391,44 @@ describe("backfillAllSessions", () => {
 
     const result = await backfillAllSessions({
       workspaceRoot: workspace,
-      deps: { summarize: stub.fn, now: () => 1000 + 60 * 60 * 1000 },
+      deps: { mode: "haiku", summarize: stub.fn, now: () => 1000 + 60 * 60 * 1000 },
     });
     assert.equal(result.indexed, 1);
     assert.equal(stub.calls, 2);
+  });
+});
+
+// #1944 — public-entry-point coverage for the mode kill switch. When
+// `mode: "off"` is injected via deps (or resolved from settings as
+// undefined → off), both public entry points must short-circuit
+// before spawning the summarizer.
+describe("public entry points honour chat-index mode = off (#1944)", () => {
+  it("maybeIndexSession returns without summarizing when mode is off", async () => {
+    seedSession("off-sess");
+    const stub = stubSummarize();
+
+    await maybeIndexSession({
+      sessionId: "off-sess",
+      workspaceRoot: workspace,
+      deps: { mode: "off", summarize: stub.fn, now: () => 0 },
+    });
+
+    assert.equal(stub.calls, 0);
+    await assert.rejects(() => readFile(indexEntryPathFor(workspace, "off-sess"), "utf-8"));
+  });
+
+  it("backfillAllSessions short-circuits and reports zero counts when mode is off", async () => {
+    seedSession("off-a");
+    seedSession("off-b");
+    const stub = stubSummarize();
+
+    const result = await backfillAllSessions({
+      workspaceRoot: workspace,
+      deps: { mode: "off", summarize: stub.fn, now: () => 0 },
+    });
+
+    // Total is 0 because the walk itself is skipped — nothing to count.
+    assert.deepEqual(result, { total: 0, indexed: 0, skipped: 0 });
+    assert.equal(stub.calls, 0);
   });
 });

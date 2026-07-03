@@ -45,6 +45,13 @@ export interface IndexerDeps {
   // prompt was edited and existing summaries are stale by design,
   // not by content.
   force?: boolean;
+  // Chat-index mode from `AppSettings.chatIndex` (default "off"). "off"
+  // short-circuits `indexSession` before any I/O; "haiku"/"sonnet"
+  // selects the model passed to the summariser. Injected from the
+  // callers (turn-finish hook, backfill scheduler, manual rebuild,
+  // startup force) so a single settings load happens at trigger time
+  // rather than N times inside the indexer.
+  mode?: "off" | "haiku" | "sonnet";
 }
 
 // --- manifest I/O ---------------------------------------------------
@@ -225,7 +232,17 @@ export function safeSessionIdOrNull(sessionId: string): string | null {
 interface SessionMeta {
   roleId?: string;
   startedAt?: string;
+  origin?: string;
 }
+
+// Origins the chat-index summarizer intentionally skips (#1944). `system`
+// sessions are hidden workers whose title never appears in any UI, and
+// `scheduler` sessions fall back to their own `firstUserMessage` (the
+// automation prompt) which identifies them well enough without an AI
+// summary. Kept as a plain string set — `SESSION_ORIGINS` lives in
+// src/types/session.ts and the indexer must not depend on the front-end
+// types module.
+const NON_INDEXED_ORIGINS: ReadonlySet<string> = new Set(["system", "scheduler"]);
 
 async function readSessionMeta(workspaceRoot: string, sessionId: string): Promise<SessionMeta> {
   // Defence-in-depth: only `indexSession` calls this (with an
@@ -242,6 +259,7 @@ async function readSessionMeta(workspaceRoot: string, sessionId: string): Promis
     return {
       roleId: typeof metaRecord.roleId === "string" ? metaRecord.roleId : undefined,
       startedAt: typeof metaRecord.startedAt === "string" ? metaRecord.startedAt : undefined,
+      origin: typeof metaRecord.origin === "string" ? metaRecord.origin : undefined,
     };
   } catch {
     return {};
@@ -282,6 +300,31 @@ export async function listSessionIds(workspaceRoot: string): Promise<string[]> {
 // resulting `safeId` is threaded through every downstream file
 // access, so `force: true` — a debug / rollout knob — cannot become
 // a path-injection escape hatch (Codex review on #1930).
+// Freshness / content-change / origin gates. All three are cheap-ish
+// checks that short-circuit before the summarizer spawn. Extracted so
+// `indexSession` stays under the cognitive-complexity ceiling.
+async function shouldSkipBeforeSummarize(
+  workspaceRoot: string,
+  safeId: string,
+  now: number,
+  minInterval: number,
+  force: boolean,
+  meta: SessionMeta,
+): Promise<boolean> {
+  // Origin filter (#1944). Always applied, even under `force: true`:
+  // `system` sessions never surface a title in any UI, and `scheduler`
+  // sessions fall back to `firstUserMessage` (the automation prompt)
+  // which identifies them without an AI summary.
+  if (meta.origin !== undefined && NON_INDEXED_ORIGINS.has(meta.origin)) return true;
+  if (force) return false;
+  if (await isFresh(workspaceRoot, safeId, now, minInterval)) return true;
+  // Second gate: even past the freshness window, if the jsonl has NOT
+  // been written since the last index there's no new content to
+  // summarize. Cuts idle scheduler tick cost from O(sessions) Claude
+  // CLI calls to O(actual updates) — see #1929.
+  return !(await sessionJsonlChangedSinceIndex(workspaceRoot, safeId));
+}
+
 export async function indexSession(workspaceRoot: string, sessionId: string, deps: IndexerDeps = {}): Promise<ChatIndexEntry | null> {
   const safeId = safeSessionIdOrNull(sessionId);
   if (safeId === null) return null;
@@ -289,25 +332,25 @@ export async function indexSession(workspaceRoot: string, sessionId: string, dep
   const now = (deps.now ?? Date.now)();
   const minInterval = deps.minIntervalMs ?? MIN_INDEX_INTERVAL_MS;
   const force = deps.force === true;
+  const mode = deps.mode ?? "off";
 
-  if (!force) {
-    if (await isFresh(workspaceRoot, safeId, now, minInterval)) {
-      return null;
-    }
-    // Second gate: even past the freshness window, if the jsonl has
-    // NOT been written since the last index there's no new content
-    // to summarize. Cuts idle scheduler tick cost from O(sessions)
-    // Claude CLI calls to O(actual updates) — see #1929.
-    if (!(await sessionJsonlChangedSinceIndex(workspaceRoot, safeId))) {
-      return null;
-    }
-  }
+  // Config-driven kill switch (#1944). "off" is the default so a fresh
+  // workspace doesn't burn CLI budget until the user opts in from
+  // Settings → Chat index. Bailing before any I/O keeps the check
+  // ~free (~1 branch) so a backfill tick over N sessions costs O(N)
+  // branches, not O(N × meta reads).
+  if (mode === "off") return null;
+
+  // Meta is read here (before jsonl load / summarizer spawn) so the
+  // origin filter can short-circuit heavy work; the same object is
+  // reused below when building the entry.
+  const meta = await readSessionMeta(workspaceRoot, safeId);
+  if (await shouldSkipBeforeSummarize(workspaceRoot, safeId, now, minInterval, force, meta)) return null;
 
   const input = await loadJsonlInput(sessionJsonlPathFor(workspaceRoot, safeId));
   if (!input.trim()) return null;
 
-  const summary = await summarize(input);
-  const meta = await readSessionMeta(workspaceRoot, safeId);
+  const summary = await summarize(input, { model: mode });
 
   const entry: ChatIndexEntry = {
     id: safeId,

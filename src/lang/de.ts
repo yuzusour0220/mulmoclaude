@@ -231,6 +231,7 @@ const deMessages = {
       photos: "Fotos",
       model: "Modell",
       voice: "Sprache",
+      chatIndex: "Chat-Index",
       skills: "Skills",
       roles: "Rollen",
     },
@@ -290,6 +291,24 @@ const deMessages = {
       ready: "Modell bereit",
       downloadError: "Modell-Download fehlgeschlagen.",
       retry: "Erneut versuchen",
+      loadError: "Einstellungen konnten nicht geladen werden",
+      saveError: "Speichern fehlgeschlagen",
+    },
+    chatIndexTab: {
+      description:
+        "Automatische KI-Titel und Zusammenfassungen für den Chat-Verlauf. Standardmäßig aus — Automatisierungs-Sessions (Scheduler / System-Worker) werden auch bei aktivierter Option immer übersprungen; menschliche Sessions kosten pro beendetem Turn genau einen Summarizer-Aufruf.",
+      modeLabel: "Chat-Index-Modell",
+      helperText: "Haiku ist günstiger; Sonnet liefert schärfere Titel bei langen, themenwechselnden Sessions.",
+      mode: {
+        off: "Aus",
+        haiku: "Haiku",
+        sonnet: "Sonnet",
+      },
+      status: {
+        off: "Indizierung ist AUS",
+        haiku: "Indizierung läuft mit Haiku",
+        sonnet: "Indizierung läuft mit Sonnet",
+      },
       loadError: "Einstellungen konnten nicht geladen werden",
       saveError: "Speichern fehlgeschlagen",
     },

@@ -234,6 +234,7 @@ const esMessages = {
       photos: "Fotos",
       model: "Modelo",
       voice: "Voz",
+      chatIndex: "Índice de chat",
       skills: "Skills",
       roles: "Roles",
     },
@@ -291,6 +292,24 @@ const esMessages = {
       ready: "Modelo listo",
       downloadError: "Error al descargar el modelo.",
       retry: "Reintentar",
+      loadError: "Error al cargar los ajustes",
+      saveError: "Error al guardar",
+    },
+    chatIndexTab: {
+      description:
+        "Títulos y resúmenes automáticos generados por IA para tu historial de chat. Sale desactivado por defecto — las sesiones de automatización (scheduler / trabajadores del sistema) siempre se omiten aunque esté activado; las sesiones humanas solo pagan una llamada al resumidor al terminar cada turno.",
+      modeLabel: "Modelo del índice de chat",
+      helperText: "Haiku es más económico; Sonnet ofrece títulos más precisos en sesiones largas con cambios de tema.",
+      mode: {
+        off: "Desactivado",
+        haiku: "Haiku",
+        sonnet: "Sonnet",
+      },
+      status: {
+        off: "La indexación está DESACTIVADA",
+        haiku: "Indexando con Haiku",
+        sonnet: "Indexando con Sonnet",
+      },
       loadError: "Error al cargar los ajustes",
       saveError: "Error al guardar",
     },
