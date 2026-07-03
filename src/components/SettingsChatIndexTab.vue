@@ -79,21 +79,29 @@ async function load(): Promise<void> {
 
 async function save(): Promise<void> {
   if (saving.value) return;
+  if (modeDraft.value === storedMode.value) return;
+  // Capture the submitted value before await — a concurrent draft change
+  // would otherwise overwrite `storedMode` with a not-yet-saved value.
+  const requested = modeDraft.value;
   saving.value = true;
   errorMessage.value = "";
-  // Send null explicitly when the user picks "off" so the server drops
-  // the field instead of storing "off" verbatim — keeps settings.json
-  // clean of default values.
-  const payload = { chatIndex: modeDraft.value === "off" ? null : modeDraft.value };
-  const response = await apiPut<SettingsResponse>(API_ROUTES.config.base, payload);
+  // The Settings tab uses the PATCH endpoint (`config.settings`) — the
+  // full-shape `config.base` PUT expects `{ settings, mcp }` and would
+  // reject a bare `{ chatIndex }` payload. Send null on "off" so the
+  // server drops the field and settings.json stays default-clean.
+  const payload = { chatIndex: requested === "off" ? null : requested };
+  const response = await apiPut<unknown>(API_ROUTES.config.settings, payload);
+  saving.value = false;
   if (!response.ok) {
     errorMessage.value = response.error || t("settingsModal.chatIndexTab.saveError");
-    saving.value = false;
     return;
   }
-  storedMode.value = modeDraft.value;
-  saving.value = false;
+  storedMode.value = requested;
   emit("saved");
+  // If the user changed the draft while we were in flight, re-trigger.
+  if (modeDraft.value !== requested) {
+    void save();
+  }
 }
 
 watch(
