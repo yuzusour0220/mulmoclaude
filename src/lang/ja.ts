@@ -139,6 +139,9 @@ const jaMessages = {
     disconnectFailed: "切断に失敗しました",
     signInFailed: "Google サインインに失敗しました",
     statusFailed: "状態の取得に失敗しました",
+    description: "リモートアクセスを有効にすると、モバイルデバイスからこの MulmoClaude のコレクションとフィードに接続できます。",
+    howTo: "モバイルから {url} を開き、同じ Google アカウントでサインインしてください。",
+    customViewHint: "モバイル向けのビューが必要な場合は、通常の custom view ではなく {keyword} を作るように Claude に依頼してください。",
   },
   sidebarHeader: {
     home: "最新のチャットに移動",
