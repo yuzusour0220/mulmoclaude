@@ -35,7 +35,8 @@
         :key="session.id"
         tabindex="0"
         role="button"
-        :aria-label="t('sessionHistoryPanel.openRowAria', { preview: session.preview || t('sessionHistoryPanel.noMessages') })"
+        :aria-label="t('sessionHistoryPanel.openRowAria', { preview: session.summary || session.preview || t('sessionHistoryPanel.noMessages') })"
+        :title="session.summary || session.preview || t('sessionHistoryPanel.noMessages')"
         class="relative cursor-pointer rounded p-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
         :class="rowClasses(session)"
         :data-testid="`session-item-${session.id}`"
@@ -91,20 +92,22 @@
             {{ t("sessionHistoryPanel.delete") }}
           </button>
         </div>
-        <div class="flex items-center gap-1.5">
-          <SessionRoleIcon :session="session" :roles="roles" size="sm" />
-          <p class="truncate flex-1 min-w-0" :class="previewClasses(session)">
-            {{ session.preview || t("sessionHistoryPanel.noMessages") }}
+        <!-- Primary line prefers the AI-generated summary (chat indexer,
+             #123) when present — it's typically more informative than
+             the first user message. Fall back to the first user message,
+             then to a "no messages" placeholder. `line-clamp-2` lets a
+             summary wrap so more of it is readable at a glance; the raw
+             first-message fallback stays on a single line via `truncate`
+             so short prompts don't disturb row heights. -->
+        <div class="flex items-start gap-1.5">
+          <SessionRoleIcon :session="session" :roles="roles" size="sm" class="flex-shrink-0 mt-0.5" />
+          <p class="flex-1 min-w-0" :class="[previewClasses(session), session.summary ? 'line-clamp-2' : 'truncate']">
+            {{ session.summary || session.preview || t("sessionHistoryPanel.noMessages") }}
           </p>
-          <span v-if="isSessionRunning(session)" class="flex-shrink-0 flex items-center" :aria-label="t('sessionHistoryPanel.running')">
+          <span v-if="isSessionRunning(session)" class="flex-shrink-0 flex items-center mt-0.5" :aria-label="t('sessionHistoryPanel.running')">
             <span class="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse" />
           </span>
         </div>
-        <!-- Optional second line: AI-generated summary of the
-             session, populated by the chat indexer (#123). -->
-        <p v-if="session.summary" class="text-xs text-gray-500 truncate mt-0.5">
-          {{ session.summary }}
-        </p>
       </div>
     </div>
   </div>
