@@ -159,6 +159,10 @@ export async function spawnSystemWorker(args: {
   message: string;
   roleId: string;
   hidden: boolean;
+  /** Path-bearing attachments to hand the spawned chat (e.g. files the mobile
+   *  remote attached, ingested into the workspace). Forwarded to `startChat`,
+   *  which loads their bytes for the model like any other attachment. */
+  attachments?: Attachment[];
   onComplete?: CompletionHook;
 }): Promise<SpawnSystemWorkerResult> {
   const chatId = randomUUID();
@@ -171,7 +175,7 @@ export async function spawnSystemWorker(args: {
   }
   let result: StartChatResult;
   try {
-    result = await startChat({ message: args.message, roleId: args.roleId, chatSessionId: chatId, origin });
+    result = await startChat({ message: args.message, roleId: args.roleId, chatSessionId: chatId, origin, attachments: args.attachments });
   } catch (err) {
     // `startChat` is normally fire-and-forget, but a synchronous setup failure
     // can reject — release the reservation so the slot isn't leaked until restart.
