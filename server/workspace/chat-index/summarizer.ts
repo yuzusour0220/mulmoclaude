@@ -39,11 +39,18 @@ const SUMMARY_SCHEMA = {
   required: ["title", "summary", "keywords"],
 };
 
-// Model used for summarization. Sonnet, not haiku: the title is the
-// primary way a user finds a past chat, so a weak title makes the
-// history list unusable. One cheap structured call per session is
-// negligible next to the agent turns it summarizes.
-const SUMMARY_MODEL = "sonnet";
+// Default model used when a caller doesn't specify one. Sonnet, not
+// haiku: the title is the primary way a user finds a past chat, so a
+// weak title makes the history list unusable. Since #1944 the model
+// is user-selectable from Settings → Chat index — "off" disables the
+// indexer, "haiku" / "sonnet" pick the model here — so this constant
+// is only the internal fallback when the indexer runs without a
+// model override (e.g. a manual rebuild triggered before the setting
+// resolves).
+const DEFAULT_SUMMARY_MODEL = "sonnet";
+// Explicit union so a bad string from the settings layer can't reach
+// the CLI unchecked. Mirror in `AppSettings.chatIndex` (server/system/config.ts).
+export type SummaryModel = "haiku" | "sonnet";
 
 // Prompt-building constants. Sized for Sonnet's large context: the
 // window is wide enough to carry a long, topic-shifting session's
@@ -68,7 +75,7 @@ const MAX_BUDGET_USD = 0.4;
 // Any module that wants to drive the summarizer — including the
 // indexer — takes a SummarizeFn so tests can supply a deterministic
 // fake. Production path is `defaultSummarize` below.
-export type SummarizeFn = (input: string) => Promise<SummaryResult>;
+export type SummarizeFn = (input: string, opts?: { model?: SummaryModel }) => Promise<SummaryResult>;
 
 interface JsonlEntry {
   source?: string;
@@ -184,7 +191,7 @@ export async function loadJsonlInput(jsonlPath: string): Promise<string> {
 
 // --- spawn layer ----------------------------------------------------
 
-function spawnClaudeSummarize(input: string, timeoutMs: number): Promise<string> {
+function spawnClaudeSummarize(input: string, timeoutMs: number, model: SummaryModel): Promise<string> {
   return new Promise((resolve, reject) => {
     const args = [
       "--print",
@@ -192,7 +199,7 @@ function spawnClaudeSummarize(input: string, timeoutMs: number): Promise<string>
       "--output-format",
       "json",
       "--model",
-      SUMMARY_MODEL,
+      model,
       "--max-budget-usd",
       String(MAX_BUDGET_USD),
       "--json-schema",
@@ -252,7 +259,8 @@ function spawnClaudeSummarize(input: string, timeoutMs: number): Promise<string>
 // Production SummarizeFn: prepare the input from a jsonl path and
 // drive the CLI. Tests inject their own SummarizeFn that bypasses
 // the CLI entirely.
-export const defaultSummarize: SummarizeFn = async (input: string) => {
-  const stdout = await spawnClaudeSummarize(input, DEFAULT_TIMEOUT_MS);
+export const defaultSummarize: SummarizeFn = async (input, opts) => {
+  const model: SummaryModel = opts?.model ?? DEFAULT_SUMMARY_MODEL;
+  const stdout = await spawnClaudeSummarize(input, DEFAULT_TIMEOUT_MS, model);
   return parseClaudeJsonResult(stdout);
 };

@@ -232,6 +232,7 @@ const jaMessages = {
       photos: "写真",
       model: "モデル",
       voice: "音声",
+      chatIndex: "チャットインデックス",
       skills: "スキル",
       roles: "ロール",
     },
@@ -289,6 +290,24 @@ const jaMessages = {
       ready: "モデルの準備が完了しました",
       downloadError: "モデルのダウンロードに失敗しました。",
       retry: "再試行",
+      loadError: "設定の読み込みに失敗しました",
+      saveError: "保存に失敗しました",
+    },
+    chatIndexTab: {
+      description:
+        "チャット履歴の AI タイトル/サマリー自動生成の設定です。デフォルトは off で、自動化系のセッション（scheduler / system worker）は on にしても常に除外されます。人間のセッションのみターン終了時に 1 回要約が走ります。",
+      modeLabel: "チャットインデックスのモデル",
+      helperText: "Haiku は安価。Sonnet は長く話題が移るセッションでタイトル品質が高くなります。",
+      mode: {
+        off: "オフ",
+        haiku: "Haiku",
+        sonnet: "Sonnet",
+      },
+      status: {
+        off: "インデックス作成: オフ",
+        haiku: "Haiku でインデックス作成中",
+        sonnet: "Sonnet でインデックス作成中",
+      },
       loadError: "設定の読み込みに失敗しました",
       saveError: "保存に失敗しました",
     },

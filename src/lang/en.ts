@@ -249,6 +249,7 @@ const enMessages = {
       photos: "Photos",
       model: "Model",
       voice: "Voice",
+      chatIndex: "Chat index",
       skills: "Skills",
       roles: "Roles",
     },
@@ -306,6 +307,24 @@ const enMessages = {
       ready: "Model ready",
       downloadError: "Model download failed.",
       retry: "Retry",
+      loadError: "Failed to load settings",
+      saveError: "Failed to save",
+    },
+    chatIndexTab: {
+      description:
+        "Background AI titles + summaries for your chat history. Ships off — automation sessions (scheduler / system workers) are always skipped even when on, and human sessions only pay one summarizer call each when a turn ends.",
+      modeLabel: "Chat index model",
+      helperText: "Haiku is cheaper; Sonnet gives sharper titles for long, topic-shifting sessions.",
+      mode: {
+        off: "Off",
+        haiku: "Haiku",
+        sonnet: "Sonnet",
+      },
+      status: {
+        off: "Indexing is OFF",
+        haiku: "Indexing with Haiku",
+        sonnet: "Indexing with Sonnet",
+      },
       loadError: "Failed to load settings",
       saveError: "Failed to save",
     },
