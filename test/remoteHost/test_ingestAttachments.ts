@@ -75,6 +75,19 @@ describe("createIngestAttachments", () => {
     assert.deepEqual(order, ["save", "delete"]);
   });
 
+  it("keeps the ingested attachment when the Storage delete fails (best-effort cleanup)", async () => {
+    const { deps, saved } = makeDeps({
+      deleteObject: async () => {
+        throw new Error("delete boom");
+      },
+    });
+    const result = await createIngestAttachments(deps)(["aaa"]);
+    // The file was saved, so the attachment is returned despite the failed
+    // cleanup — a delete error must not drop an already-ingested file.
+    assert.equal(saved.length, 1);
+    assert.deepEqual(result, [{ path: "data/attachments/2026/07/1.jpg", mimeType: "image/jpeg" }]);
+  });
+
   it("rejects when the host is not signed in, without touching Storage", async () => {
     const { deps, fetched } = makeDeps({ uid: () => null });
     await assert.rejects(async () => createIngestAttachments(deps)(["aaa"]), /not signed in/);

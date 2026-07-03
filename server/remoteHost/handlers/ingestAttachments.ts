@@ -16,8 +16,12 @@ import { deleteObject, getBytes, getMetadata, ref } from "firebase/storage";
 import type { Attachment } from "@mulmobridge/protocol";
 
 import { saveAttachment } from "../../utils/files/attachment-store.js";
+import { errorMessage } from "../../utils/errors.js";
+import { log } from "../../system/logger/index.js";
 import { currentUid } from "../auth.js";
 import { storage } from "../firebase.js";
+
+const PREFIX = "remote-host";
 
 // `storage_id` is a bare UUID minted by the remote (`crypto.randomUUID()`).
 // Accept only a safe token so it can never reshape the Storage path (no `/`,
@@ -37,10 +41,12 @@ export interface IngestDeps {
 }
 
 // storage_ids -> path-only Attachments, in order. Rejects the whole batch on the
-// first failure (host not signed in, malformed id, or a download that fails):
-// the remote already uploaded and is waiting on the result, so a surfaced error
-// beats silently starting a chat with a missing file. Each Storage object is
-// deleted only after its bytes are safely in the workspace.
+// first failure to get bytes INTO the workspace (host not signed in, malformed
+// id, or a download/save that fails): the remote already uploaded and is waiting
+// on the result, so a surfaced error beats silently starting a chat with a
+// missing file. The subsequent Storage delete is best-effort — the bytes are
+// already safe in the workspace, so a failed delete only logs and leaves an
+// orphan for the Storage TTL sweep; it must NOT drop an already-ingested file.
 export const createIngestAttachments =
   (deps: IngestDeps) =>
   async (storageIds: string[]): Promise<Attachment[]> => {
@@ -53,7 +59,14 @@ export const createIngestAttachments =
       const storagePath = `users/${uid}/uploads/${storageId}`;
       const { base64, contentType } = await deps.fetchObject(storagePath);
       const saved = await deps.saveAttachment(base64, contentType);
-      await deps.deleteObject(storagePath);
+      // Staging cleanup — best-effort. The file is already in the workspace, so
+      // a delete failure must not abort the batch (that would drop an ingested
+      // attachment); log and let the Storage TTL sweep reap the orphan.
+      try {
+        await deps.deleteObject(storagePath);
+      } catch (error) {
+        log.warn(PREFIX, "failed to delete staged upload after ingest; leaving orphan for TTL sweep", { storagePath, error: errorMessage(error) });
+      }
       attachments.push({ path: saved.relativePath, mimeType: saved.mimeType });
     }
     return attachments;
