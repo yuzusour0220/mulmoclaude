@@ -22,9 +22,11 @@
 // │ client sends `slug` anymore.                                              │
 // └─────────────────────────────────────────────────────────────────────────┘
 //
-// Role is intentionally NOT part of the remote API — the host runs the chat in
-// its default role (spawnSystemWorker → startChat requires a concrete roleId;
-// empty is rejected).
+// Optional `role` — the id of the role the chat should run in (built-in or
+// custom). Absent / null / "" ⇒ the host default role. A provided id MUST match
+// an existing role: spawnSystemWorker requires a concrete roleId and the
+// downstream getRole silently falls back to `general` on a miss, so we validate
+// here and reject an unknown role rather than seed the wrong assistant.
 //
 // Optional `attachments` — full-res files (photos, videos, PDFs) the remote
 // staged to Storage, carried as `[{ storage_id }]`. The host ingests them into
@@ -36,6 +38,7 @@
 // engine + spawner stubbed; the default export wires the real ones.
 import { spawnSystemWorker } from "../../api/routes/agent.js";
 import { loadCollection } from "../../workspace/collections/index.js";
+import { loadAllRoles } from "../../workspace/roles.js";
 import { DEFAULT_ROLE_ID } from "../../../src/config/roles.js";
 import type { CommandHandler, JsonObject, JsonValue } from "../commandChannel.js";
 import { ingestAttachments } from "./ingestAttachments.js";
@@ -44,6 +47,7 @@ export interface StartChatDeps {
   spawn: typeof spawnSystemWorker;
   loadCollection: typeof loadCollection;
   ingest: typeof ingestAttachments;
+  loadRoles: typeof loadAllRoles;
 }
 
 // Parse the optional `attachments` param into a list of storage_ids. Absent ⇒ no
@@ -101,6 +105,17 @@ const composeCollectionSeed = async (deps: StartChatDeps, params: JsonObject, me
 // set it, so they always take the verbatim branch below.
 const hasSlug = (value: JsonValue | undefined): boolean => value != null && value !== "";
 
+// Resolve the optional `role` param to a concrete roleId. Absent / null / "" ⇒
+// the host default. A provided id must be a string that matches an existing
+// role (built-in or custom) — reject an unknown one so we never seed the chat
+// with the wrong (default-fallback) assistant.
+const resolveRoleId = (deps: StartChatDeps, role: JsonValue | undefined): string => {
+  if (role == null || role === "") return DEFAULT_ROLE_ID;
+  if (typeof role !== "string") throw new Error("role must be a string");
+  if (!deps.loadRoles().some((candidate) => candidate.id === role)) throw new Error(`role '${role}' not found`);
+  return role;
+};
+
 export const createStartChat =
   (deps: StartChatDeps): CommandHandler =>
   async (params: JsonObject) => {
@@ -110,12 +125,15 @@ export const createStartChat =
     // Current clients: `message` only ⇒ seed it verbatim. Legacy clients that
     // still send `slug` ⇒ compose the old `/<slug> [id=<itemId>] <message>` seed.
     const seed = hasSlug(params.slug) ? await composeCollectionSeed(deps, params, message) : message;
+    // Resolve the role BEFORE ingest/spawn so an unknown role rejects the
+    // command without staging work or launching a chat.
+    const roleId = resolveRoleId(deps, params.role);
     // Ingest any staged files BEFORE spawning so a download/validation failure
     // rejects the command instead of starting a chat missing its attachments.
     const attachments = await deps.ingest(readStorageIds(params.attachments));
-    const result = await deps.spawn({ message: seed, roleId: DEFAULT_ROLE_ID, hidden: false, attachments });
+    const result = await deps.spawn({ message: seed, roleId, hidden: false, attachments });
     if (!result.ok) throw new Error(result.error);
     return { started: true, chatId: result.chatId };
   };
 
-export const startChat = createStartChat({ spawn: spawnSystemWorker, loadCollection, ingest: ingestAttachments });
+export const startChat = createStartChat({ spawn: spawnSystemWorker, loadCollection, ingest: ingestAttachments, loadRoles: loadAllRoles });

@@ -16,6 +16,10 @@ type Loaded = Awaited<ReturnType<StartChatDeps["loadCollection"]>>;
 const collection = { source: "user" } as unknown as Loaded;
 const feed = { source: "feed" } as unknown as Loaded;
 
+// Stub role registry — `general` (the default) plus one custom role, enough to
+// exercise the "known role passes / unknown role rejects" branches.
+const roles = [{ id: "general" }, { id: "accounting" }] as unknown as ReturnType<StartChatDeps["loadRoles"]>;
+
 // Build stub deps. `loadResult` is what `loadCollection` resolves to (only the
 // legacy slug path calls it): a normal collection (default) ⇒ chat proceeds;
 // `feed` ⇒ refused; `null` ⇒ unknown slug, rejected. `ingestOverride` swaps the
@@ -41,7 +45,8 @@ const makeDeps = (result: Awaited<ReturnType<StartChatDeps["spawn"]>>, loadResul
       ingestCalls.push(storageIds);
       return storageIds.map((storageId) => ({ path: `data/attachments/${storageId}.jpg`, mimeType: "image/jpeg" }));
     }) as StartChatDeps["ingest"]);
-  return { deps: { spawn, loadCollection, ingest } as StartChatDeps, calls, loadCalls, ingestCalls };
+  const loadRoles = (() => roles) as StartChatDeps["loadRoles"];
+  return { deps: { spawn, loadCollection, ingest, loadRoles } as StartChatDeps, calls, loadCalls, ingestCalls };
 };
 
 // ── CURRENT form: `{ message }` only, seeded verbatim ──────────────────────
@@ -183,6 +188,43 @@ describe("createStartChat — file attachments", () => {
     }) as StartChatDeps["ingest"];
     const { deps, calls } = makeDeps({ ok: true, chatId: "chat-4" }, collection, failing);
     await assert.rejects(async () => createStartChat(deps)({ message: "hi", attachments: [{ storage_id: "aaa" }] }), /storage 404/);
+    assert.equal(calls.length, 0);
+  });
+});
+
+// ── Role selection: { message, role } ──────────────────────────────────────
+describe("createStartChat — role selection", () => {
+  it("defaults to the general role when no role is sent", async () => {
+    const { deps, calls } = makeDeps({ ok: true, chatId: "chat-1" });
+    await createStartChat(deps)({ message: "hi" });
+    assert.equal(calls[0].roleId, "general");
+  });
+
+  it("treats null / empty-string role as absent (default role)", async () => {
+    const { deps, calls } = makeDeps({ ok: true, chatId: "chat-2" });
+    await createStartChat(deps)({ message: "hi", role: "" });
+    await createStartChat(deps)({ message: "hi", role: null });
+    assert.deepEqual(
+      calls.map((call) => call.roleId),
+      ["general", "general"],
+    );
+  });
+
+  it("runs the chat in a known role when one is sent", async () => {
+    const { deps, calls } = makeDeps({ ok: true, chatId: "chat-3" });
+    await createStartChat(deps)({ message: "record today's receipt", role: "accounting" });
+    assert.equal(calls[0].roleId, "accounting");
+  });
+
+  it("rejects an unknown role without spawning", async () => {
+    const { deps, calls } = makeDeps({ ok: true, chatId: "chat-4" });
+    await assert.rejects(async () => createStartChat(deps)({ message: "hi", role: "ghost" }), /role 'ghost' not found/);
+    assert.equal(calls.length, 0);
+  });
+
+  it("rejects a non-string role without spawning", async () => {
+    const { deps, calls } = makeDeps({ ok: true, chatId: "chat-5" });
+    await assert.rejects(async () => createStartChat(deps)({ message: "hi", role: 7 }), /role must be a string/);
     assert.equal(calls.length, 0);
   });
 });
