@@ -26,17 +26,38 @@
 // its default role (spawnSystemWorker → startChat requires a concrete roleId;
 // empty is rejected).
 //
+// Optional `images` — full-res photo attachments the remote staged to Storage,
+// carried as `[{ storage_id }]`. The host ingests them into the workspace
+// (ingestImages) and hands the resulting path-only Attachments to the spawned
+// chat. Absent / empty ⇒ byte-for-byte the prior text-only behaviour.
+//
 // Factory (createStartChat) keeps composition/wiring unit-testable with the
 // engine + spawner stubbed; the default export wires the real ones.
 import { spawnSystemWorker } from "../../api/routes/agent.js";
 import { loadCollection } from "../../workspace/collections/index.js";
 import { DEFAULT_ROLE_ID } from "../../../src/config/roles.js";
 import type { CommandHandler, JsonObject, JsonValue } from "../commandChannel.js";
+import { ingestImages } from "./ingestImages.js";
 
 export interface StartChatDeps {
   spawn: typeof spawnSystemWorker;
   loadCollection: typeof loadCollection;
+  ingest: typeof ingestImages;
 }
+
+// Parse the optional `images` param into a list of storage_ids. Absent ⇒ no
+// attachments. A malformed shape (not an array, or an element without a string
+// `storage_id`) rejects the whole command: the remote already uploaded the
+// bytes and is waiting, so a surfaced error beats a chat with a missing photo.
+const readStorageIds = (images: JsonValue | undefined): string[] => {
+  if (images == null) return [];
+  if (!Array.isArray(images)) throw new Error("images must be an array of { storage_id }");
+  return images.map((entry) => {
+    const storageId = entry && typeof entry === "object" && !Array.isArray(entry) ? entry.storage_id : undefined;
+    if (typeof storageId !== "string" || storageId.length === 0) throw new Error("each images entry must be { storage_id: string }");
+    return storageId;
+  });
+};
 
 // LEGACY. Prefix the message with the collection's slash command. `itemId`
 // scopes the chat to one record; empty ⇒ the whole collection. Matches the
@@ -88,9 +109,12 @@ export const createStartChat =
     // Current clients: `message` only ⇒ seed it verbatim. Legacy clients that
     // still send `slug` ⇒ compose the old `/<slug> [id=<itemId>] <message>` seed.
     const seed = hasSlug(params.slug) ? await composeCollectionSeed(deps, params, message) : message;
-    const result = await deps.spawn({ message: seed, roleId: DEFAULT_ROLE_ID, hidden: false });
+    // Ingest any staged photos BEFORE spawning so a download/validation failure
+    // rejects the command instead of starting a chat missing its attachments.
+    const attachments = await deps.ingest(readStorageIds(params.images));
+    const result = await deps.spawn({ message: seed, roleId: DEFAULT_ROLE_ID, hidden: false, attachments });
     if (!result.ok) throw new Error(result.error);
     return { started: true, chatId: result.chatId };
   };
 
-export const startChat = createStartChat({ spawn: spawnSystemWorker, loadCollection });
+export const startChat = createStartChat({ spawn: spawnSystemWorker, loadCollection, ingest: ingestImages });

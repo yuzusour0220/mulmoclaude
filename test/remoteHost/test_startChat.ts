@@ -18,11 +18,15 @@ const feed = { source: "feed" } as unknown as Loaded;
 
 // Build stub deps. `loadResult` is what `loadCollection` resolves to (only the
 // legacy slug path calls it): a normal collection (default) ⇒ chat proceeds;
-// `feed` ⇒ refused; `null` ⇒ unknown slug, rejected. `calls` captures the spawn
-// arguments; `loadCalls` records whether the collection engine was consulted.
-const makeDeps = (result: Awaited<ReturnType<StartChatDeps["spawn"]>>, loadResult: Loaded = collection) => {
+// `feed` ⇒ refused; `null` ⇒ unknown slug, rejected. `ingestOverride` swaps the
+// default image-ingest stub (which echoes one attachment per storage_id) — used
+// to simulate an ingest failure. `calls` captures the spawn arguments;
+// `loadCalls` records whether the collection engine was consulted;
+// `ingestCalls` records each storage_id list handed to ingest.
+const makeDeps = (result: Awaited<ReturnType<StartChatDeps["spawn"]>>, loadResult: Loaded = collection, ingestOverride?: StartChatDeps["ingest"]) => {
   const calls: SpawnArgs[] = [];
   const loadCalls: string[] = [];
+  const ingestCalls: string[][] = [];
   const spawn = (async (args: SpawnArgs) => {
     calls.push(args);
     return result;
@@ -31,7 +35,13 @@ const makeDeps = (result: Awaited<ReturnType<StartChatDeps["spawn"]>>, loadResul
     loadCalls.push(slug);
     return loadResult;
   }) as StartChatDeps["loadCollection"];
-  return { deps: { spawn, loadCollection } as StartChatDeps, calls, loadCalls };
+  const ingest =
+    ingestOverride ??
+    ((async (storageIds: string[]) => {
+      ingestCalls.push(storageIds);
+      return storageIds.map((storageId) => ({ path: `data/attachments/${storageId}.jpg`, mimeType: "image/jpeg" }));
+    }) as StartChatDeps["ingest"]);
+  return { deps: { spawn, loadCollection, ingest } as StartChatDeps, calls, loadCalls, ingestCalls };
 };
 
 // ── CURRENT form: `{ message }` only, seeded verbatim ──────────────────────
@@ -136,5 +146,43 @@ describe("createStartChat — legacy slug form", () => {
   it("rejects an itemId that is present but whitespace-containing", async () => {
     const { deps } = makeDeps({ ok: true, chatId: "chat-4" });
     await assert.rejects(async () => createStartChat(deps)({ slug: "clients", itemId: "a b", message: "hi" }), /itemId must be a non-empty/);
+  });
+});
+
+// ── Image attachments: { message, images:[{ storage_id }] } ────────────────
+describe("createStartChat — image attachments", () => {
+  it("ingests staged photos and hands the resulting attachments to spawn", async () => {
+    const { deps, calls, ingestCalls } = makeDeps({ ok: true, chatId: "chat-1" });
+    const result = await createStartChat(deps)({ message: "look at these", images: [{ storage_id: "aaa" }, { storage_id: "bbb" }] });
+    assert.deepEqual(result, { started: true, chatId: "chat-1" });
+    assert.deepEqual(ingestCalls, [["aaa", "bbb"]]);
+    assert.deepEqual(calls[0].attachments, [
+      { path: "data/attachments/aaa.jpg", mimeType: "image/jpeg" },
+      { path: "data/attachments/bbb.jpg", mimeType: "image/jpeg" },
+    ]);
+    assert.equal(calls[0].message, "look at these");
+  });
+
+  it("passes an empty attachment list when no images are sent (text-only parity)", async () => {
+    const { deps, calls, ingestCalls } = makeDeps({ ok: true, chatId: "chat-2" });
+    await createStartChat(deps)({ message: "hi" });
+    assert.deepEqual(ingestCalls, [[]]);
+    assert.deepEqual(calls[0].attachments, []);
+  });
+
+  it("rejects a malformed images payload without spawning", async () => {
+    const { deps, calls } = makeDeps({ ok: true, chatId: "chat-3" });
+    await assert.rejects(async () => createStartChat(deps)({ message: "hi", images: "nope" }), /images must be an array/);
+    await assert.rejects(async () => createStartChat(deps)({ message: "hi", images: [{}] }), /each images entry/);
+    assert.equal(calls.length, 0);
+  });
+
+  it("surfaces an ingest failure without spawning", async () => {
+    const failing = (async () => {
+      throw new Error("storage 404");
+    }) as StartChatDeps["ingest"];
+    const { deps, calls } = makeDeps({ ok: true, chatId: "chat-4" }, collection, failing);
+    await assert.rejects(async () => createStartChat(deps)({ message: "hi", images: [{ storage_id: "aaa" }] }), /storage 404/);
+    assert.equal(calls.length, 0);
   });
 });
