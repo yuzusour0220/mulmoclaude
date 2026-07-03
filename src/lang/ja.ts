@@ -935,6 +935,8 @@ const jaMessages = {
     cancel: "キャンセル",
     seededByPlugin: "{pkg} から",
     seededByPluginTooltip: "このメッセージは {pkg} プラグインによって作成されたもので、あなたが送信したものではありません。",
+    truncatedForRender:
+      "このメッセージは非常に長いため（全 {total} 文字）、描画のフリーズを防ぐため先頭のみ表示しています（{omitted} 文字を省略）。全文はコピーボタンから取得できます。",
   },
   pluginSkill: {
     noDescription: "(説明なし)",

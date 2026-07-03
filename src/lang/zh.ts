@@ -925,6 +925,7 @@ const zhMessages = {
     cancel: "取消",
     seededByPlugin: "来自 {pkg}",
     seededByPluginTooltip: "此消息由 {pkg} 插件生成，并非您发送。",
+    truncatedForRender: "该消息异常长（共 {total} 个字符）。为保持标签页响应，仅渲染开头部分 — 隐藏了 {omitted} 个字符。使用复制按钮获取完整原文。",
   },
   pluginSkill: {
     noDescription: "(无描述)",

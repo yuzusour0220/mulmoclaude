@@ -936,6 +936,8 @@ const ptBRMessages = {
     cancel: "Cancelar",
     seededByPlugin: "de {pkg}",
     seededByPluginTooltip: "Esta mensagem foi gerada pelo plugin {pkg}, não foi enviada por você.",
+    truncatedForRender:
+      "Esta mensagem é excepcionalmente longa ({total} caracteres no total). Apenas a primeira parte é renderizada — {omitted} caracteres ocultos para manter a aba responsiva. Use Copiar para obter o texto completo.",
   },
   pluginSkill: {
     noDescription: "(sem descrição)",

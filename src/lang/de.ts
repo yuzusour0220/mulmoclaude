@@ -949,6 +949,8 @@ const deMessages = {
     cancel: "Abbrechen",
     seededByPlugin: "von {pkg}",
     seededByPluginTooltip: "Diese Nachricht wurde vom Plugin {pkg} erstellt und nicht von Ihnen gesendet.",
+    truncatedForRender:
+      "Diese Nachricht ist ungewöhnlich lang (insgesamt {total} Zeichen). Nur der erste Teil wird angezeigt – {omitted} Zeichen ausgeblendet, damit der Tab reaktionsfähig bleibt. Nutze „Kopieren“ für den vollständigen Text.",
   },
   pluginSkill: {
     noDescription: "(keine Beschreibung)",

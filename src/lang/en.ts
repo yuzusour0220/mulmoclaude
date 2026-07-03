@@ -961,6 +961,8 @@ const enMessages = {
     cancel: "Cancel",
     seededByPlugin: "from {pkg}",
     seededByPluginTooltip: "This message was seeded by the {pkg} plugin, not sent by you.",
+    truncatedForRender:
+      "This message is unusually long ({total} chars total). Only the first portion is rendered — {omitted} chars hidden to keep the tab responsive. Use Copy for the full raw text.",
   },
   pluginSkill: {
     noDescription: "(no description)",

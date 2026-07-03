@@ -935,6 +935,8 @@ const koMessages = {
     cancel: "취소",
     seededByPlugin: "{pkg}에서",
     seededByPluginTooltip: "이 메시지는 사용자가 보낸 것이 아니라 {pkg} 플러그인에서 작성한 것입니다.",
+    truncatedForRender:
+      "이 메시지는 매우 깁니다(총 {total}자). 탭이 멈추지 않도록 앞부분만 표시됩니다 — {omitted}자 숨김. 전체 원문은 복사 버튼으로 가져올 수 있습니다.",
   },
   pluginSkill: {
     noDescription: "(설명 없음)",

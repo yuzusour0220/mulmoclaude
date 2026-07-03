@@ -947,6 +947,8 @@ const esMessages = {
     cancel: "Cancelar",
     seededByPlugin: "desde {pkg}",
     seededByPluginTooltip: "Este mensaje fue generado por el plugin {pkg}, no enviado por ti.",
+    truncatedForRender:
+      "Este mensaje es inusualmente largo ({total} caracteres en total). Solo se muestra la primera parte — {omitted} caracteres ocultos para mantener la pestaña receptiva. Usa Copiar para obtener el texto completo.",
   },
   pluginSkill: {
     noDescription: "(sin descripción)",
