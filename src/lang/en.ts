@@ -313,7 +313,7 @@ const enMessages = {
     },
     chatIndexTab: {
       description:
-        "Background AI titles + summaries for your chat history. Ships off — automation sessions (scheduler / system workers) are always skipped even when on, and human sessions only pay one summarizer call each when a turn ends.",
+        "Background AI titles + summaries for your chat history. Off by default — automation sessions (scheduler / system workers) are always skipped even when on, and human sessions only pay one summarizer call each when a turn ends.",
       modeLabel: "Chat index model",
       helperText: "Haiku is cheaper; Sonnet gives sharper titles for long, topic-shifting sessions.",
       mode: {
@@ -331,7 +331,7 @@ const enMessages = {
     },
     journalTab: {
       description:
-        "Automated daily journal — summarises recent chat sessions into journal/*.md and extracts durable memory notes. Ships off. Automation sessions (scheduler / system workers) are always excluded regardless of this setting.",
+        "Automated daily journal — summarises recent chat sessions into journal/*.md and extracts durable memory notes. Off by default. Automation sessions (scheduler / system workers) are always excluded regardless of this setting.",
       modeLabel: "Journal model",
       helperText: "Haiku is cheaper; Sonnet produces richer daily / topic summaries. The hourly pass runs only when this is set.",
       mode: {

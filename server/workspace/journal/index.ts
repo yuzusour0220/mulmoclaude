@@ -18,7 +18,7 @@ import { buildIndexMarkdown, type IndexTopicEntry, type IndexDailyEntry } from "
 import { runClaudeCli, ClaudeCliNotFoundError, type Summarize, type JournalSummaryModel } from "./archivist-cli.js";
 import { extractFirstH1 } from "../../../src/utils/markdown/extractFirstH1.js";
 import { log } from "../../system/logger/index.js";
-import { journalMode as resolveJournalMode, loadSettings } from "../../system/config.js";
+import { journalMode as resolveJournalMode, loadSettings, type JournalMode } from "../../system/config.js";
 
 export { extractFirstH1 };
 
@@ -45,7 +45,7 @@ export interface MaybeRunJournalOptions {
   // "haiku" / "sonnet" pick the model the archivist CLI spawns. Tests
   // and the force-run switch inject this directly; production callers
   // (turn-end hook, scheduled task) let the resolver pick it up.
-  mode?: JournalSummaryModel | "off";
+  mode?: JournalMode;
 }
 
 export async function maybeRunJournal(opts: MaybeRunJournalOptions = {}): Promise<void> {
