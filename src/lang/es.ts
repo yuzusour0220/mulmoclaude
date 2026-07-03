@@ -139,6 +139,9 @@ const esMessages = {
     disconnectFailed: "Error al desconectar",
     signInFailed: "Error al iniciar sesión con Google",
     statusFailed: "Error al cargar el estado",
+    description: "El acceso remoto permite que un dispositivo móvil se conecte a las colecciones y feeds de este MulmoClaude.",
+    howTo: "En tu teléfono, abre {url} e inicia sesión con la misma cuenta de Google.",
+    customViewHint: "Para una vista compatible con móviles, pide a Claude que cree una {keyword} (no una custom view normal).",
   },
   sidebarHeader: {
     home: "Ir al chat más reciente",

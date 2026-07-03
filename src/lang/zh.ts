@@ -136,6 +136,9 @@ const zhMessages = {
     disconnectFailed: "断开连接失败",
     signInFailed: "Google 登录失败",
     statusFailed: "加载状态失败",
+    description: "远程访问允许移动设备连接到此 MulmoClaude 的收藏与消息流。",
+    howTo: "在手机上打开 {url}，用同一个 Google 账号登录。",
+    customViewHint: "如需移动端优化的视图，请让 Claude 创建 {keyword}（而不是普通的 custom view）。",
   },
   sidebarHeader: {
     home: "前往最新对话",

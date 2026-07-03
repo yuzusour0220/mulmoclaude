@@ -134,6 +134,9 @@ const frMessages = {
     disconnectFailed: "Échec de la déconnexion",
     signInFailed: "Échec de la connexion Google",
     statusFailed: "Échec du chargement de l'état",
+    description: "L'accès distant permet à un appareil mobile de se connecter aux collections et aux flux de ce MulmoClaude.",
+    howTo: "Sur votre téléphone, ouvrez {url} et connectez-vous avec le même compte Google.",
+    customViewHint: "Pour une vue adaptée au mobile, demandez à Claude de créer une {keyword} (pas une custom view classique).",
   },
   sidebarHeader: {
     home: "Aller à la dernière conversation",

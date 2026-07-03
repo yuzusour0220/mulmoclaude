@@ -134,6 +134,9 @@ const ptBRMessages = {
     disconnectFailed: "Falha ao desconectar",
     signInFailed: "Falha ao entrar com o Google",
     statusFailed: "Falha ao carregar o status",
+    description: "O acesso remoto permite que um dispositivo móvel se conecte às coleções e feeds deste MulmoClaude.",
+    howTo: "No seu telefone, abra {url} e entre com a mesma conta do Google.",
+    customViewHint: "Para uma visualização adaptada ao celular, peça ao Claude para criar uma {keyword} (não uma custom view comum).",
   },
   sidebarHeader: {
     home: "Ir para o chat mais recente",

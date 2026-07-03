@@ -52,6 +52,20 @@
       </div>
 
       <p v-if="error" class="mt-2 text-red-600 break-words" data-testid="remote-host-error">{{ error }}</p>
+
+      <div class="mt-3 pt-2 border-t border-gray-100 text-[11px] leading-snug text-gray-600 space-y-2" data-testid="remote-host-help">
+        <p>{{ t("remoteHost.description") }}</p>
+        <i18n-t keypath="remoteHost.howTo" tag="p" scope="global">
+          <template #url>
+            <a :href="MOBILE_URL" target="_blank" rel="noopener noreferrer" class="font-mono text-blue-600 hover:underline break-all">{{ MOBILE_URL }}</a>
+          </template>
+        </i18n-t>
+        <i18n-t keypath="remoteHost.customViewHint" tag="p" scope="global">
+          <template #keyword>
+            <code class="px-1 py-0.5 rounded bg-gray-100 text-gray-800">custom remote view</code>
+          </template>
+        </i18n-t>
+      </div>
     </div>
   </div>
 </template>
@@ -81,6 +95,10 @@ interface StatusResponse {
 }
 
 const { t } = useI18n();
+
+// Mobile companion PWA. Shown in the popover as help text; not fetched from
+// this desktop app, so no runtime env override is needed.
+const MOBILE_URL = "https://mulmoserver.web.app";
 
 const open = ref(false);
 const busy = ref(false);
