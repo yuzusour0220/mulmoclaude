@@ -108,11 +108,14 @@ const hasSlug = (value: JsonValue | undefined): boolean => value != null && valu
 // Resolve the optional `role` param to a concrete roleId. Absent / null / "" ⇒
 // the host default. A provided id must be a string that matches an existing
 // role (built-in or custom) — reject an unknown one so we never seed the chat
-// with the wrong (default-fallback) assistant.
+// with the wrong (default-fallback) assistant. `isDebugRole` roles are excluded:
+// the desktop picker hides them from new sessions outside dev mode
+// (RoleSelector.vue), and the remote channel is a production-facing entry point,
+// so a debug role id is treated as not selectable here (rejected as unknown).
 const resolveRoleId = (deps: StartChatDeps, role: JsonValue | undefined): string => {
   if (role == null || role === "") return DEFAULT_ROLE_ID;
   if (typeof role !== "string") throw new Error("role must be a string");
-  if (!deps.loadRoles().some((candidate) => candidate.id === role)) throw new Error(`role '${role}' not found`);
+  if (!deps.loadRoles().some((candidate) => candidate.id === role && !candidate.isDebugRole)) throw new Error(`role '${role}' not found`);
   return role;
 };
 

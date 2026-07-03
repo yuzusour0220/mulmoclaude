@@ -16,9 +16,10 @@ type Loaded = Awaited<ReturnType<StartChatDeps["loadCollection"]>>;
 const collection = { source: "user" } as unknown as Loaded;
 const feed = { source: "feed" } as unknown as Loaded;
 
-// Stub role registry — `general` (the default) plus one custom role, enough to
-// exercise the "known role passes / unknown role rejects" branches.
-const roles = [{ id: "general" }, { id: "accounting" }] as unknown as ReturnType<StartChatDeps["loadRoles"]>;
+// Stub role registry — `general` (the default), one custom role, and a
+// debug-only role, enough to exercise "known role passes / unknown role rejects
+// / debug role rejected" branches.
+const roles = [{ id: "general" }, { id: "accounting" }, { id: "debug", isDebugRole: true }] as unknown as ReturnType<StartChatDeps["loadRoles"]>;
 
 // Build stub deps. `loadResult` is what `loadCollection` resolves to (only the
 // legacy slug path calls it): a normal collection (default) ⇒ chat proceeds;
@@ -219,6 +220,12 @@ describe("createStartChat — role selection", () => {
   it("rejects an unknown role without spawning", async () => {
     const { deps, calls } = makeDeps({ ok: true, chatId: "chat-4" });
     await assert.rejects(async () => createStartChat(deps)({ message: "hi", role: "ghost" }), /role 'ghost' not found/);
+    assert.equal(calls.length, 0);
+  });
+
+  it("rejects a debug-only role (not selectable from the production remote channel)", async () => {
+    const { deps, calls } = makeDeps({ ok: true, chatId: "chat-debug" });
+    await assert.rejects(async () => createStartChat(deps)({ message: "hi", role: "debug" }), /role 'debug' not found/);
     assert.equal(calls.length, 0);
   });
 
