@@ -284,6 +284,9 @@ export function saveSettings(settings: AppSettings): void {
       payload.voiceInput.model = settings.voiceInput.model;
     }
   }
+  if (settings.chatIndex !== undefined) {
+    payload.chatIndex = settings.chatIndex;
+  }
   const serialised = JSON.stringify(payload, null, 2);
   writeFileAtomicSync(settingsPath(), `${serialised}\n`, { mode: 0o600 });
 }

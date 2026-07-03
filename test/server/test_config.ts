@@ -90,6 +90,21 @@ describe("isAppSettingsPatch", () => {
     assert.equal(mod.isAppSettingsPatch({ effortLevel: "ultra" }), false);
     assert.equal(mod.isAppSettingsPatch({ effortLevel: 42 }), false);
   });
+
+  // #1944: same null-sentinel + strict-value pattern as effortLevel
+  // for the new chatIndex field.
+  it("accepts every known chatIndex mode and the null clear-sentinel", () => {
+    for (const mode of mod.CHAT_INDEX_MODES) {
+      assert.ok(mod.isAppSettingsPatch({ chatIndex: mode }), `expected ${mode} to be accepted`);
+    }
+    assert.ok(mod.isAppSettingsPatch({ chatIndex: null }));
+  });
+
+  it("rejects unknown chatIndex values on the patch path", () => {
+    assert.equal(mod.isAppSettingsPatch({ chatIndex: "opus" }), false);
+    assert.equal(mod.isAppSettingsPatch({ chatIndex: "" }), false);
+    assert.equal(mod.isAppSettingsPatch({ chatIndex: 42 }), false);
+  });
 });
 
 describe("normaliseAppSettingsPatch", () => {
@@ -103,6 +118,16 @@ describe("normaliseAppSettingsPatch", () => {
 
   it("preserves other fields untouched", () => {
     assert.deepEqual(mod.normaliseAppSettingsPatch({ extraAllowedTools: ["a"], effortLevel: null }), { extraAllowedTools: ["a"] });
+  });
+
+  // #1944: chatIndex null-sentinel mirrors effortLevel.
+  it("strips null chatIndex", () => {
+    assert.deepEqual(mod.normaliseAppSettingsPatch({ chatIndex: null }), {});
+  });
+
+  it("preserves a present chatIndex", () => {
+    assert.deepEqual(mod.normaliseAppSettingsPatch({ chatIndex: "haiku" }), { chatIndex: "haiku" });
+    assert.deepEqual(mod.normaliseAppSettingsPatch({ chatIndex: "sonnet" }), { chatIndex: "sonnet" });
   });
 });
 
@@ -387,5 +412,38 @@ describe("saveSettings", () => {
     const leftover = entries.filter((entry) => entry.endsWith(".tmp"));
     assert.deepEqual(leftover, []);
     assert.deepEqual(mod.loadSettings(), { extraAllowedTools: ["second"] });
+  });
+
+  // #1944: without this test the earlier bug (saveSettings dropping
+  // chatIndex on write, so the mode reverted on reload) would slip
+  // past. Roundtrips both non-default modes.
+  it("persists chatIndex and roundtrips it through loadSettings", () => {
+    mod.saveSettings({ extraAllowedTools: [], chatIndex: "haiku" });
+    assert.deepEqual(mod.loadSettings(), { extraAllowedTools: [], chatIndex: "haiku" });
+    mod.saveSettings({ extraAllowedTools: [], chatIndex: "sonnet" });
+    assert.deepEqual(mod.loadSettings(), { extraAllowedTools: [], chatIndex: "sonnet" });
+  });
+
+  it("omits chatIndex when unset so settings.json stays default-clean", () => {
+    mod.saveSettings({ extraAllowedTools: [] });
+    const raw = readFileSync(mod.settingsPath(), "utf-8");
+    const parsed = JSON.parse(raw);
+    assert.equal("chatIndex" in parsed, false);
+  });
+});
+
+// #1944: the resolver is the single choke point every reader
+// (indexer, backfill, settings tab) uses to translate the on-disk
+// value into a mode literal. Belt-and-braces test that undefined /
+// missing → "off" so the docs stay honest.
+describe("chatIndexMode resolver", () => {
+  it("returns 'off' when the field is undefined (default)", () => {
+    assert.equal(mod.chatIndexMode({ extraAllowedTools: [] }), "off");
+  });
+
+  it("returns the stored value when set", () => {
+    assert.equal(mod.chatIndexMode({ extraAllowedTools: [], chatIndex: "haiku" }), "haiku");
+    assert.equal(mod.chatIndexMode({ extraAllowedTools: [], chatIndex: "sonnet" }), "sonnet");
+    assert.equal(mod.chatIndexMode({ extraAllowedTools: [], chatIndex: "off" }), "off");
   });
 });
