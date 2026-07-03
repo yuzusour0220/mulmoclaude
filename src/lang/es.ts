@@ -235,6 +235,7 @@ const esMessages = {
       model: "Modelo",
       voice: "Voz",
       chatIndex: "Índice de chat",
+      journal: "Diario",
       skills: "Skills",
       roles: "Roles",
     },
@@ -309,6 +310,24 @@ const esMessages = {
         off: "La indexación está DESACTIVADA",
         haiku: "Indexando con Haiku",
         sonnet: "Indexando con Sonnet",
+      },
+      loadError: "Error al cargar los ajustes",
+      saveError: "Error al guardar",
+    },
+    journalTab: {
+      description:
+        "Diario automático — resume las sesiones de chat recientes en journal/*.md y extrae notas de memoria duradera. Sale desactivado. Las sesiones de automatización (scheduler / trabajadores del sistema) se excluyen siempre, independientemente de esta configuración.",
+      modeLabel: "Modelo del diario",
+      helperText: "Haiku es más económico; Sonnet produce resúmenes diarios y por tema más ricos. El pase horario solo se ejecuta cuando esto está activado.",
+      mode: {
+        off: "Desactivado",
+        haiku: "Haiku",
+        sonnet: "Sonnet",
+      },
+      status: {
+        off: "El diario está DESACTIVADO",
+        haiku: "Diario en ejecución con Haiku",
+        sonnet: "Diario en ejecución con Sonnet",
       },
       loadError: "Error al cargar los ajustes",
       saveError: "Error al guardar",

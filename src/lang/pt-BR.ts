@@ -230,6 +230,7 @@ const ptBRMessages = {
       model: "Modelo",
       voice: "Voz",
       chatIndex: "Índice de chat",
+      journal: "Diário",
       skills: "Skills",
       roles: "Papéis",
     },
@@ -303,6 +304,24 @@ const ptBRMessages = {
         off: "Indexação DESATIVADA",
         haiku: "Indexando com Haiku",
         sonnet: "Indexando com Sonnet",
+      },
+      loadError: "Falha ao carregar as configurações",
+      saveError: "Falha ao salvar",
+    },
+    journalTab: {
+      description:
+        "Diário diário automatizado — resume sessões recentes de chat em journal/*.md e extrai notas de memória duradoura. Sai desativado por padrão. Sessões de automação (scheduler / workers do sistema) são sempre excluídas, independentemente desta configuração.",
+      modeLabel: "Modelo do diário",
+      helperText: "Haiku é mais barato; Sonnet produz resumos diários / por tópico mais ricos. A passagem horária só é executada quando isto está ativado.",
+      mode: {
+        off: "Desativado",
+        haiku: "Haiku",
+        sonnet: "Sonnet",
+      },
+      status: {
+        off: "Diário DESATIVADO",
+        haiku: "Diário em execução com Haiku",
+        sonnet: "Diário em execução com Sonnet",
       },
       loadError: "Falha ao carregar as configurações",
       saveError: "Falha ao salvar",

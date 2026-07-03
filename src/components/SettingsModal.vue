@@ -169,6 +169,8 @@
             <SettingsVoiceTab v-else-if="activeTab === 'voice'" :reload-token="voiceReloadToken" />
 
             <SettingsChatIndexTab v-else-if="activeTab === 'chatIndex'" :reload-token="chatIndexReloadToken" @saved="emit('saved')" />
+
+            <SettingsJournalTab v-else-if="activeTab === 'journal'" :reload-token="journalReloadToken" @saved="emit('saved')" />
           </template>
         </div>
       </div>
@@ -200,6 +202,7 @@ import SettingsPhotosTab from "./SettingsPhotosTab.vue";
 import SettingsModelTab from "./SettingsModelTab.vue";
 import SettingsVoiceTab from "./SettingsVoiceTab.vue";
 import SettingsChatIndexTab from "./SettingsChatIndexTab.vue";
+import SettingsJournalTab from "./SettingsJournalTab.vue";
 import SkillsView from "../plugins/manageSkills/View.vue";
 import RolesView from "./RolesView.vue";
 import PluginScopedRoot from "./PluginScopedRoot.vue";
@@ -248,7 +251,7 @@ const emit = defineEmits<{
 // update / remove persist immediately).
 const mcpTabRef = ref<{ flushDraft: () => boolean; hasPendingDraft: () => boolean } | null>(null);
 
-type TabId = "gemini" | "tools" | "mcp" | "dirs" | "refs" | "map" | "photos" | "model" | "voice" | "chatIndex" | "skills" | "roles";
+type TabId = "gemini" | "tools" | "mcp" | "dirs" | "refs" | "map" | "photos" | "model" | "voice" | "chatIndex" | "journal" | "skills" | "roles";
 
 const activeTab = ref<TabId>("tools");
 
@@ -264,7 +267,7 @@ const isFullTab = computed(() => FULL_TABS.includes(activeTab.value));
 // item is filtered out by `visibleGroups` when geminiAvailable === true
 // (env var present → user has nothing to configure).
 const GROUPS: readonly { key: string; items: readonly TabId[] }[] = [
-  { key: "llm", items: ["model", "voice", "chatIndex", "tools", "gemini"] },
+  { key: "llm", items: ["model", "voice", "chatIndex", "journal", "tools", "gemini"] },
   { key: "servers", items: ["mcp"] },
   { key: "workspace", items: ["dirs", "refs"] },
   { key: "plugins", items: ["map", "photos"] },
@@ -298,6 +301,7 @@ const photosReloadToken = ref(0);
 const modelReloadToken = ref(0);
 const voiceReloadToken = ref(0);
 const chatIndexReloadToken = ref(0);
+const journalReloadToken = ref(0);
 const toolsText = ref("");
 // Server truth for tools — updated on load and on a successful Save
 // from the Tools tab. `toolsDirty` compares this against `toolsText`
@@ -506,6 +510,7 @@ watch(
       modelReloadToken.value += 1;
       voiceReloadToken.value += 1;
       chatIndexReloadToken.value += 1;
+      journalReloadToken.value += 1;
       statusMessage.value = "";
       statusError.value = false;
     }
