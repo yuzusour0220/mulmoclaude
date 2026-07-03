@@ -1,12 +1,12 @@
 // Pure resolver for a collection's dynamic launcher-shortcut icon (see
 // `CollectionSchema.dynamicIcon`). Selects one "source" record from a
-// (possibly cross-collection, optionally `when`-filtered) records pool,
+// (possibly cross-collection, optionally `where`-filtered) records pool,
 // then maps it through a first-match-wins rules list to an icon name.
 // No fs, no host state — the server-side compute
 // (`packages/core/src/collection/server/dynamicIcon.ts`) loads the source
 // collection's records and calls these.
 
-import { whenMatches } from "./actionVisible";
+import { matchesWhere } from "./where";
 import type { CollectionFieldSpec, CollectionItem, CollectionSchema, DynamicIconSource, DynamicIconSpec } from "./schema";
 
 /** The record with the greatest `String(record[field])` (localeCompare) —
@@ -16,15 +16,15 @@ function latestByField(pool: CollectionItem[], field: string): CollectionItem {
 }
 
 /** Reduce `records` to the one record that decides the effective icon, per
- *  `source`'s `when` filter + `from` strategy:
- *  - pool = `source.when`-filtered records, or every record when unset;
+ *  `source`'s `where` filter + `from` strategy:
+ *  - pool = `source.where`-filtered records, or every record when unset;
  *  - an empty pool resolves to `null` (no source record → fallback);
  *  - `from: "first"` / `"when"` → the first pool record (storage order);
  *  - `from: "latest"` (default), with `orderBy` given → the pool record
  *    whose `String(record[orderBy])` sorts highest;
  *  - `from: "latest"`, with no `orderBy` → the last pool record. */
 export function selectDynamicRecord(records: CollectionItem[], source: DynamicIconSource, orderBy: string | undefined): CollectionItem | null {
-  const pool = source.when ? records.filter((record) => whenMatches(source.when, record)) : records;
+  const pool = source.where ? records.filter((r) => matchesWhere(source.where!, r)) : records;
   if (pool.length === 0) return null;
   if (source.from === "first" || source.from === "when") return pool[0];
   return orderBy ? latestByField(pool, orderBy) : pool[pool.length - 1];
@@ -32,12 +32,12 @@ export function selectDynamicRecord(records: CollectionItem[], source: DynamicIc
 
 /** Map a resolved source record to the effective icon: `spec.fallback`
  *  (or the collection's own static `icon`) when there's no record or no
- *  rule matches; otherwise the `icon` of the first rule whose `when`
+ *  rule matches; otherwise the `icon` of the first rule whose `where`
  *  matches the record. */
 export function resolveIcon(record: CollectionItem | null, spec: DynamicIconSpec, staticIcon: string): string {
   const fallback = spec.fallback ?? staticIcon;
   if (!record) return fallback;
-  const rule = spec.rules.find((candidate) => whenMatches(candidate.when, record));
+  const rule = spec.rules.find((rule) => matchesWhere(rule.where, record));
   return rule ? rule.icon : fallback;
 }
 

@@ -460,17 +460,26 @@ const IngestSchemaZ = z.discriminatedUnion("kind", [DeclarativeIngestZ, AgentIng
 // so — unlike `ref`/`embed`/`when.field` elsewhere in this file — its
 // shape is validated here without a cross-field refine against a specific
 // target schema (that collection may not even be loaded yet); a bad
-// `source.collection`/`orderBy`/rule `when.field` fails soft at compute
+// `source.collection`/`orderBy`/condition `field` fails soft at compute
 // time instead (`computeCollectionIcon`), matching this feature's locked
 // design (see plans/feat-dynamic-collection-icons.md "Open questions").
+//
+// `where` is a richer AND-of-conditions predicate than the single-field
+// `WhenSchema` used elsewhere (fields/actions) — see `../core/where`.
+const WhereCondZ = z.object({
+  field: z.string().trim().min(1),
+  op: z.enum(["eq", "ne", "in", "gt", "gte", "lt", "lte", "contains"]),
+  value: z.union([z.string(), z.array(z.string())]),
+});
+const WhereZ = z.array(WhereCondZ);
 const DynamicIconSourceZ = z.object({
   collection: z.string().trim().min(1),
   from: z.enum(["latest", "first", "when"]).optional(),
   orderBy: z.string().trim().min(1).optional(),
-  when: WhenSchema.optional(),
+  where: WhereZ.optional(),
 });
 const DynamicIconRuleZ = z.object({
-  when: WhenSchema,
+  where: WhereZ,
   icon: z.string().trim().min(1),
 });
 const DynamicIconSpecZ = z.object({

@@ -11,6 +11,8 @@
 // plans/done/feat-skill-driven-apps-worklog.md — historical names predate
 // the rename).
 
+import type { Where } from "./where";
+
 /** Minimal "this collection is a feed" descriptor carried on the schema.
  *  Deliberately narrow — the canonical collection contract stays
  *  independent of the host's feeds subsystem. The host's richer retrieval
@@ -269,22 +271,22 @@ export interface CollectionAction {
 }
 
 /** One rule in a `dynamicIcon.rules` list: when the resolved source
- *  record matches `when` (see {@link CollectionWhen}), the collection's
- *  effective launcher icon becomes `icon`. Evaluated top to bottom — the
- *  first match wins. */
+ *  record matches `where` (an AND of typed conditions, see {@link Where}),
+ *  the collection's effective launcher icon becomes `icon`. Evaluated top
+ *  to bottom — the first match wins. */
 export interface DynamicIconRule {
-  when: CollectionWhen;
+  where: Where;
   icon: string;
 }
 
 /** Where a {@link DynamicIconSpec}'s source record comes from: a (possibly
- *  cross-collection) pool of records, optionally narrowed by `when` and
+ *  cross-collection) pool of records, optionally narrowed by `where` and
  *  reduced to a single record by `from`. */
 export interface DynamicIconSource {
   /** Slug of the collection to read records from — the collection itself
    *  (self-reference) or another one (cross-collection). Required. */
   collection: string;
-  /** How to reduce the (optionally `when`-filtered) pool to one record.
+  /** How to reduce the (optionally `where`-filtered) pool to one record.
    *  `"latest"` (default): the record with the greatest `orderBy` value.
    *  `"first"` / `"when"`: the first record in the pool (storage order). */
   from?: "latest" | "first" | "when";
@@ -292,9 +294,10 @@ export interface DynamicIconSource {
    *  first `date`/`datetime` field (declaration order); when the source
    *  has none, `"latest"` falls back to the last pool record. */
   orderBy?: string;
-  /** Optional predicate narrowing the pool before `from` reduces it to one
-   *  record (e.g. restrict a shared weather collection to one region). */
-  when?: CollectionWhen;
+  /** Optional predicate (AND of typed conditions) narrowing the pool
+   *  before `from` reduces it to one record (e.g. restrict a shared
+   *  weather collection to one region). */
+  where?: Where;
 }
 
 /** Declarative "data state → icon" mapping for a collection's launcher
@@ -304,7 +307,7 @@ export interface DynamicIconSource {
 export interface DynamicIconSpec {
   /** The record the `rules` are evaluated against. Required. */
   source: DynamicIconSource;
-  /** First-match-wins list of "resolved record matches `when` → `icon`"
+  /** First-match-wins list of "resolved record matches `where` → `icon`"
    *  rules. */
   rules: DynamicIconRule[];
   /** Icon used when no source record resolves or no rule matches.

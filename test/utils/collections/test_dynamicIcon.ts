@@ -57,14 +57,14 @@ describe("selectDynamicRecord", () => {
     assert.deepEqual(selectDynamicRecord(tied, source, "date"), tied[0]);
   });
 
-  it("source.when narrows the pool before from reduces it", () => {
-    const source: DynamicIconSource = { collection: "weather", when: { field: "condition", in: ["rain", "cloudy"] } };
+  it("source.where narrows the pool before from reduces it", () => {
+    const source: DynamicIconSource = { collection: "weather", where: [{ field: "condition", op: "in", value: ["rain", "cloudy"] }] };
     // Latest (no orderBy) over the filtered pool [b, c] is the last one, c.
     assert.deepEqual(selectDynamicRecord(records, source, undefined), records[2]);
   });
 
-  it("source.when filtering out every record resolves to null", () => {
-    const source: DynamicIconSource = { collection: "weather", when: { field: "condition", in: ["snow"] } };
+  it("source.where filtering out every record resolves to null", () => {
+    const source: DynamicIconSource = { collection: "weather", where: [{ field: "condition", op: "in", value: ["snow"] }] };
     assert.equal(selectDynamicRecord(records, source, "date"), null);
   });
 
@@ -78,8 +78,8 @@ describe("resolveIcon", () => {
   const spec: DynamicIconSpec = {
     source: { collection: "weather" },
     rules: [
-      { when: { field: "condition", in: ["rain"] }, icon: "rainy" },
-      { when: { field: "condition", in: ["sunny"] }, icon: "sunny" },
+      { where: [{ field: "condition", op: "eq", value: "rain" }], icon: "rainy" },
+      { where: [{ field: "condition", op: "eq", value: "sunny" }], icon: "sunny" },
     ],
   };
 
@@ -94,7 +94,7 @@ describe("resolveIcon", () => {
 
   it("first matching rule wins", () => {
     // Both rules could in principle match different fields; only the first
-    // rule whose `when` matches is used.
+    // rule whose `where` matches is used.
     assert.equal(resolveIcon({ condition: "rain" }, spec, "static_icon"), "rainy");
     assert.equal(resolveIcon({ condition: "sunny" }, spec, "static_icon"), "sunny");
   });
@@ -103,8 +103,8 @@ describe("resolveIcon", () => {
     const reordered: DynamicIconSpec = {
       source: spec.source,
       rules: [
-        { when: { field: "condition", in: ["rain", "sunny"] }, icon: "generic" },
-        { when: { field: "condition", in: ["sunny"] }, icon: "sunny" },
+        { where: [{ field: "condition", op: "in", value: ["rain", "sunny"] }], icon: "generic" },
+        { where: [{ field: "condition", op: "eq", value: "sunny" }], icon: "sunny" },
       ],
     };
     assert.equal(resolveIcon({ condition: "sunny" }, reordered, "static_icon"), "generic");
