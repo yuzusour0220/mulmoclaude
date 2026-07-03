@@ -134,6 +134,9 @@ const ptBRMessages = {
     disconnectFailed: "Falha ao desconectar",
     signInFailed: "Falha ao entrar com o Google",
     statusFailed: "Falha ao carregar o status",
+    description: "O acesso remoto permite que um dispositivo móvel se conecte às coleções e feeds deste MulmoClaude.",
+    howTo: "No seu telefone, abra {url} e entre com a mesma conta do Google.",
+    customViewHint: "Para uma visualização adaptada ao celular, peça ao Claude para criar uma {keyword} (não uma custom view comum).",
   },
   sidebarHeader: {
     home: "Ir para o chat mais recente",
@@ -229,6 +232,8 @@ const ptBRMessages = {
       photos: "Fotos",
       model: "Modelo",
       voice: "Voz",
+      chatIndex: "Índice de chat",
+      journal: "Diário",
       skills: "Skills",
       roles: "Papéis",
     },
@@ -285,6 +290,42 @@ const ptBRMessages = {
       ready: "Modelo pronto",
       downloadError: "Falha ao baixar o modelo.",
       retry: "Tentar novamente",
+      loadError: "Falha ao carregar as configurações",
+      saveError: "Falha ao salvar",
+    },
+    chatIndexTab: {
+      description:
+        "Títulos e resumos gerados por IA para o histórico do chat. Sai desativado por padrão — sessões de automação (scheduler / workers do sistema) sempre são ignoradas mesmo quando ativado; sessões humanas pagam apenas uma chamada ao sumarizador ao terminar cada turno.",
+      modeLabel: "Modelo do índice de chat",
+      helperText: "Haiku é mais barato; Sonnet dá títulos mais precisos em sessões longas que mudam de assunto.",
+      mode: {
+        off: "Desativado",
+        haiku: "Haiku",
+        sonnet: "Sonnet",
+      },
+      status: {
+        off: "Indexação DESATIVADA",
+        haiku: "Indexando com Haiku",
+        sonnet: "Indexando com Sonnet",
+      },
+      loadError: "Falha ao carregar as configurações",
+      saveError: "Falha ao salvar",
+    },
+    journalTab: {
+      description:
+        "Diário diário automatizado — resume sessões recentes de chat em journal/*.md e extrai notas de memória duradoura. Sai desativado por padrão. Sessões de automação (scheduler / workers do sistema) são sempre excluídas, independentemente desta configuração.",
+      modeLabel: "Modelo do diário",
+      helperText: "Haiku é mais barato; Sonnet produz resumos diários / por tópico mais ricos. A passagem horária só é executada quando isto está ativado.",
+      mode: {
+        off: "Desativado",
+        haiku: "Haiku",
+        sonnet: "Sonnet",
+      },
+      status: {
+        off: "Diário DESATIVADO",
+        haiku: "Diário em execução com Haiku",
+        sonnet: "Diário em execução com Sonnet",
+      },
       loadError: "Falha ao carregar as configurações",
       saveError: "Falha ao salvar",
     },
@@ -936,6 +977,8 @@ const ptBRMessages = {
     cancel: "Cancelar",
     seededByPlugin: "de {pkg}",
     seededByPluginTooltip: "Esta mensagem foi gerada pelo plugin {pkg}, não foi enviada por você.",
+    truncatedForRender:
+      "Esta mensagem é excepcionalmente longa ({total} caracteres no total). Apenas a primeira parte é renderizada — {omitted} caracteres ocultos para manter a aba responsiva. Use Copiar para obter o texto completo.",
   },
   pluginSkill: {
     noDescription: "(sem descrição)",

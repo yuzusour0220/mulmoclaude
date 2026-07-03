@@ -938,7 +938,10 @@ function maybeForceChatIndexBackfill(): void {
   // debugging the indexer itself.
   if (!env.chatIndexForceRunOnStartup) return;
   log.info("chat-index", "CHAT_INDEX_FORCE_RUN_ON_STARTUP=1 — running now");
-  backfillAllSessions()
+  // The startup switch is opt-in and its whole point is "regenerate
+  // every summary now"; pass `force: true` so it doesn't silently
+  // become a no-op after #1929's content-changed gate lands.
+  backfillAllSessions({ force: true })
     .then((result) => {
       log.info("chat-index", "startup backfill complete", {
         indexed: result.indexed,
@@ -1149,7 +1152,16 @@ async function startRuntimeServices(httpServer: ReturnType<typeof app.listen>, p
       id: "system:chat-index",
       name: "Chat index backfill",
       description: "Generate AI titles + summaries for un-indexed sessions",
-      schedule: { type: SCHEDULE_TYPES.interval, intervalMs: ONE_HOUR_MS },
+      // Every 6 hours. The primary trigger is the agent finally-hook
+      // (per-turn, 15-min throttle), so the scheduler exists only to
+      // catch strays: a turn skipped by isFresh whose session then
+      // went idle, an out-of-band jsonl edit, or a mid-turn server
+      // crash. Since #1929 the per-tick work is O(stat + entry read)
+      // for unchanged sessions — cheap — but there's still no UX
+      // reason to run it more often than every few hours, and less
+      // frequent runs match a user's expectation of "quiet
+      // background maintenance".
+      schedule: { type: SCHEDULE_TYPES.interval, intervalMs: 6 * ONE_HOUR_MS },
       missedRunPolicy: MISSED_RUN_POLICIES.runOnce,
       run: () => backfillAllSessions().then(() => {}),
     },

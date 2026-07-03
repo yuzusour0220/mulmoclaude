@@ -139,6 +139,9 @@ const jaMessages = {
     disconnectFailed: "切断に失敗しました",
     signInFailed: "Google サインインに失敗しました",
     statusFailed: "状態の取得に失敗しました",
+    description: "リモートアクセスを有効にすると、モバイルデバイスからこの MulmoClaude のコレクションとフィードに接続できます。",
+    howTo: "モバイルから {url} を開き、同じ Google アカウントでサインインしてください。",
+    customViewHint: "モバイル向けのビューが必要な場合は、通常の custom view ではなく {keyword} を作るように Claude に依頼してください。",
   },
   sidebarHeader: {
     home: "最新のチャットに移動",
@@ -232,6 +235,8 @@ const jaMessages = {
       photos: "写真",
       model: "モデル",
       voice: "音声",
+      chatIndex: "チャットインデックス",
+      journal: "ジャーナル",
       skills: "スキル",
       roles: "ロール",
     },
@@ -289,6 +294,42 @@ const jaMessages = {
       ready: "モデルの準備が完了しました",
       downloadError: "モデルのダウンロードに失敗しました。",
       retry: "再試行",
+      loadError: "設定の読み込みに失敗しました",
+      saveError: "保存に失敗しました",
+    },
+    chatIndexTab: {
+      description:
+        "チャット履歴の AI タイトル/サマリー自動生成の設定です。デフォルトは off で、自動化系のセッション（scheduler / system worker）は on にしても常に除外されます。人間のセッションのみターン終了時に 1 回要約が走ります。",
+      modeLabel: "チャットインデックスのモデル",
+      helperText: "Haiku は安価。Sonnet は長く話題が移るセッションでタイトル品質が高くなります。",
+      mode: {
+        off: "オフ",
+        haiku: "Haiku",
+        sonnet: "Sonnet",
+      },
+      status: {
+        off: "インデックス作成: オフ",
+        haiku: "Haiku でインデックス作成中",
+        sonnet: "Sonnet でインデックス作成中",
+      },
+      loadError: "設定の読み込みに失敗しました",
+      saveError: "保存に失敗しました",
+    },
+    journalTab: {
+      description:
+        "ジャーナル日次パスの設定です。最近のチャットセッションを journal/*.md に要約し、恒久メモリ（memory.md）を抽出します。デフォルトは off。自動化系セッション（scheduler / system worker）はこの設定に関わらず常に除外されます。",
+      modeLabel: "ジャーナルのモデル",
+      helperText: "Haiku は安価。Sonnet は日次/トピックまとめの質が高くなります。毎時のパスはここが on の時のみ実行されます。",
+      mode: {
+        off: "オフ",
+        haiku: "Haiku",
+        sonnet: "Sonnet",
+      },
+      status: {
+        off: "ジャーナル: オフ",
+        haiku: "Haiku でジャーナル実行中",
+        sonnet: "Sonnet でジャーナル実行中",
+      },
       loadError: "設定の読み込みに失敗しました",
       saveError: "保存に失敗しました",
     },
@@ -935,6 +976,8 @@ const jaMessages = {
     cancel: "キャンセル",
     seededByPlugin: "{pkg} から",
     seededByPluginTooltip: "このメッセージは {pkg} プラグインによって作成されたもので、あなたが送信したものではありません。",
+    truncatedForRender:
+      "このメッセージは非常に長いため（全 {total} 文字）、描画のフリーズを防ぐため先頭のみ表示しています（{omitted} 文字を省略）。全文はコピーボタンから取得できます。",
   },
   pluginSkill: {
     noDescription: "(説明なし)",

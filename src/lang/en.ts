@@ -154,6 +154,9 @@ const enMessages = {
     disconnectFailed: "Disconnect failed",
     signInFailed: "Google sign-in failed",
     statusFailed: "Failed to load status",
+    description: "Remote access lets a mobile device connect to this MulmoClaude's collections and feeds.",
+    howTo: "On your phone, open {url} and sign in with the same Google account.",
+    customViewHint: "For a mobile-friendly view, ask Claude to build a {keyword} (not a regular custom view).",
   },
   sidebarHeader: {
     home: "Go to latest chat",
@@ -249,6 +252,8 @@ const enMessages = {
       photos: "Photos",
       model: "Model",
       voice: "Voice",
+      chatIndex: "Chat index",
+      journal: "Journal",
       skills: "Skills",
       roles: "Roles",
     },
@@ -306,6 +311,42 @@ const enMessages = {
       ready: "Model ready",
       downloadError: "Model download failed.",
       retry: "Retry",
+      loadError: "Failed to load settings",
+      saveError: "Failed to save",
+    },
+    chatIndexTab: {
+      description:
+        "Background AI titles + summaries for your chat history. Off by default — automation sessions (scheduler / system workers) are always skipped even when on, and human sessions only pay one summarizer call each when a turn ends.",
+      modeLabel: "Chat index model",
+      helperText: "Haiku is cheaper; Sonnet gives sharper titles for long, topic-shifting sessions.",
+      mode: {
+        off: "Off",
+        haiku: "Haiku",
+        sonnet: "Sonnet",
+      },
+      status: {
+        off: "Indexing is OFF",
+        haiku: "Indexing with Haiku",
+        sonnet: "Indexing with Sonnet",
+      },
+      loadError: "Failed to load settings",
+      saveError: "Failed to save",
+    },
+    journalTab: {
+      description:
+        "Automated daily journal — summarises recent chat sessions into journal/*.md and extracts durable memory notes. Off by default. Automation sessions (scheduler / system workers) are always excluded regardless of this setting.",
+      modeLabel: "Journal model",
+      helperText: "Haiku is cheaper; Sonnet produces richer daily / topic summaries. The hourly pass runs only when this is set.",
+      mode: {
+        off: "Off",
+        haiku: "Haiku",
+        sonnet: "Sonnet",
+      },
+      status: {
+        off: "Journal is OFF",
+        haiku: "Journal running with Haiku",
+        sonnet: "Journal running with Sonnet",
+      },
       loadError: "Failed to load settings",
       saveError: "Failed to save",
     },
@@ -961,6 +1002,8 @@ const enMessages = {
     cancel: "Cancel",
     seededByPlugin: "from {pkg}",
     seededByPluginTooltip: "This message was seeded by the {pkg} plugin, not sent by you.",
+    truncatedForRender:
+      "This message is unusually long ({total} chars total). Only the first portion is rendered — {omitted} chars hidden to keep the tab responsive. Use Copy for the full raw text.",
   },
   pluginSkill: {
     noDescription: "(no description)",

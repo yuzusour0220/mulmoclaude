@@ -136,6 +136,9 @@ const zhMessages = {
     disconnectFailed: "断开连接失败",
     signInFailed: "Google 登录失败",
     statusFailed: "加载状态失败",
+    description: "远程访问允许移动设备连接到此 MulmoClaude 的收藏与消息流。",
+    howTo: "在手机上打开 {url}，用同一个 Google 账号登录。",
+    customViewHint: "如需移动端优化的视图，请让 Claude 创建 {keyword}（而不是普通的 custom view）。",
   },
   sidebarHeader: {
     home: "前往最新对话",
@@ -230,6 +233,8 @@ const zhMessages = {
       photos: "照片",
       model: "模型",
       voice: "语音",
+      chatIndex: "聊天索引",
+      journal: "日志",
       skills: "技能",
       roles: "角色",
     },
@@ -283,6 +288,42 @@ const zhMessages = {
       ready: "模型已就绪",
       downloadError: "模型下载失败。",
       retry: "重试",
+      loadError: "加载设置失败",
+      saveError: "保存失败",
+    },
+    chatIndexTab: {
+      description:
+        "为聊天历史自动生成 AI 标题/摘要。默认关闭。开启后自动化会话（scheduler / 系统 worker）仍会始终跳过；只有人类会话在每次轮次结束时才会调用一次摘要。",
+      modeLabel: "聊天索引模型",
+      helperText: "Haiku 更便宜；Sonnet 在长且话题多变的会话中标题更精准。",
+      mode: {
+        off: "关闭",
+        haiku: "Haiku",
+        sonnet: "Sonnet",
+      },
+      status: {
+        off: "索引已关闭",
+        haiku: "使用 Haiku 建立索引中",
+        sonnet: "使用 Sonnet 建立索引中",
+      },
+      loadError: "加载设置失败",
+      saveError: "保存失败",
+    },
+    journalTab: {
+      description:
+        "自动化每日日志 — 将近期聊天会话摘要为 journal/*.md，并抽取持久化记忆笔记。默认关闭。自动化会话（scheduler / 系统 worker）无论此设置如何都会始终排除。",
+      modeLabel: "日志模型",
+      helperText: "Haiku 更便宜；Sonnet 生成的每日/主题摘要更丰富。仅在此设置开启时每小时的轮次才会运行。",
+      mode: {
+        off: "关闭",
+        haiku: "Haiku",
+        sonnet: "Sonnet",
+      },
+      status: {
+        off: "日志已关闭",
+        haiku: "使用 Haiku 运行日志中",
+        sonnet: "使用 Sonnet 运行日志中",
+      },
       loadError: "加载设置失败",
       saveError: "保存失败",
     },
@@ -925,6 +966,7 @@ const zhMessages = {
     cancel: "取消",
     seededByPlugin: "来自 {pkg}",
     seededByPluginTooltip: "此消息由 {pkg} 插件生成，并非您发送。",
+    truncatedForRender: "该消息异常长（共 {total} 个字符）。为保持标签页响应，仅渲染开头部分 — 隐藏了 {omitted} 个字符。使用复制按钮获取完整原文。",
   },
   pluginSkill: {
     noDescription: "(无描述)",

@@ -224,6 +224,12 @@ const CustomViewSchema = z.object({
   id: z.string().trim().min(1),
   label: z.string().trim().min(1),
   icon: z.string().trim().min(1).optional(),
+  // Where the view runs. Absent ⇒ "desktop" (the sandboxed iframe over the
+  // token/dataUrl contract), so every pre-existing view keeps its behavior.
+  // "mobile" ⇒ served to the phone remote via getRemoteView (postMessage
+  // contract, @mulmoclaude/core/remote-view) and phone-frame-previewed on
+  // desktop. See plans/feat-remote-custom-view.md.
+  target: z.enum(["desktop", "mobile"]).optional(),
   file: z
     .string()
     .trim()
@@ -239,6 +245,21 @@ const CustomViewSchema = z.object({
     )
     .optional(),
   capabilities: z.array(z.enum(["read", "write"])).optional(),
+  // Mobile-only write policy (plans/feat-remote-writable-view.md). Default-deny:
+  // a `target: "mobile"` view may patch ONLY these fields via
+  // `__MC_VIEW.updateItem`, and may delete only when `allowDelete` is true. The
+  // host re-derives + enforces both on every mutate — never trusting the client.
+  // Ignored for desktop views (they use the token-scoped `capabilities` above).
+  editableFields: z.array(z.string().trim().min(1)).optional(),
+  allowDelete: z.boolean().optional(),
+  // Mobile-only image inlining (plans/feat-remote-view-images.md). A
+  // `target: "mobile"` view can't reach the host's localhost, so an `image`-type
+  // field's workspace path is unrenderable on the phone; listing it here makes
+  // the host inline it as a downscaled `data:` URL thumbnail in getItems pages.
+  // Opt-in (absent ⇒ none), projection- and budget-bounded host-side. Ignored
+  // for desktop views (they resolve via /api/files/raw).
+  imageFields: z.array(z.string().trim().min(1)).optional(),
+  imageMaxEdge: z.number().int().min(1).optional(),
 });
 
 // Recurrence advance for `spawn.every`. `interval` is a positive integer

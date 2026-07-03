@@ -243,6 +243,31 @@ export interface CollectionCustomView {
    *  (least privilege); declare `["read","write"]` only for views that
    *  edit records. The mint endpoint clamps any requested caps to this. */
   capabilities?: CollectionViewCapability[];
+  /** Where the view runs. Absent ⇒ `"desktop"` (this token/dataUrl contract).
+   *  `"mobile"` ⇒ a remote view for the phone client: served through the
+   *  command channel's `getRemoteView` over the postMessage contract
+   *  (`@mulmoclaude/core/remote-view` — no token, `connect-src 'none'`) and
+   *  previewed on desktop inside a phone-sized frame. */
+  target?: "desktop" | "mobile";
+  /** **Mobile-only** (ignored for desktop views, which use token-scoped
+   *  `capabilities`). The whitelist of field names a `target: "mobile"` view
+   *  may patch via `__MC_VIEW.updateItem(id, patch)`. Default-deny: absent or
+   *  empty ⇒ updates are refused host-side. Never include the primary key.
+   *  See plans/feat-remote-writable-view.md. */
+  editableFields?: string[];
+  /** **Mobile-only.** When `true`, a `target: "mobile"` view may remove a
+   *  record via `__MC_VIEW.deleteItem(id)`. Absent/`false` ⇒ deletes refused. */
+  allowDelete?: boolean;
+  /** **Mobile-only.** `image`-type fields whose workspace path the host inlines
+   *  as a downscaled `data:` URL thumbnail in `getItems` pages, so they render
+   *  on the phone (which can't reach the host's localhost). Opt-in (absent ⇒
+   *  none); the host projects `fields` first and only inlines the declared
+   *  fields that survive, within a per-page byte budget. Ignored for desktop
+   *  views (they resolve via `/api/files/raw`). See plans/feat-remote-view-images.md. */
+  imageFields?: string[];
+  /** **Mobile-only.** Longest-edge (px) an inlined `imageFields` thumbnail is
+   *  downscaled to. Absent ⇒ 512, clamped to `[64, 1024]`. */
+  imageMaxEdge?: number;
 }
 
 /** A schema-declared, per-record action rendered as a button in the

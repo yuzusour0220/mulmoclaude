@@ -4,7 +4,12 @@ import { spawn } from "node:child_process";
 import { CLI_SUBPROCESS_TIMEOUT_MS } from "../../utils/time.js";
 import { claudeBinPath, ClaudeCliNotFoundError } from "../../utils/claudeBin.js";
 
-export type Summarize = (systemPrompt: string, userPrompt: string) => Promise<string>;
+// User-selectable model for the archivist CLI call. `journalMode`
+// widens to `"off"` too; the entry-point (`maybeRunJournal`) filters
+// that out before we get here — this union is intentionally narrow so
+// a bad string can't reach `--model`.
+export type JournalSummaryModel = "haiku" | "sonnet";
+export type Summarize = (systemPrompt: string, userPrompt: string, opts?: { model?: JournalSummaryModel }) => Promise<string>;
 
 const CLI_TIMEOUT_MS = CLI_SUBPROCESS_TIMEOUT_MS;
 
@@ -28,9 +33,18 @@ export class ClaudeCliFailedError extends Error {
 }
 
 // Pipe the combined prompt via stdin to dodge shell-argv limits for large day excerpts.
-export const runClaudeCli: Summarize = async (systemPrompt, userPrompt) =>
+export const runClaudeCli: Summarize = async (systemPrompt, userPrompt, opts) =>
   new Promise((resolve, reject) => {
-    const child = spawn(claudeBinPath(), ["-p", "--output-format", "text"], {
+    // `opts?.model` is threaded from `Settings → Journal` via
+    // maybeRunJournal so the user's model choice reaches the CLI.
+    // When undefined we omit the flag entirely and let the CLI use
+    // its own default — preserves the pre-#1944 archivist behaviour
+    // for direct-CLI callers that don't specify a model.
+    const args = ["-p", "--output-format", "text"];
+    if (opts?.model) {
+      args.push("--model", opts.model);
+    }
+    const child = spawn(claudeBinPath(), args, {
       stdio: ["pipe", "pipe", "pipe"],
     });
 

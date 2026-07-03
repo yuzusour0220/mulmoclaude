@@ -136,6 +136,9 @@ const deMessages = {
     disconnectFailed: "Trennen fehlgeschlagen",
     signInFailed: "Google-Anmeldung fehlgeschlagen",
     statusFailed: "Status konnte nicht geladen werden",
+    description: "Mit Remote-Zugriff kann ein Mobilgerät auf die Sammlungen und Feeds dieser MulmoClaude-Instanz zugreifen.",
+    howTo: "Öffne auf deinem Smartphone {url} und melde dich mit demselben Google-Konto an.",
+    customViewHint: "Für eine mobiltaugliche Ansicht bitte Claude, statt einer normalen Custom View eine {keyword} zu bauen.",
   },
   sidebarHeader: {
     home: "Zum neuesten Chat",
@@ -231,6 +234,8 @@ const deMessages = {
       photos: "Fotos",
       model: "Modell",
       voice: "Sprache",
+      chatIndex: "Chat-Index",
+      journal: "Journal",
       skills: "Skills",
       roles: "Rollen",
     },
@@ -290,6 +295,43 @@ const deMessages = {
       ready: "Modell bereit",
       downloadError: "Modell-Download fehlgeschlagen.",
       retry: "Erneut versuchen",
+      loadError: "Einstellungen konnten nicht geladen werden",
+      saveError: "Speichern fehlgeschlagen",
+    },
+    chatIndexTab: {
+      description:
+        "Automatische KI-Titel und Zusammenfassungen für den Chat-Verlauf. Standardmäßig aus — Automatisierungs-Sessions (Scheduler / System-Worker) werden auch bei aktivierter Option immer übersprungen; menschliche Sessions kosten pro beendetem Turn genau einen Summarizer-Aufruf.",
+      modeLabel: "Chat-Index-Modell",
+      helperText: "Haiku ist günstiger; Sonnet liefert schärfere Titel bei langen, themenwechselnden Sessions.",
+      mode: {
+        off: "Aus",
+        haiku: "Haiku",
+        sonnet: "Sonnet",
+      },
+      status: {
+        off: "Indizierung ist AUS",
+        haiku: "Indizierung läuft mit Haiku",
+        sonnet: "Indizierung läuft mit Sonnet",
+      },
+      loadError: "Einstellungen konnten nicht geladen werden",
+      saveError: "Speichern fehlgeschlagen",
+    },
+    journalTab: {
+      description:
+        "Automatisiertes Tages-Journal — fasst kürzliche Chat-Sessions in journal/*.md zusammen und extrahiert dauerhafte Memory-Notizen. Standardmäßig aus. Automatisierungs-Sessions (Scheduler / System-Worker) werden unabhängig von dieser Einstellung immer ausgeschlossen.",
+      modeLabel: "Journal-Modell",
+      helperText:
+        "Haiku ist günstiger; Sonnet liefert reichhaltigere Tages- und Themen-Zusammenfassungen. Der stündliche Lauf startet nur, wenn dies gesetzt ist.",
+      mode: {
+        off: "Aus",
+        haiku: "Haiku",
+        sonnet: "Sonnet",
+      },
+      status: {
+        off: "Journal ist AUS",
+        haiku: "Journal läuft mit Haiku",
+        sonnet: "Journal läuft mit Sonnet",
+      },
       loadError: "Einstellungen konnten nicht geladen werden",
       saveError: "Speichern fehlgeschlagen",
     },
@@ -949,6 +991,8 @@ const deMessages = {
     cancel: "Abbrechen",
     seededByPlugin: "von {pkg}",
     seededByPluginTooltip: "Diese Nachricht wurde vom Plugin {pkg} erstellt und nicht von Ihnen gesendet.",
+    truncatedForRender:
+      "Diese Nachricht ist ungewöhnlich lang (insgesamt {total} Zeichen). Nur der erste Teil wird angezeigt – {omitted} Zeichen ausgeblendet, damit der Tab reaktionsfähig bleibt. Nutze „Kopieren“ für den vollständigen Text.",
   },
   pluginSkill: {
     noDescription: "(keine Beschreibung)",

@@ -15,9 +15,10 @@ import { readState, writeState, isDailyDue, isOptimizationDue } from "./state.js
 import { runDailyPass } from "./dailyPass.js";
 import { runOptimizationPass } from "./optimizationPass.js";
 import { buildIndexMarkdown, type IndexTopicEntry, type IndexDailyEntry } from "./indexFile.js";
-import { runClaudeCli, ClaudeCliNotFoundError, type Summarize } from "./archivist-cli.js";
+import { runClaudeCli, ClaudeCliNotFoundError, type Summarize, type JournalSummaryModel } from "./archivist-cli.js";
 import { extractFirstH1 } from "../../../src/utils/markdown/extractFirstH1.js";
 import { log } from "../../system/logger/index.js";
+import { journalMode as resolveJournalMode, loadSettings, type JournalMode } from "../../system/config.js";
 
 export { extractFirstH1 };
 
@@ -39,14 +40,24 @@ export interface MaybeRunJournalOptions {
   activeSessionIds?: ReadonlySet<string>;
   // Bypass the interval gate; the disable flags (CLI missing, in-process lock) still apply.
   force?: boolean;
+  // Injectable journal mode — defaults to `journalMode(loadSettings())`
+  // when omitted. "off" short-circuits before any lock / state read;
+  // "haiku" / "sonnet" pick the model the archivist CLI spawns. Tests
+  // and the force-run switch inject this directly; production callers
+  // (turn-end hook, scheduled task) let the resolver pick it up.
+  mode?: JournalMode;
 }
 
 export async function maybeRunJournal(opts: MaybeRunJournalOptions = {}): Promise<void> {
   if (disabled) return;
   if (running) return;
+  // Config-driven kill switch. Resolve at entry time so a settings edit
+  // takes effect on the very next turn without a server restart.
+  const mode = opts.mode ?? resolveJournalMode(loadSettings());
+  if (mode === "off") return;
   running = true;
   try {
-    await runJournalPass(opts);
+    await runJournalPass(opts, mode);
   } catch (err) {
     if (err instanceof ClaudeCliNotFoundError) {
       disabled = true;
@@ -61,9 +72,14 @@ export async function maybeRunJournal(opts: MaybeRunJournalOptions = {}): Promis
   }
 }
 
-async function runJournalPass(opts: MaybeRunJournalOptions): Promise<void> {
+async function runJournalPass(opts: MaybeRunJournalOptions, model: JournalSummaryModel): Promise<void> {
   const workspaceRoot = opts.workspaceRoot ?? defaultWorkspacePath;
-  const summarize = opts.summarize ?? runClaudeCli;
+  // Pre-bind the model into the summarize callable so every layer
+  // downstream (dailyPass / optimizationPass / memoryExtractor) picks
+  // the user-selected model without threading the parameter through
+  // half a dozen call sites.
+  const rawSummarize = opts.summarize ?? runClaudeCli;
+  const summarize: Summarize = (sys, user) => rawSummarize(sys, user, { model });
   const activeSessionIds = opts.activeSessionIds ?? new Set<string>();
 
   const state = await readState(workspaceRoot);

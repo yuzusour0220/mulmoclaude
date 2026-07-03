@@ -139,6 +139,9 @@ const esMessages = {
     disconnectFailed: "Error al desconectar",
     signInFailed: "Error al iniciar sesión con Google",
     statusFailed: "Error al cargar el estado",
+    description: "El acceso remoto permite que un dispositivo móvil se conecte a las colecciones y feeds de este MulmoClaude.",
+    howTo: "En tu teléfono, abre {url} e inicia sesión con la misma cuenta de Google.",
+    customViewHint: "Para una vista compatible con móviles, pide a Claude que cree una {keyword} (no una custom view normal).",
   },
   sidebarHeader: {
     home: "Ir al chat más reciente",
@@ -234,6 +237,8 @@ const esMessages = {
       photos: "Fotos",
       model: "Modelo",
       voice: "Voz",
+      chatIndex: "Índice de chat",
+      journal: "Diario",
       skills: "Skills",
       roles: "Roles",
     },
@@ -291,6 +296,42 @@ const esMessages = {
       ready: "Modelo listo",
       downloadError: "Error al descargar el modelo.",
       retry: "Reintentar",
+      loadError: "Error al cargar los ajustes",
+      saveError: "Error al guardar",
+    },
+    chatIndexTab: {
+      description:
+        "Títulos y resúmenes automáticos generados por IA para tu historial de chat. Sale desactivado por defecto — las sesiones de automatización (scheduler / trabajadores del sistema) siempre se omiten aunque esté activado; las sesiones humanas solo pagan una llamada al resumidor al terminar cada turno.",
+      modeLabel: "Modelo del índice de chat",
+      helperText: "Haiku es más económico; Sonnet ofrece títulos más precisos en sesiones largas con cambios de tema.",
+      mode: {
+        off: "Desactivado",
+        haiku: "Haiku",
+        sonnet: "Sonnet",
+      },
+      status: {
+        off: "La indexación está DESACTIVADA",
+        haiku: "Indexando con Haiku",
+        sonnet: "Indexando con Sonnet",
+      },
+      loadError: "Error al cargar los ajustes",
+      saveError: "Error al guardar",
+    },
+    journalTab: {
+      description:
+        "Diario automático — resume las sesiones de chat recientes en journal/*.md y extrae notas de memoria duradera. Sale desactivado. Las sesiones de automatización (scheduler / trabajadores del sistema) se excluyen siempre, independientemente de esta configuración.",
+      modeLabel: "Modelo del diario",
+      helperText: "Haiku es más económico; Sonnet produce resúmenes diarios y por tema más ricos. El pase horario solo se ejecuta cuando esto está activado.",
+      mode: {
+        off: "Desactivado",
+        haiku: "Haiku",
+        sonnet: "Sonnet",
+      },
+      status: {
+        off: "El diario está DESACTIVADO",
+        haiku: "Diario en ejecución con Haiku",
+        sonnet: "Diario en ejecución con Sonnet",
+      },
       loadError: "Error al cargar los ajustes",
       saveError: "Error al guardar",
     },
@@ -947,6 +988,8 @@ const esMessages = {
     cancel: "Cancelar",
     seededByPlugin: "desde {pkg}",
     seededByPluginTooltip: "Este mensaje fue generado por el plugin {pkg}, no enviado por ti.",
+    truncatedForRender:
+      "Este mensaje es inusualmente largo ({total} caracteres en total). Solo se muestra la primera parte — {omitted} caracteres ocultos para mantener la pestaña receptiva. Usa Copiar para obtener el texto completo.",
   },
   pluginSkill: {
     noDescription: "(sin descripción)",

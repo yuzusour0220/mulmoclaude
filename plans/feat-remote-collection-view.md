@@ -57,6 +57,35 @@ reuses the same card renderer. Read-only; refresh/retrieval stays desktop-only.
   `src/views/Collections.vue`). This phase adds a sibling `useCollection(slug)`
   and a `/collections/:slug` route.
 
+### Trust model — why reading an arbitrary slug is safe
+
+The infra sections below detail *how* records are paged under the 1 MiB limit;
+this paragraph records *why* an unauthenticated-at-the-handler `getCollection(slug)`
+/ `getFeed(slug)` is not a data-leak. The entire security boundary is the
+**Firestore rules layer, scoped by uid** — there is deliberately **no per-method
+authz in the handlers**:
+
+- Everything lives under `users/{uid}/hosts/{hostId}/**` (the `commands`
+  subcollection and the presence doc), which the deployed rule restricts to
+  `request.auth != null && request.auth.uid == uid`. In mulmoserver this is the
+  broader `match /users/{uid}/{document=**}` rule, whose recursive wildcard
+  already covers the hosts subtree. So a remote can only ever enqueue commands in
+  **its own** uid's queue; a different signed-in user cannot reach this host.
+- That rule was established in **phase-1 (#1909)** and is live in production —
+  it is a prerequisite of this phase, not something phase-2 adds.
+- The handlers being read-only is what makes uid-scope-only sufficient: a
+  request already proves ownership of the workspace by virtue of writing to
+  `users/{uid}/…`, and read-only handlers can't cross that boundary.
+- **Phase-3+ caveat:** when write/delete or cross-collection `ref`/`embed`
+  handlers are added, re-evaluate — they may need handler-side authz (per-slug
+  scope, rate limits) on top of the rules layer, since "can write to my own
+  queue" no longer implies "may mutate this specific record/collection."
+
+The one boundary *outside* Firestore is the auth entry point: `signInHost`'s
+Google OAuth ID token must be accepted only from the localhost owner
+(`/api/remote-host/connect`), so a hostile page can't turn the server into a host
+for someone else's workspace.
+
 ## The three decisions that shape this
 
 ### 1. The 1 MB Firestore document limit (the important one)
