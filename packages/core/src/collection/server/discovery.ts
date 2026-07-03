@@ -455,6 +455,30 @@ const AgentIngestZ = z.object({
 // discovered from `<workspace>/feeds/` are REQUIRED to carry it (gate below).
 const IngestSchemaZ = z.discriminatedUnion("kind", [DeclarativeIngestZ, AgentIngestZ]);
 
+// Data-driven launcher-icon override (see `CollectionSchema.dynamicIcon`).
+// `source.collection` may name ANY collection (self or cross-collection),
+// so — unlike `ref`/`embed`/`when.field` elsewhere in this file — its
+// shape is validated here without a cross-field refine against a specific
+// target schema (that collection may not even be loaded yet); a bad
+// `source.collection`/`orderBy`/rule `when.field` fails soft at compute
+// time instead (`computeCollectionIcon`), matching this feature's locked
+// design (see plans/feat-dynamic-collection-icons.md "Open questions").
+const DynamicIconSourceZ = z.object({
+  collection: z.string().trim().min(1),
+  from: z.enum(["latest", "first", "when"]).optional(),
+  orderBy: z.string().trim().min(1).optional(),
+  when: WhenSchema.optional(),
+});
+const DynamicIconRuleZ = z.object({
+  when: WhenSchema,
+  icon: z.string().trim().min(1),
+});
+const DynamicIconSpecZ = z.object({
+  source: DynamicIconSourceZ,
+  rules: z.array(DynamicIconRuleZ),
+  fallback: z.string().trim().min(1).optional(),
+});
+
 export const CollectionSchemaZ = z
   .object({
     title: z.string().min(1),
@@ -524,6 +548,9 @@ export const CollectionSchemaZ = z
     // the `<workspace>/feeds/` registry). Optional, so every existing
     // skill schema validates unchanged.
     ingest: IngestSchemaZ.optional(),
+    // Data-driven launcher-icon override. Optional, so every existing
+    // schema validates unchanged; `source` is required within it.
+    dynamicIcon: DynamicIconSpecZ.optional(),
   })
   // The singleton value becomes a record id (and thus a `<id>.json`
   // filename), so it must satisfy the SAME `safeRecordId` rule the

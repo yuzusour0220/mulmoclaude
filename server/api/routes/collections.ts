@@ -12,6 +12,7 @@ import { Router, Request, Response, NextFunction } from "express";
 import { API_ROUTES } from "../../../src/config/apiRoutes.js";
 import { actionVisible } from "@mulmoclaude/core/collection";
 import {
+  computeCollectionIcon,
   discoverCollections,
   generateItemId,
   deleteCollection,
@@ -95,10 +96,24 @@ interface ActionSeedResponse {
   role: string;
 }
 
+// Client-list summary: the static `toSummary` plus, for a collection that
+// declares `dynamicIcon`, the computed icon + the source slug(s) a live
+// view should watch (see `useDynamicShortcutIcons`). Collections without
+// `dynamicIcon` take the fast path (no record read) — only this endpoint
+// pays the compute cost; `toDetail`/`toSummary` elsewhere stay static.
+async function toClientSummary(collection: LoadedCollection): Promise<CollectionSummary> {
+  const summary = toSummary(collection);
+  const spec = collection.schema.dynamicIcon;
+  if (!spec) return summary;
+  const icon = await computeCollectionIcon(collection);
+  return { ...summary, icon, iconSources: [spec.source.collection] };
+}
+
 router.get(API_ROUTES.collections.list, async (_req: Request, res: Response<CollectionsListResponse>) => {
   try {
     const collections = await discoverCollections();
-    res.json({ collections: collections.map(toSummary) });
+    const summaries = await Promise.all(collections.map(toClientSummary));
+    res.json({ collections: summaries });
   } catch (err) {
     log.warn("collections", "list failed", { error: errorMessage(err) });
     serverError(res, errorMessage(err));

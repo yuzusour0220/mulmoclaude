@@ -386,6 +386,7 @@ import ConfirmModal from "./components/ConfirmModal.vue";
 import { useNotifications } from "./composables/useNotifications";
 import { collectionNotifiedSeverities } from "./utils/collections/notifiedItems";
 import { installCollectionAppBindings } from "./composables/collections/uiHost";
+import { useDynamicShortcutIcons } from "./composables/collections/useDynamicShortcutIcons";
 import type { CollectionsListResponse } from "@mulmoclaude/core/collection";
 import { useHealth } from "./composables/useHealth";
 import { useSessionHistory } from "./composables/useSessionHistory";
@@ -1207,6 +1208,10 @@ installCollectionAppBindings({
   startNewChatDraft: (prompt: string, role?: string) => startNewChatDraft(prompt, role),
   notifiedSeverities: (slug: string) => collectionNotifiedSeverities(notifierEntries.value, slug),
 });
+// Keep pinned collection-launcher icons that declare `dynamicIcon` live —
+// mounted here (not inside CollectionsIndexView) so it runs regardless of
+// which page is open.
+useDynamicShortcutIcons();
 // Plugin Views that need to tag background work with the current
 // session (e.g. MulmoScript generations) inject this.
 provideActiveSession(activeSession);
