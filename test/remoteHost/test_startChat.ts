@@ -149,11 +149,11 @@ describe("createStartChat — legacy slug form", () => {
   });
 });
 
-// ── Image attachments: { message, images:[{ storage_id }] } ────────────────
-describe("createStartChat — image attachments", () => {
-  it("ingests staged photos and hands the resulting attachments to spawn", async () => {
+// ── File attachments: { message, attachments:[{ storage_id }] } ────────────
+describe("createStartChat — file attachments", () => {
+  it("ingests staged files and hands the resulting attachments to spawn", async () => {
     const { deps, calls, ingestCalls } = makeDeps({ ok: true, chatId: "chat-1" });
-    const result = await createStartChat(deps)({ message: "look at these", images: [{ storage_id: "aaa" }, { storage_id: "bbb" }] });
+    const result = await createStartChat(deps)({ message: "look at these", attachments: [{ storage_id: "aaa" }, { storage_id: "bbb" }] });
     assert.deepEqual(result, { started: true, chatId: "chat-1" });
     assert.deepEqual(ingestCalls, [["aaa", "bbb"]]);
     assert.deepEqual(calls[0].attachments, [
@@ -163,17 +163,17 @@ describe("createStartChat — image attachments", () => {
     assert.equal(calls[0].message, "look at these");
   });
 
-  it("passes an empty attachment list when no images are sent (text-only parity)", async () => {
+  it("passes an empty attachment list when none are sent (text-only parity)", async () => {
     const { deps, calls, ingestCalls } = makeDeps({ ok: true, chatId: "chat-2" });
     await createStartChat(deps)({ message: "hi" });
     assert.deepEqual(ingestCalls, [[]]);
     assert.deepEqual(calls[0].attachments, []);
   });
 
-  it("rejects a malformed images payload without spawning", async () => {
+  it("rejects a malformed attachments payload without spawning", async () => {
     const { deps, calls } = makeDeps({ ok: true, chatId: "chat-3" });
-    await assert.rejects(async () => createStartChat(deps)({ message: "hi", images: "nope" }), /images must be an array/);
-    await assert.rejects(async () => createStartChat(deps)({ message: "hi", images: [{}] }), /each images entry/);
+    await assert.rejects(async () => createStartChat(deps)({ message: "hi", attachments: "nope" }), /attachments must be an array/);
+    await assert.rejects(async () => createStartChat(deps)({ message: "hi", attachments: [{}] }), /each attachments entry/);
     assert.equal(calls.length, 0);
   });
 
@@ -182,7 +182,7 @@ describe("createStartChat — image attachments", () => {
       throw new Error("storage 404");
     }) as StartChatDeps["ingest"];
     const { deps, calls } = makeDeps({ ok: true, chatId: "chat-4" }, collection, failing);
-    await assert.rejects(async () => createStartChat(deps)({ message: "hi", images: [{ storage_id: "aaa" }] }), /storage 404/);
+    await assert.rejects(async () => createStartChat(deps)({ message: "hi", attachments: [{ storage_id: "aaa" }] }), /storage 404/);
     assert.equal(calls.length, 0);
   });
 });

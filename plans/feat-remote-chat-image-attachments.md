@@ -13,13 +13,23 @@ The shape the remote sends becomes:
 
 ```jsonc
 // startChat params
-{ "message": "...", "images": [{ "storage_id": "<uuid>" }, ...] }
+{ "message": "...", "attachments": [{ "storage_id": "<uuid>" }, ...] }
 ```
+
+> **Contract update (2026-07-03): `images` → `attachments`, non-image types.**
+> Attachments are no longer image-only — the remote can attach **photos, videos
+> and PDFs**. The param is renamed `images` → **`attachments`** (both repos + the
+> Storage rule updated to match), and the Storage rule's content-type allowlist
+> is widened from `image/*` to `image/* | video/* | application/pdf` with the
+> size cap raised to 100 MiB (short mobile videos). The host ingest is otherwise
+> unchanged — `data/attachments/` + `saveAttachment` already accepts any type.
+> References to `params.images` / "photos" / "images" below should be read as
+> `params.attachments` / "files".
 
 The host downloads each referenced object from Storage into its **workspace
 attachment store** (`data/attachments/{year}/{month}/`), **deletes the Storage
 object**, and passes the resulting file path(s) to the LLM together with the
-message. Everything the LLM does with the image after that is up to the LLM —
+message. Everything the LLM does with the file after that is up to the LLM —
 this feature only gets the bytes from the phone into the workspace and hands the
 path to the agent.
 
@@ -46,7 +56,7 @@ its home.
 
 - **mulmoserver (remote client + contract)** — being implemented in parallel by
   another Claude Code. Uploads the photos to Storage, extends `startChat` params
-  with `images`, adds the compose-sheet attach UI, and adds the Storage security
+  with `attachments`, adds the compose-sheet attach UI, and adds the Storage security
   rule. Detailed in that repo; summarized here only so the contract is legible
   from one document.
 - **mulmoclaude (host) — THIS PLAN.** Extend the `startChat` handler to ingest
@@ -79,15 +89,15 @@ users/{uid}/uploads/{storage_id}
 ```jsonc
 {
   "message": "string (required, unchanged)",
-  "images": [ { "storage_id": "uuid" }, ... ]   // optional; omitted when no photos
+  "attachments": [ { "storage_id": "uuid" }, ... ]   // optional; omitted when no files
 }
 ```
 
-- `images` is an **array** (decided: keep it plural for future multi-attach even
-  though today's UI may send one at a time).
-- Absent / empty `images` ⇒ current behaviour, byte-for-byte. This is a **purely
-  additive** change to the handler; the existing `{ message }` and legacy
-  `{ slug, … }` forms are untouched.
+- `attachments` is an **array** (decided: keep it plural for future multi-attach
+  even though today's UI may send one at a time).
+- Absent / empty `attachments` ⇒ current behaviour, byte-for-byte. This is a
+  **purely additive** change to the handler; the existing `{ message }` and
+  legacy `{ slug, … }` forms are untouched.
 
 ### Storage security rule (owned by mulmoserver's `storage.rules`)
 
@@ -95,8 +105,10 @@ users/{uid}/uploads/{storage_id}
 match /users/{uid}/uploads/{storageId} {
   allow read, delete: if request.auth != null && request.auth.uid == uid;      // host ingests + cleans up
   allow write:        if request.auth != null && request.auth.uid == uid
-                      && request.resource.size < 20 * 1024 * 1024               // full-res cap
-                      && request.resource.contentType.matches('image/.*');      // images only
+                      && request.resource.size < 100 * 1024 * 1024              // full-res cap (short mobile video)
+                      && (request.resource.contentType.matches('image/.*')      // photos
+                        || request.resource.contentType.matches('video/.*')     // videos
+                        || request.resource.contentType == 'application/pdf');   // PDFs
 }
 ```
 
@@ -130,9 +142,9 @@ Because the host is authenticated as the owning uid, `getBytes` / `deleteObject`
 against `users/{uid}/uploads/{storage_id}` are authorized by the same rule the
 remote's upload passed — no admin SDK, no service account.
 
-### 2. An image-ingest module
+### 2. An attachment-ingest module
 
-New `server/remoteHost/handlers/ingestImages.ts` (kept separate from
+New `server/remoteHost/handlers/ingestAttachments.ts` (kept separate from
 `startChat.ts` so the handler stays thin and this is unit-testable with the
 Storage + fs deps stubbed):
 
@@ -152,12 +164,12 @@ Responsibilities, per `storage_id`:
    (`server/utils/files/attachment-store.ts`) — it derives the extension from
    the mime, shards under `data/attachments/{YYYY}/{MM}/`, writes atomically, and
    returns `{ relativePath, mimeType }`. This is the exact store Vue uploads and
-   bridge inline-bytes already use, so the ingested photo is validated by
+   bridge inline-bytes already use, so the ingested file is validated by
    `isAttachmentPath` and mime-typed by `inferMimeFromExtension` downstream. (We
    let `saveAttachment` mint the on-disk id; the `storage_id` is only a Storage
    staging reference and needn't be the workspace filename.)
 4. `deleteObject(ref)` after the file is written.
-5. Return an **`Attachment`** (`{ path: relativePath, mimeType }`) per photo, in
+5. Return an **`Attachment`** (`{ path: relativePath, mimeType }`) per file, in
    order — the path-only + mime form the spawn/`startChat` attachment channel
    consumes directly (see RESOLVED section).
 
@@ -172,12 +184,12 @@ export interface IngestDeps {
 }
 
 // storage_ids -> path-only Attachments, in order. Rejects if any download fails.
-export const createIngestImages = (deps: IngestDeps) =>
+export const createIngestAttachments = (deps: IngestDeps) =>
   async (storageIds: string[]): Promise<Attachment[]> => { /* ... */ };
 ```
 
-Validate each entry defensively (it arrives as JSON): coerce `images` to an
-array, each element to `{ storage_id: string }`. **Reject the whole command** on
+Validate each entry defensively (it arrives as JSON): coerce `params.attachments`
+to an array, each element to `{ storage_id: string }`. **Reject the whole command** on
 a malformed entry OR a referenced object that can't be downloaded — the remote
 already uploaded and is waiting on the result, so surfacing the error beats
 silently starting a chat with a missing photo. `saveAttachment` /
@@ -199,7 +211,7 @@ spawning, ingest any attachments and hand their paths to the spawner:
 const message = /* unchanged */;
 const seed = hasSlug(params.slug) ? await composeCollectionSeed(...) : message;
 
-const imageAttachments = await deps.ingest(readStorageIds(params.images));
+const ingestedAttachments = await deps.ingest(readStorageIds(params.attachments));
 
 const result = await deps.spawn({
   message: seed,
@@ -207,7 +219,7 @@ const result = await deps.spawn({
   hidden: false,
   // Path-only Attachments — the blessed form (see RESOLVED section). The
   // server loads bytes for these before the model sees them.
-  attachments: imageAttachments,
+  attachments: ingestedAttachments,
 });
 ```
 
@@ -218,15 +230,15 @@ the default export changes (it registers `startChat` already).
 
 ### 4. Tests (`test/remoteHost/`)
 
-- `test_ingestImages.ts` — with stubbed deps: builds the right Storage path from
+- `test_ingestAttachments.ts` — with stubbed deps: builds the right Storage path from
   uid + storage_id; calls `saveAttachment` with the fetched bytes + contentType;
   deletes the object after writing (ordering); returns path-only `Attachment`s
   (`{ path, mimeType }`); rejects when the host isn't signed in; rejects on a
   failed download; no-ops on empty input; rejects a malformed `storage_id`.
-- Extend `test_startChat.ts` — `{ message }` with no `images` behaves exactly as
-  today (no ingest calls); `{ message, images:[{storage_id}] }` ingests and the
-  spawned call carries the resulting attachment(s); a malformed `images` entry
-  rejects the command without spawning.
+- Extend `test_startChat.ts` — `{ message }` with no `attachments` behaves
+  exactly as today (no ingest calls); `{ message, attachments:[{storage_id}] }`
+  ingests and the spawned call carries the resulting attachment(s); a malformed
+  `attachments` entry rejects the command without spawning.
 
 ---
 
@@ -244,7 +256,7 @@ is `{ path?: "data/attachments/…"; mimeType?; filename? }`, with
 normalisation (`prepareRequestExtras`) loads the bytes for path-only entries
 before the agent sees them, so the image reaches the model as a **native image
 block** — exactly how the Vue UI's path-only attachments already flow. This is
-precisely the shape `ingestImages` returns, so there is nothing new to invent.
+precisely the shape `ingestAttachments` returns, so there is nothing new to invent.
 
 The **only gap** is that `spawnSystemWorker({ message, roleId, hidden })` drops
 everything but those three fields — it calls
@@ -281,8 +293,10 @@ The mulmoserver side does **not** depend on any of this — it only sends
 
 - `storage_id` is a bare **UUID**; Storage path is `users/{uid}/uploads/{uuid}`,
   flat (no year/month in Storage).
-- `images` is an **array** on `startChat` params (future multi-attach), even if
-  the first UI ships single-select.
+- The param is **`attachments`** (renamed from `images`), an **array** on
+  `startChat` params (future multi-attach), even if the first UI ships
+  single-select. Allowed types: **image/\*, video/\*, application/pdf**; size cap
+  **100 MiB**.
 - The **host deletes** each Storage object after ingesting it into the
   workspace.
 - Workspace destination: **`data/attachments/{year}/{month}/<id>.<ext>`** via

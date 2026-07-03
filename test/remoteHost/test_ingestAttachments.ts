@@ -1,11 +1,11 @@
-// Unit tests for the remote-host image ingest. The Firebase Storage + attachment
-// store deps are stubbed so the test asserts the flow — Storage path
+// Unit tests for the remote-host attachment ingest. The Firebase Storage +
+// attachment store deps are stubbed so the test asserts the flow — Storage path
 // composition, save→delete ordering, the returned path-only Attachments, and the
 // reject paths — not that real bytes move.
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
-import { createIngestImages, type IngestDeps } from "../../server/remoteHost/handlers/ingestImages.js";
+import { createIngestAttachments, type IngestDeps } from "../../server/remoteHost/handlers/ingestAttachments.js";
 
 // Recording stub deps. `fetchObject` returns canned bytes + an image/jpeg type;
 // `saveAttachment` hands back a deterministic relativePath; every call is logged
@@ -32,7 +32,7 @@ const makeDeps = (over: Partial<IngestDeps> = {}) => {
   return { deps, fetched, saved, deleted };
 };
 
-describe("createIngestImages", () => {
+describe("createIngestAttachments", () => {
   it("no-ops on empty input — no uid lookup, no Storage calls", async () => {
     let uidCalls = 0;
     const { deps, fetched } = makeDeps({
@@ -41,14 +41,14 @@ describe("createIngestImages", () => {
         return "user-1";
       },
     });
-    assert.deepEqual(await createIngestImages(deps)([]), []);
+    assert.deepEqual(await createIngestAttachments(deps)([]), []);
     assert.equal(fetched.length, 0);
     assert.equal(uidCalls, 0);
   });
 
   it("builds users/{uid}/uploads/{id}, saves the bytes, returns path-only Attachments", async () => {
     const { deps, fetched, saved } = makeDeps();
-    const result = await createIngestImages(deps)(["aaa", "bbb"]);
+    const result = await createIngestAttachments(deps)(["aaa", "bbb"]);
     assert.deepEqual(fetched, ["users/user-1/uploads/aaa", "users/user-1/uploads/bbb"]);
     assert.deepEqual(
       saved.map((rec) => rec.base64),
@@ -71,20 +71,20 @@ describe("createIngestImages", () => {
         order.push("delete");
       },
     });
-    await createIngestImages(deps)(["aaa"]);
+    await createIngestAttachments(deps)(["aaa"]);
     assert.deepEqual(order, ["save", "delete"]);
   });
 
   it("rejects when the host is not signed in, without touching Storage", async () => {
     const { deps, fetched } = makeDeps({ uid: () => null });
-    await assert.rejects(async () => createIngestImages(deps)(["aaa"]), /not signed in/);
+    await assert.rejects(async () => createIngestAttachments(deps)(["aaa"]), /not signed in/);
     assert.equal(fetched.length, 0);
   });
 
   it("rejects a malformed storage_id before touching Storage", async () => {
     const { deps, fetched } = makeDeps();
-    await assert.rejects(async () => createIngestImages(deps)(["../evil"]), /invalid storage_id/);
-    await assert.rejects(async () => createIngestImages(deps)(["a/b"]), /invalid storage_id/);
+    await assert.rejects(async () => createIngestAttachments(deps)(["../evil"]), /invalid storage_id/);
+    await assert.rejects(async () => createIngestAttachments(deps)(["a/b"]), /invalid storage_id/);
     assert.equal(fetched.length, 0);
   });
 
@@ -94,7 +94,7 @@ describe("createIngestImages", () => {
         throw new Error("storage 404");
       },
     });
-    await assert.rejects(async () => createIngestImages(deps)(["aaa"]), /storage 404/);
+    await assert.rejects(async () => createIngestAttachments(deps)(["aaa"]), /storage 404/);
     assert.equal(deleted.length, 0);
   });
 });

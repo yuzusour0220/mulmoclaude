@@ -159,7 +159,7 @@ export async function spawnSystemWorker(args: {
   message: string;
   roleId: string;
   hidden: boolean;
-  /** Path-bearing attachments to hand the spawned chat (e.g. photos the mobile
+  /** Path-bearing attachments to hand the spawned chat (e.g. files the mobile
    *  remote attached, ingested into the workspace). Forwarded to `startChat`,
    *  which loads their bytes for the model like any other attachment. */
   attachments?: Attachment[];

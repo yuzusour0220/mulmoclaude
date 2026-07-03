@@ -15,8 +15,8 @@ import { firebaseConfig } from "../../src/config/firebaseConfig.js";
 export const firebaseApp = initializeApp(firebaseConfig);
 export const auth = getAuth(firebaseApp);
 export const firestore = getFirestore(firebaseApp);
-// Storage carries the full-res photo bytes the command channel can't (a
+// Storage carries the full-res attachment bytes the command channel can't (a
 // Firestore command doc caps at ~1 MiB). The host, signed in as the user, pulls
 // each staged upload from `users/{uid}/uploads/{id}` and deletes it after
-// ingest — see handlers/ingestImages.ts.
+// ingest — see handlers/ingestAttachments.ts.
 export const storage = getStorage(firebaseApp);
