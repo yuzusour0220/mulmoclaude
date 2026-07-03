@@ -35,8 +35,8 @@
         :key="session.id"
         tabindex="0"
         role="button"
-        :aria-label="t('sessionHistoryPanel.openRowAria', { preview: session.summary || session.preview || t('sessionHistoryPanel.noMessages') })"
-        :title="session.summary || session.preview || t('sessionHistoryPanel.noMessages')"
+        :aria-label="t('sessionHistoryPanel.openRowAria', { preview: primaryText(session) })"
+        :title="primaryText(session)"
         class="relative cursor-pointer rounded p-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
         :class="rowClasses(session)"
         :data-testid="`session-item-${session.id}`"
@@ -101,8 +101,8 @@
              so short prompts don't disturb row heights. -->
         <div class="flex items-start gap-1.5">
           <SessionRoleIcon :session="session" :roles="roles" size="sm" class="flex-shrink-0 mt-0.5" />
-          <p class="flex-1 min-w-0" :class="[previewClasses(session), session.summary ? 'line-clamp-2' : 'truncate']">
-            {{ session.summary || session.preview || t("sessionHistoryPanel.noMessages") }}
+          <p class="flex-1 min-w-0" :class="[previewClasses(session), sessionHasVisibleSummary(session) ? 'line-clamp-2' : 'truncate']">
+            {{ primaryText(session) }}
           </p>
           <span v-if="isSessionRunning(session)" class="flex-shrink-0 flex items-center mt-0.5" :aria-label="t('sessionHistoryPanel.running')">
             <span class="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse" />
@@ -121,6 +121,7 @@ import type { SessionSummary, SessionOrigin } from "../types/session";
 import { SESSION_ORIGINS } from "../types/session";
 import { HISTORY_FILTERS, HISTORY_FILTER_ORDER, type HistoryFilter } from "../config/historyFilters";
 import { isLongRunningConversation } from "../utils/session/longRunning";
+import { resolveSessionPrimaryText, sessionHasVisibleSummary } from "../utils/session/sessionPreview";
 import { formatDate } from "../utils/format/date";
 import SessionRoleIcon from "./SessionRoleIcon.vue";
 import FilterChip from "./FilterChip.vue";
@@ -200,6 +201,15 @@ function rowClasses(session: SessionSummary): string {
 function previewClasses(session: SessionSummary): string {
   if (isSessionUnread(session)) return "text-gray-900 font-bold";
   return "text-gray-700";
+}
+
+// Primary line resolution: prefer the AI summary (trim + whitespace
+// guarded so a summarizer returning "   " doesn't blank the row) →
+// first user message → localised placeholder. Same call is used for
+// visible text, aria-label, and the hover title so all three stay in
+// lockstep.
+function primaryText(session: SessionSummary): string {
+  return resolveSessionPrimaryText(session) ?? t("sessionHistoryPanel.noMessages");
 }
 
 // ── Row action menu ─────────────────────────────────────────
