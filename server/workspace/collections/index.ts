@@ -8,7 +8,7 @@ export {
   type LoadedCollection,
 } from "@mulmoclaude/core/collection/server";
 export { validateCollectionRecords, validateRecordObject, COMPUTED_TYPES, type RecordIssue } from "@mulmoclaude/core/collection/server";
-export { enrichItems } from "@mulmoclaude/core/collection/server";
+export { enrichItems, computeCollectionIcon } from "@mulmoclaude/core/collection/server";
 export { deleteCollection, deleteCollectionRefusalMessage, type DeleteCollectionResult } from "@mulmoclaude/core/collection/server";
 export { deleteCustomView, type DeleteViewResult } from "@mulmoclaude/core/collection/server";
 export {

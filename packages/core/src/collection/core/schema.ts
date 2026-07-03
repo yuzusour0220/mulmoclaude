@@ -11,6 +11,8 @@
 // plans/done/feat-skill-driven-apps-worklog.md — historical names predate
 // the rename).
 
+import type { Where } from "./where";
+
 /** Minimal "this collection is a feed" descriptor carried on the schema.
  *  Deliberately narrow — the canonical collection contract stays
  *  independent of the host's feeds subsystem. The host's richer retrieval
@@ -293,6 +295,51 @@ export interface CollectionAction {
   when?: CollectionWhen;
 }
 
+/** One rule in a `dynamicIcon.rules` list: when the resolved source
+ *  record matches `where` (an AND of typed conditions, see {@link Where}),
+ *  the collection's effective launcher icon becomes `icon`. Evaluated top
+ *  to bottom — the first match wins. */
+export interface DynamicIconRule {
+  where: Where;
+  icon: string;
+}
+
+/** Where a {@link DynamicIconSpec}'s source record comes from: a (possibly
+ *  cross-collection) pool of records, optionally narrowed by `where` and
+ *  reduced to a single record by `from`. */
+export interface DynamicIconSource {
+  /** Slug of the collection to read records from — the collection itself
+   *  (self-reference) or another one (cross-collection). Required. */
+  collection: string;
+  /** How to reduce the (optionally `where`-filtered) pool to one record.
+   *  `"latest"` (default): the record with the greatest `orderBy` value.
+   *  `"first"` / `"when"`: the first record in the pool (storage order). */
+  from?: "latest" | "first" | "when";
+  /** Field compared for `from: "latest"`. Defaults to the source schema's
+   *  first `date`/`datetime` field (declaration order); when the source
+   *  has none, `"latest"` falls back to the last pool record. */
+  orderBy?: string;
+  /** Optional predicate (AND of typed conditions) narrowing the pool
+   *  before `from` reduces it to one record (e.g. restrict a shared
+   *  weather collection to one region). */
+  where?: Where;
+}
+
+/** Declarative "data state → icon" mapping for a collection's launcher
+ *  shortcut icon (see `CollectionSchema.dynamicIcon`). When absent, the
+ *  launcher icon is the static `schema.icon`, unchanged from before this
+ *  field existed. */
+export interface DynamicIconSpec {
+  /** The record the `rules` are evaluated against. Required. */
+  source: DynamicIconSource;
+  /** First-match-wins list of "resolved record matches `where` → `icon`"
+   *  rules. */
+  rules: DynamicIconRule[];
+  /** Icon used when no source record resolves or no rule matches.
+   *  Defaults to the collection's own static `schema.icon`. */
+  fallback?: string;
+}
+
 export interface CollectionFieldSpec {
   type: CollectionFieldType;
   label: string;
@@ -494,6 +541,13 @@ export interface CollectionSchema {
    *  `ingest.template`, and the worker edits the records itself. The host's
    *  feeds subsystem narrows this to its richer `IngestSpec`. */
   ingest?: CollectionIngest;
+  /** Optional data-driven override for the launcher shortcut icon: when
+   *  set, the host resolves a record from `dynamicIcon.source` and maps
+   *  it through `dynamicIcon.rules` to compute `CollectionSummary.icon`
+   *  instead of using this static `icon`. Absent ⇒ unchanged static-icon
+   *  behaviour. See `computeCollectionIcon` (server) and
+   *  `selectDynamicRecord`/`resolveIcon` (pure resolver). */
+  dynamicIcon?: DynamicIconSpec;
 }
 
 export interface CollectionSummary {
@@ -501,6 +555,11 @@ export interface CollectionSummary {
   title: string;
   icon: string;
   source: CollectionSource;
+  /** Slugs of the source collection(s) a `dynamicIcon` icon was computed
+   *  from — present only when `schema.dynamicIcon` is set. Lets a client
+   *  know which collection change-channel(s) to watch for a live icon
+   *  update (see `useDynamicShortcutIcons`). */
+  iconSources?: string[];
 }
 
 export interface CollectionDetail extends CollectionSummary {
