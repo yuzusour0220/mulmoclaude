@@ -32,7 +32,8 @@ export function selectDynamicRecord(
   orderBy: string | undefined,
   recordsById: Record<string, CollectionItem> = {},
 ): CollectionItem | null {
-  const pool = source.where ? records.filter((r) => matchesWhere(source.where!, r, recordsById)) : records;
+  const { where } = source;
+  const pool = where ? records.filter((record) => matchesWhere(where, record, recordsById)) : records;
   if (pool.length === 0) return null;
   if (source.from === "first" || source.from === "when") return pool[0];
   return orderBy ? latestByField(pool, orderBy) : pool[pool.length - 1];
@@ -51,8 +52,8 @@ export function resolveIcon(
 ): string {
   const fallback = spec.fallback ?? staticIcon;
   if (!record) return fallback;
-  const rule = spec.rules.find((rule) => matchesWhere(rule.where, record, recordsById));
-  return rule ? rule.icon : fallback;
+  const matched = spec.rules.find((rule) => matchesWhere(rule.where, record, recordsById));
+  return matched ? matched.icon : fallback;
 }
 
 const isDateLikeField = (field: CollectionFieldSpec): boolean => field.type === "date" || field.type === "datetime";

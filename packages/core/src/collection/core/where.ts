@@ -52,11 +52,11 @@ function resolveValue(cond: WhereCond, record: Record<string, unknown>, recordsB
   return isMissing(raw) ? undefined : String(raw);
 }
 
-function matchesNumericOp(op: "gt" | "gte" | "lt" | "lte", a: number, b: number): boolean {
-  if (op === "gt") return a > b;
-  if (op === "gte") return a >= b;
-  if (op === "lt") return a < b;
-  return a <= b;
+function matchesNumericOp(operator: "gt" | "gte" | "lt" | "lte", left: number, right: number): boolean {
+  if (operator === "gt") return left > right;
+  if (operator === "gte") return left >= right;
+  if (operator === "lt") return left < right;
+  return left <= right;
 }
 
 /** `Number("")` / `Number("  ")` are `0`, not `NaN`, so treat a blank string
@@ -66,33 +66,33 @@ function toNumber(raw: string): number {
   return raw.trim() === "" ? NaN : Number(raw);
 }
 
-function matchesNumeric(op: "gt" | "gte" | "lt" | "lte", v: string, value: string | string[]): boolean {
+function matchesNumeric(operator: "gt" | "gte" | "lt" | "lte", raw: string, value: string | string[]): boolean {
   if (Array.isArray(value)) return false;
-  const a = toNumber(v);
-  const b = toNumber(value);
-  if (Number.isNaN(a) || Number.isNaN(b)) return false;
-  return matchesNumericOp(op, a, b);
+  const left = toNumber(raw);
+  const right = toNumber(value);
+  if (Number.isNaN(left) || Number.isNaN(right)) return false;
+  return matchesNumericOp(operator, left, right);
 }
 
-/** True when the present string value `v` satisfies `op` against the
+/** True when the present string `raw` satisfies `operator` against the
  *  resolved `value` (field known to exist — MISSING is handled by the
  *  caller before this runs, and an UNRESOLVED `valueFrom` never reaches
  *  here either). */
-function matchesPresent(op: WhereOp, v: string, value: string | string[]): boolean {
-  switch (op) {
+function matchesPresent(operator: WhereOp, raw: string, value: string | string[]): boolean {
+  switch (operator) {
     case "eq":
-      return v === String(value);
+      return raw === String(value);
     case "ne":
-      return v !== String(value);
+      return raw !== String(value);
     case "in":
-      return (value as string[]).includes(v);
+      return Array.isArray(value) && value.includes(raw);
     case "contains":
-      return v.includes(String(value));
+      return raw.includes(String(value));
     case "gt":
     case "gte":
     case "lt":
     case "lte":
-      return matchesNumeric(op, v, value);
+      return matchesNumeric(operator, raw, value);
     default:
       return false;
   }

@@ -130,6 +130,15 @@ describe("matchesWhere with valueFrom", () => {
     assert.equal(matchesWhere(where, { office: "tokyo" }), false);
   });
 
+  it("in + valueFrom (resolves to a string, not a set): false, never substring", () => {
+    // `resolveValue` stringifies every valueFrom result; `in` must stay
+    // membership-only, so a string comparand can't accidentally substring-match.
+    const where: Where = [{ field: "code", op: "in", valueFrom: { record: "_config", field: "allowed" } }];
+    assert.equal(matchesWhere(where, { code: "rain" }, { _config: { allowed: "rain" } }), false);
+    // even when the field value is a substring of the resolved string
+    assert.equal(matchesWhere([{ field: "code", op: "in", valueFrom: { field: "list" } }], { code: "ai", list: "rain" }), false);
+  });
+
   it("same-record valueFrom (record omitted): field-to-field compare", () => {
     const over: Where = [{ field: "spent", op: "gt", valueFrom: { field: "budget" } }];
     assert.equal(matchesWhere(over, { spent: "120", budget: "100" }), true);

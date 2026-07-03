@@ -489,6 +489,10 @@ const WhereCondZ = z
   .refine((cond) => (cond.value !== undefined) !== (cond.valueFrom !== undefined), {
     message: "a where condition must declare exactly one of `value` (a literal) or `valueFrom` (a reference to another record's field), never both or neither",
     path: ["value"],
+  })
+  .refine((cond) => cond.value === undefined || (cond.op === "in") === Array.isArray(cond.value), {
+    message: "`in` requires an array `value` (the allowed set); every other op requires a single string `value`",
+    path: ["value"],
   });
 const WhereZ = z.array(WhereCondZ);
 const DynamicIconSourceZ = z.object({

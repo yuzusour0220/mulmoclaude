@@ -26,6 +26,7 @@ type Unsubscribe = () => void;
 const summaries = ref<CollectionSummary[]>([]);
 let subscriptions: Unsubscribe[] = [];
 let debounceHandle: ReturnType<typeof setTimeout> | null = null;
+let refreshSeq = 0;
 
 /** Slugs of every source collection a dynamic-icon shortcut watches,
  *  deduped (two dynamic collections can share a source). */
@@ -66,9 +67,13 @@ function scheduleRefresh(): void {
  *  `"collection"` shortcuts against it, and re-derive which source
  *  collections to watch. Feed-source entries are excluded — they're
  *  reconciled separately (kind `"feed"`) by `FeedsView`. A failed fetch
- *  leaves the prior summaries (and subscriptions) untouched. */
+ *  leaves the prior summaries (and subscriptions) untouched. A monotonic
+ *  `refreshSeq` drops a superseded fetch so a slow older `listCollections`
+ *  can't resolve last and overwrite fresher summaries / resubscribe stale. */
 async function refresh(): Promise<void> {
+  const seq = ++refreshSeq;
   const result = await collectionUi().listCollections();
+  if (seq !== refreshSeq) return;
   if (!result.ok) return;
   summaries.value = result.data.collections.filter((summary) => summary.source !== "feed");
   resubscribe();
