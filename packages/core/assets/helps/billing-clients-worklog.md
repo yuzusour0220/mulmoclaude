@@ -234,19 +234,27 @@ distinct from "the ref actually resolves" (clientId is a valid slug AND
      so the user can fill them in later.
    - **not a valid slug** (contains uppercase, spaces, `&`, `.`, etc.) →
      (a) generate the slug (lowercase, spaces → `-`, drop punctuation,
-     collapse repeat hyphens); (b) **check for slug collisions BEFORE
-     writing anything**: if `data/clients/items/<slug>.json` already
-     exists AND its `name` field does not match the display value being
-     reconciled, stop and disambiguate — either append a numeric suffix
-     (`acme-corp-2`) after confirming the new client is genuinely
-     distinct, or ask the user which client the worklog entries belong
-     to. Do **not** silently overwrite an existing client. Also stop
-     when two different display values in the current inventory
-     slugify to the same slug (e.g. `"ACME Corp"` and `"Acme Corp."`);
-     ask the user whether they're the same client (merge to one slug)
-     or distinct (assign each a suffixed slug). (c) create
+     collapse repeat hyphens, strip leading/trailing hyphens); (b)
+     **validate the generated slug against the `clients.id` contract**
+     (see § 1 record shape: `[a-z0-9-]`, 1–48 chars): if it is empty
+     (punctuation-only or all-whitespace input like `"!!!"`), or longer
+     than 48 chars, **stop and ask the user** for a valid slug rather
+     than writing an invalid filename. If it is >48 chars but has
+     meaningful prefix content, propose truncation at 48 (dropping any
+     trailing hyphen) and confirm with the user before proceeding; (c)
+     **check for slug collisions BEFORE writing anything**: if
+     `data/clients/items/<slug>.json` already exists AND its `name`
+     field does not match the display value being reconciled, stop and
+     disambiguate — either append a numeric suffix (`acme-corp-2`)
+     after confirming the new client is genuinely distinct, or ask the
+     user which client the worklog entries belong to. Do **not**
+     silently overwrite an existing client. Also stop when two
+     different display values in the current inventory slugify to the
+     same slug (e.g. `"ACME Corp"` and `"Acme Corp."`); ask the user
+     whether they're the same client (merge to one slug) or distinct
+     (assign each a suffixed slug); (d) create
      `data/clients/items/<slug>.json` with `id: <slug>`, `name:
-     <original display value>`, other fields blank; (d) rewrite the raw
+     <original display value>`, other fields blank; (e) rewrite the raw
      display value inside every affected `data/worklog/items/*.json`
      to the new slug in the `clientId` field (preserve every other
      field untouched).
