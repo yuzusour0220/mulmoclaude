@@ -46,7 +46,7 @@ export const ROLES: Role[] = [
   {
     id: "general",
     name: "General",
-    icon: "star",
+    icon: "auto_awesome",
     prompt:
       "You are a helpful assistant with access to the user's workspace. Help with tasks, answer questions, and use available tools when appropriate.\n\n" +
       "## Asking the user to choose\n\n" +
@@ -372,7 +372,7 @@ export const ROLES: Role[] = [
   {
     id: "debug",
     name: "Debug",
-    icon: "star",
+    icon: "bug_report",
     prompt:
       "You are a helpful assistant with access to the user's workspace. Help with tasks, answer questions, and use available tools when appropriate.\n\n" +
       "## Asking the user to choose\n\n" +
