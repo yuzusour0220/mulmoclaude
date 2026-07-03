@@ -96,3 +96,45 @@ describe("matchesWhere", () => {
     assert.equal(matchesWhere([], { anything: "goes" }), true);
   });
 });
+
+describe("matchesWhere with valueFrom", () => {
+  it("eq: resolves the value from recordsById and matches", () => {
+    const where: Where = [{ field: "office", op: "eq", valueFrom: { record: "_config", field: "defaultCity" } }];
+    const recordsById = { _config: { defaultCity: "tokyo" } };
+    assert.equal(matchesWhere(where, { office: "tokyo" }, recordsById), true);
+  });
+
+  it("eq: resolves the value from recordsById and does not match", () => {
+    const where: Where = [{ field: "office", op: "eq", valueFrom: { record: "_config", field: "defaultCity" } }];
+    const recordsById = { _config: { defaultCity: "osaka" } };
+    assert.equal(matchesWhere(where, { office: "tokyo" }, recordsById), false);
+  });
+
+  it("UNRESOLVED valueFrom (missing target record): false for eq and for ne", () => {
+    const eqWhere: Where = [{ field: "office", op: "eq", valueFrom: { record: "_config", field: "defaultCity" } }];
+    const neWhere: Where = [{ field: "office", op: "ne", valueFrom: { record: "_config", field: "defaultCity" } }];
+    assert.equal(matchesWhere(eqWhere, { office: "tokyo" }, {}), false);
+    assert.equal(matchesWhere(neWhere, { office: "tokyo" }, {}), false);
+  });
+
+  it("UNRESOLVED valueFrom (missing field on the target record): false for eq and for ne", () => {
+    const eqWhere: Where = [{ field: "office", op: "eq", valueFrom: { record: "_config", field: "defaultCity" } }];
+    const neWhere: Where = [{ field: "office", op: "ne", valueFrom: { record: "_config", field: "defaultCity" } }];
+    const recordsById = { _config: { otherField: "tokyo" } };
+    assert.equal(matchesWhere(eqWhere, { office: "tokyo" }, recordsById), false);
+    assert.equal(matchesWhere(neWhere, { office: "tokyo" }, recordsById), false);
+  });
+
+  it("a 2-arg matchesWhere call (no recordsById) with a valueFrom cond is always false", () => {
+    const where: Where = [{ field: "office", op: "eq", valueFrom: { record: "_config", field: "defaultCity" } }];
+    assert.equal(matchesWhere(where, { office: "tokyo" }), false);
+  });
+
+  it("same-record valueFrom (record omitted): field-to-field compare", () => {
+    const over: Where = [{ field: "spent", op: "gt", valueFrom: { field: "budget" } }];
+    assert.equal(matchesWhere(over, { spent: "120", budget: "100" }), true);
+    assert.equal(matchesWhere(over, { spent: "80", budget: "100" }), false);
+    // missing sibling field on the same record → unresolved → false
+    assert.equal(matchesWhere(over, { spent: "120" }), false);
+  });
+});

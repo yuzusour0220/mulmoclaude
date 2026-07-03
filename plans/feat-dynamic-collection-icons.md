@@ -39,6 +39,15 @@ Issue: #1900 (beta-feedback)
 それ以外の `op` はすべて false になる。`gt`/`gte`/`lt`/`lte` は両辺を `Number()` に変換して比較し、
 どちらかが `NaN`（数値化できない）なら false。
 
+条件の比較値は、リテラル `value` の代わりに **`valueFrom`（他レコードの値参照）** でも指定できる:
+`{ field, op, valueFrom: { record, field } }`（`value`/`valueFrom` は排他— どちらか一方必須、zod で強制）。
+`valueFrom.record` は同じ `source.collection` 内のレコードID（`primaryKey` の値）、`valueFrom.field`
+はそのレコードのフィールド名。ユーザごとの設定を持つ `_config` シングルトンレコードを参照すれば、
+ハードコードした値ではなく「ユーザが設定したデフォルト値」に追従できる（例: 気象庁 (jma) 予報
+コレクションで `office == _config.defaultCity` — ユーザが選んだ市区町村の予報だけを対象にする）。
+参照先レコード/フィールドが存在しない場合（**未解決参照**）、その条件は `eq`/`ne` を含む**すべての
+op で false** になる（壊れた参照が誤ってマッチすることは絶対にない）。
+
 ```jsonc
 "dynamicIcon": {
   "source": {                    // 必須
@@ -54,6 +63,24 @@ Issue: #1900 (beta-feedback)
     { "where": [{ "field": "temp", "op": "gt", "value": "30" }], "icon": "sunny" }
   ],
   "fallback": "partly_cloudy_day" // 任意・既定 schema.icon
+}
+```
+
+`valueFrom` の例（jma-weather 風: ユーザが設定した市区町村の予報だけを対象にする）:
+
+```jsonc
+"dynamicIcon": {
+  "source": {
+    "collection": "jma-forecast",
+    "where": [
+      // office == _config.defaultCity（_config は同コレクション内のシングルトンレコード）
+      { "field": "office", "op": "eq", "valueFrom": { "record": "_config", "field": "defaultCity" } }
+    ]
+  },
+  "rules": [
+    { "where": [{ "field": "condition", "op": "eq", "value": "rain" }], "icon": "rainy" }
+  ],
+  "fallback": "partly_cloudy_day"
 }
 ```
 
@@ -88,7 +115,42 @@ Issue: #1900 (beta-feedback)
 - `dynamicIcon` の妥当性検査（存在しない `source.collection`/`field`/icon名）は discovery 時に warn 
   （`packages/core/assets/helps/error-recovery.md` に診断を1項目追記するか検討）。
 
-## Out of scope
-- 数値formula の文字列/条件拡張（不要。宣言的 rules で足りる）。
-- アイコン以外（色/バッジ）の動的化。
-- v2 の細かいデバウンス最適化（まず動くもの）。
+## DSL 汎用性検証（10 ユースケース）
+
+DSL の骨格（すっきり保つための不変な形）:
+**「source で 1 レコードを選ぶ → rules を先勝ちで評価 → icon。外れたら fallback」**
+- `source = { collection, from?(latest|first|when), orderBy?, where? }`
+- `where = WhereCond[]`（AND）。`WhereCond = { field, op, value | valueFrom }`、
+  `op ∈ eq|ne|in|gt|gte|lt|lte|contains`、`valueFrom = { record?, field }`
+  （`record` 有=別レコード＝設定追従 / 省略=同一レコード＝フィールド比較）。
+
+| # | ユースケース | 設定の要点 | 判定 |
+|---|---|---|---|
+| 1 | 天気: 既定都市の当日予報 | `source.where: office eq valueFrom(_config.defaultCity) & source eq today`、rules は `weatherCode` の `gte` 帯 | ✅ |
+| 2 | 株: 当日騰落 | 要約レコードを選び `dayChangePct gte 0 → trending_up` / fallback `trending_down` | ✅ |
+| 3 | 個別銘柄アラート | `price gte valueFrom(_config.alertHigh)` / `lte valueFrom(_config.alertLow)` | ✅ |
+| 4 | 予算: 使いすぎ | 同一レコード比較 `spent gt valueFrom(budget) → error` | ✅（同一レコード valueFrom） |
+| 5 | フィットネス: 歩数目標 | `steps gte valueFrom(goal) → check_circle` | ✅（同一レコード valueFrom） |
+| 6 | 読書: 今読んでる本 | `from:first where status eq reading`、genre で分岐 | ✅ |
+| 7 | 習慣: 連続日数バッジ | `streak gte 30/7/1 →` 各アイコン（数値帯） | ✅ |
+| 8 | メール: 未読有無 | 要約レコードの `unread gt 0 → mark_email_unread` | ✅（要約レコード） |
+| 9 | タスク: 期限切れ有無 | **集約が必要**（どれか1件でも overdue）→ 要約レコード `overdueCount gt 0` | ⚠️→✅（要約） |
+| 10 | カレンダー: 今日の予定 | **時刻依存**（today）→ データ側の today マーカー/`_today` 要約 | ⚠️→✅（マーカー） |
+
+### この検証で判明したこと（＋加えた spec 変更）
+- **B. 同一レコードのフィールド比較**（4,5）→ `valueFrom.record` を任意化（省略=同一レコード）。**実装済み**。
+- **数値比較の穴**: `Number("")===0` で空文字が 0 と誤判定 → 空/空白は非数値(NaN)扱いに**修正済み**。
+- **A. 集約（any/all/count）**（9）と **C. 動的 now/today**（10）は **DSL に入れない**。理由: 「1 レコード選択→写像」の骨格を崩すと一気に複雑化する。代わりに **データ層へ委譲**:
+  - 集約 → **要約レコード**（`_summary.overdueCount` / `worstStatus` 等）をコレクション側（generator / `derived` フィールド）が持つ。
+  - 時刻 → **マーカー**（天気の `source:today` と同発想 / `_today` 要約）でデータ側が表現。
+  - これで DSL は小さく・宣言的・保守しやすいまま、実ユースケースを網羅できる。
+
+### 設計原則（メンテのため）
+- DSL は宣言的な **select-one → first-match rules → icon** のみ。集約・時刻・複雑な導出は**データ層**（要約レコード・`derived` フィールド・generator のマーカー）に委譲。
+- `valueFrom` の 2 用途（別レコード=設定追従 / 同一レコード=フィールド比較）で「動的な閾値・都市・目標値」を宣言的にカバー。
+
+## Out of scope（意図的に入れない＝複雑化回避）
+- **集約演算子**（any/all/count）→ 要約レコードで表現。
+- **`$now`/`$today` 等の時刻参照**→ データ側の today マーカーで表現。
+- **OR / 入れ子 where**→ 今は AND のみ（必要になってから検討）。
+- 数値formula の文字列/条件拡張（不要）。アイコン以外（色/バッジ）の動的化。v2 の細かいデバウンス最適化。

@@ -466,11 +466,30 @@ const IngestSchemaZ = z.discriminatedUnion("kind", [DeclarativeIngestZ, AgentIng
 //
 // `where` is a richer AND-of-conditions predicate than the single-field
 // `WhenSchema` used elsewhere (fields/actions) — see `../core/where`.
-const WhereCondZ = z.object({
+//
+// A condition's comparison value is either a literal `value` or a
+// `valueFrom` reference to another record's field (e.g. a `_config`
+// singleton's `defaultCity`, resolved at compute time against the source
+// collection's own records — see `server/dynamicIcon.ts`'s `recordsById`).
+// Exactly one of the two is required: neither (nothing to compare against)
+// and both (ambiguous which wins) are equally meaningless.
+// `record` omitted → the SAME record being matched (field-to-field compare,
+// e.g. `spent > budget`); set → another record by primaryKey (e.g. `_config`).
+const ValueRefZ = z.object({
+  record: z.string().trim().min(1).optional(),
   field: z.string().trim().min(1),
-  op: z.enum(["eq", "ne", "in", "gt", "gte", "lt", "lte", "contains"]),
-  value: z.union([z.string(), z.array(z.string())]),
 });
+const WhereCondZ = z
+  .object({
+    field: z.string().trim().min(1),
+    op: z.enum(["eq", "ne", "in", "gt", "gte", "lt", "lte", "contains"]),
+    value: z.union([z.string(), z.array(z.string())]).optional(),
+    valueFrom: ValueRefZ.optional(),
+  })
+  .refine((cond) => (cond.value !== undefined) !== (cond.valueFrom !== undefined), {
+    message: "a where condition must declare exactly one of `value` (a literal) or `valueFrom` (a reference to another record's field), never both or neither",
+    path: ["value"],
+  });
 const WhereZ = z.array(WhereCondZ);
 const DynamicIconSourceZ = z.object({
   collection: z.string().trim().min(1),

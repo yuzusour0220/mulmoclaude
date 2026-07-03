@@ -22,9 +22,17 @@ function latestByField(pool: CollectionItem[], field: string): CollectionItem {
  *  - `from: "first"` / `"when"` → the first pool record (storage order);
  *  - `from: "latest"` (default), with `orderBy` given → the pool record
  *    whose `String(record[orderBy])` sorts highest;
- *  - `from: "latest"`, with no `orderBy` → the last pool record. */
-export function selectDynamicRecord(records: CollectionItem[], source: DynamicIconSource, orderBy: string | undefined): CollectionItem | null {
-  const pool = source.where ? records.filter((r) => matchesWhere(source.where!, r)) : records;
+ *  - `from: "latest"`, with no `orderBy` → the last pool record.
+ *  `recordsById` (the source collection's records keyed by primaryKey)
+ *  resolves any `valueFrom` reference inside `source.where`; omitted for
+ *  callers with no cross-record lookups. */
+export function selectDynamicRecord(
+  records: CollectionItem[],
+  source: DynamicIconSource,
+  orderBy: string | undefined,
+  recordsById: Record<string, CollectionItem> = {},
+): CollectionItem | null {
+  const pool = source.where ? records.filter((r) => matchesWhere(source.where!, r, recordsById)) : records;
   if (pool.length === 0) return null;
   if (source.from === "first" || source.from === "when") return pool[0];
   return orderBy ? latestByField(pool, orderBy) : pool[pool.length - 1];
@@ -33,11 +41,17 @@ export function selectDynamicRecord(records: CollectionItem[], source: DynamicIc
 /** Map a resolved source record to the effective icon: `spec.fallback`
  *  (or the collection's own static `icon`) when there's no record or no
  *  rule matches; otherwise the `icon` of the first rule whose `where`
- *  matches the record. */
-export function resolveIcon(record: CollectionItem | null, spec: DynamicIconSpec, staticIcon: string): string {
+ *  matches the record. `recordsById` resolves any `valueFrom` reference
+ *  inside a rule's `where`, same as `selectDynamicRecord`. */
+export function resolveIcon(
+  record: CollectionItem | null,
+  spec: DynamicIconSpec,
+  staticIcon: string,
+  recordsById: Record<string, CollectionItem> = {},
+): string {
   const fallback = spec.fallback ?? staticIcon;
   if (!record) return fallback;
-  const rule = spec.rules.find((rule) => matchesWhere(rule.where, record));
+  const rule = spec.rules.find((rule) => matchesWhere(rule.where, record, recordsById));
   return rule ? rule.icon : fallback;
 }
 

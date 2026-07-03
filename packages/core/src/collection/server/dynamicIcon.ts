@@ -8,6 +8,17 @@ import { loadCollection, type DiscoveryOptions } from "./discovery";
 import { listItems } from "./io";
 import { log } from "./host";
 import type { LoadedCollection } from "./discoveredCollection";
+import type { CollectionItem } from "../core/schema";
+
+/** Index `items` by their `primaryKey` value — the `recordsById` map a
+ *  `valueFrom` reference (e.g. `_config.defaultCity`) resolves against.
+ *  Items whose primary key isn't a string (shouldn't happen for a valid
+ *  schema, but records are untyped storage) are skipped rather than
+ *  coerced, so a broken key never silently shadows a real one. */
+function buildRecordsById(items: CollectionItem[], primaryKey: string): Record<string, CollectionItem> {
+  const entries = items.filter((item) => typeof item[primaryKey] === "string").map((item): [string, CollectionItem] => [String(item[primaryKey]), item]);
+  return Object.fromEntries(entries);
+}
 
 /** Compute the effective launcher icon for `collection`: its static
  *  `schema.icon` when it declares no `dynamicIcon`, else the icon
@@ -25,7 +36,9 @@ export async function computeCollectionIcon(collection: LoadedCollection, opts: 
     if (!source) return spec.fallback ?? schema.icon;
     const items = await listItems(source.dataDir, { workspaceRoot: opts.workspaceRoot });
     const orderBy = spec.source.orderBy ?? firstDateField(source.schema);
-    return resolveIcon(selectDynamicRecord(items, spec.source, orderBy), spec, schema.icon);
+    const recordsById = buildRecordsById(items, source.schema.primaryKey);
+    const record = selectDynamicRecord(items, spec.source, orderBy, recordsById);
+    return resolveIcon(record, spec, schema.icon, recordsById);
   } catch (err) {
     log.warn("collections", "dynamic icon compute failed, falling back", {
       slug: collection.slug,

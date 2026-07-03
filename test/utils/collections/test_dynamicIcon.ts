@@ -72,6 +72,19 @@ describe("selectDynamicRecord", () => {
     const source: DynamicIconSource = { collection: "weather" };
     assert.equal(selectDynamicRecord([], source, "date"), null);
   });
+
+  it("source.where with valueFrom follows a value from recordsById (e.g. a _config singleton)", () => {
+    const withOffice = [
+      { id: "a", date: "2026-01-01", office: "osaka", condition: "sunny" },
+      { id: "b", date: "2026-01-02", office: "tokyo", condition: "rain" },
+    ];
+    const source: DynamicIconSource = {
+      collection: "weather",
+      where: [{ field: "office", op: "eq", valueFrom: { record: "_config", field: "defaultCity" } }],
+    };
+    const recordsById = { _config: { defaultCity: "tokyo" } };
+    assert.deepEqual(selectDynamicRecord(withOffice, source, "date", recordsById), withOffice[1]);
+  });
 });
 
 describe("resolveIcon", () => {
