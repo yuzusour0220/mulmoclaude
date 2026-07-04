@@ -518,6 +518,27 @@ O canvas (painel direito) suporta 8 modos de visualização, alternáveis via ba
 
 Todo modo de visualização é orientado por URL: clicar em um botão do launcher atualiza `?view=`, e chegar em uma URL com `?view=wiki` (por exemplo) restaura a visualização correspondente. A lista de modos de visualização é definida uma vez em `src/utils/canvas/viewMode.ts` — adicionar um novo modo é apenas adicionar um item ao array.
 
+## Acesso remoto
+
+Acesse o seu MulmoClaude em execução a partir de um celular (ou qualquer navegador): navegue por suas coleções, feeds e visualizações personalizadas e inicie chats, de qualquer lugar. Não é preciso configurar nenhuma conta ou servidor separado: o acesso é concedido simplesmente fazendo login em **ambas** as pontas com a **mesma conta do Google**.
+
+**Como conectar**
+
+1. No desktop, clique no ícone **phonelink** no cabeçalho para abrir o popover _Host remoto_ e escolha **Fazer login com o Google**. O MulmoClaude faz login como seu usuário do Google e abre um canal de comandos via Firebase (o projeto público compartilhado [`mulmoserver`](https://mulmoserver.web.app)). O ícone fica verde enquanto o host está online.
+2. No seu celular, abra **[https://mulmoserver.web.app](https://mulmoserver.web.app)** e faça login com a **mesma conta do Google**. O app web encontra seu host online e se conecta a ele.
+
+Como ambas as pontas se autenticam como o mesmo usuário do Firebase, o celular e o desktop só se encontram dentro do seu próprio espaço de usuário — nenhum terceiro pode alcançar seu host.
+
+**O Firebase e o Firestore são usados apenas como transporte** — um relé para transmitir comandos e respostas entre o seu celular e o seu desktop. Seus dados **nunca são armazenados nem retidos** em nenhum dos dois. No host existem apenas os seus arquivos locais do workspace; tudo o que precisa cruzar o canal (como um anexo em trânsito pelo Firebase Storage) é excluído assim que chega ao destino.
+
+**O que você pode fazer pelo celular**
+
+- Navegar e paginar por suas **coleções** e **feeds**.
+- Abrir **visualizações remotas personalizadas** (custom remote views) — páginas adaptadas para celular que o Claude cria para você. Peça ao Claude para criar uma _custom remote view_ (não uma visualização personalizada comum); ela pode ser somente leitura ou editável.
+- **Iniciar um chat** no host e anexar **fotos, vídeos ou PDFs** do celular. Os bytes dos anexos são grandes demais para o canal de comandos, então passam pelo Firebase Storage; o host baixa cada arquivo para o seu workspace (`data/attachments/`), exclui a cópia em trânsito e entrega o arquivo ao Claude junto com a sua mensagem.
+
+O canal é baseado em comandos e conduzido pelo host: o celular faz as requisições e o seu MulmoClaude de desktop as responde. Use **Desconectar** no popover (ou encerre o MulmoClaude) para colocar o host offline.
+
 ## Workspace
 
 Todos os dados são armazenados como arquivos simples no diretório do workspace, agrupados em quatro buckets semânticos (#284):

@@ -568,6 +568,27 @@ The canvas (right panel) supports 8 view modes, switchable via the launcher tool
 
 Every view mode is URL-driven: clicking a launcher button updates `?view=`, and landing on a URL with `?view=wiki` (for example) restores the corresponding view. The view mode list is defined once in `src/utils/canvas/viewMode.ts` — adding a new mode is a single array append.
 
+## Remote Access
+
+Reach your running MulmoClaude from a phone (or any browser) — browse its collections, feeds, and custom views, and start chats, from anywhere. There is no separate account or server to set up: access is granted simply by signing in to **both** ends with the **same Google account**.
+
+**How to connect**
+
+1. On the desktop, click the **phonelink** icon in the header to open the _Remote host_ popover, then choose **Sign in with Google**. MulmoClaude signs in as your Google user and opens a command channel over Firebase (the shared public [`mulmoserver`](https://mulmoserver.web.app) project). The icon turns green while the host is online.
+2. On your phone, open **[https://mulmoserver.web.app](https://mulmoserver.web.app)** and sign in with the **same Google account**. The web app finds your online host and connects to it.
+
+Because both ends authenticate as the same Firebase user, the phone and the desktop only ever meet inside your own user space — no third party can reach your host.
+
+**Firebase and Firestore are used purely as a transport** — a relay to pass commands and responses between your phone and your desktop. Your data is **never stored or retained** on either. Nothing lives on the host except your local workspace files; anything that must cross the channel (such as an attachment staged through Firebase Storage) is deleted as soon as it reaches its destination.
+
+**What you can do from the phone**
+
+- Browse and page through your **collections** and **feeds**.
+- Open **custom remote views** — mobile-friendly pages Claude builds for you. Ask Claude to build a _custom remote view_ (not a regular custom view), which can be read-only or writable.
+- **Start a chat** on the host and attach **photos, videos, or PDFs** from the phone. Attachment bytes are too large for the command channel, so they stage through Firebase Storage; the host downloads each file into its workspace (`data/attachments/`), deletes the staged copy, and hands the file to Claude alongside your message.
+
+The channel is command-based and host-driven: the phone issues requests and your desktop MulmoClaude answers them. Use **Disconnect** in the popover (or quit MulmoClaude) to take the host offline.
+
 ## Workspace
 
 All data is stored as plain files in the workspace directory, grouped into four semantic buckets (#284):
