@@ -186,6 +186,9 @@ const esMessages = {
     // "RO" = Read-Only. Se mantiene la abreviatura en inglés para
     // renderizarse como una insignia compacta junto al label Referencia.
     readOnlyBadge: "RO",
+    showSystemFiles: "Mostrar archivos del sistema",
+    showSystemFilesTitle:
+      "Muestra los directorios raíz internos del agente (conversations/, feeds/, etc.) además del contenido del usuario (data/, artifacts/, config/).",
   },
   fileTree: {
     workspace: "(área de trabajo)",

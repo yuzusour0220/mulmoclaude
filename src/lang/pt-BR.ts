@@ -181,6 +181,9 @@ const ptBRMessages = {
     // "RO" = Read-Only. Abreviação em inglês mantida para caber como
     // badge compacto ao lado do rótulo Referência.
     readOnlyBadge: "RO",
+    showSystemFiles: "Exibir arquivos do sistema",
+    showSystemFilesTitle:
+      "Mostra os diretórios raiz internos do agente (conversations/, feeds/ etc.) além do conteúdo do usuário (data/, artifacts/, config/).",
   },
   fileTree: {
     workspace: "(workspace)",

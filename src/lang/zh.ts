@@ -182,6 +182,8 @@ const zhMessages = {
     reference: "引用",
     // "RO" = Read-Only. 保留英文缩写作为紧凑徽章。
     readOnlyBadge: "RO",
+    showSystemFiles: "显示系统文件",
+    showSystemFilesTitle: "在用户内容(data/、artifacts/、config/)之外同时显示代理内部的顶层目录(conversations/、feeds/ 等)。",
   },
   fileTree: {
     workspace: "(工作区)",

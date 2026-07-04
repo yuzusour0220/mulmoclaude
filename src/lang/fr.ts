@@ -181,6 +181,9 @@ const frMessages = {
     // "RO" = Read-Only. Abréviation anglaise conservée volontairement
     // pour tenir dans un badge compact à côté du libellé Référence.
     readOnlyBadge: "RO",
+    showSystemFiles: "Afficher les fichiers système",
+    showSystemFilesTitle:
+      "Affiche les répertoires racine internes de l'agent (conversations/, feeds/, etc.) en plus des contenus utilisateur (data/, artifacts/, config/).",
   },
   fileTree: {
     workspace: "(espace de travail)",

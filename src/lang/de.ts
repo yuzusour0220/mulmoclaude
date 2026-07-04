@@ -183,6 +183,9 @@ const deMessages = {
     // "RO" = Read-Only. Englische Abkürzung bleibt erhalten, um als
     // kompaktes Badge neben dem Label "Referenz" zu passen.
     readOnlyBadge: "RO",
+    showSystemFiles: "Systemdateien anzeigen",
+    showSystemFilesTitle:
+      "Zeigt agent-interne Top-Level-Verzeichnisse (conversations/, feeds/ usw.) zusätzlich zu den Nutzer-Daten (data/, artifacts/, config/) an.",
   },
   fileTree: {
     workspace: "(Arbeitsbereich)",

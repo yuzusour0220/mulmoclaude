@@ -184,6 +184,9 @@ const jaMessages = {
     recent: "最近",
     reference: "参照",
     readOnlyBadge: "RO",
+    showSystemFiles: "システムファイルを表示",
+    showSystemFilesTitle:
+      "エージェント内部の top-level ディレクトリ (conversations/ や feeds/ など) をユーザーデータ (data/ artifacts/ config/) と合わせて表示します。",
   },
   fileTree: {
     workspace: "（ワークスペース）",

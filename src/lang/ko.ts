@@ -187,6 +187,8 @@ const koMessages = {
     reference: "참조",
     // "RO" = Read-Only. 간결한 배지로 표시하기 위해 영문 약어 유지.
     readOnlyBadge: "RO",
+    showSystemFiles: "시스템 파일 표시",
+    showSystemFilesTitle: "사용자 콘텐츠(data/, artifacts/, config/)에 더해 에이전트 내부 최상위 디렉터리(conversations/, feeds/ 등)까지 표시합니다.",
   },
   fileTree: {
     workspace: "(워크스페이스)",
