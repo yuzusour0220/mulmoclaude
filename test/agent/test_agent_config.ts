@@ -1,6 +1,6 @@
 import { describe, it, afterEach } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, unlinkSync } from "fs";
+import { existsSync, unlinkSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { __resetForTests as resetTokenState, generateAndWriteToken } from "../../server/api/auth/token.js";
@@ -51,6 +51,22 @@ describe("buildMcpConfig", () => {
     const server = servers.mulmoclaude as Record<string, unknown>;
     const env = server.env as Record<string, string>;
     assert.equal(env.PLUGIN_NAMES, "");
+  });
+
+  function dockerServerEnv(): Record<string, string> {
+    const config = buildMcpConfig({ chatSessionId: "s", port: 3001, activePlugins: [], useDocker: true }) as Record<string, unknown>;
+    const server = (config.mcpServers as Record<string, unknown>).mulmoclaude as Record<string, unknown>;
+    return server.env as Record<string, string>;
+  }
+
+  it("docker NODE_PATH includes the junction-free workspace-modules fallback root (#1946)", async () => {
+    assert.equal(dockerServerEnv().NODE_PATH, "/app/node_modules:/app/pkg_modules");
+  });
+
+  it("native (non-docker) server carries no NODE_PATH", async () => {
+    const config = buildMcpConfig({ chatSessionId: "s", port: 3001, activePlugins: [], useDocker: false }) as Record<string, unknown>;
+    const server = (config.mcpServers as Record<string, unknown>).mulmoclaude as Record<string, unknown>;
+    assert.equal((server.env as Record<string, string>).NODE_PATH, undefined);
   });
 });
 
@@ -342,6 +358,56 @@ describe("buildDockerSpawnArgs", () => {
     });
     // No mount line referring to /app/packages should appear.
     assert.ok(!args.some((token) => token.includes(":/app/packages:")));
+  });
+
+  // #1946: Windows yarn-workspace junctions dangle inside the Linux
+  // container, so on win32 source builds each @mulmoclaude/* package is
+  // also bind-mounted at a junction-free /app/pkg_modules/@mulmoclaude/<name>
+  // that NODE_PATH falls through to.
+  function seedWorkspacePackages(root: string): void {
+    mkdirSync(join(root, "packages", "core"), { recursive: true });
+    writeFileSync(join(root, "packages", "core", "package.json"), JSON.stringify({ name: "@mulmoclaude/core" }));
+    mkdirSync(join(root, "packages", "plugins", "x-plugin"), { recursive: true });
+    writeFileSync(join(root, "packages", "plugins", "x-plugin", "package.json"), JSON.stringify({ name: "@mulmoclaude/x-plugin" }));
+    // A non-@mulmoclaude leaf lib in the same tree must NOT be mounted.
+    mkdirSync(join(root, "packages", "plugins", "leaf-lib"), { recursive: true });
+    writeFileSync(join(root, "packages", "plugins", "leaf-lib", "package.json"), JSON.stringify({ name: "some-leaf" }));
+  }
+
+  it("win32 source build mounts each @mulmoclaude/* at /app/pkg_modules, skipping non-scoped packages (#1946)", async () => {
+    const root = mkdtempSync(join(tmpdir(), "mc-pkgroot-"));
+    try {
+      seedWorkspacePackages(root);
+      const args = buildDockerSpawnArgs({ ...baseParams(), platform: "win32" as Platform, packageRoot: root });
+      const toDocker = (hostPath: string): string => hostPath.replace(/\\/g, "/");
+      assert.ok(args.includes(`${toDocker(join(root, "packages", "core"))}:/app/pkg_modules/@mulmoclaude/core:ro`));
+      assert.ok(args.includes(`${toDocker(join(root, "packages", "plugins", "x-plugin"))}:/app/pkg_modules/@mulmoclaude/x-plugin:ro`));
+      assert.ok(!args.some((token) => token.includes("/app/pkg_modules/some-leaf")));
+      assert.ok(!args.some((token) => token.includes("leaf-lib:/app/pkg_modules")));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("does NOT add /app/pkg_modules mounts on non-Windows platforms", async () => {
+    const root = mkdtempSync(join(tmpdir(), "mc-pkgroot-"));
+    try {
+      seedWorkspacePackages(root);
+      const args = buildDockerSpawnArgs({ ...baseParams(), platform: "darwin" as Platform, packageRoot: root });
+      assert.ok(!args.some((token) => token.includes(":/app/pkg_modules/")));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("win32 npx install (no packages/ dir) adds no /app/pkg_modules mounts", async () => {
+    const root = mkdtempSync(join(tmpdir(), "mc-pkgroot-"));
+    try {
+      const args = buildDockerSpawnArgs({ ...baseParams(), platform: "win32" as Platform, packageRoot: root });
+      assert.ok(!args.some((token) => token.includes(":/app/pkg_modules/")));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   // The package bin script (`npx mulmoclaude` / `node packages/mulmoclaude/bin/...`)
