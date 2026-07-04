@@ -516,6 +516,27 @@ Das Canvas (rechtes Panel) unterstützt 8 Ansichtsmodi, umschaltbar über die La
 
 Jeder Ansichtsmodus ist URL-gesteuert: Das Klicken auf eine Launcher-Schaltfläche aktualisiert `?view=`, und das Aufrufen einer URL mit `?view=wiki` (zum Beispiel) stellt die entsprechende Ansicht wieder her. Die Liste der Ansichtsmodi wird einmal in `src/utils/canvas/viewMode.ts` definiert — das Hinzufügen eines neuen Modus ist ein einzelnes Array-Append.
 
+## Fernzugriff
+
+Greifen Sie von einem Smartphone (oder einem beliebigen Browser) auf Ihr laufendes MulmoClaude zu — durchsuchen Sie Sammlungen, Feeds und benutzerdefinierte Ansichten und starten Sie Chats, von überall. Es ist kein separates Konto und kein zusätzlicher Server nötig: Der Zugriff wird einfach dadurch gewährt, dass Sie sich auf **beiden** Seiten mit **demselben Google-Konto** anmelden.
+
+**So verbinden Sie sich**
+
+1. Klicken Sie auf dem Desktop auf das **phonelink**-Symbol in der Kopfzeile, um das _Remote-Host_-Popover zu öffnen, und wählen Sie **Mit Google anmelden**. MulmoClaude meldet sich als Ihr Google-Nutzer an und öffnet einen Befehlskanal über Firebase (das gemeinsame öffentliche Projekt [`mulmoserver`](https://mulmoserver.web.app)). Das Symbol wird grün, solange der Host online ist.
+2. Öffnen Sie auf Ihrem Smartphone **[https://mulmoserver.web.app](https://mulmoserver.web.app)** und melden Sie sich mit **demselben Google-Konto** an. Die Web-App findet Ihren Online-Host und verbindet sich mit ihm.
+
+Da sich beide Seiten als derselbe Firebase-Nutzer authentifizieren, treffen sich Smartphone und Desktop nur innerhalb Ihres eigenen Nutzerbereichs — kein Dritter kann Ihren Host erreichen.
+
+**Firebase und Firestore werden ausschließlich als Transport genutzt** — als Relais, das Befehle und Antworten zwischen Ihrem Smartphone und Ihrem Desktop weiterleitet. Ihre Daten werden auf keiner der beiden Seiten **gespeichert oder aufbewahrt**. Auf dem Host existieren nur Ihre lokalen Workspace-Dateien; alles, was den Kanal passieren muss (etwa ein über Firebase Storage bereitgestellter Anhang), wird gelöscht, sobald es sein Ziel erreicht hat.
+
+**Was Sie vom Smartphone aus tun können**
+
+- Ihre **Sammlungen** und **Feeds** durchsuchen und durchblättern.
+- **Custom Remote Views** öffnen — mobilfreundliche Seiten, die Claude für Sie erstellt. Bitten Sie Claude, eine _custom remote view_ zu erstellen (keine normale Custom View); sie kann schreibgeschützt oder beschreibbar sein.
+- Einen **Chat** auf dem Host **starten** und **Fotos, Videos oder PDFs** vom Smartphone anhängen. Die Bytes der Anhänge sind für den Befehlskanal zu groß, daher werden sie über Firebase Storage bereitgestellt; der Host lädt jede Datei in seinen Workspace (`data/attachments/`) herunter, löscht die bereitgestellte Kopie und übergibt die Datei zusammen mit Ihrer Nachricht an Claude.
+
+Der Kanal ist befehlsbasiert und host-gesteuert: Das Smartphone stellt Anfragen und Ihr Desktop-MulmoClaude beantwortet sie. Verwenden Sie **Trennen** im Popover (oder beenden Sie MulmoClaude), um den Host offline zu nehmen.
+
 ## Workspace
 
 Alle Daten werden als einfache Dateien im Workspace-Verzeichnis gespeichert, gruppiert in vier semantische Bereiche (#284):

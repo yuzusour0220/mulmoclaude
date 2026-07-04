@@ -515,6 +515,27 @@ Le canevas (panneau de droite) prend en charge 8 modes d'affichage, permutables 
 
 Chaque mode d'affichage est piloté par l'URL : cliquer sur un bouton du lanceur met à jour `?view=`, et atterrir sur une URL avec `?view=wiki` (par exemple) restaure la vue correspondante. La liste des modes d'affichage est définie une seule fois dans `src/utils/canvas/viewMode.ts` — ajouter un nouveau mode est un simple ajout à un tableau.
 
+## Accès à distance
+
+Accédez à votre MulmoClaude en cours d'exécution depuis un téléphone (ou n'importe quel navigateur) : parcourez ses collections, ses feeds et ses vues personnalisées, et démarrez des chats, où que vous soyez. Aucun compte ni serveur distinct à configurer : l'accès est accordé simplement en vous connectant aux **deux** extrémités avec le **même compte Google**.
+
+**Comment se connecter**
+
+1. Sur le bureau, cliquez sur l'icône **phonelink** dans l'en-tête pour ouvrir le popover _Hôte distant_, puis choisissez **Se connecter avec Google**. MulmoClaude se connecte en tant que votre utilisateur Google et ouvre un canal de commandes via Firebase (le projet public partagé [`mulmoserver`](https://mulmoserver.web.app)). L'icône devient verte tant que l'hôte est en ligne.
+2. Sur votre téléphone, ouvrez **[https://mulmoserver.web.app](https://mulmoserver.web.app)** et connectez-vous avec le **même compte Google**. L'application web trouve votre hôte en ligne et s'y connecte.
+
+Comme les deux extrémités s'authentifient en tant que même utilisateur Firebase, le téléphone et le bureau ne se rencontrent qu'à l'intérieur de votre propre espace utilisateur — aucun tiers ne peut atteindre votre hôte.
+
+**Firebase et Firestore ne servent que de transport** — un relais pour transmettre les commandes et les réponses entre votre téléphone et votre bureau. Vos données ne sont **jamais stockées ni conservées** sur l'un ou l'autre. Sur l'hôte, seuls vos fichiers locaux de l'espace de travail existent ; tout ce qui doit traverser le canal (comme une pièce jointe transitant par Firebase Storage) est supprimé dès qu'il atteint sa destination.
+
+**Ce que vous pouvez faire depuis le téléphone**
+
+- Parcourir et feuilleter vos **collections** et vos **feeds**.
+- Ouvrir des **vues distantes personnalisées** (custom remote views) — des pages adaptées au mobile que Claude crée pour vous. Demandez à Claude de créer une _custom remote view_ (et non une vue personnalisée classique) ; elle peut être en lecture seule ou modifiable.
+- **Démarrer un chat** sur l'hôte et joindre des **photos, vidéos ou PDF** depuis le téléphone. Les octets des pièces jointes sont trop volumineux pour le canal de commandes ; ils transitent donc par Firebase Storage ; l'hôte télécharge chaque fichier dans son espace de travail (`data/attachments/`), supprime la copie en transit et transmet le fichier à Claude avec votre message.
+
+Le canal est basé sur des commandes et piloté par l'hôte : le téléphone envoie des requêtes et votre MulmoClaude de bureau y répond. Utilisez **Déconnecter** dans le popover (ou quittez MulmoClaude) pour mettre l'hôte hors ligne.
+
 ## Espace de travail
 
 Toutes les données sont stockées sous forme de fichiers en clair dans le répertoire de l'espace de travail, regroupées en quatre groupes sémantiques (#284) :
