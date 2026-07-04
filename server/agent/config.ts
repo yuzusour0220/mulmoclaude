@@ -2,7 +2,7 @@ import { basename, dirname, join } from "path";
 import { homedir, tmpdir } from "os";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import type { Role } from "../../src/config/roles.js";
 import { mcpTools, isMcpToolEnabled } from "./mcp-tools/index.js";
 import { getActiveToolDescriptors } from "./activeTools.js";
@@ -17,6 +17,15 @@ import { log } from "../system/logger/index.js";
 import { preflightUserServers, logPreflightResult } from "./mcpPreflight.js";
 
 export const CONTAINER_WORKSPACE_PATH = "/home/node/mulmoclaude";
+
+// Junction-free NODE_PATH fallback root for the in-container MCP child.
+// On Windows the yarn-workspace `node_modules/@mulmoclaude/*` links are
+// absolute junctions that dangle inside the Linux container (#1946), so
+// each workspace package is also bind-mounted here as
+// `@mulmoclaude/<name>` and this dir is appended to NODE_PATH — CJS
+// resolution falls through to it when the primary link fails to resolve.
+// Only mounted for win32 source builds; a no-op path elsewhere.
+const CONTAINER_WORKSPACE_MODULES_PATH = "/app/pkg_modules";
 
 // `Skill` is the tool Claude Code uses to execute a discovered
 // `.claude/skills/<name>/SKILL.md`. Because `--allowedTools` is passed
@@ -282,7 +291,7 @@ function buildMulmoclaudeServer(params: { chatSessionId: string; port: number; a
   const dockerEnv = useDocker
     ? {
         MCP_HOST: "host.docker.internal",
-        NODE_PATH: "/app/node_modules",
+        NODE_PATH: `/app/node_modules:${CONTAINER_WORKSPACE_MODULES_PATH}`,
         ...collectMcpToolSentinelEnv(),
       }
     : {};
@@ -582,6 +591,45 @@ export interface DockerSpawnArgsParams {
   sshAgentForward?: boolean;
 }
 
+// The workspace-package dirs that ship as `@mulmoclaude/*` — `packages/core`
+// plus every `packages/plugins/*`. Source/dev layout only (npx installs have
+// no `packages/`), so an absent dir yields an empty list.
+function workspacePackageDirs(packageRoot: string): string[] {
+  const core = join(packageRoot, "packages", "core");
+  const pluginsDir = join(packageRoot, "packages", "plugins");
+  const plugins = existsSync(pluginsDir)
+    ? readdirSync(pluginsDir, { withFileTypes: true })
+        .filter((entry) => entry.isDirectory())
+        .map((entry) => join(pluginsDir, entry.name))
+    : [];
+  return [core, ...plugins].filter((dir) => existsSync(join(dir, "package.json")));
+}
+
+// The `@mulmoclaude/<name>` a package declares, or null if it isn't one of
+// ours / is unreadable — a malformed package.json never breaks a spawn.
+function scopedPackageName(pkgDir: string): string | null {
+  try {
+    const { name } = JSON.parse(readFileSync(join(pkgDir, "package.json"), "utf-8")) as { name?: unknown };
+    return typeof name === "string" && name.startsWith("@mulmoclaude/") ? name : null;
+  } catch {
+    return null;
+  }
+}
+
+// Windows-only bind mounts giving the in-container MCP child a junction-free
+// copy of each `@mulmoclaude/*` package under CONTAINER_WORKSPACE_MODULES_PATH
+// (#1946 — the yarn-workspace junctions dangle inside the Linux container).
+// Empty on every other platform and on npx installs (no `packages/`).
+function workspaceModuleMounts(packageRoot: string, platform: Platform, toDockerPath: (hostPath: string) => string): string[] {
+  if (platform !== "win32") return [];
+  const mounts: string[] = [];
+  for (const dir of workspacePackageDirs(packageRoot)) {
+    const name = scopedPackageName(dir);
+    if (name) mounts.push("-v", `${toDockerPath(dir)}:${CONTAINER_WORKSPACE_MODULES_PATH}/${name}:ro`);
+  }
+  return mounts;
+}
+
 // Pure helper that returns the full `docker run ... claude <args>`
 // argv array. Extracted from runAgent so the long flag list can be
 // inspected and tested without spawning a real subprocess.
@@ -673,6 +721,7 @@ export function buildDockerSpawnArgs(params: DockerSpawnArgsParams): string[] {
     "-v",
     `${toDockerPath(packageRoot)}/src:/app/src:ro`,
     ...packagesMount,
+    ...workspaceModuleMounts(packageRoot, platform, toDockerPath),
     "-v",
     `${toDockerPath(workspacePath)}:${CONTAINER_WORKSPACE_PATH}`,
     "-v",
