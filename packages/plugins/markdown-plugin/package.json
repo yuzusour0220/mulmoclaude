@@ -35,7 +35,7 @@
     "test": "echo 'no in-package tests; presentDocument logic is covered by host integration tests'"
   },
   "dependencies": {
-    "@marp-team/marp-core": "^4.3.0",
+    "@marp-team/marp-core": "^4.3.1",
     "js-yaml": "^5.2.1",
     "marked": "^18.0.5",
     "mermaid": "^11.16.0"
