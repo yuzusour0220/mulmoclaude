@@ -201,6 +201,8 @@ const enMessages = {
     // "RO" = Read-Only. Kept short on purpose — rendered as a compact
     // badge next to the Reference label.
     readOnlyBadge: "RO",
+    showSystemFiles: "Show system files",
+    showSystemFilesTitle: "Show agent-internal top-level dirs (conversations/, feeds/, etc.) in addition to your user content (data/, artifacts/, config/).",
   },
   fileTree: {
     workspace: "(workspace)",
