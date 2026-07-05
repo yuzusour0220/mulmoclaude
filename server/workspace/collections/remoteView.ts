@@ -21,7 +21,7 @@ import {
   type RemoteViewPage,
   type RemoteViewPageRequest,
 } from "@mulmoclaude/core/remote-view";
-import { deriveAll } from "@mulmoclaude/core/collection";
+import { enrichItems } from "@mulmoclaude/core/collection/server";
 import {
   deleteItem,
   listItems,
@@ -200,6 +200,7 @@ export type RemoteViewItemsResult =
 
 export interface RemoteViewItemsDeps {
   listItems: typeof listItems;
+  enrichItems: typeof enrichItems;
   resolveThumbnail: typeof resolveThumbnail;
 }
 
@@ -251,9 +252,13 @@ export const createRemoteViewItems =
     const view = (collection.schema.views ?? []).find((entry) => entry.id === viewId);
     if (!view) return { kind: "view-not-found", viewId };
     if (view.target !== "mobile") return { kind: "not-mobile", viewId };
-    // Derive record-local formulas with an empty ref cache — same as the phase-2
-    // channel handlers and the preview, so `getItems` numbers match the desktop.
-    const derived = (await deps.listItems(collection.dataDir)).map((item) => deriveAll(collection.schema, item, {}) as RemoteViewItem);
+    // Hydrate through the SAME server resolver the desktop `dataUrl` route uses
+    // (manageCollection.getItems → enrichItems): ref targets loaded once, derived
+    // formulas evaluated with a full ref cache (`ticker.price`, `shares * ticker.price`
+    // resolve), toggles projected, embeds resolved. The phone gets plain resolved
+    // scalars — no network, no dataUrl — so mobile numbers match desktop exactly.
+    const items = await deps.listItems(collection.dataDir);
+    const derived = (await deps.enrichItems(collection, items)) as RemoteViewItem[];
     const page = pageFromItems(derived, request, collection.schema.primaryKey);
     const fields = inlineFields(view, collection.schema, request.fields);
     if (fields.length === 0) return { kind: "ok", page, inlined: 0, omitted: 0 };
@@ -264,7 +269,7 @@ export const createRemoteViewItems =
     return { kind: "ok", page, inlined, omitted };
   };
 
-export const remoteViewItems = createRemoteViewItems({ listItems, resolveThumbnail });
+export const remoteViewItems = createRemoteViewItems({ listItems, enrichItems, resolveThumbnail });
 
 /** Message per non-ok item-page kind — shared by the channel handler (throws)
  *  and the HTTP route (sends with the matching status). */
