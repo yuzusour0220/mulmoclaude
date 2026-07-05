@@ -1,22 +1,12 @@
-// Node-side Firebase init for the remote-host runner.
+// Node-side Firebase init for this host's remote-host runner.
 //
-// The MulmoClaude server acts as a *host*: it signs in to Firebase as the user
-// (via signInWithCredential, see auth.ts) and listens to that user's command
-// queue in Firestore. The modular firebase/firestore + firebase/auth SDKs run
-// in Node, so this mirrors the browser init but also exposes Firestore (default
-// database, which must be in Native mode).
-import { initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
-import { getStorage } from "firebase/storage";
+// The init itself (initializeApp + getAuth/getFirestore/getStorage) lives in the
+// shared `@mulmoclaude/core/remote-host/server` so both hosts share one copy;
+// this module just supplies MulmoClaude's public web config. Firestore is the
+// default database and must be in Native mode. Storage carries the full-res
+// attachment bytes the command channel can't (see handlers/ingestAttachments.ts).
+import { createRemoteHostFirebase } from "@mulmoclaude/core/remote-host/server";
 
 import { firebaseConfig } from "../../src/config/firebaseConfig.js";
 
-export const firebaseApp = initializeApp(firebaseConfig);
-export const auth = getAuth(firebaseApp);
-export const firestore = getFirestore(firebaseApp);
-// Storage carries the full-res attachment bytes the command channel can't (a
-// Firestore command doc caps at ~1 MiB). The host, signed in as the user, pulls
-// each staged upload from `users/{uid}/uploads/{id}` and deletes it after
-// ingest — see handlers/ingestAttachments.ts.
-export const storage = getStorage(firebaseApp);
+export const { app: firebaseApp, auth, firestore, storage } = createRemoteHostFirebase(firebaseConfig);

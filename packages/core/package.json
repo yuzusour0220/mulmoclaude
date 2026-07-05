@@ -1,7 +1,7 @@
 {
   "name": "@mulmoclaude/core",
-  "version": "0.8.2",
-  "description": "Shared server-side core for MulmoClaude and MulmoTerminal — the always-shipped-together subsystems consolidated behind subpath exports so the two hosts can't drift. Server-only except the browser-safe ./whisper/client, ./workspace-setup/slug, ./translation/client and ./remote-view entries. All host specifics are injected.",
+  "version": "0.9.0",
+  "description": "Shared server-side core for MulmoClaude and MulmoTerminal — the always-shipped-together subsystems consolidated behind subpath exports so the two hosts can't drift. Server-only except the browser-safe ./whisper/client, ./workspace-setup/slug, ./translation/client, ./remote-view and ./remote-host entries. All host specifics are injected.",
   "type": "module",
   "exports": {
     "./collection": {
@@ -118,6 +118,18 @@
       "require": "./dist/remote-view/index.cjs",
       "default": "./dist/remote-view/index.js"
     },
+    "./remote-host": {
+      "types": "./dist/remote-host/index.d.ts",
+      "import": "./dist/remote-host/index.js",
+      "require": "./dist/remote-host/index.cjs",
+      "default": "./dist/remote-host/index.js"
+    },
+    "./remote-host/server": {
+      "types": "./dist/remote-host/server/index.d.ts",
+      "import": "./dist/remote-host/server/index.js",
+      "require": "./dist/remote-host/server/index.cjs",
+      "default": "./dist/remote-host/server/index.js"
+    },
     "./translation/client": {
       "types": "./dist/translation/client.d.ts",
       "import": "./dist/translation/client.js",
@@ -154,7 +166,13 @@
   },
   "peerDependencies": {
     "@receptron/task-scheduler": "*",
+    "firebase": "^12.0.0",
     "gui-chat-protocol": "^0.4.0"
+  },
+  "peerDependenciesMeta": {
+    "firebase": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@receptron/task-scheduler": "*",

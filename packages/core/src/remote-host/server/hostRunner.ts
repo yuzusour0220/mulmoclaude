@@ -1,19 +1,16 @@
 // Host side of the command channel: claim queued commands, run handlers, write
 // results back, and announce presence via heartbeat.
 //
-// Ported from ../mulmoserver/src/firestore/hostRunner.ts. Adaptations for this
-// repo: `db` import rewired to the Node-side `firestore` instance;
-// `errorMessage` reused from server/utils/errors.ts (the canonical helper)
-// instead of a copied commandFormat.ts; `heartbeatMs` sourced from the time
-// constants; the runTransaction callback param renamed tx -> txn (id-length).
-import { DocumentReference, onSnapshot, query, runTransaction, serverTimestamp, setDoc, updateDoc, where } from "firebase/firestore";
+// Extracted into core from MulmoClaude's server/remoteHost/hostRunner.ts (itself
+// ported from ../mulmoserver). The only signature change vs. that copy: the
+// `firestore` instance is a parameter (each host supplies its own Firebase init),
+// and the heartbeat interval is an option (defaults to one minute).
+import { DocumentReference, Firestore, onSnapshot, query, runTransaction, serverTimestamp, setDoc, updateDoc, where } from "firebase/firestore";
 
-import { errorMessage } from "../utils/errors.js";
-import { ONE_MINUTE_MS } from "../utils/time.js";
-import { Channel, Command, CommandHandler, CommandHandlers, JsonObject, commandsCollection, hostDoc } from "./commandChannel.js";
-import { firestore } from "./firebase.js";
+import { errorMessage } from "../../collection/core/errorMessage.js";
+import { Channel, Command, CommandHandler, CommandHandlers, JsonObject, commandsCollection, hostDoc } from "../index.js";
 
-const heartbeatMs = ONE_MINUTE_MS;
+const DEFAULT_HEARTBEAT_MS = 60_000;
 
 export interface HostEvent {
   phase: "received" | "done" | "error";
@@ -28,6 +25,8 @@ export interface HostRunnerOptions {
   // the runner handle so status() no longer reports connected. NOT called on a
   // normal stop().
   onClosed?: () => void;
+  // Presence heartbeat interval; defaults to one minute.
+  heartbeatMs?: number;
 }
 
 interface Claim {
@@ -43,7 +42,7 @@ const writeError = (ref: DocumentReference, code: string, message: string) =>
 
 // Atomically move a command queued -> processing so it is handled exactly once.
 // Returns the method/params to run, or null if another handler already took it.
-const claimCommand = (ref: DocumentReference): Promise<Claim | null> =>
+const claimCommand = (firestore: Firestore, ref: DocumentReference): Promise<Claim | null> =>
   runTransaction(firestore, async (txn) => {
     const data = (await txn.get(ref)).data() as Command | undefined;
     if (!data || data.status !== "queued") {
@@ -65,8 +64,8 @@ const runHandler = async (ref: DocumentReference, claim: Claim, handler: Command
   }
 };
 
-const processCommand = async (ref: DocumentReference, handlers: CommandHandlers, onEvent?: HostRunnerOptions["onEvent"]) => {
-  const claim = await claimCommand(ref);
+const processCommand = async (firestore: Firestore, ref: DocumentReference, handlers: CommandHandlers, onEvent?: HostRunnerOptions["onEvent"]) => {
+  const claim = await claimCommand(firestore, ref);
   if (!claim) {
     return;
   }
@@ -84,21 +83,21 @@ const processCommand = async (ref: DocumentReference, handlers: CommandHandlers,
 // each one through the supplied handler table. It also announces presence (a
 // heartbeat on users/{uid}/hosts/{hostId}) so the remote can tell it is online.
 // Returns a stop function that goes offline and detaches the listener.
-export const startHostRunner = (channel: Channel, handlers: CommandHandlers, options: HostRunnerOptions = {}): (() => void) => {
-  const presence = hostDoc(channel);
+export const startHostRunner = (firestore: Firestore, channel: Channel, handlers: CommandHandlers, options: HostRunnerOptions = {}): (() => void) => {
+  const presence = hostDoc(firestore, channel);
   const announce = () => {
     setDoc(presence, { online: true, updatedAt: serverTimestamp() }).catch(noop);
   };
   announce();
-  const beat = setInterval(announce, heartbeatMs);
+  const beat = setInterval(announce, options.heartbeatMs ?? DEFAULT_HEARTBEAT_MS);
 
-  const queuedCommands = query(commandsCollection(channel), where("status", "==", "queued"));
+  const queuedCommands = query(commandsCollection(firestore, channel), where("status", "==", "queued"));
   const unsubscribe = onSnapshot(
     queuedCommands,
     (snapshot) => {
       snapshot.docChanges().forEach((change) => {
         if (change.type === "added") {
-          processCommand(change.doc.ref, handlers, options.onEvent).catch(noop);
+          processCommand(firestore, change.doc.ref, handlers, options.onEvent).catch(noop);
         }
       });
     },

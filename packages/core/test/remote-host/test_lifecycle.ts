@@ -5,11 +5,16 @@
 //   - disconnect stops the runner + signs out
 //   - a FATAL listener death reconciles status() back to disconnected, and the
 //     reconciliation is identity-guarded (a superseded runner can't clear a newer one)
+//
+// The factory takes injected fakes (including a pre-bound startRunner + hostId),
+// so these run without Firebase.
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
-import { createRemoteHost, type RemoteHostDeps } from "../../server/remoteHost/index.js";
-import type { Channel } from "../../server/remoteHost/commandChannel.js";
+import { createRemoteHost, type RemoteHostDeps } from "../../src/remote-host/server/lifecycle.js";
+import type { Channel } from "../../src/remote-host/index.js";
+
+const HOST_ID = "test-host";
 
 interface FakeRunner {
   channel: Channel;
@@ -33,6 +38,7 @@ const makeHarness = () => {
   };
 
   const deps: RemoteHostDeps = {
+    hostId: HOST_ID,
     signIn: async (idToken: string) => {
       if (idToken === "bad") throw new Error("rejected credential");
       uid = `uid-${idToken}`;
@@ -57,7 +63,7 @@ describe("createRemoteHost lifecycle", () => {
     assert.deepEqual(status, { connected: true, uid: "uid-t1" });
     assert.equal(runners.length, 1);
     assert.equal(runners[0].stopped, false);
-    assert.deepEqual(runners[0].channel, { uid: "uid-t1", hostId: "mulmoclaude" });
+    assert.deepEqual(runners[0].channel, { uid: "uid-t1", hostId: HOST_ID });
   });
 
   it("failed reconnect is non-destructive: keeps the existing healthy session", async () => {

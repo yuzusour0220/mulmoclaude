@@ -81,21 +81,32 @@ over localhost only, never logged, not persisted to disk. The session is
 
 ---
 
-## Server code map (`server/remoteHost/`)
+## Where the code lives — shared transport in core, host specifics local
+
+The generic transport is **extracted into `@mulmoclaude/core`** so both hosts
+(MulmoClaude, MulmoTerminal) share one copy instead of each porting it from
+`../mulmoserver` (which is where it originated). Two subpaths, split on the
+browser-safe boundary — mirroring `@mulmoclaude/core/remote-view`:
+
+| Import | Surface | Provides |
+|---|---|---|
+| `@mulmoclaude/core/remote-host` | **browser-safe** | Protocol wire types (`Command`, `CommandStatus`, `Channel`, `CommandHandlers`) + Firestore path helpers `commandsCollection(firestore, channel)` / `hostDoc(firestore, channel)`. Shared by host **and** the mobile client. |
+| `@mulmoclaude/core/remote-host/server` | **server-only** | `startHostRunner(firestore, channel, handlers, opts)` — the command loop; `createRemoteHost(deps)` — the connect/disconnect/status lifecycle factory; `createRemoteHostAuth(auth)` + `createRemoteHostFirebase(config)` — the Firebase init/auth primitives. `firebase` is an optional peer dep of core. |
+
+Each host supplies only its own specifics under `server/remoteHost/`:
 
 | File | Responsibility |
 |---|---|
-| `index.ts` | Lifecycle: `createRemoteHost(deps)` factory + default singleton. `connect(idToken)` / `disconnect()` / `status()`. Serializes transitions (no double runner), authenticates **before** teardown (a failed connect leaves a healthy session untouched), reconciles state if the listener dies (`onClosed`). |
-| `auth.ts` | Firebase credential exchange — `signInHost(idToken)`, `signOutHost()`, `currentUid()`. |
-| `firebase.ts` | Node-side Firebase init (`initializeApp` + `getAuth` + `getFirestore` + `getStorage`) using the shared public `firebaseConfig`. |
-| `commandChannel.ts` | Protocol types (`Command`, `CommandStatus`, `Channel`) + Firestore path helpers `commandsCollection(channel)` / `hostDoc(channel)` + `HOST_ID = "mulmoclaude"`. Ported from `../mulmoserver` and runs unchanged in Node (modular `firebase/firestore`). |
-| `hostRunner.ts` | **The command loop.** `startHostRunner(channel, handlers, options)` — heartbeats presence, `onSnapshot(where status=="queued")`, `claimCommand` via `runTransaction`, runs the handler, writes `done`/`error`. Returns a `stop()` that goes offline + unsubscribes. |
+| `index.ts` | Binds this host's `hostId="mulmoclaude"`, handler table, firestore-bound runner, and logger to core's `createRemoteHost`; exposes the default singleton the route uses. |
+| `firebase.ts` | `createRemoteHostFirebase(firebaseConfig)` → this host's `{ firestore, auth, storage }` (Firestore must be in Native mode). |
+| `auth.ts` | `createRemoteHostAuth(auth)` → `signInHost` / `signOutHost` / `currentUid` bound to this host's Firebase auth. |
+| `commandChannel.ts` | Re-exports the core protocol + pins `HOST_ID = "mulmoclaude"`. |
 | `handlers/index.ts` | The method table — the single place the runner learns which methods it serves. |
 
-### The command loop, precisely (`hostRunner.ts`)
+### The command loop, precisely (core `startHostRunner`)
 
 - **Presence.** `setDoc(presence, {online:true})` on start, then a heartbeat
-  `setInterval` every `ONE_MINUTE_MS`. On `stop()` or fatal listener death it
+  `setInterval` once a minute (`opts.heartbeatMs`, default 60 s). On `stop()` or fatal listener death it
   writes `online:false` and clears the interval — so remotes see the host go
   offline instead of a live-but-dead host that silently consumes no commands.
 - **Claim exactly once.** `claimCommand` runs a `runTransaction` that reads the
