@@ -57,7 +57,7 @@ concurrency:
 jobs:
   windows-junction-linux-container:
     runs-on: windows-latest
-    timeout-minutes: 25
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v6
         with:
@@ -90,25 +90,38 @@ jobs:
             throw "expected NTFS Junction, got '$($x.LinkType)' — probe assumption violated"
           }
 
-      # Docker Desktop on windows-latest ships in Windows-container mode.
-      # We need Linux containers to reproduce the sandbox environment.
-      - name: Switch Docker Desktop to the Linux engine
+      # GitHub-hosted windows-latest runners have Docker CLI but not Docker
+      # Desktop — the Linux engine we need to reproduce the sandbox has to
+      # be installed first. choco is preinstalled on the runner image.
+      - name: Install Docker Desktop
         shell: pwsh
         run: |
-          & "$Env:ProgramFiles\Docker\Docker\DockerCli.exe" -SwitchLinuxEngine
-          # Poll until OSType flips to linux. `docker info --format` errors
-          # while the engine is restarting, so wrap in try/catch.
+          choco install docker-desktop --no-progress -y
+          $cli = "$Env:ProgramFiles\Docker\Docker\DockerCli.exe"
+          if (-not (Test-Path $cli)) {
+            throw "Docker Desktop install did not place DockerCli.exe at the expected path"
+          }
+          Write-Host "Installed. DockerCli.exe present at $cli"
+
+      # Docker Desktop's daemon needs to start before we can talk to it.
+      # It uses WSL2 as the Linux backend on modern runners; startup takes
+      # a couple of minutes.
+      - name: Start Docker Desktop and wait for the Linux daemon
+        shell: pwsh
+        run: |
+          Start-Process -FilePath "$Env:ProgramFiles\Docker\Docker\Docker Desktop.exe"
           $ok = $false
-          for ($i = 0; $i -lt 45; $i++) {
+          for ($i = 0; $i -lt 90; $i++) {
             try {
               $ostype = docker info --format "{{.OSType}}" 2>$null
               if ($ostype -eq "linux") { $ok = $true; break }
             } catch { }
-            Start-Sleep -Seconds 2
+            Start-Sleep -Seconds 5
           }
           if (-not $ok) {
+            Write-Host "docker info at timeout:"
             docker info
-            throw "Docker Desktop did not switch to Linux engine in 90s"
+            throw "Docker Desktop daemon did not become ready (Linux engine) in ~8min"
           }
           docker info --format "OSType: {{.OSType}}"
 
