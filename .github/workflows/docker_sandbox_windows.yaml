@@ -1,0 +1,134 @@
+name: docker sandbox (Windows junction repro)
+
+# Windows + Docker sandbox regression coverage for #1946 / #1982.
+#
+# The bug this catches only reproduces when a Windows host's NTFS
+# junctions in `node_modules/@mulmoclaude/*` are bind-mounted into a
+# Linux Docker container — they dangle inside the container and break
+# every module resolver that doesn't honour NODE_PATH.
+#
+# The workflow:
+#   1. `yarn install` on the Windows runner creates the workspace
+#      junctions.
+#   2. Docker Desktop switches to the Linux engine (WSL2 backend).
+#   3. A single `docker run node:22-slim` reproduces the production
+#      sandbox mount layout (primary node_modules read-only + the
+#      per-package `/app/pkg_modules` fallback + NODE_PATH).
+#   4. `test/sandbox-repro/probe.mjs` inline-implements both the buggy
+#      parent-walk-only resolver and the fixed `require.resolve.paths()`
+#      resolver, asserts the env reproduces the failure mode, and
+#      asserts the fix pattern finds every preset package.
+#
+# Triggers on `paths:` filter so ordinary PRs pay no Windows CI cost;
+# a daily schedule + manual `workflow_dispatch` catches drift in the
+# Docker-Desktop-on-windows-latest environment itself.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "server/agent/config.ts"
+      - "server/plugins/preset-loader.ts"
+      - "server/plugins/preset-list.ts"
+      - "Dockerfile.sandbox"
+      - "packages/plugins/*/package.json"
+      - "test/sandbox-repro/**"
+      - ".github/workflows/docker_sandbox_windows.yaml"
+  pull_request:
+    paths:
+      - "server/agent/config.ts"
+      - "server/plugins/preset-loader.ts"
+      - "server/plugins/preset-list.ts"
+      - "Dockerfile.sandbox"
+      - "packages/plugins/*/package.json"
+      - "test/sandbox-repro/**"
+      - ".github/workflows/docker_sandbox_windows.yaml"
+  schedule:
+    - cron: "0 19 * * *" # Daily 19:00 UTC = 04:00 JST
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docker-sandbox-windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows-junction-linux-container:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22.x
+
+      # Defender's realtime scan intermittently EPERMs the atomic renames
+      # yarn / tsc do on Windows. Same rationale as lint_test_windows.
+      - name: Disable Windows Defender realtime monitoring
+        shell: powershell
+        run: Set-MpPreference -DisableRealtimeMonitoring $true
+
+      - name: yarn install (creates NTFS junctions in node_modules/@mulmoclaude/*)
+        run: yarn install --frozen-lockfile --network-timeout 120000
+
+      # Sanity: the workspace linker actually made a junction here. If not,
+      # the whole test is meaningless (some future yarn version might switch
+      # to hardlinks or copies — we want to fail loudly at that point).
+      - name: Confirm yarn created NTFS junctions for @mulmoclaude/*
+        shell: pwsh
+        run: |
+          $x = Get-Item node_modules/@mulmoclaude/x-plugin
+          Write-Host "LinkType: $($x.LinkType)"
+          Write-Host "Target:   $($x.Target)"
+          if ($x.LinkType -ne "Junction") {
+            throw "expected NTFS Junction, got '$($x.LinkType)' — probe assumption violated"
+          }
+
+      # Docker Desktop on windows-latest ships in Windows-container mode.
+      # We need Linux containers to reproduce the sandbox environment.
+      - name: Switch Docker Desktop to the Linux engine
+        shell: pwsh
+        run: |
+          & "$Env:ProgramFiles\Docker\Docker\DockerCli.exe" -SwitchLinuxEngine
+          # Poll until OSType flips to linux. `docker info --format` errors
+          # while the engine is restarting, so wrap in try/catch.
+          $ok = $false
+          for ($i = 0; $i -lt 45; $i++) {
+            try {
+              $ostype = docker info --format "{{.OSType}}" 2>$null
+              if ($ostype -eq "linux") { $ok = $true; break }
+            } catch { }
+            Start-Sleep -Seconds 2
+          }
+          if (-not $ok) {
+            docker info
+            throw "Docker Desktop did not switch to Linux engine in 90s"
+          }
+          docker info --format "OSType: {{.OSType}}"
+
+      # Warm the base image once so the actual probe run is quick and its
+      # output isn't buried under pull progress. `docker pull` is idempotent.
+      - name: Pull node:22-slim
+        run: docker pull node:22-slim
+
+      - name: Run the sandbox regression probe
+        shell: pwsh
+        run: |
+          $ws = "${{ github.workspace }}" -replace '\\','/'
+          docker run --rm `
+            -v "${ws}/node_modules:/app/node_modules:ro" `
+            -v "${ws}/packages/plugins/x-plugin:/app/pkg_modules/@mulmoclaude/x-plugin:ro" `
+            -v "${ws}/packages/plugins/spotify-plugin:/app/pkg_modules/@mulmoclaude/spotify-plugin:ro" `
+            -v "${ws}/packages/plugins/debug-plugin:/app/pkg_modules/@mulmoclaude/debug-plugin:ro" `
+            -v "${ws}/packages/core:/app/pkg_modules/@mulmoclaude/core:ro" `
+            -v "${ws}/test/sandbox-repro:/repro:ro" `
+            -e NODE_PATH=/app/node_modules:/app/pkg_modules `
+            -w /app `
+            node:22-slim `
+            node /repro/probe.mjs
