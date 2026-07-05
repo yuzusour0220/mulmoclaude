@@ -1,0 +1,242 @@
+# Remote Host — driving MulmoClaude from your phone
+
+**Remote host** lets a phone browser invoke capabilities on your own MulmoClaude
+server — list collections, render mobile custom views, edit records, start a
+chat with image attachments — **without** exposing the server to the internet,
+running Cloud Functions, or polling. The transport is a **Firestore-backed
+request/response channel** in a shared public Firebase project; the phone writes
+a command document, the server claims it, runs a handler, and writes the result
+back over a real-time listener.
+
+The mobile client itself (`https://mulmoserver.web.app`) lives in the sibling
+repo `../mulmoserver` and is **not** part of this repo. This repo ships the
+**host** half — the Firestore command loop, the handler table, and the toolbar
+Connect/Disconnect control — plus the shared contract that both sides compile
+against (`@mulmoclaude/core/remote-view`).
+
+---
+
+## The big picture
+
+```text
+  Phone browser                     Firestore (project "mulmoserver")                MulmoClaude server (Node)
+  mulmoserver.web.app               the relay — no P2P, no Cloud Functions           this repo, host-only
+  ───────────────────               ─────────────────────────────────               ─────────────────────────
+   Google sign-in
+        │  writes command doc
+        │  users/{uid}/hosts/mulmoclaude/commands/{id}
+        │  { method, params, status:"queued", createdBy:"remote" }
+        ▼
+                                    ┌──────────────────────────────┐
+                                    │  users/{uid}/hosts/           │  onSnapshot(where status=="queued")
+                                    │    mulmoclaude/commands/{id}  │◄──────── host claims via runTransaction
+                                    │  status: queued→processing    │           (queued→processing, exactly once)
+                                    │         →done | error         │           runs handlers[method](params)
+                                    │  result / error written back  │────────► writes status:"done" + result
+                                    └──────────────────────────────┘
+        │  real-time listener on the same doc
+        ▼
+   renders result
+                                    ┌──────────────────────────────┐
+                                    │  users/{uid}/hosts/mulmoclaude │  presence doc — host heartbeats
+                                    │  { online, updatedAt }         │◄──────── every 60s while connected
+                                    └──────────────────────────────┘           online:false on stop/death
+        │  reads presence → "host online?"
+```
+
+Both sides agree on a hardcoded **`hostId = "mulmoclaude"`** — there is no host
+discovery or registry. Isolation is by subcollection: a user running several
+hosts under the same account (laptop + this MulmoClaude) never compete for each
+other's commands.
+
+---
+
+## Auth model — "Option B: the server signs in as the user"
+
+The server authenticates to Firestore **as the user**, using the Firebase JS SDK
+(no Admin SDK, no project service account distributed to self-hosted installs):
+
+1. In the browser, `RemoteHostControl.vue` does `signInWithPopup(GoogleAuthProvider)`
+   and extracts the short-lived **Google OAuth ID token**
+   (`GoogleAuthProvider.credentialFromResult(result).idToken`).
+2. It POSTs that token to the **loopback** route `POST /api/remote-host/connect`.
+3. The server calls `signInWithCredential(auth, GoogleAuthProvider.credential(idToken))`
+   → gets `auth.currentUser.uid`, then starts the host runner. The JS SDK holds
+   its own refresh token for the process lifetime; the ID token is used once.
+
+Security rules keep the server scoped to the user's own subtree:
+
+```
+match /users/{uid}/{document=**} {
+  allow read, write: if request.auth != null && request.auth.uid == uid;
+}
+```
+
+The server holds **no project-wide privilege** — blast radius is the user's own
+`users/{uid}/…` Firestore subtree. The ID token is treated as a secret: POSTed
+over localhost only, never logged, not persisted to disk. The session is
+**in-memory** — a server restart drops it and needs a re-connect.
+
+> **Firestore must be in Native mode** — Datastore mode silently no-ops the web SDK.
+
+---
+
+## Server code map (`server/remoteHost/`)
+
+| File | Responsibility |
+|---|---|
+| `index.ts` | Lifecycle: `createRemoteHost(deps)` factory + default singleton. `connect(idToken)` / `disconnect()` / `status()`. Serializes transitions (no double runner), authenticates **before** teardown (a failed connect leaves a healthy session untouched), reconciles state if the listener dies (`onClosed`). |
+| `auth.ts` | Firebase credential exchange — `signInHost(idToken)`, `signOutHost()`, `currentUid()`. |
+| `firebase.ts` | Node-side Firebase init (`initializeApp` + `getAuth` + `getFirestore` + `getStorage`) using the shared public `firebaseConfig`. |
+| `commandChannel.ts` | Protocol types (`Command`, `CommandStatus`, `Channel`) + Firestore path helpers `commandsCollection(channel)` / `hostDoc(channel)` + `HOST_ID = "mulmoclaude"`. Ported from `../mulmoserver` and runs unchanged in Node (modular `firebase/firestore`). |
+| `hostRunner.ts` | **The command loop.** `startHostRunner(channel, handlers, options)` — heartbeats presence, `onSnapshot(where status=="queued")`, `claimCommand` via `runTransaction`, runs the handler, writes `done`/`error`. Returns a `stop()` that goes offline + unsubscribes. |
+| `handlers/index.ts` | The method table — the single place the runner learns which methods it serves. |
+
+### The command loop, precisely (`hostRunner.ts`)
+
+- **Presence.** `setDoc(presence, {online:true})` on start, then a heartbeat
+  `setInterval` every `ONE_MINUTE_MS`. On `stop()` or fatal listener death it
+  writes `online:false` and clears the interval — so remotes see the host go
+  offline instead of a live-but-dead host that silently consumes no commands.
+- **Claim exactly once.** `claimCommand` runs a `runTransaction` that reads the
+  doc and only flips `queued → processing` if it is still `queued`; a second
+  host (or a snapshot replay) that races gets `null` and skips it.
+- **Run + write back.** `runHandler` calls `handlers[method](params)` and writes
+  `status:"done"` + `result`, or `status:"error"` + a `{code,message}`. Unknown
+  methods write an `unknown_method` error. Write-after-delete is swallowed
+  (the remote may have deleted the doc on its own timeout).
+
+### Handler table (capabilities)
+
+Each handler runs **in-process**, bypassing the HTTP bearer/view-token layer and
+calling the collection engine directly. Added incrementally across phases:
+
+| Method | What it returns | Phase |
+|---|---|---|
+| `listCollections` | Collections (feeds excluded), same shape as `GET /api/collections` | 1 |
+| `getCollection` | One collection's detail + a page of records | 2 |
+| `listShortcuts` | Pinned launcher favorites (read-only) | — |
+| `listSkills` | Skill ids as `string[]` | — |
+| `listFeeds` / `getFeed` | Feed registry / one feed's detail page (read-only) | — |
+| `listAccountingBooks` | `{ books: [{id,name}] }` for a mobile book picker | — |
+| `getRemoteView` | A `target:"mobile"` custom view built into a sandboxed `srcdoc` | 3 |
+| `getRemoteViewItems` | One page of a view's records, image fields inlined as `data:` thumbnails | 5 |
+| `mutateRemoteViewItem` | Applies an update/delete from a mobile view; policy enforced **host-side** | 4 |
+| `startChat` | Starts a visible chat from the phone (message + optional role + attachments) | — |
+| `ingestAttachments` | Pulls staged files from Firebase Storage into the workspace | — |
+
+---
+
+## Custom mobile views — the postMessage bridge (phase 3+)
+
+A phone can't reach the host's `localhost`, and handing the sandboxed iframe
+Firestore credentials would defeat the sandbox. So mobile custom views replace
+the desktop pattern (fetch `/view-data` with a scoped token) with an **async
+postMessage bridge**: the parent page owns the data channel, and the injected
+bootstrap exposes a small API the LLM-authored view just awaits.
+
+- The whole contract is a **browser-safe** subpath: `@mulmoclaude/core/remote-view`
+  — CSP builder, srcdoc wrapping + bootstrap injection, pagination clamps + field
+  projection, and the parent-side message handler. It is the **single source of
+  truth** for both the desktop preview and the mulmoserver client, so parity is
+  structural rather than disciplined.
+- The **host** wraps the srcdoc server-side (`server/workspace/collections/remoteView.ts`
+  → `buildRemoteView`); the phone and the desktop preview both receive the same
+  finished artifact.
+- CSP is **stricter than desktop**: `connect-src 'none'` — data arrives via
+  postMessage, so the view needs no network channel and the fetch/XHR/beacon
+  exfil surface disappears.
+- **1 MiB budget.** The srcdoc travels inside a Firestore command document
+  (1 MiB cap), so the builder enforces `REMOTE_VIEW_MAX_BYTES` (~900 KB) and
+  throws a byte-count error the agent can act on. The desktop preview surfaces
+  the size as a caption while iterating.
+- **Preview == phone capability, exactly.** The desktop preview answers only the
+  same messages the phone runtime does (`mc-remote-get-items`, `mc-start-chat`),
+  so "works in preview" stays meaningful.
+
+Authoring spec for the agent: `packages/core/assets/helps/custom-view-remote.md`.
+Register a mobile view with a `target` discriminator:
+
+```jsonc
+"views": [
+  { "id": "phone", "label": "Phone", "target": "mobile", "file": "views/phone.html" }
+]
+```
+
+Absent `target` means `desktop`, so every existing view keeps its exact behavior.
+
+---
+
+## Chat with image attachments
+
+`startChat` seeds a visible chat from the phone: the verbatim `message`, an
+optional `role`, and optional `attachments`. Because a command doc can't carry
+full-resolution bytes, images go through **Firebase Storage** as a staging area:
+
+1. The remote uploads bytes to `users/{uid}/uploads/{storage_id}` (it holds
+   read/delete rights there).
+2. `startChat` → `ingestAttachments` downloads each staged object into the
+   workspace via `saveAttachment` (110 MiB cap, `storage_id` regex-guarded),
+   **deletes the staging object**, and returns path-only `Attachment[]`.
+3. `spawnSystemWorker` starts the chat.
+
+Storage is staging only. Two orphan safeguards (for uploads whose host never
+ran): **remote-side rollback** — the remote best-effort deletes its own staged
+objects if `startChat` never gets a host ack — and a **Storage lifecycle TTL**
+backstop (follow-up, not v1). See `plans/feat-remote-chat-image-attachments.md`.
+
+---
+
+## API surface (`server/api/routes/remoteHost.ts`)
+
+Bearer-guarded loopback routes (paths under `API_ROUTES.remoteHost` in
+`src/config/apiRoutes.ts`). These start/stop the Firestore host loop — they are
+**not** the command channel itself:
+
+| Route | Body | Returns |
+|---|---|---|
+| `POST /api/remote-host/connect` | `{ idToken }` | `{ status }` — signs in + starts the runner (idToken never logged) |
+| `POST /api/remote-host/disconnect` | — | `{ status }` — stops the runner + signs out |
+| `GET /api/remote-host/status` | — | `{ status }` where `status = { connected, uid }` |
+
+---
+
+## Frontend
+
+- **`src/components/RemoteHostControl.vue`** — the only remote-host UI. A toolbar
+  `phonelink` button (green when connected) with a popover showing online/offline,
+  uid, and Connect/Disconnect. Connect runs the browser Google sign-in, extracts
+  the `idToken`, and `apiPost`s to `/connect`. Popover help text links the mobile
+  URL `https://mulmoserver.web.app` and hints at custom remote views.
+- **`src/components/SidebarHeader.vue`** — mounts `<RemoteHostControl />` in the
+  toolbar chrome row.
+- **`src/config/firebaseConfig.ts`** (pure public web config, source of truth) +
+  **`src/config/firebase.ts`** (browser SDK init) — project `mulmoserver`.
+- i18n keys `remoteHost.*` across all `src/lang/*` locales.
+
+There is **no in-app remote-view renderer** in this repo — mobile views render on
+the external mulmoserver client. The desktop side only builds a *preview* of a
+mobile view inside a phone-sized (390×844) sandboxed iframe in the collection's
+view selector.
+
+---
+
+## Roadmap / provenance
+
+Every phase's **host** side is shipped in this repo; the outstanding half each
+names is the external mulmoserver client (which depends on the published
+`@mulmoclaude/core` contract). Design rationale lives in the plan files:
+
+| Plan | Phase / feature |
+|---|---|
+| `plans/feat-remote-host-firestore-list-collections.md` | Phase 1 — channel + auth + hostRunner + `listCollections` |
+| `plans/feat-remote-collection-view.md` | Phase 2 — `getCollection` / paged records |
+| `plans/feat-remote-custom-view.md` | Phase 3 — `getRemoteView` sandboxed srcdoc + postMessage bridge |
+| `plans/feat-remote-writable-view.md` | Phase 4 — `mutateRemoteViewItem` (host-enforced policy) |
+| `plans/feat-remote-view-images.md` | Phase 5 — `getRemoteViewItems` image thumbnails |
+| `plans/feat-remote-chat-image-attachments.md` | `startChat` attachments + `ingestAttachments` |
+| `plans/feat-1955-remote-host-help.md` | Popover help text + mobile URL link |
+
+> **Not to be confused with** MulmoBridge's "relay" (a Cloudflare Workers message
+> relay — see `docs/message_apps/relay/`). That is a separate messaging feature;
+> the remote-host relay is Firestore itself.

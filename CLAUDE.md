@@ -126,6 +126,7 @@ Full layout + workspace tree + process map: [`docs/developer.md`](docs/developer
 | **Publish a shared `@mulmoclaude/*` or `@mulmobridge/*` npm package** | `/publish` skill — tag `@scope/name@X.Y.Z` (no `v`), GH release with `--latest=false` |
 | **Add / write an e2e test** (mock or live) | [`docs/developer.md#e2e-testing-playwright`](docs/developer.md#e2e-testing-playwright) for mock, [`docs/e2e-live-testing.md`](docs/e2e-live-testing.md) for live (must-read before adding a `e2e-live/tests/*.spec.ts`) |
 | **Manual-test scenarios that can't be automated** | [`docs/manual-testing.md`](docs/manual-testing.md) |
+| **Work on remote host** (drive MulmoClaude from a phone over the Firestore command channel) | [`docs/remote-host.md`](docs/remote-host.md) (auth model, command loop, handler table, mobile custom-view postMessage bridge) |
 | **Reference the centralised constants** (`API_ROUTES`, `TOOL_NAMES`, `WORKSPACE_DIRS`, `PUBSUB_CHANNELS`, `EVENT_TYPES`, `SCHEDULE_TYPES`) | [`docs/developer.md#centralized-constants`](docs/developer.md#centralized-constants). For the four plugin-aware aggregators, edit the plugin's `meta.ts` — never the host record. |
 
 ### `chore(release)` commits — never bump the launcher preemptively
