@@ -41,6 +41,7 @@ Guides for using MulmoClaude. No programming knowledge required.
 | [Image-path Routing — Research](image-path-routing.md)            | English  | Read-only audit of how the LLM's image references become browser-loadable URLs                                     |
 | [Image-path Routing — 設計議論](discussion-image-path-routing.md) | 日本語   | 画像パスのルーティング再設計の議論メモと段階的実装計画                                                             |
 | [Wiki / HTML 表示サーフェス](wiki-html-render-surfaces.md)        | 日本語   | Wiki / HTML / Markdown が表示される複数箇所の差異 (権限・画像パス解決) を整理                                      |
+| [Remote Host](remote-host.md)                                    | English  | Driving MulmoClaude from a phone over a Firestore command channel — auth model, command loop, handler table, mobile custom-view bridge |
 
 ## Papers
 
