@@ -293,10 +293,10 @@
   resolved "https://npm.flatt.tech/@cloudflare/workerd-windows-64/-/workerd-windows-64-1.20260701.1.tgz#5bb96eae407ec4dcf927656c63dadaf99eaf3e9c"
   integrity sha512-ngxCiIN9s/fM2o1IBMD0o1/mcXrv2NJVdyznh51UH8sQuvrTrXvV2nM0Uj/qU2wMwF6prgNBcdcd7AZeZGiBQA==
 
-"@cloudflare/workers-types@^5.20260704.1":
-  version "5.20260704.1"
-  resolved "https://registry.yarnpkg.com/@cloudflare/workers-types/-/workers-types-5.20260704.1.tgz#129185ff9dc9a80ef89eca420770b0c3c7767f1c"
-  integrity sha512-3yhiCWzlWjkwtvZCTrvppLTSTEY+HkaBHJ9EXOEbuA4WQduCbZxgbCnVq/AWyojHrvhYXtKpqWdHA3UIIX3POQ==
+"@cloudflare/workers-types@^5.20260705.1":
+  version "5.20260705.1"
+  resolved "https://registry.yarnpkg.com/@cloudflare/workers-types/-/workers-types-5.20260705.1.tgz#f1a48ac5da7e404a10d459b9fb3d2c90f61b6618"
+  integrity sha512-My4wQdN7ZkM9PzPC92mdCRbdJivtcEiyCr5Qi5cgKxMk3hrULkmiIoI7ZrhGei+QHDlok+g5HSPMuDm62sdaMQ==
 
 "@codemirror/autocomplete@^6.0.0":
   version "6.20.2"
@@ -3450,13 +3450,13 @@
     "@xmpp/events" "^0.14.0"
     ltx "^3.1.2"
 
-"@zone-eu/mailsplit@5.4.13":
-  version "5.4.13"
-  resolved "https://npm.flatt.tech/@zone-eu/mailsplit/-/mailsplit-5.4.13.tgz#860d869e1ba0b9eeaa313bf787cd1936c7afbe9f"
-  integrity sha512-j40NeNlSAivqnKEjzZYsGP/bKWr2zwuyb8XOYsC3i0ZlfM5UnTYTa7aCRkE8rYQvVzE1dRjVYdvZ1Epi6x+h6w==
+"@zone-eu/mailsplit@5.4.14":
+  version "5.4.14"
+  resolved "https://registry.yarnpkg.com/@zone-eu/mailsplit/-/mailsplit-5.4.14.tgz#5af29ae70ddb3a8897eaa3d933c9321e12481e0c"
+  integrity sha512-rz0FQOhN3Vq1XrSeSSa9+dPcaFbBxmQPjiZm6zS9oxdVHV7rOWIAYX3yP2YAUf0qBncY8CI+NogzPCmMVrMXcw==
   dependencies:
     libbase64 "1.3.0"
-    libmime "5.4.0"
+    libmime "5.4.1"
     libqp "2.1.1"
 
 a-sync-waterfall@^1.0.0:
@@ -6298,10 +6298,10 @@ iconv-lite@0.6, iconv-lite@^0.6.3:
   dependencies:
     safer-buffer ">= 2.1.2 < 3.0.0"
 
-iconv-lite@0.7.2, iconv-lite@^0.7.0, iconv-lite@~0.7.0:
-  version "0.7.2"
-  resolved "https://registry.yarnpkg.com/iconv-lite/-/iconv-lite-0.7.2.tgz#d0bdeac3f12b4835b7359c2ad89c422a4d1cc72e"
-  integrity sha512-im9DjEDQ55s9fL4EYzOAv0yMqmMBSZp6G0VvFyTMPKWxiSBHUj9NW/qqLmXUwXrrM7AvqSlTCfvqRb0cM8yYqw==
+iconv-lite@0.7.3, iconv-lite@^0.7.0, iconv-lite@~0.7.0:
+  version "0.7.3"
+  resolved "https://registry.yarnpkg.com/iconv-lite/-/iconv-lite-0.7.3.tgz#84ee12f963e7de50bc01a13e160a078b3b0f415f"
+  integrity sha512-IKXpvIzjnC9XTAUbVBcMfGS0EPaIXtW6v+zr+RRp+hqULEpo0owZax6wyRwPOJbWbzjYspQwusTsfVr0ifh4uQ==
   dependencies:
     safer-buffer ">= 2.1.2 < 3.0.0"
 
@@ -6325,18 +6325,18 @@ ignore@^7.0.0, ignore@^7.0.5:
   resolved "https://registry.yarnpkg.com/ignore/-/ignore-7.0.5.tgz#4cb5f6cd7d4c7ab0365738c7aea888baa6d7efd9"
   integrity sha512-Hs59xBNfUIunMFgWAbGX5cq6893IbWg4KnrjbYwX3tx0ztorVgTDA6B2sxf8ejHJ4wz8BqGUMYlnzNBer5NvGg==
 
-imapflow@^1.4.3:
-  version "1.4.3"
-  resolved "https://npm.flatt.tech/imapflow/-/imapflow-1.4.3.tgz#617a5acdf9635e9ff5d159f2691218714f3fa0c3"
-  integrity sha512-UNimp06TINpFLx7g5nXh/8+oykfaHy6zgvLuQseLifGrQUSqDexuSKrksM+uA9mQw1cYJTOVrFPRTHkK+W/tpw==
+imapflow@^1.4.6:
+  version "1.4.6"
+  resolved "https://registry.yarnpkg.com/imapflow/-/imapflow-1.4.6.tgz#0ceb1a876d61c772088bd4bd0d350ef30c499188"
+  integrity sha512-rStOxV2g1WKKSkctKluUHSJB99mRT2l8Dr0W67owCHsCjqYSMY+AnvzXbaG3NGSpRziu6PWNik1/nVwL0Zlycg==
   dependencies:
-    "@zone-eu/mailsplit" "5.4.13"
+    "@zone-eu/mailsplit" "5.4.14"
     encoding-japanese "2.2.0"
-    iconv-lite "0.7.2"
+    iconv-lite "0.7.3"
     libbase64 "1.3.0"
-    libmime "5.4.0"
+    libmime "5.4.1"
     libqp "2.1.1"
-    nodemailer "9.0.1"
+    nodemailer "9.0.3"
     pino "10.3.1"
     socks "2.8.9"
 
@@ -7016,13 +7016,13 @@ libbase64@1.3.0:
   resolved "https://registry.yarnpkg.com/libbase64/-/libbase64-1.3.0.tgz#053314755a05d2e5f08bbfc48d0290e9322f4406"
   integrity sha512-GgOXd0Eo6phYgh0DJtjQ2tO8dc0IVINtZJeARPeiIJqge+HdsWSuaDTe8ztQ7j/cONByDZ3zeB325AHiv5O0dg==
 
-libmime@5.4.0:
-  version "5.4.0"
-  resolved "https://npm.flatt.tech/libmime/-/libmime-5.4.0.tgz#832da5ba1e9f8590fe1f61b6ec0e03cde0542f83"
-  integrity sha512-MAWyU2qYtCsrZ6GClgukz2jx73NQrzA6ASo9qzThuTG+A7+H3lWQuBsjoy9lls+v6q/epAeBdEMJ3T0f4b+uRw==
+libmime@5.4.1:
+  version "5.4.1"
+  resolved "https://registry.yarnpkg.com/libmime/-/libmime-5.4.1.tgz#8cd717bcd0a8d7e13205ae84fa234e158e4ea8ad"
+  integrity sha512-0wHGhsofo9IdQPenr3BBHXuxcwMq4atFUTsZ9Ogc1OvI5h4rUdDIrBQEN9JHjCXfDMrE59LUMJWsTD82wTYk8A==
   dependencies:
     encoding-japanese "2.2.0"
-    iconv-lite "0.7.2"
+    iconv-lite "0.7.3"
     libbase64 "1.3.0"
     libqp "2.1.1"
 
@@ -7125,14 +7125,7 @@ linebreak@^1.1.0:
     base64-js "0.0.8"
     unicode-trie "^2.0.0"
 
-linkify-it@5.0.1:
-  version "5.0.1"
-  resolved "https://npm.flatt.tech/linkify-it/-/linkify-it-5.0.1.tgz#10c4cecbb5c6828eabf81d3c801adc4a542dfb55"
-  integrity sha512-wVoTjP4Q6R0NW5hiZkVJaFZPWgtXfoGF+6LucL3/FtiNjmcHhYjEr5f1Kqjirc1nBW07J/ZuRFumqr2oqccEWg==
-  dependencies:
-    uc.micro "^2.0.0"
-
-linkify-it@^5.0.2:
+linkify-it@5.0.2, linkify-it@^5.0.2:
   version "5.0.2"
   resolved "https://registry.yarnpkg.com/linkify-it/-/linkify-it-5.0.2.tgz#d3be0a693af3da9df3883f1e346a0e97461a8c19"
   integrity sha512-ONTm2jCMAVZjgQa/Fy1kScXsuOoF5NPTsoFBdE1KVIZ2vAh/r9+Bqo+0jINCBYnavTPQZz38QzFTme79ENoN3Q==
@@ -7288,19 +7281,19 @@ magic-string@^0.30.17, magic-string@^0.30.19, magic-string@^0.30.21:
   dependencies:
     "@jridgewell/sourcemap-codec" "^1.5.5"
 
-mailparser@^3.9.12:
-  version "3.9.12"
-  resolved "https://npm.flatt.tech/mailparser/-/mailparser-3.9.12.tgz#ecd8eed5c4faff4ef136d4d4cad238416f2e4b53"
-  integrity sha512-kbT4xtkKEddonhDTjjWWVFJlI5axm0S9QuIAHs1ue3IEw+fNd9o4ytPKaG7p1LOE2aKifrWLjx/omOGLHz/9RQ==
+mailparser@^3.9.14:
+  version "3.9.14"
+  resolved "https://registry.yarnpkg.com/mailparser/-/mailparser-3.9.14.tgz#cbd7f63eb6f984bf27dd931e1cec4dcc27a58a89"
+  integrity sha512-3QD6TRXcyXtq2NCuyA2AEjqmallQkyxYmZI9GMCIvQDCaB9Uc034WUI1x8RUBYFnk5+p7h14JEz4O/lrxQmttw==
   dependencies:
-    "@zone-eu/mailsplit" "5.4.13"
+    "@zone-eu/mailsplit" "5.4.14"
     encoding-japanese "2.2.0"
     he "1.2.0"
     html-to-text "10.0.0"
-    iconv-lite "0.7.2"
-    libmime "5.4.0"
-    linkify-it "5.0.1"
-    nodemailer "9.0.1"
+    iconv-lite "0.7.3"
+    libmime "5.4.1"
+    linkify-it "5.0.2"
+    nodemailer "9.0.3"
     punycode.js "2.3.1"
     tlds "1.261.0"
 
@@ -7727,12 +7720,7 @@ node-pty@^1.1.0:
   dependencies:
     node-addon-api "^7.1.0"
 
-nodemailer@9.0.1:
-  version "9.0.1"
-  resolved "https://registry.yarnpkg.com/nodemailer/-/nodemailer-9.0.1.tgz#871c04d8423fc0c790289f4a8f6f71f1b3563e8c"
-  integrity sha512-Gwv8SQewT616ZM/URn0H54b8PWo/Wum7md3EW2aWy1lO27+WZCX+Xyak3J+NlmHUjDh5ME+uesJUDRbR3Ye8Bw==
-
-nodemailer@^9.0.3:
+nodemailer@9.0.3, nodemailer@^9.0.3:
   version "9.0.3"
   resolved "https://npm.flatt.tech/nodemailer/-/nodemailer-9.0.3.tgz#ce84f8046977b616847ad56130aa30bdb3c67c1f"
   integrity sha512-n+YP+NKwR5zRWa60k3GiQ6Q3B4KXCoAw40dAKeCtYn020iNN74aWK2liXIC3ZEATeGql7we3tE3t8QwhY0eskw==
