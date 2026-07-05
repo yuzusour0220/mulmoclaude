@@ -104,6 +104,7 @@ function isWritableView(view: CollectionCustomView): boolean {
 export type MutateRemoteViewResult =
   | { kind: "ok"; op: "update"; item: CollectionItem }
   | { kind: "ok"; op: "delete"; id: string }
+  | { kind: "too-large"; bytes: number }
   | { kind: "view-not-found"; viewId: string }
   | { kind: "not-mobile"; viewId: string }
   | { kind: "not-writable"; viewId: string }
@@ -181,10 +182,16 @@ async function updateViaView(
   // stays a path (placeholder), never a doc-write failure.
   const [enriched] = await deps.enrichItems(collection, [result.item]);
   const item = enriched as RemoteViewItem;
+  // Enrichment can inflate the base item (an `embed` attaches a whole target
+  // record, a computed field a large payload). If the base JSON already exceeds
+  // the doc budget, no thumbnail-skipping can save it — the write DID persist,
+  // but return `too-large` (mirroring the getItems page cap) so the response
+  // fails predictably/actionably here instead of downstream on the channel write.
+  const baseBytes = Buffer.byteLength(JSON.stringify(item), "utf8");
+  if (baseBytes > REMOTE_VIEW_ITEMS_MAX_BYTES) return { kind: "too-large", bytes: baseBytes };
   const imageFields = inlineFields(view, collection.schema, undefined);
   if (imageFields.length > 0) {
-    const budget = REMOTE_VIEW_ITEMS_MAX_BYTES - Buffer.byteLength(JSON.stringify(item), "utf8");
-    await inlineImages([item], imageFields, clampImageMaxEdge(view.imageMaxEdge), deps.resolveThumbnail, Math.max(0, budget));
+    await inlineImages([item], imageFields, clampImageMaxEdge(view.imageMaxEdge), deps.resolveThumbnail, REMOTE_VIEW_ITEMS_MAX_BYTES - baseBytes);
   }
   return { kind: "ok", op: "update", item: item as CollectionItem };
 }
@@ -306,5 +313,7 @@ export function mutateRemoteViewFailureMessage(result: Exclude<MutateRemoteViewR
   if (result.kind === "invalid-patch") return `update patch must be a non-empty object of field changes`;
   if (result.kind === "item-not-found") return `item '${result.id}' not found in collection '${slug}'`;
   if (result.kind === "invalid-id") return `invalid item id: ${result.id}`;
+  if (result.kind === "too-large")
+    return `update succeeded but its response is ${result.bytes} bytes — over the ${REMOTE_VIEW_ITEMS_MAX_BYTES}-byte command-channel budget; slim the record (an embed/computed field is too big) and re-fetch with \`getItems\``;
   return `data directory for collection '${slug}' escapes the workspace`;
 }
