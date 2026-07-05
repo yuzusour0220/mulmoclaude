@@ -32,6 +32,9 @@ const RECORDS = [
 
 const deps = (overrides: Partial<RemoteViewItemsDeps> = {}): RemoteViewItemsDeps => ({
   listItems: (async () => RECORDS) as unknown as RemoteViewItemsDeps["listItems"],
+  // Identity stub: these fixtures have no computed fields, so the real resolver
+  // (enrichItems) returns them unchanged — the builder just threads records through it.
+  enrichItems: (async (_collection: unknown, items: unknown[]) => items) as unknown as RemoteViewItemsDeps["enrichItems"],
   // Deterministic stub: a short data URL derived from the path (no native binary).
   resolveThumbnail: (async (relPath: string) => `data:image/jpeg;base64,${Buffer.from(relPath).toString("base64")}`) as RemoteViewItemsDeps["resolveThumbnail"],
   ...overrides,
@@ -99,9 +102,35 @@ describe("createRemoteViewItems", () => {
     assert.equal(result.page.items[1].photo, "images/b.png"); // left as path (over budget)
   });
 
+  it("serves host-resolved computed fields (ref-crossing derived, etc.) the resolver produced", async () => {
+    // Prove the builder hydrates through enrichItems, not a record-local evaluator:
+    // a derived `value` that only the full resolver could compute (e.g. shares *
+    // ticker.price) must reach the projected page unchanged.
+    const enriched = RECORDS.map((record) => ({ ...record, value: record.id === "a" ? 100 : 250 }));
+    const build = createRemoteViewItems(deps({ enrichItems: (async () => enriched) as unknown as RemoteViewItemsDeps["enrichItems"] }));
+    const result = await build(collection(view()), "gallery", { offset: 0, limit: 50, fields: ["title", "value"] });
+    assert.equal(result.kind, "ok");
+    if (result.kind !== "ok") return;
+    assert.deepEqual(result.page.items[0], { id: "a", title: "A", value: 100 });
+    assert.deepEqual(result.page.items[1], { id: "b", title: "B", value: 250 });
+  });
+
+  it("rejects a page whose base JSON already exceeds the doc budget", async () => {
+    // An embed column can attach a whole record per row; if the projected base
+    // page alone overflows the budget, fail with an actionable error rather than
+    // letting the oversized doc break the downstream command-channel write.
+    const huge = "x".repeat(REMOTE_VIEW_ITEMS_MAX_BYTES);
+    const build = createRemoteViewItems(deps({ enrichItems: (async () => [{ id: "a", blob: huge }]) as unknown as RemoteViewItemsDeps["enrichItems"] }));
+    const result = await build(collection(view()), "gallery", { offset: 0, limit: 50, fields: ["blob"] });
+    assert.equal(result.kind, "too-large");
+    if (result.kind !== "too-large") return;
+    assert.ok(result.bytes > REMOTE_VIEW_ITEMS_MAX_BYTES);
+  });
+
   it("maps failure kinds to actionable messages", () => {
     assert.match(remoteViewItemsFailureMessage({ kind: "view-not-found", viewId: "v" }, "plan"), /'v' not found on collection 'plan'/);
     assert.match(remoteViewItemsFailureMessage({ kind: "not-mobile", viewId: "v" }, "plan"), /target: "mobile"/);
+    assert.match(remoteViewItemsFailureMessage({ kind: "too-large", bytes: 1_000_000 }, "plan"), /over the 900000-byte command-channel budget/);
   });
 });
 

@@ -28,6 +28,9 @@ const deps = (overrides: Partial<MutateRemoteViewDeps> = {}): MutateRemoteViewDe
   readItem: (async () => ({ ...record })) as unknown as MutateRemoteViewDeps["readItem"],
   writeItem: (async (_dir: string, itemId: string, item: unknown) => ({ kind: "ok", itemId, item })) as unknown as MutateRemoteViewDeps["writeItem"],
   deleteItem: (async (_dir: string, itemId: string) => ({ kind: "ok", itemId })) as unknown as MutateRemoteViewDeps["deleteItem"],
+  // Identity stub: fixtures have no computed fields, so the real resolver returns
+  // them unchanged — the update path just threads the written record through it.
+  enrichItems: (async (_collection: unknown, items: unknown[]) => items) as unknown as MutateRemoteViewDeps["enrichItems"],
   // A declared-image view inlines the returned item's image fields; the default
   // view here declares none, so this is only exercised by the dedicated test below.
   resolveThumbnail: (async (relPath: string) =>
@@ -71,27 +74,61 @@ describe("createMutateRemoteView", () => {
     assert.match(String(result.item.poster), /^data:image\/jpeg;base64,/); // inlined, not the path
   });
 
-  it("leaves the image as a path when the returned item is already over budget", async () => {
-    // A record with a huge text field (near the whole 900 KB doc budget) leaves
-    // no room for a thumbnail — the field must stay a path, not overflow the doc.
+  it("leaves the image as a path when the thumbnail would exceed the remaining budget", async () => {
+    // The base item fits, but the thumbnail is bigger than the room left under the
+    // doc budget — it must stay a path, not overflow the doc. (A base item that is
+    // itself over budget is a `too-large` failure, covered separately.)
     const withImage = collection([{ ...writableView, editableFields: ["rating"], imageFields: ["poster"] }]);
-    withImage.schema.fields = {
-      id: { type: "string" },
-      rating: { type: "string" },
-      poster: { type: "image" },
-      notes: { type: "text" },
-    } as unknown as typeof withImage.schema.fields;
-    const huge = "x".repeat(REMOTE_VIEW_ITEMS_MAX_BYTES);
+    withImage.schema.fields = { id: { type: "string" }, rating: { type: "string" }, poster: { type: "image" } } as unknown as typeof withImage.schema.fields;
+    const big = `data:image/jpeg;base64,${"x".repeat(REMOTE_VIEW_ITEMS_MAX_BYTES)}`;
     const mutate = createMutateRemoteView(
       deps({
-        readItem: (async () => ({ id: "t1", rating: "", poster: "images/a.png", notes: huge })) as unknown as MutateRemoteViewDeps["readItem"],
+        readItem: (async () => ({ id: "t1", rating: "", poster: "images/a.png" })) as unknown as MutateRemoteViewDeps["readItem"],
         writeItem: (async (_dir: string, itemId: string, item: unknown) => ({ kind: "ok", itemId, item })) as unknown as MutateRemoteViewDeps["writeItem"],
+        resolveThumbnail: (async () => big) as MutateRemoteViewDeps["resolveThumbnail"],
       }),
     );
     const result = await mutate(withImage, "phone", { op: "update", id: "t1", patch: { rating: "★" } });
     assert.equal(result.kind, "ok");
     if (result.kind !== "ok" || result.op !== "update") return;
-    assert.equal(result.item.poster, "images/a.png"); // left as path — no budget for a thumbnail
+    assert.equal(result.item.poster, "images/a.png"); // left as path — thumbnail over the remaining budget
+  });
+
+  it("returns the update item in the enriched getItems shape (computed fields resolved)", async () => {
+    // Regression for the getItems/updateItem shape parity: a view that merges the
+    // update result must keep its host-computed columns (e.g. a ref-crossing
+    // `value = shares * ticker.price`), not drop them until the next refetch.
+    const mutate = createMutateRemoteView(
+      deps({
+        readItem: (async () => ({ id: "t1", shares: 2 })) as unknown as MutateRemoteViewDeps["readItem"],
+        writeItem: (async (_dir: string, itemId: string, item: unknown) => ({ kind: "ok", itemId, item })) as unknown as MutateRemoteViewDeps["writeItem"],
+        enrichItems: (async (_collection: unknown, items: Record<string, unknown>[]) =>
+          items.map((entry) => ({ ...entry, value: Number(entry.shares) * 50 }))) as unknown as MutateRemoteViewDeps["enrichItems"],
+      }),
+    );
+    const editable = collection([{ ...writableView, editableFields: ["shares"] }]);
+    const result = await mutate(editable, "phone", { op: "update", id: "t1", patch: { shares: 3 } });
+    assert.equal(result.kind, "ok");
+    if (result.kind !== "ok" || result.op !== "update") return;
+    assert.equal(result.item.value, 150); // 3 * 50 — resolved host-side, present on the returned item
+  });
+
+  it("returns too-large when enrichment inflates the response past the doc budget", async () => {
+    // The write persists, but an embed/computed payload can push the enriched item
+    // over the command-doc cap — fail predictably here, not downstream on write.
+    const huge = "x".repeat(REMOTE_VIEW_ITEMS_MAX_BYTES);
+    const mutate = createMutateRemoteView(
+      deps({
+        readItem: (async () => ({ id: "t1", done: false })) as unknown as MutateRemoteViewDeps["readItem"],
+        writeItem: (async (_dir: string, itemId: string, item: unknown) => ({ kind: "ok", itemId, item })) as unknown as MutateRemoteViewDeps["writeItem"],
+        enrichItems: (async (_collection: unknown, items: Record<string, unknown>[]) =>
+          items.map((entry) => ({ ...entry, embedded: huge }))) as unknown as MutateRemoteViewDeps["enrichItems"],
+      }),
+    );
+    const result = await mutate(collection([writableView]), "phone", { op: "update", id: "t1", patch: { done: true } });
+    assert.equal(result.kind, "too-large");
+    if (result.kind !== "too-large") return;
+    assert.ok(result.bytes > REMOTE_VIEW_ITEMS_MAX_BYTES);
   });
 
   it("deletes a record when allowDelete is set", async () => {
@@ -159,6 +196,7 @@ describe("createMutateRemoteView", () => {
     assert.match(mutateRemoteViewFailureMessage({ kind: "item-not-found", id: "t9" }, "todos"), /'t9' not found/);
     assert.match(mutateRemoteViewFailureMessage({ kind: "invalid-id", id: "bad/id" }, "todos"), /invalid item id: bad\/id/);
     assert.match(mutateRemoteViewFailureMessage({ kind: "path-escape" }, "todos"), /escapes the workspace/);
+    assert.match(mutateRemoteViewFailureMessage({ kind: "too-large", bytes: 1_000_000 }, "todos"), /over the 900000-byte command-channel budget/);
   });
 });
 

@@ -90,10 +90,13 @@ const page = await window.__MC_VIEW.getItems({
   any `image`-type field you want inlined (see **Displaying images**).
 - The promise **rejects** on failure or after a 30 s timeout — catch it and
   show the message; don't fail silently.
-- **`derived` formulas that read only the record's own fields come back
-  resolved** (e.g. `won * 3 + drawn`). Formulas that dereference a `ref`
-  field, and `embed` fields, are NOT resolved on the phone — don't rely on
-  them; compute from base fields or omit.
+- **Computed fields resolve host-side, exactly as on desktop.** `derived`
+  formulas — including ones that dereference a `ref` into another collection
+  (e.g. `ticker.price`, `shares * ticker.price`) — plus `toggle` and `embed`
+  fields all come back fully resolved. The host does the join before serializing
+  the page; the phone just receives the plain values. A `ref` target that's
+  missing resolves that field to `null` (same fail-soft as desktop), so guard
+  for `null` rather than assuming a number is always present.
 
 ### Writing records — `updateItem` / `deleteItem`
 
@@ -137,9 +140,11 @@ const { id: removed } = await window.__MC_VIEW.deleteItem(id);
   optimistically update your local copy from the returned `item`, or re-call
   `getItems` to refetch. The preview's real write also refreshes the desktop
   collection, so you see the true result while iterating.
-- **The returned `item` is shaped like a `getItems` item** — the view's declared
-  `imageFields` come back inlined as `data:` URLs (not bare paths), so merging the
-  result (`items[i] = { ...items[i], ...res.item }`) keeps thumbnails intact.
+- **The returned `item` is shaped like a `getItems` item** — host-computed fields
+  (`derived`, including ref-crossing formulas, `toggle`, `embed`) are resolved and
+  the view's declared `imageFields` come back inlined as `data:` URLs (not bare
+  paths), so merging the result (`items[i] = { ...items[i], ...res.item }`) keeps
+  computed columns and thumbnails intact — no refetch needed just to recompute them.
 - **Create is not available** in this phase — `updateItem` only patches an
   existing record; use `startChat` to ask the agent to add a new one.
 
