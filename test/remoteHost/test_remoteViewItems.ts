@@ -115,9 +115,22 @@ describe("createRemoteViewItems", () => {
     assert.deepEqual(result.page.items[1], { id: "b", title: "B", value: 250 });
   });
 
+  it("rejects a page whose base JSON already exceeds the doc budget", async () => {
+    // An embed column can attach a whole record per row; if the projected base
+    // page alone overflows the budget, fail with an actionable error rather than
+    // letting the oversized doc break the downstream command-channel write.
+    const huge = "x".repeat(REMOTE_VIEW_ITEMS_MAX_BYTES);
+    const build = createRemoteViewItems(deps({ enrichItems: (async () => [{ id: "a", blob: huge }]) as unknown as RemoteViewItemsDeps["enrichItems"] }));
+    const result = await build(collection(view()), "gallery", { offset: 0, limit: 50, fields: ["blob"] });
+    assert.equal(result.kind, "too-large");
+    if (result.kind !== "too-large") return;
+    assert.ok(result.bytes > REMOTE_VIEW_ITEMS_MAX_BYTES);
+  });
+
   it("maps failure kinds to actionable messages", () => {
     assert.match(remoteViewItemsFailureMessage({ kind: "view-not-found", viewId: "v" }, "plan"), /'v' not found on collection 'plan'/);
     assert.match(remoteViewItemsFailureMessage({ kind: "not-mobile", viewId: "v" }, "plan"), /target: "mobile"/);
+    assert.match(remoteViewItemsFailureMessage({ kind: "too-large", bytes: 1_000_000 }, "plan"), /over the 900000-byte command-channel budget/);
   });
 });
 

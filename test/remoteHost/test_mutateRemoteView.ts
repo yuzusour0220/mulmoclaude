@@ -28,6 +28,9 @@ const deps = (overrides: Partial<MutateRemoteViewDeps> = {}): MutateRemoteViewDe
   readItem: (async () => ({ ...record })) as unknown as MutateRemoteViewDeps["readItem"],
   writeItem: (async (_dir: string, itemId: string, item: unknown) => ({ kind: "ok", itemId, item })) as unknown as MutateRemoteViewDeps["writeItem"],
   deleteItem: (async (_dir: string, itemId: string) => ({ kind: "ok", itemId })) as unknown as MutateRemoteViewDeps["deleteItem"],
+  // Identity stub: fixtures have no computed fields, so the real resolver returns
+  // them unchanged — the update path just threads the written record through it.
+  enrichItems: (async (_collection: unknown, items: unknown[]) => items) as unknown as MutateRemoteViewDeps["enrichItems"],
   // A declared-image view inlines the returned item's image fields; the default
   // view here declares none, so this is only exercised by the dedicated test below.
   resolveThumbnail: (async (relPath: string) =>
@@ -92,6 +95,25 @@ describe("createMutateRemoteView", () => {
     assert.equal(result.kind, "ok");
     if (result.kind !== "ok" || result.op !== "update") return;
     assert.equal(result.item.poster, "images/a.png"); // left as path — no budget for a thumbnail
+  });
+
+  it("returns the update item in the enriched getItems shape (computed fields resolved)", async () => {
+    // Regression for the getItems/updateItem shape parity: a view that merges the
+    // update result must keep its host-computed columns (e.g. a ref-crossing
+    // `value = shares * ticker.price`), not drop them until the next refetch.
+    const mutate = createMutateRemoteView(
+      deps({
+        readItem: (async () => ({ id: "t1", shares: 2 })) as unknown as MutateRemoteViewDeps["readItem"],
+        writeItem: (async (_dir: string, itemId: string, item: unknown) => ({ kind: "ok", itemId, item })) as unknown as MutateRemoteViewDeps["writeItem"],
+        enrichItems: (async (_collection: unknown, items: Record<string, unknown>[]) =>
+          items.map((entry) => ({ ...entry, value: Number(entry.shares) * 50 }))) as unknown as MutateRemoteViewDeps["enrichItems"],
+      }),
+    );
+    const editable = collection([{ ...writableView, editableFields: ["shares"] }]);
+    const result = await mutate(editable, "phone", { op: "update", id: "t1", patch: { shares: 3 } });
+    assert.equal(result.kind, "ok");
+    if (result.kind !== "ok" || result.op !== "update") return;
+    assert.equal(result.item.value, 150); // 3 * 50 — resolved host-side, present on the returned item
   });
 
   it("deletes a record when allowDelete is set", async () => {
