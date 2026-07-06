@@ -66,6 +66,14 @@ function recordViolation(violation: CspViolation): void {
 }
 
 function onMessage(event: MessageEvent): void {
+  // Only accept reports from an opaque-origin (sandboxed) frame — our custom
+  // views run `sandbox="allow-scripts"` with no `allow-same-origin`, so a
+  // legitimate report always arrives with `event.origin === "null"`. This
+  // rejects a spoofed "add this host to config/csp.json" banner posted by an
+  // ALLOWED external iframe (e.g. a Google Maps embed), which carries its real
+  // origin. The banner is informational (no auto-action), so this proportionate
+  // check is enough without threading iframe refs into this host-global listener.
+  if (event.origin !== "null") return;
   const violation = parseCspViolationMessage(event.data);
   if (violation) recordViolation(violation);
 }

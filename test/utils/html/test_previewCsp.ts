@@ -151,6 +151,20 @@ describe("user CSP extension (config/csp.json)", () => {
     const csp = buildHtmlPreviewCsp("http://localhost:5173", HTML_PREVIEW_CSP_ALLOWED_CDNS, { "frame-src": ["https://www.google.com"] });
     assert.match(csp, /frame-src https:\/\/www\.google\.com/);
   });
+
+  it("sanitizes extra at the builder boundary, not just at the callers", () => {
+    // Pass a HOSTILE extra straight to the builder (as a forgetful future caller
+    // might). Injection (`;`), attribute-break (`"`), and keyword tokens must be
+    // dropped by the builder itself — safety can't depend on the caller.
+    const csp = buildCustomViewCsp("http://localhost:3001", HTML_PREVIEW_CSP_ALLOWED_CDNS, {
+      "frame-src": ["https://ok.com; connect-src https://evil.example", 'https://x.com" onload="alert(1)', "https://good.com"],
+      "script-src": ["'unsafe-eval'"],
+    });
+    assert.match(csp, /frame-src https:\/\/good\.com/);
+    assert.ok(!csp.includes("connect-src https://evil.example"), "';' must not inject another directive");
+    assert.ok(!csp.includes("onload="), "'\"' must not break the meta attribute");
+    assert.ok(!csp.includes("'unsafe-eval'"), "keyword tokens must be dropped");
+  });
 });
 
 describe("sanitizeCspExtra", () => {

@@ -32,14 +32,13 @@ const extraFor = (extra: CspExtraHosts, directive: CspDirective): string[] => [.
 // paths / query / hash / credentials, and the per-char host check rejects
 // wildcards like `*.evil.com` that `URL` would otherwise accept as a hostname.
 function isPlainHttpsHost(value: string): boolean {
-  let url: URL;
   try {
-    url = new URL(value);
+    const url = new URL(value);
+    if (url.protocol !== "https:" || value.toLowerCase() !== `https://${url.host}`) return false;
+    return url.hostname.length > 0 && [...url.hostname].every((char) => /[a-z0-9.-]/i.test(char));
   } catch {
     return false;
   }
-  if (url.protocol !== "https:" || value.toLowerCase() !== `https://${url.host}`) return false;
-  return url.hostname.length > 0 && [...url.hostname].every((char) => /[a-z0-9.-]/i.test(char));
 }
 
 export function sanitizeCspExtra(raw: unknown): CspExtraHosts {
@@ -70,14 +69,19 @@ export function sanitizeCspExtra(raw: unknown): CspExtraHosts {
  */
 function buildCsp(connectSrc: string, imgSelf: string, cdns: readonly string[], extraImgSrc = "", mediaSrc = "", extra: CspExtraHosts = {}): string {
   const cdnArr = [...cdns];
+  // Sanitize at the builder boundary — NOT only at the callers — so an added
+  // host can never carry a `;` (inject another directive) or a `"` (break the
+  // `<meta … content="…">` attribute), regardless of whether the caller
+  // remembered to sanitize. Idempotent for already-clean input.
+  const safeExtra = sanitizeCspExtra(extra);
   const directives: string[] = [
     "default-src 'none'",
     // LLM-authored HTML almost always uses inline <script> blocks
     // alongside the CDN load. No feasible path to avoid
     // 'unsafe-inline' without rewriting every output.
-    `script-src ${["'unsafe-inline'", ...cdnArr, ...extraFor(extra, "script-src")].join(" ")}`,
-    `style-src ${["'unsafe-inline'", ...cdnArr, ...extraFor(extra, "style-src")].join(" ")}`,
-    `font-src ${[...cdnArr, ...extraFor(extra, "font-src")].join(" ")}`,
+    `script-src ${["'unsafe-inline'", ...cdnArr, ...extraFor(safeExtra, "script-src")].join(" ")}`,
+    `style-src ${["'unsafe-inline'", ...cdnArr, ...extraFor(safeExtra, "style-src")].join(" ")}`,
+    `font-src ${[...cdnArr, ...extraFor(safeExtra, "font-src")].join(" ")}`,
     // Images: same-origin (workspace files via /api/files/raw), CDN
     // whitelist, plus data: and blob: for inline PNGs and dynamically-
     // generated charts. Wildcard is deliberately avoided here — an attacker
@@ -86,20 +90,20 @@ function buildCsp(connectSrc: string, imgSelf: string, cdns: readonly string[], 
     // blocked. Widen via HTML_PREVIEW_CSP_ALLOWED_CDNS if LLM output
     // legitimately needs more hosts. `extraImgSrc` lets a specific caller
     // (custom views) opt into a broader source set — see buildCustomViewCsp.
-    `img-src ${[imgSelf, ...cdnArr, "data:", "blob:", ...(extraImgSrc ? [extraImgSrc] : []), ...extraFor(extra, "img-src")].join(" ")}`,
+    `img-src ${[imgSelf, ...cdnArr, "data:", "blob:", ...(extraImgSrc ? [extraImgSrc] : []), ...extraFor(safeExtra, "img-src")].join(" ")}`,
   ];
   // Audio / video: omitted by default, so `<audio>`/`<video>` fall back to
   // default-src 'none' (preview + print stay locked). Custom views opt in via
   // `mediaSrc`; users can also add hosts via config. Same one-way GET-exfil
   // tradeoff as img-src, see buildCustomViewCsp.
-  const media = [...(mediaSrc ? [mediaSrc] : []), ...extraFor(extra, "media-src")];
+  const media = [...(mediaSrc ? [mediaSrc] : []), ...extraFor(safeExtra, "media-src")];
   if (media.length > 0) directives.push(`media-src ${media.join(" ")}`);
   // frame-src has NO base value — iframes fall back to default-src 'none'
   // (locked) unless a user opts specific hosts in via config (e.g. a Google
   // Maps embed). Only emitted when the user added hosts.
-  const frame = extraFor(extra, "frame-src");
+  const frame = extraFor(safeExtra, "frame-src");
   if (frame.length > 0) directives.push(`frame-src ${frame.join(" ")}`);
-  directives.push(`connect-src ${[connectSrc, ...extraFor(extra, "connect-src")].join(" ")}`);
+  directives.push(`connect-src ${[connectSrc, ...extraFor(safeExtra, "connect-src")].join(" ")}`);
   return directives.join("; ");
 }
 
