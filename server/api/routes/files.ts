@@ -14,11 +14,27 @@ import { classifyAsWikiPage, writeWikiPage } from "../../workspace/wiki-pages/io
 import { log } from "../../system/logger/index.js";
 import { previewSnippet } from "../../utils/logPreview.js";
 import { publishFileChange } from "../../events/file-change.js";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
-import { SUBPROCESS_PROBE_TIMEOUT_MS } from "../../utils/time.js";
+import { spawn } from "node:child_process";
 
-const execFileAsync = promisify(execFile);
+// Cross-platform "open this file with the host's default handler" that
+// never lets the path travel through a shell parser. Windows earlier
+// used `cmd /c start "" <path>` — `cmd` DOES tokenise the arguments,
+// so a workspace filename with `&` / `|` / `^` / a leading `-` / etc.
+// could be reinterpreted as command syntax (Codex + CodeQL flagged
+// this on #1985). `explorer.exe <path>` is fed to CreateProcess as an
+// array argv (no shell parsing) and treats the argument as a
+// filesystem path. explorer.exe intentionally returns exit code 1 even
+// on success, so we `spawn` + `unref()` instead of awaiting a subprocess
+// exit — the whole operation is fire-and-forget anyway (we can't tell
+// whether the associated app actually opened a window).
+function openInHostOs(absPath: string): void {
+  const { platform } = process;
+  const [command, args] =
+    platform === "darwin" ? (["open", [absPath]] as const) : platform === "win32" ? (["explorer.exe", [absPath]] as const) : (["xdg-open", [absPath]] as const);
+  const child = spawn(command, args, { detached: true, stdio: "ignore" });
+  child.on("error", (err) => log.warn("files", "open: spawn error", { platform, error: err.message }));
+  child.unref();
+}
 
 const router = Router();
 
@@ -1138,24 +1154,8 @@ router.post(API_ROUTES.files.open, async (req: Request<object, unknown, OpenFile
   (req.query as PathQuery).path = requestedPath;
   const ctx = resolveAndStatFile(req, res);
   if (!ctx) return;
-  const { absPath } = ctx;
-  const { platform } = process;
-  try {
-    if (platform === "darwin") {
-      await execFileAsync("open", [absPath], { timeout: SUBPROCESS_PROBE_TIMEOUT_MS });
-    } else if (platform === "win32") {
-      // `start` is a cmd built-in; the empty "" is a title placeholder
-      // required when the target path is quoted (else cmd interprets
-      // the first quoted arg as the window title, not the file).
-      await execFileAsync("cmd", ["/c", "start", "", absPath], { timeout: SUBPROCESS_PROBE_TIMEOUT_MS });
-    } else {
-      await execFileAsync("xdg-open", [absPath], { timeout: SUBPROCESS_PROBE_TIMEOUT_MS });
-    }
-    res.json({ ok: true });
-  } catch (err) {
-    log.warn("files", "POST open: spawn failed", { platform, error: errorMessage(err) });
-    serverError(res, `Failed to open file in OS: ${errorMessage(err)}`);
-  }
+  openInHostOs(ctx.absPath);
+  res.json({ ok: true });
 });
 
 router.get(API_ROUTES.files.refRoots, async (_req: Request, res: Response<TreeNode[]>) => {
