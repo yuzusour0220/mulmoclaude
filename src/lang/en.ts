@@ -71,6 +71,11 @@ const enMessages = {
       stop: "Stop voice input",
     },
   },
+  cspViolation: {
+    notice:
+      "⚠ A view tried to load {host}, but the content security policy blocked it ({directive}). To allow it, add the host to config/csp.json — only if you trust it.",
+    dismiss: "Dismiss",
+  },
   sessionHistoryPanel: {
     filters: {
       all: "All",

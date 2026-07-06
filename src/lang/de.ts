@@ -49,6 +49,11 @@ const deMessages = {
       stop: "Spracheingabe stoppen",
     },
   },
+  cspViolation: {
+    notice:
+      "⚠ Eine Ansicht wollte {host} laden, aber die Content Security Policy hat es blockiert ({directive}). Zum Erlauben den Host in config/csp.json eintragen – nur wenn Sie ihm vertrauen.",
+    dismiss: "Schließen",
+  },
   sessionHistoryPanel: {
     filters: {
       all: "Alle",

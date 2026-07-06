@@ -4,6 +4,17 @@
          it's the first thing the user sees when the server isn't
          reachable. Self-hiding when fetchHealth succeeds. -->
     <BackendOfflineBanner :on-retry="fetchHealth" />
+    <!-- CSP-blocked-resource notice (#1989) — a sandboxed view tried to load a
+         host not allowed by config/csp.json. Tells the user the exact host +
+         directive so they can extend the policy (if they trust it). -->
+    <div
+      v-if="cspViolations.length > 0"
+      class="shrink-0 flex items-start gap-3 bg-amber-50 text-amber-900 text-xs px-3 py-2 border-b border-amber-200"
+      role="alert"
+    >
+      <span class="flex-1 min-w-0">{{ $t("cspViolation.notice", { host: cspViolations[0].host, directive: cspViolations[0].directive }) }}</span>
+      <button class="shrink-0 underline hover:no-underline" @click="dismissCspViolations()">{{ $t("cspViolation.dismiss") }}</button>
+    </div>
     <!-- Global top bar — shown in every view mode -->
     <div class="shrink-0 bg-white text-gray-900">
       <!-- Row 1: title + plugin launcher -->
@@ -360,6 +371,8 @@ import { roleName, roleIcon } from "./utils/role/icon";
 import { createEmptySession } from "./utils/session/sessionFactory";
 import { buildLoadedSession, parseSessionEntries } from "./utils/session/sessionEntries";
 import { usePendingCalls } from "./composables/usePendingCalls";
+import { loadCspExtra } from "./composables/useCspExtra";
+import { cspViolations, dismissCspViolations, installCspViolationListener } from "./composables/useCspViolations";
 import { useRunElapsed } from "./composables/useRunElapsed";
 import { useKeyNavigation } from "./composables/useKeyNavigation";
 import { useDebugBeat } from "./composables/useDebugBeat";
@@ -766,6 +779,8 @@ async function refreshGoogleMapsApiKey(): Promise<void> {
   }
 }
 void refreshGoogleMapsApiKey();
+void loadCspExtra();
+installCspViolationListener();
 
 function googleMapKeyFor(toolName: string | undefined): string | null {
   return toolName === TOOL_NAMES.mapControl ? googleMapsApiKey.value : null;

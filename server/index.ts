@@ -120,6 +120,7 @@ import { API_ROUTES } from "../src/config/apiRoutes.js";
 import { EVENT_TYPES } from "../src/types/events.js";
 import { SESSION_ORIGINS } from "../src/types/session.js";
 import { buildHtmlPreviewCsp } from "../src/utils/html/previewCsp.js";
+import { readCspExtraSync, warnIfCspExtended } from "./utils/files/csp-io.js";
 import { readAndInjectHtmlArtifact } from "./utils/html/htmlArtifactSplicer.js";
 import { ONE_SECOND_MS, ONE_MINUTE_MS, ONE_HOUR_MS, STARTUP_FAILURE_FORCE_EXIT_MS, FATAL_LOG_FLUSH_MS } from "./utils/time.js";
 import { isPortFree, findAvailablePort, MAX_PORT_PROBES } from "./utils/port.mjs";
@@ -173,6 +174,7 @@ if (process.env.MULMOCLAUDE_FAKE_AGENT === "1") {
 }
 
 initWorkspace();
+warnIfCspExtended();
 
 // Fire-and-forget memory migrations: legacy `memory.md` → atomic
 // (#1029), then atomic → topic-format staging (#1070). Chained so
@@ -508,7 +510,7 @@ app.use(
     }
     if (HTML_DOCUMENT_EXT_RE.test(req.path)) {
       const origin = browserVisibleOrigin(req);
-      res.setHeader("Content-Security-Policy", buildHtmlPreviewCsp(origin));
+      res.setHeader("Content-Security-Policy", buildHtmlPreviewCsp(origin, undefined, readCspExtraSync()));
       res.setHeader("X-Content-Type-Options", "nosniff");
       const spliced = await readAndInjectHtmlArtifact(root, relPath);
       if (spliced === null) {

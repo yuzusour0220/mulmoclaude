@@ -49,6 +49,11 @@ const frMessages = {
       stop: "Arrêter la saisie vocale",
     },
   },
+  cspViolation: {
+    notice:
+      "⚠ Une vue a tenté de charger {host}, mais la politique de sécurité du contenu l'a bloqué ({directive}). Pour l'autoriser, ajoutez l'hôte à config/csp.json, uniquement si vous lui faites confiance.",
+    dismiss: "Fermer",
+  },
   sessionHistoryPanel: {
     filters: {
       all: "Toutes",

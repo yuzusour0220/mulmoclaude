@@ -56,6 +56,11 @@ const jaMessages = {
       stop: "音声入力を停止",
     },
   },
+  cspViolation: {
+    notice:
+      "⚠ ビューが {host} を読み込もうとしましたが、コンテンツセキュリティポリシー（{directive}）でブロックされました。許可するには config/csp.json にこのホストを追加してください（信頼できる場合のみ）。",
+    dismiss: "閉じる",
+  },
   sessionHistoryPanel: {
     filters: {
       all: "すべて",

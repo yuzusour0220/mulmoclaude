@@ -54,6 +54,11 @@ const esMessages = {
       stop: "Detener entrada de voz",
     },
   },
+  cspViolation: {
+    notice:
+      "⚠ Una vista intentó cargar {host}, pero la política de seguridad de contenido lo bloqueó ({directive}). Para permitirlo, añade el host a config/csp.json, solo si confías en él.",
+    dismiss: "Descartar",
+  },
   sessionHistoryPanel: {
     filters: {
       all: "Todas",
