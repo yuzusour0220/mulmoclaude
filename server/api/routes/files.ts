@@ -23,17 +23,34 @@ import { spawn } from "node:child_process";
 // could be reinterpreted as command syntax (Codex + CodeQL flagged
 // this on #1985). `explorer.exe <path>` is fed to CreateProcess as an
 // array argv (no shell parsing) and treats the argument as a
-// filesystem path. explorer.exe intentionally returns exit code 1 even
-// on success, so we `spawn` + `unref()` instead of awaiting a subprocess
-// exit — the whole operation is fire-and-forget anyway (we can't tell
-// whether the associated app actually opened a window).
-function openInHostOs(absPath: string): void {
+// filesystem path.
+//
+// Returns a promise that settles based on `spawn` vs `error` events —
+// NOT process exit. We can't tell whether the associated app actually
+// opened a window (explorer.exe returns exit code 1 even on success),
+// but we CAN distinguish "spawn succeeded" from "command not found /
+// permission denied" (e.g. `xdg-open` missing on a headless Linux
+// host). Client-side error handling depends on this signal.
+export function openInHostOs(absPath: string): Promise<boolean> {
   const { platform } = process;
   const [command, args] =
     platform === "darwin" ? (["open", [absPath]] as const) : platform === "win32" ? (["explorer.exe", [absPath]] as const) : (["xdg-open", [absPath]] as const);
-  const child = spawn(command, args, { detached: true, stdio: "ignore" });
-  child.on("error", (err) => log.warn("files", "open: spawn error", { platform, error: err.message }));
-  child.unref();
+  return new Promise<boolean>((resolve) => {
+    const child = spawn(command, args, { detached: true, stdio: "ignore" });
+    let settled = false;
+    child.once("error", (err) => {
+      if (settled) return;
+      settled = true;
+      log.warn("files", "open: spawn error", { platform, error: err.message });
+      resolve(false);
+    });
+    child.once("spawn", () => {
+      if (settled) return;
+      settled = true;
+      child.unref();
+      resolve(true);
+    });
+  });
 }
 
 const router = Router();
@@ -1154,7 +1171,11 @@ router.post(API_ROUTES.files.open, async (req: Request<object, unknown, OpenFile
   (req.query as PathQuery).path = requestedPath;
   const ctx = resolveAndStatFile(req, res);
   if (!ctx) return;
-  openInHostOs(ctx.absPath);
+  const spawned = await openInHostOs(ctx.absPath);
+  if (!spawned) {
+    serverError(res, "Failed to launch OS file handler");
+    return;
+  }
   res.json({ ok: true });
 });
 

@@ -352,10 +352,20 @@ const marpPdfFilename = computed(() => {
 // Inline JSON editor (#833 Phase 1). Available only for policy-editable
 // JSON config files; the read-only pretty-print stays the default.
 // "Open in OS" button on the binary / unsupported fallback (#1985).
-// Fire-and-forget — success just means the server spawned the OS
-// handler; whether the app actually surfaces is out of scope.
+// Success just means the server successfully spawned the OS handler;
+// whether the app actually surfaces a window is out of scope.
 const openInOsBusy = ref(false);
 const openInOsError = ref<string | null>(null);
+// Reset button state whenever the user navigates to a different file —
+// otherwise an error from file A would linger while viewing file B
+// (Codex review on #1988).
+watch(
+  () => props.selectedPath,
+  () => {
+    openInOsBusy.value = false;
+    openInOsError.value = null;
+  },
+);
 async function openInOs(): Promise<void> {
   if (!props.selectedPath) return;
   openInOsBusy.value = true;
