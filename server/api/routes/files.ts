@@ -670,7 +670,10 @@ function resolveAndStatFile<T>(
   req: Request<object, unknown, unknown, PathQuery>,
   res: Response<T | ErrorResponse>,
 ): { relPath: string; absPath: string; stat: Stats } | null {
-  const relPath = getOptionalStringQuery(req, "path") ?? "";
+  return resolveAndStatFileByPath(getOptionalStringQuery(req, "path") ?? "", res);
+}
+
+function resolveAndStatFileByPath<T>(relPath: string, res: Response<T | ErrorResponse>): { relPath: string; absPath: string; stat: Stats } | null {
   if (!relPath) {
     badRequest(res, "path required");
     return null;
@@ -1168,8 +1171,7 @@ router.post(API_ROUTES.files.open, async (req: Request<object, unknown, OpenFile
     badRequest(res, "path required");
     return;
   }
-  (req.query as PathQuery).path = requestedPath;
-  const ctx = resolveAndStatFile(req, res);
+  const ctx = resolveAndStatFileByPath(requestedPath, res);
   if (!ctx) return;
   const spawned = await openInHostOs(ctx.absPath);
   if (!spawned) {
