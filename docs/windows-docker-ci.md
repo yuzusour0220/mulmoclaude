@@ -134,28 +134,44 @@ Full timing on the first-ever run (cold caches):
 
 ## Anatomy of the probe
 
-The probe (`test/sandbox-repro/probe.mjs`) is self-contained — it doesn't
-import from the server source or need `yarn build:packages`. It inlines
-both the buggy resolver (parent-walk-only) and the fixed resolver
-(`require.resolve.paths()`) and asserts:
+The probe (`test/sandbox-repro/probe.ts`) imports the shipped
+`resolvePresetRoot()` from `server/plugins/resolvePresetRoot.ts` — the
+same file the production `preset-loader.ts` uses. Breaking the fix in
+production breaks the probe; that's the point. `resolvePresetRoot.ts`
+was pulled out of `preset-loader.ts` specifically to give the probe a
+minimal-deps import target (only `node:fs` / `node:module` / `node:path`)
+so it can run in a plain `node:22-slim` container without dragging in
+the full server graph (logger, plugin registry, …).
+
+The probe also keeps ONE inline copy — the legacy parent-walk-only
+resolver from BEFORE the fix — so a check can prove the container
+environment is actually reproducing the bug. If a future WSL2 or Docker
+update stops dangling the junction, that check fails and tells us the
+whole probe stopped exercising the failure mode.
+
+Assertions:
 
 1. **Environment sanity** — `/app/node_modules/@mulmoclaude/x-plugin/package.json`
    MUST dangle (`existsSync` false). If this passes, the workflow's bind mount isn't
    reproducing the bug and everything below is meaningless.
 2. **Fallback mount present** — `/app/pkg_modules/@mulmoclaude/x-plugin/package.json`
    MUST exist (PR #1974's mount).
-3. **Buggy resolver reproduces the bug** — the parent-walk-only implementation MUST
-   return `null` for `@mulmoclaude/spotify-plugin`.
-4. **Fixed resolver works** — `require.resolve.paths()`-based lookup MUST resolve
-   every preset package to the `/app/pkg_modules/` fallback.
-5. **Negative case** — the fixed resolver returns `null` for a made-up preset name
+3. **Node's own resolver sees NODE_PATH** — `require.resolve.paths()` MUST include
+   `/app/pkg_modules`. Direct check that the env wiring works.
+4. **Legacy resolver reproduces the bug** — the inline parent-walk-only
+   implementation MUST return `null` for `@mulmoclaude/spotify-plugin`.
+5. **Shipped resolver works** — `resolvePresetRoot()` imported from
+   `server/plugins/resolvePresetRoot.ts` MUST resolve every preset package to the
+   `/app/pkg_modules/` fallback.
+6. **Negative case** — the shipped resolver returns `null` for a made-up preset name
    (no false positives).
 
-`require.resolve()` was tempting for check #4 but it walks the package's
-`main`/`exports` entries which point at `dist/` files that aren't built in
-this CI job — the check would fail without proving anything about the
-resolver. `require.resolve.paths()` returns the search-path list without
-touching main entries.
+`require.resolve()` for check #3 was tempting (fully resolve, prove the
+whole chain works) but it walks the package's `main`/`exports` entries
+which point at `dist/` files that aren't built in this CI job — the check
+would fail without proving anything about the resolver.
+`require.resolve.paths()` returns the search-path list without touching
+main entries.
 
 ## Gotchas
 
@@ -195,6 +211,18 @@ runs from an isolated tmp cwd with no `node_modules`. Passing `--import
 tsx` fails because tsx isn't resolvable from that cwd. Resolve tsx's
 absolute path in the parent (`require.resolve("tsx")`) and pass the
 absolute path with `pathToFileURL()` instead.
+
+## Why the workflow only runs on schedule + workflow_dispatch
+
+Every PR to `resolvePresetRoot` or the sandbox mount config is already
+covered on `ubuntu-latest` and `macos-latest` by
+`test/plugins/test_preset_loader_node_path.ts` — it exercises the shipped
+resolver against a POSIX-symlink stand-in for the dangling junction.
+Windows CI adds value ONLY for detecting **upstream environment drift**
+(yarn switching from junctions to hardlinks, WSL2 changing how junctions
+surface, Docker changing bind-mount semantics). That drift is slow-moving,
+so a daily canary is sufficient — running on every PR would burn Windows
+minutes without catching anything the POSIX test doesn't.
 
 ## When to reach for this
 

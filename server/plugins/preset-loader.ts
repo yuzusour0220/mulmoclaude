@@ -28,57 +28,24 @@
 // Failures don't abort boot. A missing preset (install drift, rare)
 // logs a warning; healthy presets still register.
 
-import { existsSync, readFileSync } from "node:fs";
-import { createRequire } from "node:module";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import { PRESET_PLUGINS, type PresetPlugin } from "./preset-list.js";
+// The preset-package resolver lives in its own module so the sandbox
+// regression probe (test/sandbox-repro/probe.ts) can import it inside a
+// node:22-slim container without dragging in the full server graph
+// (logger, plugin registry). Re-exported so existing imports of
+// `resolvePresetRoot` from this file keep working.
+import { resolvePresetRoot } from "./resolvePresetRoot.js";
 import { loadPluginFromCacheDir, type LoaderDeps, type RuntimePlugin } from "./runtime-loader.js";
 import { log } from "../system/logger/index.js";
 
-const LOG_PREFIX = "plugins/preset";
+export { resolvePresetRoot };
 
-// Anchored at this module so `require.resolve.paths(pkg)` returns the same
-// list Node's own CJS resolver would search from here — parent walk plus
-// NODE_PATH entries. See resolvePresetRoot below.
-const localRequire = createRequire(import.meta.url);
+const LOG_PREFIX = "plugins/preset";
 
 interface PackageJsonShape {
   version?: string;
-}
-
-/** Resolve the on-disk root of a preset package. Delegates the search path
- *  list to Node's `require.resolve.paths(<pkg>)` so we stay in lockstep with
- *  the CJS resolver on every layout the installer might choose:
- *
- *    - yarn workspaces: deps hoisted to the repo root's `node_modules`
- *    - npm flat install: package's `node_modules` directly
- *    - npm nested install: under a parent package's `node_modules`
- *    - NODE_PATH fallback: the Docker sandbox mounts each
- *      `@mulmoclaude/*` workspace at `/app/pkg_modules/@mulmoclaude/<name>`
- *      and appends `/app/pkg_modules` to NODE_PATH so CJS resolution
- *      falls through when the primary `node_modules` link dangles inside
- *      the container (#1946 on Windows). The old hand-rolled parent-walk
- *      didn't consult NODE_PATH, silently dropping every preset — the
- *      #1982 gap this delegation closes.
- *
- *  Why the `existsSync` gate instead of `require.resolve('<pkg>/package.json')`:
- *  many packages (including `@gui-chat-plugin/*`) ship an `exports` field
- *  that doesn't expose `./package.json`, so the ESM/CJS resolver throws
- *  `ERR_PACKAGE_PATH_NOT_EXPORTED`. Doing the final `<dir>/<pkg>/package.json`
- *  check ourselves sidesteps the exports gate.
- *
- *  Exported for the POSIX-only unit test that pins the NODE_PATH fallback
- *  behavior (test/plugins/test_preset_loader_node_path.ts). */
-export function resolvePresetRoot(packageName: string): string | null {
-  const paths = localRequire.resolve.paths(packageName);
-  if (!paths) return null;
-  for (const dir of paths) {
-    const candidate = path.join(dir, packageName);
-    if (existsSync(path.join(candidate, "package.json"))) {
-      return candidate;
-    }
-  }
-  return null;
 }
 
 async function loadOnePreset(entry: PresetPlugin, deps: LoaderDeps = {}): Promise<RuntimePlugin | null> {

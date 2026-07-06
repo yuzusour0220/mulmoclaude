@@ -24,25 +24,12 @@ name: docker sandbox (Windows junction repro)
 # Docker-Desktop-on-windows-latest environment itself.
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - "server/agent/config.ts"
-      - "server/plugins/preset-loader.ts"
-      - "server/plugins/preset-list.ts"
-      - "Dockerfile.sandbox"
-      - "packages/plugins/*/package.json"
-      - "test/sandbox-repro/**"
-      - ".github/workflows/docker_sandbox_windows.yaml"
-  pull_request:
-    paths:
-      - "server/agent/config.ts"
-      - "server/plugins/preset-loader.ts"
-      - "server/plugins/preset-list.ts"
-      - "Dockerfile.sandbox"
-      - "packages/plugins/*/package.json"
-      - "test/sandbox-repro/**"
-      - ".github/workflows/docker_sandbox_windows.yaml"
+  # Scheduled canary — catches upstream env drift (yarn switching from
+  # NTFS junctions to hardlinks, WSL2 changing how junctions surface,
+  # Docker changing bind-mount semantics). The resolver code itself is
+  # covered every PR by `test/plugins/test_preset_loader_node_path.ts`
+  # in the ubuntu/macos matrix, so we don't burn Windows CI minutes on
+  # every push. Manual re-run available via workflow_dispatch.
   schedule:
     - cron: "0 19 * * *" # Daily 19:00 UTC = 04:00 JST
   workflow_dispatch:
@@ -147,6 +134,11 @@ jobs:
       # NTFS junctions in `node_modules/@mulmoclaude/*` surface there as
       # Linux symlinks with dangling Windows-style targets — which is
       # exactly the environment the probe wants to prove the fix survives.
+      #
+      # `server/plugins/resolvePresetRoot.ts` is bind-mounted to
+      # `/app/server-plugins/resolvePresetRoot.ts` so probe.ts imports the
+      # shipped code directly (no inline reimplementation). `tsx` is
+      # `npm install -g`'d in the container so it can load the .ts import.
       - name: Run the sandbox regression probe (via WSL2 docker)
         shell: pwsh
         run: |
@@ -163,8 +155,9 @@ jobs:
             -v "${wsLinux}/packages/plugins/spotify-plugin:/app/pkg_modules/@mulmoclaude/spotify-plugin:ro" `
             -v "${wsLinux}/packages/plugins/debug-plugin:/app/pkg_modules/@mulmoclaude/debug-plugin:ro" `
             -v "${wsLinux}/packages/core:/app/pkg_modules/@mulmoclaude/core:ro" `
+            -v "${wsLinux}/server/plugins:/app/server-plugins:ro" `
             -v "${wsLinux}/test/sandbox-repro:/repro:ro" `
             -e NODE_PATH=/app/node_modules:/app/pkg_modules `
             -w /app `
             node:22-slim `
-            node /repro/probe.mjs
+            bash -c "npm install -g tsx --silent && tsx /repro/probe.ts"
