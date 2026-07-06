@@ -37,7 +37,8 @@ import { htmlPreviewUrlFor, svgPreviewUrlFor } from "../useContentDisplay";
 import { isValidFilePath } from "../useFileSelection";
 import { resolveImageSrc } from "../../utils/image/resolve";
 import { buildCustomViewSrcdoc } from "../../utils/html/customViewSrcdoc";
-import { cspExtra } from "../useCspExtra";
+import { cspExtra, loadCspExtra } from "../useCspExtra";
+import { registerViewNonce } from "../useCspViolations";
 import { useConfirm } from "../useConfirm";
 import { useShortcuts } from "../useShortcuts";
 import PinToggle from "../../components/PinToggle.vue";
@@ -96,6 +97,10 @@ configureCollectionUi({
   mintViewToken: (slug, viewId) => apiPost<CollectionViewToken>(withSlug(API_ROUTES.collections.viewToken, slug), { viewId }),
   fetchViewHtml: async (slug, viewId) => {
     try {
+      // Refresh the CSP extension so a `config/csp.json` edit takes effect on
+      // the next view open (not only after an app reload) — the srcdoc CSP is
+      // built client-side from the cached `cspExtra` a moment later. Best-effort.
+      await loadCspExtra().catch(() => {});
       const resp = await apiFetchRaw(withSlug(API_ROUTES.collections.viewFile, slug), { query: { id: viewId } });
       return resp.ok ? { ok: true, html: await resp.text() } : { ok: false, status: resp.status };
     } catch {
@@ -114,7 +119,13 @@ configureCollectionUi({
       limit: request.limit,
       fields: request.fields?.join(",") || undefined,
     }),
-  buildViewSrcdoc: (html, boot) => buildCustomViewSrcdoc(html, boot, cspExtra.value),
+  buildViewSrcdoc: (html, boot) => {
+    // Per-render nonce: only a violation report echoing this exact nonce is
+    // trusted by the host collector, so a nested hostile iframe can't spoof it.
+    const nonce = crypto.randomUUID();
+    registerViewNonce(nonce);
+    return buildCustomViewSrcdoc(html, boot, cspExtra.value, nonce);
+  },
 
   // record CRUD + actions
   createItem: (slug, record) => apiPost<ItemMutationResponse>(withSlug(API_ROUTES.collections.items, slug), record),

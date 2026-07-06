@@ -35,9 +35,30 @@ function originOf(uri: string): string {
 
 interface ViolationMessage {
   type: string;
+  nonce?: unknown;
   blockedURI?: unknown;
   violatedDirective?: unknown;
   effectiveDirective?: unknown;
+}
+
+// Per-render nonces the host handed to legitimate custom-view srcdocs. A
+// violation report is trusted only if it echoes one of these. A nested,
+// hostile iframe inside a view has an opaque origin too, but it runs in a
+// SEPARATE document and cannot read the parent view's `window.__MC_VIEW`, so
+// it cannot forge the nonce — closing the spoofed-banner hole that an
+// `event.origin === "null"` check alone leaves open. Bounded so a long session
+// can't grow it without limit.
+const MAX_LIVE_NONCES = 64;
+const liveNonces = new Set<string>();
+
+export function registerViewNonce(nonce: string): void {
+  if (!nonce) return;
+  liveNonces.add(nonce);
+  while (liveNonces.size > MAX_LIVE_NONCES) {
+    const oldest = liveNonces.values().next().value;
+    if (oldest === undefined) break;
+    liveNonces.delete(oldest);
+  }
 }
 
 function isViolationMessage(data: unknown): data is ViolationMessage {
@@ -65,16 +86,24 @@ function recordViolation(violation: CspViolation): void {
   console.warn(`[csp] blocked ${violation.host}${directiveSuffix}. To allow it, add the host to config/csp.json — but only if you trust it.`);
 }
 
+// Decide whether a `message` event is a trusted CSP-violation report and, if
+// so, extract the actionable `{ host, directive }`. Trust requires BOTH:
+//   1. opaque origin (`event.origin === "null"`) — our custom views run
+//      `sandbox="allow-scripts"`, so a legitimate report always arrives opaque;
+//      this alone rejects an ALLOWED external iframe (e.g. a Maps embed).
+//   2. a live per-render nonce the host handed only to legitimate views — this
+//      rejects a nested hostile (also-opaque) iframe that can't read the nonce.
+// Exported (with an injected nonce predicate) for unit tests.
+export function decideViolation(origin: string, data: unknown, isLiveNonce: (nonce: string) => boolean): CspViolation | null {
+  if (origin !== "null") return null;
+  if (!isViolationMessage(data)) return null;
+  const nonce = typeof data.nonce === "string" ? data.nonce : "";
+  if (!isLiveNonce(nonce)) return null;
+  return parseCspViolationMessage(data);
+}
+
 function onMessage(event: MessageEvent): void {
-  // Only accept reports from an opaque-origin (sandboxed) frame — our custom
-  // views run `sandbox="allow-scripts"` with no `allow-same-origin`, so a
-  // legitimate report always arrives with `event.origin === "null"`. This
-  // rejects a spoofed "add this host to config/csp.json" banner posted by an
-  // ALLOWED external iframe (e.g. a Google Maps embed), which carries its real
-  // origin. The banner is informational (no auto-action), so this proportionate
-  // check is enough without threading iframe refs into this host-global listener.
-  if (event.origin !== "null") return;
-  const violation = parseCspViolationMessage(event.data);
+  const violation = decideViolation(event.origin, event.data, (nonce) => liveNonces.has(nonce));
   if (violation) recordViolation(violation);
 }
 
