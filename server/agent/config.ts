@@ -25,7 +25,13 @@ export const CONTAINER_WORKSPACE_PATH = "/home/node/mulmoclaude";
 // `@mulmoclaude/<name>` and this dir is appended to NODE_PATH — CJS
 // resolution falls through to it when the primary link fails to resolve.
 // Only mounted for win32 source builds; a no-op path elsewhere.
+//
+// NODE_PATH is CJS-only per Node's spec, so the paired
+// `mcp-esm-loader.mjs` (registered via `--import`) covers the ESM side
+// by reading each pkg's package.json under this root and returning the
+// resolved entry URL (#1982).
 const CONTAINER_WORKSPACE_MODULES_PATH = "/app/pkg_modules";
+const CONTAINER_ESM_LOADER_URL = "file:///app/server/agent/mcp-esm-loader.mjs";
 
 // `Skill` is the tool Claude Code uses to execute a discovered
 // `.claude/skills/<name>/SKILL.md`. Because `--allowedTools` is passed
@@ -312,7 +318,12 @@ function buildMulmoclaudeServer(params: { chatSessionId: string; port: number; a
     // started silently failing some time after the CLI update.
     type: "stdio",
     command,
-    args: [mcpServerPath],
+    // Docker path: register the ESM resolver hook that plugs the
+    // Windows-junction gap in the ESM loader (#1946/#1982). Passed
+    // as a Node CLI flag; tsx forwards `--import` through. No-op on
+    // Linux/macOS Docker (the hook's catch never fires). Native
+    // mode never sees this flag.
+    args: useDocker ? ["--import", CONTAINER_ESM_LOADER_URL, mcpServerPath] : [mcpServerPath],
     env: {
       SESSION_ID: chatSessionId,
       PORT: String(port),
