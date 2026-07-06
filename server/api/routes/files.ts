@@ -14,6 +14,44 @@ import { classifyAsWikiPage, writeWikiPage } from "../../workspace/wiki-pages/io
 import { log } from "../../system/logger/index.js";
 import { previewSnippet } from "../../utils/logPreview.js";
 import { publishFileChange } from "../../events/file-change.js";
+import { spawn } from "node:child_process";
+
+// Cross-platform "open this file with the host's default handler" that
+// never lets the path travel through a shell parser. Windows earlier
+// used `cmd /c start "" <path>` — `cmd` DOES tokenise the arguments,
+// so a workspace filename with `&` / `|` / `^` / a leading `-` / etc.
+// could be reinterpreted as command syntax (Codex + CodeQL flagged
+// this on #1985). `explorer.exe <path>` is fed to CreateProcess as an
+// array argv (no shell parsing) and treats the argument as a
+// filesystem path.
+//
+// Returns a promise that settles based on `spawn` vs `error` events —
+// NOT process exit. We can't tell whether the associated app actually
+// opened a window (explorer.exe returns exit code 1 even on success),
+// but we CAN distinguish "spawn succeeded" from "command not found /
+// permission denied" (e.g. `xdg-open` missing on a headless Linux
+// host). Client-side error handling depends on this signal.
+export function openInHostOs(absPath: string): Promise<boolean> {
+  const { platform } = process;
+  const [command, args] =
+    platform === "darwin" ? (["open", [absPath]] as const) : platform === "win32" ? (["explorer.exe", [absPath]] as const) : (["xdg-open", [absPath]] as const);
+  return new Promise<boolean>((resolve) => {
+    const child = spawn(command, args, { detached: true, stdio: "ignore" });
+    let settled = false;
+    child.once("error", (err) => {
+      if (settled) return;
+      settled = true;
+      log.warn("files", "open: spawn error", { platform, error: err.message });
+      resolve(false);
+    });
+    child.once("spawn", () => {
+      if (settled) return;
+      settled = true;
+      child.unref();
+      resolve(true);
+    });
+  });
+}
 
 const router = Router();
 
@@ -632,7 +670,10 @@ function resolveAndStatFile<T>(
   req: Request<object, unknown, unknown, PathQuery>,
   res: Response<T | ErrorResponse>,
 ): { relPath: string; absPath: string; stat: Stats } | null {
-  const relPath = getOptionalStringQuery(req, "path") ?? "";
+  return resolveAndStatFileByPath(getOptionalStringQuery(req, "path") ?? "", res);
+}
+
+function resolveAndStatFileByPath<T>(relPath: string, res: Response<T | ErrorResponse>): { relPath: string; absPath: string; stat: Stats } | null {
   if (!relPath) {
     badRequest(res, "path required");
     return null;
@@ -1110,6 +1151,35 @@ router.get(API_ROUTES.files.raw, (req: Request<object, unknown, unknown, PathQue
 // Returns configured reference directories as top-level TreeNode[]
 // for the file explorer. Each node's path uses the @ref/<label>
 // prefix so subsequent /dir and /content requests route correctly.
+
+// POST /api/files/open — spawn the host OS's default handler for a
+// file. Backing the "Open in OS" button on the Files view's binary /
+// unsupported preview so a `.xlsx` / `.pptx` reachable via the file
+// tree can be viewed in Excel / Keynote when in-browser preview isn't
+// available (#1985). Cross-platform: macOS `open`, Linux `xdg-open`,
+// Windows `start` (via cmd). Workspace-scoped path validation same as
+// every other files route. Accepts `path` from body OR query so a
+// swallowed body doesn't stop the button (belt + suspenders).
+interface OpenFileRequest {
+  path?: unknown;
+}
+router.post(API_ROUTES.files.open, async (req: Request<object, unknown, OpenFileRequest, PathQuery>, res: Response<{ ok: boolean } | ErrorResponse>) => {
+  const bodyPath = typeof req.body?.path === "string" ? req.body.path : "";
+  const queryPath = getOptionalStringQuery(req, "path") ?? "";
+  const requestedPath = bodyPath || queryPath;
+  if (!requestedPath) {
+    badRequest(res, "path required");
+    return;
+  }
+  const ctx = resolveAndStatFileByPath(requestedPath, res);
+  if (!ctx) return;
+  const spawned = await openInHostOs(ctx.absPath);
+  if (!spawned) {
+    serverError(res, "Failed to launch OS file handler");
+    return;
+  }
+  res.json({ ok: true });
+});
 
 router.get(API_ROUTES.files.refRoots, async (_req: Request, res: Response<TreeNode[]>) => {
   log.info("files", "GET ref-roots: start");

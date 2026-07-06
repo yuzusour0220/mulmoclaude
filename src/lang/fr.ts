@@ -448,6 +448,9 @@ const frMessages = {
     redo: "Rétablir",
     editMarp: "Modifier la source de la diapositive",
     marpEditorLabel: "Source des diapositives Marp",
+    openInOs: "Ouvrir dans le système",
+    openingInOs: "Ouverture…",
+    openInOsFailed: "Échec de l'ouverture dans le système",
   },
   filesView: {
     chatPlaceholder: "Posez une question sur ce fichier…",

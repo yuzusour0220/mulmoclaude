@@ -452,6 +452,9 @@ const deMessages = {
     redo: "Wiederholen",
     editMarp: "Folienquelle bearbeiten",
     marpEditorLabel: "Marp-Folienquelle",
+    openInOs: "Im Betriebssystem oeffnen",
+    openingInOs: "Wird geoeffnet…",
+    openInOsFailed: "Konnte nicht im Betriebssystem geoeffnet werden",
   },
   filesView: {
     chatPlaceholder: "Frage zu dieser Datei stellen…",
