@@ -37,9 +37,54 @@ export interface InstallerPackageJson {
   private: true;
   description: string;
   dependencies: Record<string, string>;
+  /** npm `overrides` pinning the launcher's first-party workspace deps to local
+   *  `file:` tarballs. Omitted when the map is empty. */
+  overrides?: Record<string, string>;
 }
 
-export function buildInstallerPackageJson(options?: { tarballName?: string }): InstallerPackageJson;
+export function buildInstallerPackageJson(options?: { tarballName?: string; overrides?: Record<string, string> }): InstallerPackageJson;
+
+/** One workspace package discovered from the root `workspaces` globs. */
+export interface WorkspacePackage {
+  name: string;
+  dir: string;
+  private: boolean;
+  /** dependencies + peerDependencies + optionalDependencies names. */
+  deps: string[];
+}
+
+/** Result of the injectable command runner (npm pack). */
+export interface RunCommandResult {
+  code: number | null;
+  timedOut: boolean;
+  stdout: string;
+  stderr: string;
+}
+
+/** Enumerate every workspace package by expanding the root `workspaces` globs. */
+export function enumerateWorkspacePackages(
+  root: string,
+  options?: {
+    readFileImpl?: (filePath: string, encoding: "utf8") => Promise<string>;
+    readdirImpl?: (dirPath: string, options: { withFileTypes: true }) => Promise<Array<{ name: string; isDirectory(): boolean }>>;
+  },
+): Promise<WorkspacePackage[]>;
+
+/** Pure BFS: transitive first-party (workspace) deps reachable from `rootName`,
+ *  excluding the root itself. Third-party deps are naturally excluded. */
+export function computeFirstPartyClosure(packages: Array<{ name: string; deps: string[] }>, rootName: string): Set<string>;
+
+export interface PackWorkspaceOverridesOptions {
+  root: string;
+  packDir: string;
+  runCommandImpl?: (cmd: string, args: string[], options?: { cwd?: string; timeoutMs?: number; env?: NodeJS.ProcessEnv }) => Promise<RunCommandResult>;
+  enumerateImpl?: (root: string) => Promise<WorkspacePackage[]>;
+  packTimeoutMs?: number;
+}
+
+/** Pack the launcher's first-party dependency closure to local tarballs and
+ *  return an npm `overrides` map `{ name: "file:<abs.tgz>" }`. */
+export function packWorkspaceOverrides(options: PackWorkspaceOverridesOptions): Promise<Record<string, string>>;
 
 export interface RunTarballSmokeOptions {
   root?: string;
