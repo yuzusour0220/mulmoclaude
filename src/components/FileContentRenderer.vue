@@ -271,8 +271,9 @@ import type { JsonToken, JsonlLine } from "../utils/format/jsonSyntax";
 import { formatScalarField, type MarkdownDocView } from "../composables/useMarkdownDoc";
 import { rewriteMarkdownImageRefs } from "../utils/image/rewriteMarkdownImageRefs";
 import { API_ROUTES } from "../config/apiRoutes";
-import { apiPost } from "../utils/api";
 import { useSharePack } from "../composables/useSharePack";
+import { useOpenInOs } from "../composables/useOpenInOs";
+import { toRef } from "vue";
 import { descriptorForPath, jsonEditableByPolicy } from "../config/systemFileDescriptors";
 import { isMarpDocument } from "../utils/markdown/marpDetect";
 import { buildPdfFilename } from "../utils/files/filename";
@@ -349,39 +350,9 @@ const marpPdfFilename = computed(() => {
   return buildPdfFilename({ name: stem, fallback: "slides" });
 });
 
-// Inline JSON editor (#833 Phase 1). Available only for policy-editable
-// JSON config files; the read-only pretty-print stays the default.
 // "Open in OS" button on the binary / unsupported fallback (#1985).
-// Success just means the server successfully spawned the OS handler;
-// whether the app actually surfaces a window is out of scope.
-const openInOsBusy = ref(false);
-const openInOsError = ref<string | null>(null);
-// Reset button state whenever the user navigates to a different file —
-// otherwise an error from file A would linger while viewing file B
-// (Codex review on #1988).
-watch(
-  () => props.selectedPath,
-  () => {
-    openInOsBusy.value = false;
-    openInOsError.value = null;
-  },
-);
-async function openInOs(): Promise<void> {
-  if (!props.selectedPath) return;
-  openInOsBusy.value = true;
-  openInOsError.value = null;
-  try {
-    // Send path in BOTH the body and the query — the server accepts
-    // either. Defensive against a proxy/middleware chain that swallows
-    // the JSON body (#1985 early report: "path required" back to a
-    // request whose body should have carried the path).
-    const url = `${API_ROUTES.files.open}?path=${encodeURIComponent(props.selectedPath)}`;
-    const result = await apiPost<{ ok: boolean }>(url, { path: props.selectedPath });
-    if (!result.ok) openInOsError.value = result.error || t("fileContentRenderer.openInOsFailed");
-  } finally {
-    openInOsBusy.value = false;
-  }
-}
+// State machine + fetch lives in useOpenInOs so it's unit-testable.
+const { busy: openInOsBusy, error: openInOsError, open: openInOs } = useOpenInOs(toRef(props, "selectedPath"), () => t("fileContentRenderer.openInOsFailed"));
 
 const jsonEditing = ref(false);
 const jsonDraft = ref("");
