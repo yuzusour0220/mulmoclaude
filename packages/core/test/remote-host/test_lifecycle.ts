@@ -12,7 +12,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
 import { createRemoteHost, type RemoteHostDeps } from "../../src/remote-host/server/lifecycle.js";
-import type { Channel } from "../../src/remote-host/index.js";
+import type { Channel, Command } from "../../src/remote-host/index.js";
 
 const HOST_ID = "test-host";
 
@@ -20,19 +20,21 @@ interface FakeRunner {
   channel: Channel;
   stopped: boolean;
   onClosed?: () => void;
+  onExpire?: (command: Command, uid: string) => void | Promise<void>;
   stop: () => void;
 }
 
 // Build a lifecycle backed by fakes. signIn maps a token to a uid (and updates
 // the "current user"), except the token "bad" which rejects — mirroring
-// signInWithCredential leaving currentUser unchanged on failure.
-const makeHarness = () => {
+// signInWithCredential leaving currentUser unchanged on failure. An optional
+// `onExpire` is forwarded into deps so a test can assert it reaches the runner.
+const makeHarness = (onExpire?: RemoteHostDeps["onExpire"]) => {
   const runners: FakeRunner[] = [];
   let uid: string | null = null;
   let signOutCount = 0;
 
   const startRunner: RemoteHostDeps["startRunner"] = (channel, _handlers, options) => {
-    const runner: FakeRunner = { channel, stopped: false, onClosed: options?.onClosed, stop: () => (runner.stopped = true) };
+    const runner: FakeRunner = { channel, stopped: false, onClosed: options?.onClosed, onExpire: options?.onExpire, stop: () => (runner.stopped = true) };
     runners.push(runner);
     return runner.stop;
   };
@@ -51,6 +53,7 @@ const makeHarness = () => {
     currentUid: () => uid,
     startRunner,
     handlers: {},
+    onExpire,
   };
 
   return { rh: createRemoteHost(deps), runners, signOutCount: () => signOutCount };
@@ -106,6 +109,13 @@ describe("createRemoteHost lifecycle", () => {
     // A fresh connect still works after a fatal death.
     await rh.connect("t2");
     assert.deepEqual(rh.status(), { connected: true, uid: "uid-t2" });
+  });
+
+  it("threads deps.onExpire into the runner options", async () => {
+    const onExpire = () => undefined;
+    const { rh, runners } = makeHarness(onExpire);
+    await rh.connect("t1");
+    assert.equal(runners[0].onExpire, onExpire);
   });
 
   it("onClosed from a superseded runner does not clear the current one", async () => {

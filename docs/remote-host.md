@@ -124,7 +124,7 @@ presence doc** the remote already listens to:
 
 ```jsonc
 // users/{uid}/hosts/mulmoclaude
-{ "online": true, "hostId": "mulmoclaude", "protocolVersion": 1,
+{ "online": true, "hostId": "mulmoclaude", "protocolVersion": 2,
   "capabilities": ["listCollections", "getCollection", "startChat", …],
   "updatedAt": <serverTimestamp> }
 ```
@@ -138,9 +138,13 @@ presence doc** the remote already listens to:
   registering a handler in `handlers/index.ts` is the **only** step needed to
   advertise it — there is no second list to keep in sync (the same
   "derive, don't duplicate" discipline as the handler table itself).
-- **`protocolVersion`** (`REMOTE_HOST_PROTOCOL_VERSION`, currently `1`) lets the
+- **`protocolVersion`** (`REMOTE_HOST_PROTOCOL_VERSION`, currently `2`) lets the
   remote gate on wire-protocol compatibility independent of the method list; bump
   it when the command channel changes shape in a way the remote must react to.
+  **v2** signals offline-queue support (the host honours `expiresAt` — deletes an
+  expired command + its staged uploads instead of spawning a stale chat); a remote
+  MUST see `protocolVersion >= 2` before queueing a `startChat` while offline (see
+  "Offline queueing").
 - The payload shape (`HostPresence`) is a **browser-safe** export both repos
   compile against, so host and mobile client can't drift on the contract.
 - **Claim exactly once.** `claimCommand` runs a `runTransaction` that reads the
@@ -232,6 +236,56 @@ backstop (follow-up, not v1). See `plans/feat-remote-chat-image-attachments.md`.
 
 ---
 
+## Offline queueing (`startChat` while the host is asleep)
+
+The command channel is a **durable Firestore queue**, so `startChat` doesn't need
+the host awake *now*. A remote can write the command (and stage its attachments)
+while the host is offline; the host **drains everything on reconnect** because the
+runner's `onSnapshot` reports every pre-existing `queued` doc as an `added` change
+the instant it re-attaches. No flush call, no separate channel — the same
+`commands` subcollection, treated slightly differently on both ends. See
+`plans/feat-remote-offline-queue.md`.
+
+Three optional, backward-compatible fields on the command doc drive it (absent ⇒
+today's exact behaviour):
+
+```jsonc
+{ "createdAt": 1751760000000,   // enqueue time (epoch ms) — replay ordering
+  "expiresAt": 1752364800000,   // deadline (epoch ms) — past it the host deletes it
+  "queuedOffline": true }       // emitted while the host was offline
+```
+
+- **Best-effort drain order.** The runner sorts each drained batch by `createdAt`
+  **in memory** (oldest first) to bias which command starts first — but commands
+  are processed concurrently and **out-of-order completion is by design** (chat is
+  asynchronous), so this is not a strict ordering guarantee. In-memory rather than
+  `orderBy("createdAt")` on the query because a Firestore `orderBy` silently
+  excludes pre-offline-queue docs that have no `createdAt`.
+- **Expiry ⇒ delete, not error.** A command past `expiresAt` is removed entirely:
+  the runner calls the host's `onExpire(command)` — which deletes the staged
+  attachment uploads (`server/remoteHost/onExpire.ts`) — then `deleteDoc`s it. It
+  never reaches a handler and leaves no `error` doc. Both steps are
+  best-effort/idempotent, so a snapshot replay of the same expired doc is
+  harmless. (Contrast a command that *ran* and failed validation — e.g. a stale
+  role — which keeps its `error` so the phone can explain it.)
+- **Cleanup ownership.** Every staged upload now has a definite reaper — the host
+  on ingest-success, the host on expiry, or the remote on user-delete — so the
+  Storage lifecycle TTL drops to a last-resort backstop for the one case nobody
+  covers: a host that never reconnects at all.
+- **TTL-below-expiry invariant.** The `expiresAt` horizon **must be shorter than**
+  the Storage lifecycle TTL, or a still-valid queued command could find its staged
+  attachment already swept. Chosen pair: **7-day expiry under a 14-day TTL.**
+- **Protocol-gated.** Offline queueing requires the host to honour `expiresAt`, so
+  it is advertised via `protocolVersion` (v2). A remote MUST see `protocolVersion
+  >= 2` in the presence doc before queueing offline — a v1 host would ignore
+  `expiresAt` and spawn stale chats on reconnect with uploads never cleaned up.
+- The remote lists its own `queued` commands and can **delete** one before the
+  host drains it (doc + staged uploads), and exempts `queuedOffline` commands from
+  its ack-timeout rollback (that cleanup is now the host's / user's job). These
+  are the mulmoserver-client half.
+
+---
+
 ## API surface (`server/api/routes/remoteHost.ts`)
 
 Bearer-guarded loopback routes (paths under `API_ROUTES.remoteHost` in
@@ -268,9 +322,10 @@ view selector.
 
 ## Roadmap / provenance
 
-Every phase's **host** side is shipped in this repo; the outstanding half each
-names is the external mulmoserver client (which depends on the published
-`@mulmoclaude/core` contract). Design rationale lives in the plan files:
+Every phase's **host** side is shipped in this repo (rows marked _(planned)_ are
+designed but not yet built); the outstanding half each names is the external
+mulmoserver client (which depends on the published `@mulmoclaude/core` contract).
+Design rationale lives in the plan files:
 
 | Plan | Phase / feature |
 |---|---|
@@ -282,6 +337,7 @@ names is the external mulmoserver client (which depends on the published
 | `plans/feat-remote-chat-image-attachments.md` | `startChat` attachments + `ingestAttachments` |
 | `plans/feat-1955-remote-host-help.md` | Popover help text + mobile URL link |
 | `plans/feat-remote-host-capabilities.md` | Capability advertisement in the presence doc (`HostPresence`, `protocolVersion`) |
+| `plans/feat-remote-offline-queue.md` | _(planned)_ Queue `startChat` while the host is offline — drain on reconnect, `expiresAt` + host-side expiry delete (doc + attachments), user-managed pending list |
 
 > **Not to be confused with** MulmoBridge's "relay" (a Cloudflare Workers message
 > relay — see `docs/message_apps/relay/`). That is a separate messaging feature;

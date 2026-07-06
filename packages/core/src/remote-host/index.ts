@@ -45,7 +45,27 @@ export interface Command {
   result: JsonValue;
   error: CommandError | null;
   createdBy: "remote" | "host";
+  // Offline-queue fields (all optional; absent ⇒ pre-offline-queue behaviour, so
+  // this is backward-compatible with every deployed client). Epoch-millisecond
+  // NUMBERS set by the remote at enqueue time — deliberately plain numbers, not
+  // Firestore Timestamps, so `isExpired` / `byCreatedAt` stay pure + browser-safe
+  // and unit-testable without a Firestore fake. Clock skew over a multi-day expiry
+  // window is immaterial. See plans/feat-remote-offline-queue.md.
+  createdAt?: number; // enqueue time — age/display + best-effort dispatch bias (NOT a strict order guarantee; chat is async)
+  expiresAt?: number; // deadline; past it the host deletes the command + its staged attachments
+  queuedOffline?: boolean; // emitted while the host was offline (gates the remote's attachment rollback)
 }
+
+// A command is expired once `now` reaches its remote-set deadline. Absent
+// `expiresAt` ⇒ it never expires (pre-offline-queue commands). Pure with an
+// injected `now` for deterministic tests; the runner passes `Date.now()`.
+export const isExpired = (command: Pick<Command, "expiresAt">, now: number): boolean => typeof command.expiresAt === "number" && now >= command.expiresAt;
+
+// Best-effort dispatch bias for a drained batch: oldest enqueue first. This is
+// NOT an ordering guarantee — commands run concurrently and may complete out of
+// order (chat is asynchronous, by design); it only nudges which one starts first.
+// A command with no `createdAt` sorts as oldest (0) so it is never starved.
+export const byCreatedAt = (left: Pick<Command, "createdAt">, right: Pick<Command, "createdAt">): number => (left.createdAt ?? 0) - (right.createdAt ?? 0);
 
 export type CommandHandler = (params: JsonObject) => JsonValue | Promise<JsonValue>;
 export type CommandHandlers = Record<string, CommandHandler>;
@@ -53,7 +73,13 @@ export type CommandHandlers = Record<string, CommandHandler>;
 // Bumped when the command-channel wire protocol changes in a way the remote must
 // gate on. Advertised in the presence doc so the remote can check compatibility
 // before issuing commands.
-export const REMOTE_HOST_PROTOCOL_VERSION = 1;
+//
+// v2: offline queueing. The host honours `expiresAt` (deletes an expired command
+// + its staged attachments instead of spawning a stale chat). A remote MUST see
+// protocolVersion >= 2 before queueing a startChat while the host is offline —
+// a v1 host silently ignores `expiresAt`, so a queued chat would spawn stale on
+// reconnect with its uploads never cleaned up.
+export const REMOTE_HOST_PROTOCOL_VERSION = 2;
 
 // The presence doc's payload: online flag + a capability advertisement. Written
 // by the host on every heartbeat; the remote reads it from the presence listener
