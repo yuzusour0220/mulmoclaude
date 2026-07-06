@@ -154,13 +154,23 @@ jobs:
           Write-Host "Windows workspace: $wsWin"
           Write-Host "WSL2 mount path:   $wsLinux"
 
+          # Bind each preset package's dev-workspace path to
+          # /app/pkg_modules/@mulmoclaude/<name>. `packages/plugins` is
+          # mounted whole; the container-side symlinks resolve to the
+          # individual package roots. `packages/core` is separate (it
+          # lives at packages/core, not packages/plugins/core). Keep in
+          # sync with server/plugins/preset-list.ts when a preset is
+          # added or removed — the probe iterates PRESET_PLUGINS and
+          # will fail if a mount is missing.
           wsl -d Ubuntu-22.04 -u root -- docker run --rm `
             -v "${wsLinux}/node_modules:/app/node_modules:ro" `
             -v "${wsLinux}/packages/plugins/x-plugin:/app/pkg_modules/@mulmoclaude/x-plugin:ro" `
             -v "${wsLinux}/packages/plugins/spotify-plugin:/app/pkg_modules/@mulmoclaude/spotify-plugin:ro" `
             -v "${wsLinux}/packages/plugins/debug-plugin:/app/pkg_modules/@mulmoclaude/debug-plugin:ro" `
+            -v "${wsLinux}/packages/plugins/edgar-plugin:/app/pkg_modules/@mulmoclaude/edgar-plugin:ro" `
+            -v "${wsLinux}/packages/plugins/email-plugin:/app/pkg_modules/@mulmoclaude/email-plugin:ro" `
             -v "${wsLinux}/packages/core:/app/pkg_modules/@mulmoclaude/core:ro" `
-            -v "${wsLinux}/server/plugins:/app/server-plugins:ro" ` # includes resolvePresetRoot.ts + preset-list.ts
+            -v "${wsLinux}/server/plugins:/app/server-plugins:ro" `
             -v "${wsLinux}/test/sandbox-repro:/repro:ro" `
             -e NODE_PATH=/app/node_modules:/app/pkg_modules `
             -w /app `
