@@ -8,7 +8,7 @@
 import { DocumentReference, Firestore, onSnapshot, query, runTransaction, serverTimestamp, setDoc, updateDoc, where } from "firebase/firestore";
 
 import { errorMessage } from "../../collection/core/errorMessage.js";
-import { Channel, Command, CommandHandler, CommandHandlers, JsonObject, commandsCollection, hostDoc } from "../index.js";
+import { Channel, Command, CommandHandler, CommandHandlers, JsonObject, buildHostPresence, commandsCollection, hostDoc } from "../index.js";
 
 const DEFAULT_HEARTBEAT_MS = 60_000;
 
@@ -85,8 +85,11 @@ const processCommand = async (firestore: Firestore, ref: DocumentReference, hand
 // Returns a stop function that goes offline and detaches the listener.
 export const startHostRunner = (firestore: Firestore, channel: Channel, handlers: CommandHandlers, options: HostRunnerOptions = {}): (() => void) => {
   const presence = hostDoc(firestore, channel);
+  // Advertise online/offline + the capability set (method names + protocol
+  // version) on the same doc the remote already listens to for presence.
+  const writePresence = (online: boolean) => setDoc(presence, { ...buildHostPresence(channel, handlers, online), updatedAt: serverTimestamp() }).catch(noop);
   const announce = () => {
-    setDoc(presence, { online: true, updatedAt: serverTimestamp() }).catch(noop);
+    writePresence(true);
   };
   announce();
   const beat = setInterval(announce, options.heartbeatMs ?? DEFAULT_HEARTBEAT_MS);
@@ -108,14 +111,14 @@ export const startHostRunner = (firestore: Firestore, channel: Channel, handlers
       // write online:false) so remotes see the host as offline instead of a
       // live host that silently consumes no commands.
       clearInterval(beat);
-      setDoc(presence, { online: false, updatedAt: serverTimestamp() }).catch(noop);
+      writePresence(false);
       options.onClosed?.();
     },
   );
 
   return () => {
     clearInterval(beat);
-    setDoc(presence, { online: false, updatedAt: serverTimestamp() }).catch(noop);
+    writePresence(false);
     unsubscribe();
   };
 };
