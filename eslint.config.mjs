@@ -259,6 +259,13 @@ export default [
       complexity: ["error", { max: 15 }],
       "max-depth": ["error", { max: 4 }],
       "max-params": ["error", { max: 6 }],
+      // Soft-launched as `warn` per CLAUDE.md's 20-line target — starts
+      // as advisory nudges so existing violations don't block CI. Bumping
+      // to `error` (or lowering `max`) once the count is drained is a
+      // one-line follow-up. skipBlankLines + skipComments so heavily-
+      // documented small functions don't count as "long"; IIFEs kept in
+      // so top-level `(() => { … })()` blocks are measured too.
+      "max-lines-per-function": ["warn", { max: 50, skipBlankLines: true, skipComments: true, IIFEs: true }],
       quotes: "off",
       "no-shadow": "error",
       "no-param-reassign": "error",
@@ -345,7 +352,7 @@ export default [
     // to just those categories so no-shadow / cognitive-complexity /
     // no-unused-vars / no-floating-promises etc. stay at `error`
     // across the whole repo — those *do* catch real bugs in tests.
-    files: ["test/**/*.{ts,js}", "e2e/**/*.{ts,js}", "packages/**/test/**/*.{ts,js}"],
+    files: ["test/**/*.{ts,js}", "e2e/**/*.{ts,js}", "e2e-live/**/*.{ts,js}", "packages/**/test/**/*.{ts,js}"],
     languageOptions: {
       globals: {
         ...globals.browser,
@@ -362,6 +369,12 @@ export default [
       // `no-explicit-any` at `error` in production code; demote to
       // warn inside tests.
       "@typescript-eslint/no-explicit-any": "warn",
+      // Test files (describe/it blocks, seed helpers, fixture
+      // builders) legitimately have long function bodies. The
+      // 20-line target CLAUDE.md sets is for production code
+      // readability — it doesn't map onto a describe() block that
+      // happens to hold ten it() cases.
+      "max-lines-per-function": "off",
     },
   },
   {
