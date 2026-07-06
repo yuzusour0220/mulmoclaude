@@ -238,8 +238,21 @@
         <video :key="selectedPath" :src="rawUrl(selectedPath)" controls preload="metadata" class="max-w-full max-h-full" />
       </div>
       <!-- Binary or too-large -->
-      <div v-else class="p-4 text-sm text-gray-500">
+      <div v-else class="p-4 text-sm text-gray-500 flex flex-col gap-3">
         <template v-if="'message' in content">{{ content.message }}</template>
+        <div v-if="selectedPath">
+          <button
+            type="button"
+            class="h-8 px-3 flex items-center gap-1 rounded border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 font-medium disabled:opacity-50"
+            :disabled="openInOsBusy"
+            data-testid="file-open-in-os"
+            @click="openInOs"
+          >
+            <span class="material-icons text-sm">open_in_new</span>
+            {{ openInOsBusy ? t("fileContentRenderer.openingInOs") : t("fileContentRenderer.openInOs") }}
+          </button>
+          <p v-if="openInOsError" class="mt-2 text-xs text-red-600">{{ openInOsError }}</p>
+        </div>
       </div>
     </template>
   </div>
@@ -259,6 +272,8 @@ import { formatScalarField, type MarkdownDocView } from "../composables/useMarkd
 import { rewriteMarkdownImageRefs } from "../utils/image/rewriteMarkdownImageRefs";
 import { API_ROUTES } from "../config/apiRoutes";
 import { useSharePack } from "../composables/useSharePack";
+import { useOpenInOs } from "../composables/useOpenInOs";
+import { toRef } from "vue";
 import { descriptorForPath, jsonEditableByPolicy } from "../config/systemFileDescriptors";
 import { isMarpDocument } from "../utils/markdown/marpDetect";
 import { buildPdfFilename } from "../utils/files/filename";
@@ -335,8 +350,10 @@ const marpPdfFilename = computed(() => {
   return buildPdfFilename({ name: stem, fallback: "slides" });
 });
 
-// Inline JSON editor (#833 Phase 1). Available only for policy-editable
-// JSON config files; the read-only pretty-print stays the default.
+// "Open in OS" button on the binary / unsupported fallback (#1985).
+// State machine + fetch lives in useOpenInOs so it's unit-testable.
+const { busy: openInOsBusy, error: openInOsError, open: openInOs } = useOpenInOs(toRef(props, "selectedPath"), () => t("fileContentRenderer.openInOsFailed"));
+
 const jsonEditing = ref(false);
 const jsonDraft = ref("");
 

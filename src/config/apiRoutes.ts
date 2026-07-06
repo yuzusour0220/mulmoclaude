@@ -115,6 +115,13 @@ const HOST_API_ROUTES = {
     create: "/api/files/create",
     raw: "/api/files/raw",
     refRoots: "/api/files/ref-roots",
+    /** POST { path } — spawn the host OS's default handler for the
+     *  file (`open` on macOS, `xdg-open` on Linux, `start` on
+     *  Windows). The Files view exposes this as an "Open in OS"
+     *  button on binary / unsupported previews so `.xlsx` / `.pptx`
+     *  can be viewed in the native app when in-browser preview
+     *  isn't available (#1985). */
+    open: "/api/files/open",
   },
 
   // `html` group migrated to META — see `src/plugins/presentHtml/meta.ts`.
