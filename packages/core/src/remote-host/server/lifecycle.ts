@@ -11,7 +11,7 @@
 //
 // Single-account, single-host per instance, in-memory session: a host restart
 // drops the session and needs a re-connect.
-import type { Channel, CommandHandlers } from "../index.js";
+import type { Channel, Command, CommandHandlers } from "../index.js";
 import type { HostRunnerOptions } from "./hostRunner.js";
 
 export interface RemoteHostStatus {
@@ -38,6 +38,10 @@ export interface RemoteHostDeps {
   currentUid: () => string | null;
   startRunner: (channel: Channel, handlers: CommandHandlers, options: HostRunnerOptions) => () => void;
   handlers: CommandHandlers;
+  // Optional host-specific cleanup for a command the runner drops as expired
+  // (e.g. delete its staged attachment uploads). Threaded verbatim into the
+  // runner's `onExpire`; absent ⇒ an expired doc is just deleted.
+  onExpire?: (command: Command) => void | Promise<void>;
   log?: RemoteHostLogger;
 }
 
@@ -81,6 +85,7 @@ export const createRemoteHost = (deps: RemoteHostDeps): RemoteHostLifecycle => {
   const startRunner = (uid: string) => {
     const runner = deps.startRunner({ uid, hostId: deps.hostId }, deps.handlers, {
       onEvent: (event) => log.debug(`host event: ${event.phase} ${event.method}`),
+      onExpire: deps.onExpire,
       // The listener died fatally (heartbeat already stopped + offline written);
       // clear the handle so status() stops reporting connected — but only if it
       // still points at THIS runner (a later reconnect may have replaced it).

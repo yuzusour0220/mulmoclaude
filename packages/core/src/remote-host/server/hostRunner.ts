@@ -5,10 +5,21 @@
 // ported from ../mulmoserver). The only signature change vs. that copy: the
 // `firestore` instance is a parameter (each host supplies its own Firebase init),
 // and the heartbeat interval is an option (defaults to one minute).
-import { DocumentReference, Firestore, onSnapshot, query, runTransaction, serverTimestamp, setDoc, updateDoc, where } from "firebase/firestore";
+import { DocumentReference, Firestore, deleteDoc, onSnapshot, query, runTransaction, serverTimestamp, setDoc, updateDoc, where } from "firebase/firestore";
 
 import { errorMessage } from "../../collection/core/errorMessage.js";
-import { Channel, Command, CommandHandler, CommandHandlers, JsonObject, buildHostPresence, commandsCollection, hostDoc } from "../index.js";
+import {
+  Channel,
+  Command,
+  CommandHandler,
+  CommandHandlers,
+  JsonObject,
+  buildHostPresence,
+  byCreatedAt,
+  commandsCollection,
+  hostDoc,
+  isExpired,
+} from "../index.js";
 
 const DEFAULT_HEARTBEAT_MS = 60_000;
 
@@ -25,6 +36,12 @@ export interface HostRunnerOptions {
   // the runner handle so status() no longer reports connected. NOT called on a
   // normal stop().
   onClosed?: () => void;
+  // Called when a command is dropped for being past its `expiresAt`, BEFORE the
+  // doc is deleted, so the host can clean up out-of-band resources the command
+  // referenced (e.g. staged attachment uploads in Storage). Best-effort: a throw
+  // is logged via onEvent and does NOT block the doc deletion. Absent ⇒ the
+  // expired doc is simply deleted with no extra cleanup.
+  onExpire?: (command: Command) => void | Promise<void>;
   // Presence heartbeat interval; defaults to one minute.
   heartbeatMs?: number;
 }
@@ -64,19 +81,46 @@ const runHandler = async (ref: DocumentReference, claim: Claim, handler: Command
   }
 };
 
-const processCommand = async (firestore: Firestore, ref: DocumentReference, handlers: CommandHandlers, onEvent?: HostRunnerOptions["onEvent"]) => {
+// A command past its deadline is removed entirely rather than run: give the host
+// a chance to clean up out-of-band resources (staged attachments), then delete
+// the doc so it is neither reprocessed nor left as a stale error. Both steps are
+// best-effort/idempotent, so a snapshot replay surfacing the same expired doc
+// twice is harmless (no claim transaction needed — see plan edge #3).
+const expireCommand = async (ref: DocumentReference, command: Command, options: HostRunnerOptions) => {
+  try {
+    await options.onExpire?.(command);
+  } catch (error) {
+    options.onEvent?.({ phase: "error", method: command.method, message: `onExpire failed: ${errorMessage(error)}` });
+  }
+  await deleteDoc(ref).catch(noop);
+  options.onEvent?.({ phase: "done", method: command.method, message: "expired" });
+};
+
+const processCommand = async (
+  firestore: Firestore,
+  ref: DocumentReference,
+  command: Command,
+  handlers: CommandHandlers,
+  options: HostRunnerOptions,
+  now: number,
+) => {
+  // Drop an expired command before claiming it — it must never reach a handler.
+  if (isExpired(command, now)) {
+    await expireCommand(ref, command, options);
+    return;
+  }
   const claim = await claimCommand(firestore, ref);
   if (!claim) {
     return;
   }
-  onEvent?.({ phase: "received", method: claim.method });
+  options.onEvent?.({ phase: "received", method: claim.method });
   const handler: CommandHandler | undefined = handlers[claim.method];
   if (!handler) {
     await writeError(ref, "unknown_method", `No handler for method: ${claim.method}`);
-    onEvent?.({ phase: "error", method: claim.method, message: "unknown method" });
+    options.onEvent?.({ phase: "error", method: claim.method, message: "unknown method" });
     return;
   }
-  onEvent?.(await runHandler(ref, claim, handler));
+  options.onEvent?.(await runHandler(ref, claim, handler));
 };
 
 // startHostRunner subscribes to queued commands for the given channel and runs
@@ -98,10 +142,18 @@ export const startHostRunner = (firestore: Firestore, channel: Channel, handlers
   const unsubscribe = onSnapshot(
     queuedCommands,
     (snapshot) => {
-      snapshot.docChanges().forEach((change) => {
-        if (change.type === "added") {
-          processCommand(firestore, change.doc.ref, handlers, options.onEvent).catch(noop);
-        }
+      const now = Date.now();
+      // Replay a drained batch oldest-first. We sort in memory rather than
+      // orderBy("createdAt") on the query because a Firestore orderBy silently
+      // EXCLUDES docs missing the ordered field — which would drop every
+      // pre-offline-queue command (no createdAt) from the queue entirely.
+      const added = snapshot
+        .docChanges()
+        .filter((change) => change.type === "added")
+        .map((change) => ({ ref: change.doc.ref, command: change.doc.data() as Command }))
+        .sort((left, right) => byCreatedAt(left.command, right.command));
+      added.forEach(({ ref, command }) => {
+        processCommand(firestore, ref, command, handlers, options, now).catch(noop);
       });
     },
     (error) => {

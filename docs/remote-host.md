@@ -232,6 +232,50 @@ backstop (follow-up, not v1). See `plans/feat-remote-chat-image-attachments.md`.
 
 ---
 
+## Offline queueing (`startChat` while the host is asleep)
+
+The command channel is a **durable Firestore queue**, so `startChat` doesn't need
+the host awake *now*. A remote can write the command (and stage its attachments)
+while the host is offline; the host **drains everything on reconnect** because the
+runner's `onSnapshot` reports every pre-existing `queued` doc as an `added` change
+the instant it re-attaches. No flush call, no separate channel — the same
+`commands` subcollection, treated slightly differently on both ends. See
+`plans/feat-remote-offline-queue.md`.
+
+Three optional, backward-compatible fields on the command doc drive it (absent ⇒
+today's exact behaviour):
+
+```jsonc
+{ "createdAt": 1751760000000,   // enqueue time (epoch ms) — replay ordering
+  "expiresAt": 1752364800000,   // deadline (epoch ms) — past it the host deletes it
+  "queuedOffline": true }       // emitted while the host was offline
+```
+
+- **Ordered drain.** The runner sorts each drained batch by `createdAt` **in
+  memory** (oldest first) — deliberately *not* `orderBy("createdAt")` on the
+  query, which would silently exclude pre-offline-queue docs that have no
+  `createdAt` and drop them from the queue entirely.
+- **Expiry ⇒ delete, not error.** A command past `expiresAt` is removed entirely:
+  the runner calls the host's `onExpire(command)` — which deletes the staged
+  attachment uploads (`server/remoteHost/onExpire.ts`) — then `deleteDoc`s it. It
+  never reaches a handler and leaves no `error` doc. Both steps are
+  best-effort/idempotent, so a snapshot replay of the same expired doc is
+  harmless. (Contrast a command that *ran* and failed validation — e.g. a stale
+  role — which keeps its `error` so the phone can explain it.)
+- **Cleanup ownership.** Every staged upload now has a definite reaper — the host
+  on ingest-success, the host on expiry, or the remote on user-delete — so the
+  Storage lifecycle TTL drops to a last-resort backstop for the one case nobody
+  covers: a host that never reconnects at all.
+- **TTL-below-expiry invariant.** The `expiresAt` horizon **must be shorter than**
+  the Storage lifecycle TTL, or a still-valid queued command could find its staged
+  attachment already swept. Chosen pair: **7-day expiry under a 14-day TTL.**
+- The remote lists its own `queued` commands and can **delete** one before the
+  host drains it (doc + staged uploads), and exempts `queuedOffline` commands from
+  its ack-timeout rollback (that cleanup is now the host's / user's job). These
+  are the mulmoserver-client half.
+
+---
+
 ## API surface (`server/api/routes/remoteHost.ts`)
 
 Bearer-guarded loopback routes (paths under `API_ROUTES.remoteHost` in
@@ -268,9 +312,10 @@ view selector.
 
 ## Roadmap / provenance
 
-Every phase's **host** side is shipped in this repo; the outstanding half each
-names is the external mulmoserver client (which depends on the published
-`@mulmoclaude/core` contract). Design rationale lives in the plan files:
+Every phase's **host** side is shipped in this repo (rows marked _(planned)_ are
+designed but not yet built); the outstanding half each names is the external
+mulmoserver client (which depends on the published `@mulmoclaude/core` contract).
+Design rationale lives in the plan files:
 
 | Plan | Phase / feature |
 |---|---|
@@ -282,6 +327,7 @@ names is the external mulmoserver client (which depends on the published
 | `plans/feat-remote-chat-image-attachments.md` | `startChat` attachments + `ingestAttachments` |
 | `plans/feat-1955-remote-host-help.md` | Popover help text + mobile URL link |
 | `plans/feat-remote-host-capabilities.md` | Capability advertisement in the presence doc (`HostPresence`, `protocolVersion`) |
+| `plans/feat-remote-offline-queue.md` | _(planned)_ Queue `startChat` while the host is offline — drain on reconnect, `expiresAt` + host-side expiry delete (doc + attachments), user-managed pending list |
 
 > **Not to be confused with** MulmoBridge's "relay" (a Cloudflare Workers message
 > relay — see `docs/message_apps/relay/`). That is a separate messaging feature;

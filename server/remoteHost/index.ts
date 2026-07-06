@@ -16,6 +16,7 @@ import { HOST_ID } from "./commandChannel.js";
 import { currentUid, signInHost, signOutHost } from "./auth.js";
 import { firestore } from "./firebase.js";
 import { handlers } from "./handlers/index.js";
+import { onExpire } from "./onExpire.js";
 
 export type { RemoteHostStatus } from "@mulmoclaude/core/remote-host/server";
 
@@ -31,6 +32,7 @@ const instance = createRemoteHost({
   currentUid,
   startRunner: (channel, hostHandlers, options) => startHostRunner(firestore, channel, hostHandlers, options),
   handlers,
+  onExpire,
   log: {
     info: (msg) => log.info(PREFIX, msg),
     warn: (msg) => log.warn(PREFIX, msg),
