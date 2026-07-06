@@ -20,7 +20,7 @@ interface FakeRunner {
   channel: Channel;
   stopped: boolean;
   onClosed?: () => void;
-  onExpire?: (command: Command) => void | Promise<void>;
+  onExpire?: (command: Command, uid: string) => void | Promise<void>;
   stop: () => void;
 }
 
