@@ -103,21 +103,24 @@ const expireCommand = async (ref: DocumentReference, command: Command, options: 
   options.onEvent?.({ phase: "done", method: command.method, message: "expired" });
 };
 
-const processCommand = async (
-  firestore: Firestore,
-  ref: DocumentReference,
-  command: Command,
-  handlers: CommandHandlers,
-  options: HostRunnerOptions,
-  now: number,
-  uid: string,
-) => {
+// Per-runner constants bundled into one context so processCommand stays under the
+// max-params cap: firestore, the handler table, options, and the session uid are
+// all fixed for the runner's lifetime; only ref/command/now vary per command.
+interface RunnerContext {
+  firestore: Firestore;
+  handlers: CommandHandlers;
+  options: HostRunnerOptions;
+  uid: string;
+}
+
+const processCommand = async (ctx: RunnerContext, ref: DocumentReference, command: Command, now: number) => {
+  const { handlers, options } = ctx;
   // Drop an expired command before claiming it — it must never reach a handler.
   if (isExpired(command, now)) {
-    await expireCommand(ref, command, options, uid);
+    await expireCommand(ref, command, options, ctx.uid);
     return;
   }
-  const claim = await claimCommand(firestore, ref);
+  const claim = await claimCommand(ctx.firestore, ref);
   if (!claim) {
     return;
   }
@@ -147,6 +150,7 @@ export const startHostRunner = (firestore: Firestore, channel: Channel, handlers
   const beat = setInterval(announce, options.heartbeatMs ?? DEFAULT_HEARTBEAT_MS);
 
   const queuedCommands = query(commandsCollection(firestore, channel), where("status", "==", "queued"));
+  const ctx: RunnerContext = { firestore, handlers, options, uid: channel.uid };
   const unsubscribe = onSnapshot(
     queuedCommands,
     (snapshot) => {
@@ -164,7 +168,7 @@ export const startHostRunner = (firestore: Firestore, channel: Channel, handlers
         .map((change) => ({ ref: change.doc.ref, command: change.doc.data() as Command }))
         .sort((left, right) => byCreatedAt(left.command, right.command));
       added.forEach(({ ref, command }) => {
-        processCommand(firestore, ref, command, handlers, options, now, channel.uid).catch(noop);
+        processCommand(ctx, ref, command, now).catch(noop);
       });
     },
     (error) => {
