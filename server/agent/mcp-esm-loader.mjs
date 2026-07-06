@@ -35,9 +35,21 @@ export function splitScopedSpecifier(specifier) {
   const firstSlash = rest.indexOf("/");
   if (firstSlash === -1) return { pkg: specifier, subpath: "." };
   return {
-    pkg: SCOPE + rest.slice(0, firstSlash),
-    subpath: "./" + rest.slice(firstSlash + 1),
+    pkg: `${SCOPE}${rest.slice(0, firstSlash)}`,
+    subpath: `./${rest.slice(firstSlash + 1)}`,
   };
+}
+
+// Walk a conditional-export block preferring `import.default` >
+// `import` > `default`, matching Node's conditional-export precedence
+// for the "import" condition set.
+function pickConditional(entry) {
+  const importCond = entry.import;
+  if (typeof importCond === "string") return importCond;
+  if (importCond && typeof importCond === "object" && typeof importCond.default === "string") {
+    return importCond.default;
+  }
+  return typeof entry.default === "string" ? entry.default : null;
 }
 
 // Pick an entry file for the given subpath from a package.json's
@@ -53,15 +65,7 @@ export function pickEntry(manifest, subpath) {
   if (exp && typeof exp === "object") {
     const entry = exp[subpath];
     if (typeof entry === "string") return entry;
-    if (entry && typeof entry === "object") {
-      // Prefer import > default (matches Node's conditional-export resolution).
-      const importCond = entry.import;
-      if (typeof importCond === "string") return importCond;
-      if (importCond && typeof importCond === "object" && typeof importCond.default === "string") {
-        return importCond.default;
-      }
-      if (typeof entry.default === "string") return entry.default;
-    }
+    if (entry && typeof entry === "object") return pickConditional(entry);
   }
   return subpath === "." && typeof main === "string" ? main : null;
 }
