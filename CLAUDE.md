@@ -69,6 +69,7 @@ When you (or a PR you're reviewing) adds a new diagnostic / fix for a recurring 
 - **UI control sizes + chrome row layout** → [`docs/ui-controls.md`](docs/ui-controls.md)
 - **UI region naming + testid discipline + when to update layout art** → [`docs/ui-cheatsheet.md`](docs/ui-cheatsheet.md) (also the source of truth for the ASCII layout map)
 - **i18n (all 8 locales in lockstep, add / rename / remove keys, new locale registration)** → [`docs/i18n.md`](docs/i18n.md)
+- **Reproducing Windows-host FS bugs inside Linux Docker containers on CI** (dangling NTFS junctions, WSL2 + native `dockerd` setup, gotchas) → [`docs/windows-docker-ci.md`](docs/windows-docker-ci.md)
 
 ## Package dependency direction (always apply)
 
