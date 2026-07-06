@@ -14,6 +14,11 @@ import { classifyAsWikiPage, writeWikiPage } from "../../workspace/wiki-pages/io
 import { log } from "../../system/logger/index.js";
 import { previewSnippet } from "../../utils/logPreview.js";
 import { publishFileChange } from "../../events/file-change.js";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { SUBPROCESS_PROBE_TIMEOUT_MS } from "../../utils/time.js";
+
+const execFileAsync = promisify(execFile);
 
 const router = Router();
 
@@ -1110,6 +1115,48 @@ router.get(API_ROUTES.files.raw, (req: Request<object, unknown, unknown, PathQue
 // Returns configured reference directories as top-level TreeNode[]
 // for the file explorer. Each node's path uses the @ref/<label>
 // prefix so subsequent /dir and /content requests route correctly.
+
+// POST /api/files/open — spawn the host OS's default handler for a
+// file. Backing the "Open in OS" button on the Files view's binary /
+// unsupported preview so a `.xlsx` / `.pptx` reachable via the file
+// tree can be viewed in Excel / Keynote when in-browser preview isn't
+// available (#1985). Cross-platform: macOS `open`, Linux `xdg-open`,
+// Windows `start` (via cmd). Workspace-scoped path validation same as
+// every other files route. Accepts `path` from body OR query so a
+// swallowed body doesn't stop the button (belt + suspenders).
+interface OpenFileRequest {
+  path?: unknown;
+}
+router.post(API_ROUTES.files.open, async (req: Request<object, unknown, OpenFileRequest, PathQuery>, res: Response<{ ok: boolean } | ErrorResponse>) => {
+  const bodyPath = typeof req.body?.path === "string" ? req.body.path : "";
+  const queryPath = getOptionalStringQuery(req, "path") ?? "";
+  const requestedPath = bodyPath || queryPath;
+  if (!requestedPath) {
+    badRequest(res, "path required");
+    return;
+  }
+  (req.query as PathQuery).path = requestedPath;
+  const ctx = resolveAndStatFile(req, res);
+  if (!ctx) return;
+  const { absPath } = ctx;
+  const { platform } = process;
+  try {
+    if (platform === "darwin") {
+      await execFileAsync("open", [absPath], { timeout: SUBPROCESS_PROBE_TIMEOUT_MS });
+    } else if (platform === "win32") {
+      // `start` is a cmd built-in; the empty "" is a title placeholder
+      // required when the target path is quoted (else cmd interprets
+      // the first quoted arg as the window title, not the file).
+      await execFileAsync("cmd", ["/c", "start", "", absPath], { timeout: SUBPROCESS_PROBE_TIMEOUT_MS });
+    } else {
+      await execFileAsync("xdg-open", [absPath], { timeout: SUBPROCESS_PROBE_TIMEOUT_MS });
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    log.warn("files", "POST open: spawn failed", { platform, error: errorMessage(err) });
+    serverError(res, `Failed to open file in OS: ${errorMessage(err)}`);
+  }
+});
 
 router.get(API_ROUTES.files.refRoots, async (_req: Request, res: Response<TreeNode[]>) => {
   log.info("files", "GET ref-roots: start");

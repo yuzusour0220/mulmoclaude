@@ -238,8 +238,21 @@
         <video :key="selectedPath" :src="rawUrl(selectedPath)" controls preload="metadata" class="max-w-full max-h-full" />
       </div>
       <!-- Binary or too-large -->
-      <div v-else class="p-4 text-sm text-gray-500">
+      <div v-else class="p-4 text-sm text-gray-500 flex flex-col gap-3">
         <template v-if="'message' in content">{{ content.message }}</template>
+        <div v-if="selectedPath">
+          <button
+            type="button"
+            class="h-8 px-3 flex items-center gap-1 rounded border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 font-medium disabled:opacity-50"
+            :disabled="openInOsBusy"
+            data-testid="file-open-in-os"
+            @click="openInOs"
+          >
+            <span class="material-icons text-sm">open_in_new</span>
+            {{ openInOsBusy ? t("fileContentRenderer.openingInOs") : t("fileContentRenderer.openInOs") }}
+          </button>
+          <p v-if="openInOsError" class="mt-2 text-xs text-red-600">{{ openInOsError }}</p>
+        </div>
       </div>
     </template>
   </div>
@@ -258,6 +271,7 @@ import type { JsonToken, JsonlLine } from "../utils/format/jsonSyntax";
 import { formatScalarField, type MarkdownDocView } from "../composables/useMarkdownDoc";
 import { rewriteMarkdownImageRefs } from "../utils/image/rewriteMarkdownImageRefs";
 import { API_ROUTES } from "../config/apiRoutes";
+import { apiPost } from "../utils/api";
 import { useSharePack } from "../composables/useSharePack";
 import { descriptorForPath, jsonEditableByPolicy } from "../config/systemFileDescriptors";
 import { isMarpDocument } from "../utils/markdown/marpDetect";
@@ -337,6 +351,28 @@ const marpPdfFilename = computed(() => {
 
 // Inline JSON editor (#833 Phase 1). Available only for policy-editable
 // JSON config files; the read-only pretty-print stays the default.
+// "Open in OS" button on the binary / unsupported fallback (#1985).
+// Fire-and-forget — success just means the server spawned the OS
+// handler; whether the app actually surfaces is out of scope.
+const openInOsBusy = ref(false);
+const openInOsError = ref<string | null>(null);
+async function openInOs(): Promise<void> {
+  if (!props.selectedPath) return;
+  openInOsBusy.value = true;
+  openInOsError.value = null;
+  try {
+    // Send path in BOTH the body and the query — the server accepts
+    // either. Defensive against a proxy/middleware chain that swallows
+    // the JSON body (#1985 early report: "path required" back to a
+    // request whose body should have carried the path).
+    const url = `${API_ROUTES.files.open}?path=${encodeURIComponent(props.selectedPath)}`;
+    const result = await apiPost<{ ok: boolean }>(url, { path: props.selectedPath });
+    if (!result.ok) openInOsError.value = result.error || t("fileContentRenderer.openInOsFailed");
+  } finally {
+    openInOsBusy.value = false;
+  }
+}
+
 const jsonEditing = ref(false);
 const jsonDraft = ref("");
 
