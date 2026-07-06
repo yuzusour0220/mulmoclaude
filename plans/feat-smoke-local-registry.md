@@ -21,40 +21,42 @@ the publish.)
 A PR can bump + validate a shared-package version **without** publishing to public
 npm. Public publish moves to a clean post-merge release step.
 
-## Options
+## Chosen approach — npm `overrides` → locally-packed `.tgz` (IMPLEMENTED)
 
-### Option A — Verdaccio throwaway local registry (highest fidelity, recommended)
+Considered a Verdaccio throwaway local registry (highest fidelity, but adds a
+service + auth-token/`.npmrc` scoping to the CI job). Chose the **service-free
+`overrides`** path: pure npm, no extra process, a targeted change to
+`scripts/mulmoclaude/tarball.mjs` + its unit tests.
 
-In the smoke workflow: start [Verdaccio](https://verdaccio.org/) on localhost,
-`npm publish` every workspace `@mulmoclaude/*` package (already built by the smoke
-build step) to it, then run the tarball install with
-`--registry http://localhost:4873`. The launcher's first-party deps resolve to the
-just-built workspace versions; third-party deps still come from the real registry
-(Verdaccio proxies uplinks).
+De-risked first: a synthetic repro confirmed npm resolves a **transitive** `file:`
+override for an unpublished-scope package fully offline (npm ≥ 8.3). Then built:
 
-- **Pro:** exercises real `npm publish` + `npm install` semantics against the
-  actual built artifacts — closest to today's fidelity, minus the public publish.
-- **Con:** adds a service to the CI job (startup, config, `.npmrc`/auth-token
-  scoping so only `@mulmoclaude:` routes to Verdaccio).
+- `enumerateWorkspacePackages(root)` — expand the root `workspaces` globs (all
+  `<dir>/*`) to `{ name, dir, private, deps }` per package (`deps` folds
+  dependencies + peer + optional).
+- `computeFirstPartyClosure(packages, "mulmoclaude")` — pure BFS for the launcher's
+  transitive **first-party** (workspace) deps, so third-party deps
+  (`@mulmochat-plugin/*`, `@mulmocast/types`, …) are left to the real registry.
+  Against the real repo this is **13 packages** (core, the bundled plugins, the
+  bridges, task-scheduler), not all 47 workspace packages.
+- `packWorkspaceOverrides(...)` — `npm pack --ignore-scripts` each closure package
+  (dist is already built by the workflow's `yarn build:packages`, so no prepack
+  rebuild) into a temp dir; returns an `overrides` map `{ name: "file:<abs.tgz>" }`.
+- `buildInstallerPackageJson({ tarballName, overrides })` — emits the `overrides`
+  block; `installTarball` writes it before `npm install`, so first-party deps
+  resolve from the just-built workspace instead of the public registry.
 
-### Option B — npm `overrides` → locally-packed `.tgz` (lighter)
+`scripts/` is not covered by `yarn lint`; the pure helpers are unit-tested in
+`test/scripts/mulmoclaude/test_tarball.ts` (closure BFS, overrides shape, the pack
+loop with injected fakes, real-repo enumeration). The full install+boot is exercised
+by the `smoke` job itself, which `paths`-triggers on `scripts/mulmoclaude/**`.
 
-Extend `buildInstallerPackageJson` (`scripts/mulmoclaude/tarball.mjs`) to `npm
-pack` each workspace `@mulmoclaude/*` dep and add an `overrides` map pointing each
-`@mulmoclaude/<name>` at its local `file:<tgz>` in the installer `package.json`.
+## The fidelity tradeoff (accepted by the maintainer)
 
-- **Pro:** no extra service; a targeted change to one script + its unit tests
-  (`buildInstallerPackageJson` is already unit-tested).
-- **Con:** relies on npm resolving **transitive** `file:` overrides correctly
-  (npm ≥ 8.3); fiddlier for scoped/peer deps; slightly less "real" than a registry.
-
-## The fidelity tradeoff (decide before implementing)
-
-Either option means `smoke` **no longer catches "you forgot to publish a
-first-party dep"** — it always uses the local build. That check must move to the
-release/publish step (the `/publish` skill already verifies a package's deps are
-published before publishing it). Confirm that relocation is acceptable to the
-maintainer; it is the one real regression in test coverage.
+`smoke` **no longer catches "you forgot to publish a first-party dep"** — it always
+installs the local build. That check lives in the release/publish step (the
+`/publish` skill verifies a package's deps are published before publishing it).
+Signed off for this change.
 
 ## Non-goals
 

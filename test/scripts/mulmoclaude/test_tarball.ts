@@ -165,6 +165,79 @@ describe("buildInstallerPackageJson", () => {
     const pkg = tarball.buildInstallerPackageJson();
     assert.deepEqual(pkg.dependencies, {});
   });
+
+  it("includes an overrides block when first-party deps are pinned locally", () => {
+    const overrides = { "@mulmoclaude/core": "file:/tmp/core.tgz" };
+    const pkg = tarball.buildInstallerPackageJson({ tarballName: "mulmoclaude-0.12.0.tgz", overrides });
+    assert.deepEqual(pkg.overrides, overrides);
+  });
+
+  it("omits the overrides key entirely when the map is empty or absent", () => {
+    assert.equal("overrides" in tarball.buildInstallerPackageJson({ tarballName: "x.tgz" }), false);
+    assert.equal("overrides" in tarball.buildInstallerPackageJson({ tarballName: "x.tgz", overrides: {} }), false);
+  });
+});
+
+describe("computeFirstPartyClosure", () => {
+  // root -> a -> b (first-party chain); `c` is third-party (not a workspace
+  // package), so it must NOT appear. `b`'s dep on the external `ext` is ignored.
+  const packages = [
+    { name: "mulmoclaude", deps: ["@w/a", "ext-cli"] },
+    { name: "@w/a", deps: ["@w/b", "ext-lib"] },
+    { name: "@w/b", deps: ["@w/a"] }, // cycle back to a — must terminate
+    { name: "@w/unused", deps: [] }, // a workspace package the launcher doesn't use
+  ];
+
+  it("returns the transitive first-party deps reachable from the root", () => {
+    const closure = tarball.computeFirstPartyClosure(packages, "mulmoclaude");
+    assert.deepEqual([...closure].sort(), ["@w/a", "@w/b"]);
+  });
+
+  it("excludes the root itself, third-party deps, and unused workspace packages", () => {
+    const closure = tarball.computeFirstPartyClosure(packages, "mulmoclaude");
+    assert.equal(closure.has("mulmoclaude"), false);
+    assert.equal(closure.has("ext-cli"), false); // third-party, not a workspace pkg
+    assert.equal(closure.has("@w/unused"), false); // workspace pkg, not a launcher dep
+  });
+
+  it("returns an empty set when the root package is absent", () => {
+    assert.equal(tarball.computeFirstPartyClosure(packages, "nonexistent").size, 0);
+  });
+});
+
+describe("packWorkspaceOverrides", () => {
+  it("packs only the launcher's first-party closure and maps each to a file: tarball", async () => {
+    const enumerateImpl = async () => [
+      { name: "mulmoclaude", dir: "/repo/packages/mulmoclaude", private: false, deps: ["@w/core"] },
+      { name: "@w/core", dir: "/repo/packages/core", private: false, deps: [] },
+      { name: "@w/unused", dir: "/repo/packages/unused", private: false, deps: [] },
+    ];
+    const packedDirs: string[] = [];
+    const runCommandImpl = async (_cmd: string, args: string[]) => {
+      const [, dir] = args; // ["pack", <dir>, "--ignore-scripts", ...]
+      packedDirs.push(dir);
+      const base = dir.split("/").pop();
+      return { code: 0, timedOut: false, stdout: JSON.stringify([{ filename: `${base}-1.0.0.tgz` }]), stderr: "" };
+    };
+    const overrides = await tarball.packWorkspaceOverrides({ root: "/repo", packDir: "/tmp/packs", enumerateImpl, runCommandImpl });
+    // Only @w/core is packed — the launcher itself and the unused package are not.
+    assert.deepEqual(packedDirs, ["/repo/packages/core"]);
+    assert.deepEqual(overrides, { "@w/core": "file:/tmp/packs/core-1.0.0.tgz" });
+  });
+});
+
+describe("enumerateWorkspacePackages", () => {
+  it("finds the real workspace packages, including the launcher and core, with dep lists", async () => {
+    const path = await import("node:path");
+    const url = await import("node:url");
+    const root = path.resolve(path.dirname(url.fileURLToPath(import.meta.url)), "../../..");
+    const packages = await tarball.enumerateWorkspacePackages(root);
+    const byName = new Map(packages.map((pkg: { name: string }) => [pkg.name, pkg]));
+    assert.ok(byName.has("mulmoclaude"), "launcher package must be discovered");
+    const core = byName.get("@mulmoclaude/core") as { deps: string[] } | undefined;
+    assert.ok(core, "@mulmoclaude/core must be discovered");
+    assert.ok(Array.isArray((core as { deps: string[] }).deps), "each package carries a deps array");
+  });
 });
 
 describe("readTokenFromLauncherLog", () => {
