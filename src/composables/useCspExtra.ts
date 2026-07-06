@@ -18,6 +18,11 @@ const cspExtraState = ref<CspExtraHosts>({});
 export const cspExtra = readonly(cspExtraState);
 
 export async function loadCspExtra(): Promise<void> {
-  const response = await apiGet<{ csp?: CspExtraHosts }>(API_ROUTES.config.base);
-  if (response.ok) cspExtraState.value = sanitizeCspExtra(response.data.csp ?? {});
+  try {
+    const response = await apiGet<{ csp?: CspExtraHosts }>(API_ROUTES.config.base);
+    if (response.ok) cspExtraState.value = sanitizeCspExtra(response.data.csp ?? {});
+  } catch {
+    // Best-effort: on a failed fetch keep the last-known extra rather than
+    // reject — callers fire this with `void` from watchers / view opens.
+  }
 }

@@ -100,7 +100,7 @@ configureCollectionUi({
       // Refresh the CSP extension so a `config/csp.json` edit takes effect on
       // the next view open (not only after an app reload) — the srcdoc CSP is
       // built client-side from the cached `cspExtra` a moment later. Best-effort.
-      await loadCspExtra().catch(() => {});
+      await loadCspExtra();
       const resp = await apiFetchRaw(withSlug(API_ROUTES.collections.viewFile, slug), { query: { id: viewId } });
       return resp.ok ? { ok: true, html: await resp.text() } : { ok: false, status: resp.status };
     } catch {

@@ -1,10 +1,10 @@
 // Composable: derive content-type flags and formatted views from the
 // current selection. Extracted from FilesView.vue (#507 step 5).
 
-import { computed, type Ref } from "vue";
+import { computed, watch, type Ref } from "vue";
 import type { FileContent } from "./useFileSelection";
 import { wrapHtmlWithPreviewCsp } from "../utils/html/previewCsp";
-import { cspExtra } from "./useCspExtra";
+import { cspExtra, loadCspExtra } from "./useCspExtra";
 import { tokenizeJson, tokenizeJsonl, prettyJson } from "../utils/format/jsonSyntax";
 import { parseFrontmatter } from "../utils/markdown/frontmatter";
 
@@ -55,6 +55,20 @@ export function useContentDisplay(selectedPath: Ref<string | null>, content: Ref
   const isJsonl = computed(() => hasExt(selectedPath.value, [".jsonl", ".ndjson"]));
 
   const sandboxedHtml = computed(() => (content.value?.kind === "text" && isHtml.value ? wrapHtmlWithPreviewCsp(content.value.content, cspExtra.value) : ""));
+
+  // Keep `config/csp.json` edits live for the srcdoc HTML preview (files NOT
+  // under artifacts/html/, which the server-header path already covers): refresh
+  // the cached extra whenever an HTML file is shown so `sandboxedHtml` — which
+  // depends on `cspExtra` — rebuilds with the current policy on the next open,
+  // not only after a full app reload. Best-effort; a stale value just means the
+  // previous policy until the fetch lands.
+  watch(
+    () => content.value?.kind === "text" && isHtml.value,
+    (isHtmlPreview) => {
+      if (isHtmlPreview) void loadCspExtra();
+    },
+    { immediate: true },
+  );
 
   // When the selected file is HTML and lives under `artifacts/html/`,
   // expose a server-served URL so the iframe can load via `src=` and
