@@ -90,57 +90,80 @@ jobs:
             throw "expected NTFS Junction, got '$($x.LinkType)' — probe assumption violated"
           }
 
-      # GitHub-hosted windows-latest runners have Docker CLI but not Docker
-      # Desktop — the Linux engine we need to reproduce the sandbox has to
-      # be installed first. choco is preinstalled on the runner image.
-      - name: Install Docker Desktop
+      # windows-latest ships Docker CLI + a Windows-only engine, no Docker
+      # Desktop. Docker Desktop in CI needs UI dialogs on first launch and
+      # is flake-prone. Instead we use the preinstalled WSL2 with Ubuntu +
+      # native `docker.io`, which is headless and reliable.
+      #
+      # The Windows workspace at `${{ github.workspace }}` (`C:\a\...`) is
+      # visible from WSL2 at `/mnt/c/a/...`. NTFS junctions on that FS
+      # surface as Linux symlinks whose targets are Windows-style absolute
+      # paths (`C:\Users\...`) that don't exist inside a Linux container's
+      # mount namespace — the exact dangling-junction failure #1946/#1982
+      # reproduces.
+      - name: Set up WSL2 (Ubuntu-22.04)
         shell: pwsh
         run: |
-          choco install docker-desktop --no-progress -y
-          $cli = "$Env:ProgramFiles\Docker\Docker\DockerCli.exe"
-          if (-not (Test-Path $cli)) {
-            throw "Docker Desktop install did not place DockerCli.exe at the expected path"
+          wsl --version
+          $distros = @()
+          try { $distros = wsl --list --quiet 2>$null } catch { }
+          if (-not ($distros | Where-Object { $_ -match "Ubuntu" })) {
+            wsl --install -d Ubuntu-22.04 --no-launch
+            Start-Sleep -Seconds 15
           }
-          Write-Host "Installed. DockerCli.exe present at $cli"
+          wsl -d Ubuntu-22.04 -u root -- uname -a
 
-      # Docker Desktop's daemon needs to start before we can talk to it.
-      # It uses WSL2 as the Linux backend on modern runners; startup takes
-      # a couple of minutes.
-      - name: Start Docker Desktop and wait for the Linux daemon
+      - name: Install docker.io inside WSL2
         shell: pwsh
         run: |
-          Start-Process -FilePath "$Env:ProgramFiles\Docker\Docker\Docker Desktop.exe"
+          wsl -d Ubuntu-22.04 -u root -- bash -c "apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y docker.io"
+
+      - name: Start dockerd in the background inside WSL2
+        shell: pwsh
+        run: |
+          # nohup + disown so dockerd survives the wsl -e exit.
+          # --iptables=false because WSL2's kernel lacks iptables_nat.
+          wsl -d Ubuntu-22.04 -u root -- bash -c "nohup dockerd --iptables=false --bridge=none > /var/log/dockerd.log 2>&1 &"
           $ok = $false
-          for ($i = 0; $i -lt 90; $i++) {
-            try {
-              $ostype = docker info --format "{{.OSType}}" 2>$null
-              if ($ostype -eq "linux") { $ok = $true; break }
-            } catch { }
-            Start-Sleep -Seconds 5
+          for ($i = 0; $i -lt 30; $i++) {
+            $null = wsl -d Ubuntu-22.04 -u root -- docker info 2>&1
+            if ($LASTEXITCODE -eq 0) { $ok = $true; break }
+            Start-Sleep -Seconds 2
           }
           if (-not $ok) {
-            Write-Host "docker info at timeout:"
-            docker info
-            throw "Docker Desktop daemon did not become ready (Linux engine) in ~8min"
+            Write-Host "dockerd log:"
+            wsl -d Ubuntu-22.04 -u root -- cat /var/log/dockerd.log
+            throw "dockerd did not become ready in 60s inside WSL2"
           }
-          docker info --format "OSType: {{.OSType}}"
+          Write-Host "dockerd is up:"
+          wsl -d Ubuntu-22.04 -u root -- docker info --format "OSType: {{.OSType}}"
 
-      # Warm the base image once so the actual probe run is quick and its
-      # output isn't buried under pull progress. `docker pull` is idempotent.
-      - name: Pull node:22-slim
-        run: docker pull node:22-slim
+      - name: Pull node:22-slim inside WSL2
+        shell: pwsh
+        run: wsl -d Ubuntu-22.04 -u root -- docker pull node:22-slim
 
-      - name: Run the sandbox regression probe
+      # Path translation: PowerShell sees the workspace at `C:\a\<repo>\<repo>`;
+      # WSL2 exposes the same Windows FS at `/mnt/c/a/<repo>/<repo>`. The
+      # NTFS junctions in `node_modules/@mulmoclaude/*` surface there as
+      # Linux symlinks with dangling Windows-style targets — which is
+      # exactly the environment the probe wants to prove the fix survives.
+      - name: Run the sandbox regression probe (via WSL2 docker)
         shell: pwsh
         run: |
-          $ws = "${{ github.workspace }}" -replace '\\','/'
-          docker run --rm `
-            -v "${ws}/node_modules:/app/node_modules:ro" `
-            -v "${ws}/packages/plugins/x-plugin:/app/pkg_modules/@mulmoclaude/x-plugin:ro" `
-            -v "${ws}/packages/plugins/spotify-plugin:/app/pkg_modules/@mulmoclaude/spotify-plugin:ro" `
-            -v "${ws}/packages/plugins/debug-plugin:/app/pkg_modules/@mulmoclaude/debug-plugin:ro" `
-            -v "${ws}/packages/core:/app/pkg_modules/@mulmoclaude/core:ro" `
-            -v "${ws}/test/sandbox-repro:/repro:ro" `
+          $wsWin = "${{ github.workspace }}"
+          $drive = $wsWin.Substring(0, 1).ToLower()
+          $rest = $wsWin.Substring(3) -replace '\\', '/'
+          $wsLinux = "/mnt/$drive/$rest"
+          Write-Host "Windows workspace: $wsWin"
+          Write-Host "WSL2 mount path:   $wsLinux"
+
+          wsl -d Ubuntu-22.04 -u root -- docker run --rm `
+            -v "${wsLinux}/node_modules:/app/node_modules:ro" `
+            -v "${wsLinux}/packages/plugins/x-plugin:/app/pkg_modules/@mulmoclaude/x-plugin:ro" `
+            -v "${wsLinux}/packages/plugins/spotify-plugin:/app/pkg_modules/@mulmoclaude/spotify-plugin:ro" `
+            -v "${wsLinux}/packages/plugins/debug-plugin:/app/pkg_modules/@mulmoclaude/debug-plugin:ro" `
+            -v "${wsLinux}/packages/core:/app/pkg_modules/@mulmoclaude/core:ro" `
+            -v "${wsLinux}/test/sandbox-repro:/repro:ro" `
             -e NODE_PATH=/app/node_modules:/app/pkg_modules `
             -w /app `
             node:22-slim `
