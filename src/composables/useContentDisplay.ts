@@ -4,6 +4,7 @@
 import { computed, type Ref } from "vue";
 import type { FileContent } from "./useFileSelection";
 import { wrapHtmlWithPreviewCsp } from "../utils/html/previewCsp";
+import { cspExtra } from "./useCspExtra";
 import { tokenizeJson, tokenizeJsonl, prettyJson } from "../utils/format/jsonSyntax";
 import { parseFrontmatter } from "../utils/markdown/frontmatter";
 
@@ -53,7 +54,7 @@ export function useContentDisplay(selectedPath: Ref<string | null>, content: Ref
   const isJson = computed(() => hasExt(selectedPath.value, [".json"]));
   const isJsonl = computed(() => hasExt(selectedPath.value, [".jsonl", ".ndjson"]));
 
-  const sandboxedHtml = computed(() => (content.value?.kind === "text" && isHtml.value ? wrapHtmlWithPreviewCsp(content.value.content) : ""));
+  const sandboxedHtml = computed(() => (content.value?.kind === "text" && isHtml.value ? wrapHtmlWithPreviewCsp(content.value.content, cspExtra.value) : ""));
 
   // When the selected file is HTML and lives under `artifacts/html/`,
   // expose a server-served URL so the iframe can load via `src=` and

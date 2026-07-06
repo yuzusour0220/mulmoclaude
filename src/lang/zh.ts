@@ -54,6 +54,10 @@ const zhMessages = {
       stop: "停止语音输入",
     },
   },
+  cspViolation: {
+    notice: "⚠ 某视图尝试加载 {host}，但内容安全策略已将其拦截（{directive}）。如需允许，请将该主机添加到 config/csp.json（仅在你信任它时）。",
+    dismiss: "关闭",
+  },
   sessionHistoryPanel: {
     filters: {
       all: "全部",

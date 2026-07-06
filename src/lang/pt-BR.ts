@@ -49,6 +49,11 @@ const ptBRMessages = {
       stop: "Parar entrada de voz",
     },
   },
+  cspViolation: {
+    notice:
+      "⚠ Uma visualização tentou carregar {host}, mas a política de segurança de conteúdo bloqueou ({directive}). Para permitir, adicione o host a config/csp.json — somente se você confiar nele.",
+    dismiss: "Dispensar",
+  },
   sessionHistoryPanel: {
     filters: {
       all: "Todas",

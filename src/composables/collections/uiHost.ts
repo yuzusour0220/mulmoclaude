@@ -37,6 +37,7 @@ import { htmlPreviewUrlFor, svgPreviewUrlFor } from "../useContentDisplay";
 import { isValidFilePath } from "../useFileSelection";
 import { resolveImageSrc } from "../../utils/image/resolve";
 import { buildCustomViewSrcdoc } from "../../utils/html/customViewSrcdoc";
+import { cspExtra } from "../useCspExtra";
 import { useConfirm } from "../useConfirm";
 import { useShortcuts } from "../useShortcuts";
 import PinToggle from "../../components/PinToggle.vue";
@@ -113,7 +114,7 @@ configureCollectionUi({
       limit: request.limit,
       fields: request.fields?.join(",") || undefined,
     }),
-  buildViewSrcdoc: (html, boot) => buildCustomViewSrcdoc(html, boot),
+  buildViewSrcdoc: (html, boot) => buildCustomViewSrcdoc(html, boot, cspExtra.value),
 
   // record CRUD + actions
   createItem: (slug, record) => apiPost<ItemMutationResponse>(withSlug(API_ROUTES.collections.items, slug), record),

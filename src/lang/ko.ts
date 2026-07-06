@@ -56,6 +56,10 @@ const koMessages = {
       stop: "음성 입력 중지",
     },
   },
+  cspViolation: {
+    notice: "⚠ 뷰가 {host}를 불러오려 했지만 콘텐츠 보안 정책({directive})이 차단했습니다. 허용하려면 신뢰하는 경우에만 config/csp.json에 호스트를 추가하세요.",
+    dismiss: "닫기",
+  },
   sessionHistoryPanel: {
     filters: {
       all: "전체",

@@ -6,12 +6,12 @@ issue: #1989
 
 カスタムビュー等のサンドボックス HTML に適用される CSP を `config/csp.json` で拡張できるようにする（例: Google Maps を通す）。あわせて CSP 違反をチャットに拾い、拡張の危険性を明示する。
 
-## 段階（PR を分ける）
+## 実装状況（全て本 PR で完了）
 
-- **PR1a（本 PR）: CSP ビルダーの基盤** — `previewCsp.ts` に `frame-src` directive と directive 別 extra（`CspExtraHosts`）＋ `sanitizeCspExtra` バリデーションを追加。純関数＋ユニットテストのみ（呼び出し側は未変更＝挙動不変）。以降の土台。
-- **PR1b: config 読込＋配信の配線** — `config/csp.json`（`csp-io.ts`）→ サーバヘッダ（`server/index.ts`）＋ `/api/config` 配信 → クライアント holder → `uiHost.ts` で custom view の srcdoc に注入。**ここで Maps 埋め込みが実際に通る。**
-- PR2: CSP 違反捕捉 → チャット提示（`securitypolicyviolation` + postMessage、`error-recovery.md`）。
-- PR3: 危険性の警告（config 読込時ログ / connect-src 専用の強い警告 / help）。
+- ✅ **基盤**: `previewCsp.ts` に `frame-src` directive + directive 別 extra（`CspExtraHosts`）+ `sanitizeCspExtra`（URL ベース検証）。
+- ✅ **config 読込＋配信**: `config/csp.json`（`csp-io.ts` `readCspExtraSync`）→ サーバヘッダ（`server/index.ts`）＋ `/api/config`（`ConfigResponse.csp`）配信 → クライアント holder（`useCspExtra.ts`）→ `uiHost.ts` で custom view srcdoc に注入 + `useContentDisplay` の file preview にも。**Maps 埋め込みが通る。**
+- ✅ **違反捕捉→通知**: srcdoc に `securitypolicyviolation` リスナー注入（host `customViewSrcdoc.ts`、プラグイン改変なし）→ 親へ postMessage → host global collector（`useCspViolations.ts`）→ App.vue の注意バナー（i18n 8 locale）＋ console.warn。
+- ✅ **危険性の警告**: `warnIfCspExtended`（boot 時ログ、`connect-src` は専用の強警告）。バナー文言にも「信頼できる場合のみ」を明記。
 
 ## 現状（確定）
 

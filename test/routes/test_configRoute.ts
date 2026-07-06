@@ -113,6 +113,7 @@ describe("GET /config", () => {
     assert.deepEqual(state.body, {
       settings: { extraAllowedTools: [] },
       mcp: { servers: [] },
+      csp: {},
     });
   });
 
@@ -125,6 +126,7 @@ describe("GET /config", () => {
     assert.deepEqual(state.body, {
       settings: { extraAllowedTools: ["mcp__claude_ai_Gmail"] },
       mcp: { servers: [] },
+      csp: {},
     });
   });
 });
@@ -139,7 +141,7 @@ describe("PUT /config/settings", () => {
     const { state, res } = mockRes();
     putSettingsHandler({ body } as Request, res);
     assert.equal(state.status, 200);
-    assert.deepEqual(state.body, { settings: body, mcp: { servers: [] } });
+    assert.deepEqual(state.body, { settings: body, mcp: { servers: [] }, csp: {} });
     assert.deepEqual(configMod.loadSettings(), body);
   });
 
