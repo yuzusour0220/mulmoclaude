@@ -50,6 +50,35 @@ export interface Command {
 export type CommandHandler = (params: JsonObject) => JsonValue | Promise<JsonValue>;
 export type CommandHandlers = Record<string, CommandHandler>;
 
+// Bumped when the command-channel wire protocol changes in a way the remote must
+// gate on. Advertised in the presence doc so the remote can check compatibility
+// before issuing commands.
+export const REMOTE_HOST_PROTOCOL_VERSION = 1;
+
+// The presence doc's payload: online flag + a capability advertisement. Written
+// by the host on every heartbeat; the remote reads it from the presence listener
+// it already runs (no extra round trip, known the instant the host is online).
+// Browser-safe so the mobile client compiles against the same shape.
+// `updatedAt` (a Firestore serverTimestamp) is added by the runner at write time
+// and is intentionally not part of this capability contract.
+export interface HostPresence {
+  online: boolean;
+  hostId: string;
+  protocolVersion: number;
+  // Method names the host serves — the keys of the live handler table.
+  capabilities: string[];
+}
+
+// Build the presence payload from the live handler table. Capabilities are
+// `Object.keys(handlers)` so registering a handler is the ONLY step needed to
+// advertise it — there is no second list to keep in sync.
+export const buildHostPresence = (channel: Channel, handlers: CommandHandlers, online: boolean): HostPresence => ({
+  online,
+  hostId: channel.hostId,
+  protocolVersion: REMOTE_HOST_PROTOCOL_VERSION,
+  capabilities: Object.keys(handlers),
+});
+
 // Per-host command queue: users/{uid}/hosts/{hostId}/commands.
 export const commandsCollection = (firestore: Firestore, channel: Channel): CollectionReference<DocumentData> =>
   collection(firestore, "users", channel.uid, "hosts", channel.hostId, "commands");

@@ -39,9 +39,11 @@ against (`@mulmoclaude/core/remote-view`).
    renders result
                                     ┌──────────────────────────────┐
                                     │  users/{uid}/hosts/mulmoclaude │  presence doc — host heartbeats
-                                    │  { online, updatedAt }         │◄──────── every 60s while connected
-                                    └──────────────────────────────┘           online:false on stop/death
-        │  reads presence → "host online?"
+                                    │  { online, updatedAt,          │◄──────── every 60s while connected
+                                    │    hostId, protocolVersion,    │           online:false on stop/death
+                                    │    capabilities:[method,…] }   │
+                                    └──────────────────────────────┘
+        │  reads presence → "host online?" + which methods it serves
 ```
 
 Both sides agree on a hardcoded **`hostId = "mulmoclaude"`** — there is no host
@@ -90,7 +92,7 @@ browser-safe boundary — mirroring `@mulmoclaude/core/remote-view`:
 
 | Import | Surface | Provides |
 |---|---|---|
-| `@mulmoclaude/core/remote-host` | **browser-safe** | Protocol wire types (`Command`, `CommandStatus`, `Channel`, `CommandHandlers`) + Firestore path helpers `commandsCollection(firestore, channel)` / `hostDoc(firestore, channel)`. Shared by host **and** the mobile client. |
+| `@mulmoclaude/core/remote-host` | **browser-safe** | Protocol wire types (`Command`, `CommandStatus`, `Channel`, `CommandHandlers`) + Firestore path helpers `commandsCollection(firestore, channel)` / `hostDoc(firestore, channel)` + the capability advertisement (`HostPresence`, `REMOTE_HOST_PROTOCOL_VERSION`, `buildHostPresence`). Shared by host **and** the mobile client. |
 | `@mulmoclaude/core/remote-host/server` | **server-only** | `startHostRunner(firestore, channel, handlers, opts)` — the command loop; `createRemoteHost(deps)` — the connect/disconnect/status lifecycle factory; `createRemoteHostAuth(auth)` + `createRemoteHostFirebase(config)` — the Firebase init/auth primitives. `firebase` is an optional peer dep of core. |
 
 Each host supplies only its own specifics under `server/remoteHost/`:
@@ -105,10 +107,42 @@ Each host supplies only its own specifics under `server/remoteHost/`:
 
 ### The command loop, precisely (core `startHostRunner`)
 
-- **Presence.** `setDoc(presence, {online:true})` on start, then a heartbeat
+- **Presence + capabilities.** `writePresence(true)` on start, then a heartbeat
   `setInterval` once a minute (`opts.heartbeatMs`, default 60 s). On `stop()` or fatal listener death it
-  writes `online:false` and clears the interval — so remotes see the host go
+  writes `writePresence(false)` and clears the interval — so remotes see the host go
   offline instead of a live-but-dead host that silently consumes no commands.
+  Every write carries the capability advertisement (next section), not just the
+  `online` flag.
+
+### Capability advertisement — presence doc, auto-derived
+
+The remote has no host registry and no way to know *which* methods a given host
+build serves — a self-hosted install may be older, or ship a plugin that adds or
+drops a capability. Rather than let the remote discover this by firing a command
+and getting `unknown_method` back, the host **advertises its capabilities in the
+presence doc** the remote already listens to:
+
+```jsonc
+// users/{uid}/hosts/mulmoclaude
+{ "online": true, "hostId": "mulmoclaude", "protocolVersion": 1,
+  "capabilities": ["listCollections", "getCollection", "startChat", …],
+  "updatedAt": <serverTimestamp> }
+```
+
+- **Push, not pull.** It rides the same `onSnapshot` the remote runs for
+  online/offline, so the remote knows the capability set the instant the host is
+  online — no extra round trip, and it can gate UI (hide "send photo" when
+  `startChat` is absent) *before* issuing anything.
+- **Auto-derived, single source of truth.** `buildHostPresence` sets
+  `capabilities = Object.keys(handlers)` from the live handler table, so
+  registering a handler in `handlers/index.ts` is the **only** step needed to
+  advertise it — there is no second list to keep in sync (the same
+  "derive, don't duplicate" discipline as the handler table itself).
+- **`protocolVersion`** (`REMOTE_HOST_PROTOCOL_VERSION`, currently `1`) lets the
+  remote gate on wire-protocol compatibility independent of the method list; bump
+  it when the command channel changes shape in a way the remote must react to.
+- The payload shape (`HostPresence`) is a **browser-safe** export both repos
+  compile against, so host and mobile client can't drift on the contract.
 - **Claim exactly once.** `claimCommand` runs a `runTransaction` that reads the
   doc and only flips `queued → processing` if it is still `queued`; a second
   host (or a snapshot replay) that races gets `null` and skips it.
@@ -247,6 +281,7 @@ names is the external mulmoserver client (which depends on the published
 | `plans/feat-remote-view-images.md` | Phase 5 — `getRemoteViewItems` image thumbnails |
 | `plans/feat-remote-chat-image-attachments.md` | `startChat` attachments + `ingestAttachments` |
 | `plans/feat-1955-remote-host-help.md` | Popover help text + mobile URL link |
+| `plans/feat-remote-host-capabilities.md` | Capability advertisement in the presence doc (`HostPresence`, `protocolVersion`) |
 
 > **Not to be confused with** MulmoBridge's "relay" (a Cloudflare Workers message
 > relay — see `docs/message_apps/relay/`). That is a separate messaging feature;
