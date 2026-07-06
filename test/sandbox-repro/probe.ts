@@ -31,6 +31,13 @@ import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { resolvePresetRoot } from "/app/server-plugins/resolvePresetRoot.ts";
+// The list the shipped preset-loader ACTUALLY iterates over. Iterating
+// this same list keeps the probe locked to production behavior — adding
+// or removing a preset in preset-list.ts automatically extends the
+// regression coverage here. A previous version of the probe hardcoded a
+// package list that drifted (missed edgar/email, included non-preset
+// entries like x-plugin/core); Codex flagged this on PR #1984.
+import { PRESET_PLUGINS } from "/app/server-plugins/preset-list.ts";
 
 const localRequire = createRequire(import.meta.url);
 
@@ -95,9 +102,13 @@ step("legacy parent-walk resolver returns null for @mulmoclaude/spotify-plugin (
 
 // ── 4. Shipped resolver — MUST resolve every preset via the fallback ──
 
-for (const pkg of ["@mulmoclaude/x-plugin", "@mulmoclaude/spotify-plugin", "@mulmoclaude/debug-plugin", "@mulmoclaude/core"]) {
-  step(`shipped resolvePresetRoot() finds ${pkg} via NODE_PATH`, () => {
-    const resolved = resolvePresetRoot(pkg);
+if (PRESET_PLUGINS.length === 0) {
+  failures++;
+  console.log("  FAIL  PRESET_PLUGINS is empty — nothing to verify, and the shipped preset-loader has nothing to load");
+}
+for (const preset of PRESET_PLUGINS) {
+  step(`shipped resolvePresetRoot() finds ${preset.packageName} via NODE_PATH`, () => {
+    const resolved = resolvePresetRoot(preset.packageName);
     if (resolved === null) throw new Error(`shipped resolver returned null — fallback path did not resolve`);
     if (!resolved.startsWith("/app/pkg_modules/")) throw new Error(`resolved outside fallback root: ${resolved}`);
   });

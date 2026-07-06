@@ -92,9 +92,14 @@ jobs:
         shell: pwsh
         run: |
           wsl --version
+          # Every subsequent step calls `wsl -d Ubuntu-22.04`, so we
+          # require that exact distro rather than any "Ubuntu"-family
+          # match. A runner that ships only `Ubuntu` (no `-22.04`) would
+          # otherwise skip install here and then error out on the
+          # `-d Ubuntu-22.04` calls below. Codex review on PR #1984.
           $distros = @()
           try { $distros = wsl --list --quiet 2>$null } catch { }
-          if (-not ($distros | Where-Object { $_ -match "Ubuntu" })) {
+          if (-not ($distros | Where-Object { $_.Trim() -eq "Ubuntu-22.04" })) {
             wsl --install -d Ubuntu-22.04 --no-launch
             Start-Sleep -Seconds 15
           }
@@ -155,7 +160,7 @@ jobs:
             -v "${wsLinux}/packages/plugins/spotify-plugin:/app/pkg_modules/@mulmoclaude/spotify-plugin:ro" `
             -v "${wsLinux}/packages/plugins/debug-plugin:/app/pkg_modules/@mulmoclaude/debug-plugin:ro" `
             -v "${wsLinux}/packages/core:/app/pkg_modules/@mulmoclaude/core:ro" `
-            -v "${wsLinux}/server/plugins:/app/server-plugins:ro" `
+            -v "${wsLinux}/server/plugins:/app/server-plugins:ro" ` # includes resolvePresetRoot.ts + preset-list.ts
             -v "${wsLinux}/test/sandbox-repro:/repro:ro" `
             -e NODE_PATH=/app/node_modules:/app/pkg_modules `
             -w /app `
