@@ -124,7 +124,7 @@ presence doc** the remote already listens to:
 
 ```jsonc
 // users/{uid}/hosts/mulmoclaude
-{ "online": true, "hostId": "mulmoclaude", "protocolVersion": 1,
+{ "online": true, "hostId": "mulmoclaude", "protocolVersion": 2,
   "capabilities": ["listCollections", "getCollection", "startChat", …],
   "updatedAt": <serverTimestamp> }
 ```
@@ -138,9 +138,13 @@ presence doc** the remote already listens to:
   registering a handler in `handlers/index.ts` is the **only** step needed to
   advertise it — there is no second list to keep in sync (the same
   "derive, don't duplicate" discipline as the handler table itself).
-- **`protocolVersion`** (`REMOTE_HOST_PROTOCOL_VERSION`, currently `1`) lets the
+- **`protocolVersion`** (`REMOTE_HOST_PROTOCOL_VERSION`, currently `2`) lets the
   remote gate on wire-protocol compatibility independent of the method list; bump
   it when the command channel changes shape in a way the remote must react to.
+  **v2** signals offline-queue support (the host honours `expiresAt` — deletes an
+  expired command + its staged uploads instead of spawning a stale chat); a remote
+  MUST see `protocolVersion >= 2` before queueing a `startChat` while offline (see
+  "Offline queueing").
 - The payload shape (`HostPresence`) is a **browser-safe** export both repos
   compile against, so host and mobile client can't drift on the contract.
 - **Claim exactly once.** `claimCommand` runs a `runTransaction` that reads the
@@ -271,6 +275,10 @@ today's exact behaviour):
 - **TTL-below-expiry invariant.** The `expiresAt` horizon **must be shorter than**
   the Storage lifecycle TTL, or a still-valid queued command could find its staged
   attachment already swept. Chosen pair: **7-day expiry under a 14-day TTL.**
+- **Protocol-gated.** Offline queueing requires the host to honour `expiresAt`, so
+  it is advertised via `protocolVersion` (v2). A remote MUST see `protocolVersion
+  >= 2` in the presence doc before queueing offline — a v1 host would ignore
+  `expiresAt` and spawn stale chats on reconnect with uploads never cleaned up.
 - The remote lists its own `queued` commands and can **delete** one before the
   host drains it (doc + staged uploads), and exempts `queuedOffline` commands from
   its ack-timeout rollback (that cleanup is now the host's / user's job). These

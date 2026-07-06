@@ -7,6 +7,10 @@
 // is only the last-resort backstop for the one case this can't cover — a host
 // that never reconnects at all.
 //
+// `uid` is the runner's session uid, passed in by the runner (channel.uid) rather
+// than read from a global — a concurrent reconnect as a different account must not
+// point this cleanup at the new user's Storage path.
+//
 // Best-effort throughout: a failed delete logs and leaves the orphan for the TTL
 // sweep, and this must never throw back into the runner (the doc deletion runs
 // regardless). Unlike startChat's strict `readStorageIds`, extraction here is
@@ -16,7 +20,6 @@ import type { Command, JsonObject } from "@mulmoclaude/core/remote-host";
 
 import { errorMessage } from "../utils/errors.js";
 import { log } from "../system/logger/index.js";
-import { currentUid } from "./auth.js";
 import { storage } from "./firebase.js";
 
 const PREFIX = "remote-host";
@@ -36,9 +39,7 @@ const stagedStorageIds = (params: JsonObject): string[] => {
   });
 };
 
-export const onExpire = async (command: Command): Promise<void> => {
-  const uid = currentUid();
-  if (!uid) return;
+export const onExpire = async (command: Command, uid: string): Promise<void> => {
   for (const storageId of stagedStorageIds(command.params)) {
     try {
       await deleteObject(ref(storage, `users/${uid}/uploads/${storageId}`));

@@ -38,10 +38,12 @@ export interface HostRunnerOptions {
   onClosed?: () => void;
   // Called when a command is dropped for being past its `expiresAt`, BEFORE the
   // doc is deleted, so the host can clean up out-of-band resources the command
-  // referenced (e.g. staged attachment uploads in Storage). Best-effort: a throw
-  // is logged via onEvent and does NOT block the doc deletion. Absent ⇒ the
-  // expired doc is simply deleted with no extra cleanup.
-  onExpire?: (command: Command) => void | Promise<void>;
+  // referenced (e.g. staged attachment uploads in Storage). `uid` is THIS runner's
+  // session uid (channel.uid) — passed in rather than read from a global so a
+  // concurrent reconnect as a different account can't point cleanup at the wrong
+  // user's Storage path. Best-effort: a throw is logged via onEvent and does NOT
+  // block the doc deletion. Absent ⇒ the expired doc is simply deleted.
+  onExpire?: (command: Command, uid: string) => void | Promise<void>;
   // Presence heartbeat interval; defaults to one minute.
   heartbeatMs?: number;
 }
@@ -86,9 +88,9 @@ const runHandler = async (ref: DocumentReference, claim: Claim, handler: Command
 // the doc so it is neither reprocessed nor left as a stale error. Both steps are
 // best-effort/idempotent, so a snapshot replay surfacing the same expired doc
 // twice is harmless (no claim transaction needed — see plan edge #3).
-const expireCommand = async (ref: DocumentReference, command: Command, options: HostRunnerOptions) => {
+const expireCommand = async (ref: DocumentReference, command: Command, options: HostRunnerOptions, uid: string) => {
   try {
-    await options.onExpire?.(command);
+    await options.onExpire?.(command, uid);
   } catch (error) {
     options.onEvent?.({ phase: "error", method: command.method, message: `onExpire failed: ${errorMessage(error)}` });
   }
@@ -108,10 +110,11 @@ const processCommand = async (
   handlers: CommandHandlers,
   options: HostRunnerOptions,
   now: number,
+  uid: string,
 ) => {
   // Drop an expired command before claiming it — it must never reach a handler.
   if (isExpired(command, now)) {
-    await expireCommand(ref, command, options);
+    await expireCommand(ref, command, options, uid);
     return;
   }
   const claim = await claimCommand(firestore, ref);
@@ -161,7 +164,7 @@ export const startHostRunner = (firestore: Firestore, channel: Channel, handlers
         .map((change) => ({ ref: change.doc.ref, command: change.doc.data() as Command }))
         .sort((left, right) => byCreatedAt(left.command, right.command));
       added.forEach(({ ref, command }) => {
-        processCommand(firestore, ref, command, handlers, options, now).catch(noop);
+        processCommand(firestore, ref, command, handlers, options, now, channel.uid).catch(noop);
       });
     },
     (error) => {

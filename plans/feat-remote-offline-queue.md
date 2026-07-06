@@ -86,6 +86,13 @@ New optional fields on the command doc (`@mulmoclaude/core/remote-host`
   host wakes" from "sent while online, expecting a prompt ack." The remote's
   attachment-rollback safeguard keys on this (edge #1).
 
+Plus a **presence-doc gate**: `REMOTE_HOST_PROTOCOL_VERSION` bumps **1 → 2**. v2
+means "this host honours `expiresAt` (deletes an expired command + its uploads)".
+A remote MUST see `protocolVersion >= 2` before queueing offline — a v1 host
+ignores `expiresAt` and would spawn a stale chat on reconnect with its uploads
+never cleaned. This is exactly what `protocolVersion` exists for (a wire-shape
+change the remote must react to), so no new capability string is needed.
+
 ## The three load-bearing decisions (edges)
 
 ### Edge #1 — Attachment staging TTL is the tightest coupling
@@ -165,15 +172,21 @@ on wake.
   optional `createdAt` / `expiresAt` / `queuedOffline` (epoch-millisecond numbers,
   not Firestore Timestamps, so the helpers stay pure + browser-safe). Added pure
   `isExpired(command, now)` and `byCreatedAt(left, right)` helpers (`now` injected
-  for deterministic tests; the runner passes `Date.now()`).
+  for deterministic tests; the runner passes `Date.now()`). Bumped
+  `REMOTE_HOST_PROTOCOL_VERSION` **1 → 2** so the remote gates offline queueing on
+  host support.
 - `packages/core/src/remote-host/server/hostRunner.ts` — (a) sort each drained
-  batch by `createdAt` **in memory**, NOT `orderBy("createdAt")` on the query: a
-  Firestore `orderBy` silently excludes docs missing the field, which would drop
-  every pre-offline-queue command (no `createdAt`) from the queue entirely; (b)
-  `processCommand` now takes the command data + `now` and, before claiming, routes
-  an expired command to `expireCommand` → `options.onExpire?.(command)` then
-  `deleteDoc(ref)` (both best-effort/idempotent, no claim transaction); (c) added
-  the optional `onExpire?(command)` field to `HostRunnerOptions`.
+  batch by `createdAt` **in memory** as a *best-effort* dispatch bias, NOT
+  `orderBy("createdAt")` on the query (a Firestore `orderBy` silently excludes docs
+  missing the field). Processing stays concurrent — out-of-order completion is by
+  design (chat is async), so this is not a strict ordering guarantee; (b)
+  `processCommand` takes the command data + `now` + the session `uid` and, before
+  claiming, routes an expired command to `expireCommand` → `onExpire(command, uid)`
+  then `deleteDoc(ref)` (a `deleteDoc` failure is surfaced via `onEvent`, symmetric
+  with the `onExpire` failure path; both best-effort/idempotent, no claim
+  transaction); (c) added the optional `onExpire?(command, uid)` field to
+  `HostRunnerOptions` — `uid` is `channel.uid`, passed in (not read from a global)
+  so a concurrent reconnect as a different account can't misdirect cleanup.
 - `packages/core/src/remote-host/server/lifecycle.ts` — added `onExpire?` to
   `RemoteHostDeps` and thread it verbatim into the runner options.
 - `packages/core/test/remote-host/test_expiry.ts` — pure-helper tests
@@ -202,6 +215,8 @@ The mobile client owns the actual offline experience and depends on a **publishe
 
 - Cache `listCollections` / `listSkills` / roles to `localStorage`; render the
   compose UI from the cache when presence is offline.
+- **Gate on `protocolVersion >= 2`** in the presence doc before offering offline
+  queueing at all — a v1 host ignores `expiresAt` and would spawn stale chats.
 - Change offline gating from **block → queue**: emit the `startChat` command with
   `queuedOffline: true`, `createdAt`, and an `expiresAt` inside the Storage-TTL
   horizon, with a clear "will send when your Mac is online" affordance.
@@ -221,35 +236,30 @@ The mobile client owns the actual offline experience and depends on a **publishe
 
 The contract lives in `@mulmoclaude/core`, which MulmoClaude consumes via
 workspace linking (immediate) but MulmoServer + MulmoTerminal consume as a
-**published** dep. So the contract is frozen + published up front (step 2), and
-MulmoServer then builds against the real published package rather than a
-dev-linked one — no `file:`/yarn-link dance, and no risk of MulmoServer compiling
-against a core that npm has never seen.
+**published** dep. **Release rule: bump the version inside the PR, but publish
+only after merge** (from `main`). Nobody needs the *published* package during the
+PR — in-repo consumers use workspace linking, cross-repo consumers **dev-link**
+(`file:` / yarn link) — and the launcher-sync gate checks in-repo consistency
+only (never npm), so a bumped-but-unpublished version stays green.
 
 | # | Repo | Deliverable | Status |
 |---|---|---|---|
-| 1 | **MulmoClaude** | Core contract (`Command` fields, `isExpired` / `byCreatedAt`, in-memory ordered drain, expiry-delete + `onExpire` hook) **and** this host's `onExpire` attachment-cleanup wiring (`server/remoteHost/onExpire.ts`). Works immediately via workspace linking. | ✅ shipped |
-| 2 | **shared pkgs** | Bump + publish `@mulmoclaude/core` (`/publish` skill), then bump MulmoClaude's launcher dep **range** to match. The contract genuinely changed (new `Command` fields + `onExpire`), so this is **unconditional**, not "if necessary". | — |
-| 3 | **MulmoServer** | Client: localStorage pick-list cache, block→queue gating, pending-list + delete UI, `queuedOffline` rollback exemption. Builds against the **published** core from step 2. | — |
-| 4 | — | Manual test end-to-end: phone composes offline → command queues → host reconnect drains in `createdAt` order / expired command deletes doc + attachments / user deletes a pending item. | — |
-| 5 | **MulmoTerminal** | Bump its `@mulmoclaude/core` dep to the published version; wire its **own** `onExpire` attachment cleanup. It gets ordering + expiry-delete for free from the shared runner — only the host-specific Storage cleanup is per-host. | — |
+| 1 | **MulmoClaude** | Core contract (`Command` fields, `isExpired` / `byCreatedAt`, best-effort in-memory drain order, expiry-delete + `onExpire(command, uid)` hook, `protocolVersion` 1→2) **and** this host's `onExpire` cleanup (`server/remoteHost/onExpire.ts`). Version **bumped to `core@0.12.0` + `collection-plugin@0.7.3`** in-PR. Works immediately via workspace linking. | ✅ in PR |
+| 2 | **shared pkgs** | **After the PR merges:** publish `@mulmoclaude/core@0.12.0` then `@mulmoclaude/collection-plugin@0.7.3` from `main` (`/publish` skill). | pending merge |
+| 3 | **MulmoServer** | Client: localStorage pick-list cache, `protocolVersion >= 2` gate, block→queue gating, pending-list + delete UI, `queuedOffline` rollback exemption. **Dev-links** the local workspace core during development; pins the published version once step 2 is done. | — |
+| 4 | — | Manual test end-to-end: phone composes offline → command queues → host reconnect drains / expired command deletes doc + attachments / user deletes a pending item. | — |
+| 5 | **MulmoTerminal** | Bump its `@mulmoclaude/core` dep to the published version; wire its **own** `onExpire(command, uid)` cleanup. Gets drain-order + expiry-delete for free from the shared runner — only the host-specific Storage cleanup is per-host. | — |
 
-**Why publish before MulmoServer (step 2 moved up).** MulmoServer is easier and
-safer to develop against a real published `@mulmoclaude/core` than a dev-link, so
-the contract is frozen and published immediately after step 1 rather than after
-manual testing.
+**Contract-freeze rule:** the `Command` fields + `HostRunnerOptions.onExpire`
+shape + `protocolVersion` must be settled before step 3 consumes them. A late
+contract change loops back to **step 1** (change core, re-bump), never a
+client-only patch — that would drift MulmoServer from the shipped contract.
 
-**Contract-freeze rule:** the new `Command` fields + `HostRunnerOptions.onExpire`
-shape must be settled at step 1, before the step-2 publish. If step-4 manual
-testing surfaces a needed contract change, the loop-back target is **step 1**
-(change core), followed by a **re-publish** (a fresh `@mulmoclaude/core` patch
-version) before MulmoServer picks it up — never a client-only patch, which would
-drift MulmoServer from the published core. Publishing up front makes that
-re-publish the explicit, visible cost of a late contract change.
-
-The step-2 launcher bump is a `chore(release)` that bumps only the
-`@mulmoclaude/core` dep **range** in `packages/mulmoclaude`, **not** the
-launcher's own `version` (see CLAUDE.md).
+The in-PR version bump is a `chore(release)` that bumps the package versions +
+the `@mulmoclaude/core` / `@mulmoclaude/collection-plugin` dep **ranges** in the
+launcher, **not** the launcher's own `version` (see CLAUDE.md). Earlier
+intermediate publishes (`core@0.11.0`, `collection-plugin@0.7.2`) were superseded
+by `0.12.0` / `0.7.3` before merge — harmless, just unused version numbers.
 
 ## Non-goals
 

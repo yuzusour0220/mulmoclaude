@@ -40,8 +40,10 @@ export interface RemoteHostDeps {
   handlers: CommandHandlers;
   // Optional host-specific cleanup for a command the runner drops as expired
   // (e.g. delete its staged attachment uploads). Threaded verbatim into the
-  // runner's `onExpire`; absent ⇒ an expired doc is just deleted.
-  onExpire?: (command: Command) => void | Promise<void>;
+  // runner's `onExpire`, which supplies the session `uid` so cleanup targets the
+  // right user's Storage path even across a reconnect; absent ⇒ an expired doc is
+  // just deleted.
+  onExpire?: (command: Command, uid: string) => void | Promise<void>;
   log?: RemoteHostLogger;
 }
 

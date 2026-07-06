@@ -73,7 +73,13 @@ export type CommandHandlers = Record<string, CommandHandler>;
 // Bumped when the command-channel wire protocol changes in a way the remote must
 // gate on. Advertised in the presence doc so the remote can check compatibility
 // before issuing commands.
-export const REMOTE_HOST_PROTOCOL_VERSION = 1;
+//
+// v2: offline queueing. The host honours `expiresAt` (deletes an expired command
+// + its staged attachments instead of spawning a stale chat). A remote MUST see
+// protocolVersion >= 2 before queueing a startChat while the host is offline —
+// a v1 host silently ignores `expiresAt`, so a queued chat would spawn stale on
+// reconnect with its uploads never cleaned up.
+export const REMOTE_HOST_PROTOCOL_VERSION = 2;
 
 // The presence doc's payload: online flag + a capability advertisement. Written
 // by the host on every heartbeat; the remote reads it from the presence listener
