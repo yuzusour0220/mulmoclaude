@@ -87,12 +87,17 @@ step("fallback /app/pkg_modules/@mulmoclaude/x-plugin/package.json is present", 
   if (!existsSync(fallback)) throw new Error("fallback mount missing from container");
 });
 
-// ── 2. Node's built-in CJS resolver — confirms #1946 fix is intact ────
+// ── 2. Node's built-in CJS resolver sees NODE_PATH — confirms #1946 wiring intact ─
 
-step("Node CJS require() resolves @mulmoclaude/x-plugin via NODE_PATH", () => {
-  const resolved = localRequire.resolve("@mulmoclaude/x-plugin");
-  if (!resolved.startsWith("/app/pkg_modules/")) {
-    throw new Error(`resolved to unexpected path: ${resolved}`);
+// `require.resolve.paths(pkg)` returns the list Node would search, in order.
+// If NODE_PATH is honoured, `/app/pkg_modules` appears there. Using this
+// list check instead of `require.resolve(pkg)` sidesteps a build-state
+// dependency: the full resolver walks the package's `main` / `exports`
+// entries, which point at `dist/` files that aren't built in this CI job.
+step("Node's own resolver includes the NODE_PATH fallback root", () => {
+  const paths = localRequire.resolve.paths("@mulmoclaude/x-plugin");
+  if (!paths || !paths.includes("/app/pkg_modules")) {
+    throw new Error(`resolve.paths did not include /app/pkg_modules; got: ${JSON.stringify(paths)}`);
   }
 });
 
