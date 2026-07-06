@@ -236,30 +236,32 @@ The mobile client owns the actual offline experience and depends on a **publishe
 
 The contract lives in `@mulmoclaude/core`, which MulmoClaude consumes via
 workspace linking (immediate) but MulmoServer + MulmoTerminal consume as a
-**published** dep. **Release rule: bump the version inside the PR, but publish
-only after merge** (from `main`). Nobody needs the *published* package during the
-PR — in-repo consumers use workspace linking, cross-repo consumers **dev-link**
-(`file:` / yarn link) — and the launcher-sync gate checks in-repo consistency
-only (never npm), so a bumped-but-unpublished version stays green.
+**published** dep. **Release rule (this repo): a launcher-pinned shared package
+must be published DURING the PR — publish-after-merge does not work here.** The
+`smoke` CI job (`scripts/mulmoclaude/tarball.mjs`) `npm pack`s the launcher and
+`npm install`s it, resolving the launcher's `@mulmoclaude/*` deps **from the npm
+registry** (a real user install, no workspace fallback). So a bumped-but-unpublished
+version fails `smoke` with `ETARGET No matching version found`, even though the
+launcher-sync gate (npm-agnostic) stays green. Publish core first, then dependents;
+then `gh run rerun <run-id> --failed` (a new npm version doesn't auto-retrigger CI).
 
 | # | Repo | Deliverable | Status |
 |---|---|---|---|
 | 1 | **MulmoClaude** | Core contract (`Command` fields, `isExpired` / `byCreatedAt`, best-effort in-memory drain order, expiry-delete + `onExpire(command, uid)` hook, `protocolVersion` 1→2) **and** this host's `onExpire` cleanup (`server/remoteHost/onExpire.ts`). Version **bumped to `core@0.12.0` + `collection-plugin@0.7.3`** in-PR. Works immediately via workspace linking. | ✅ in PR |
-| 2 | **shared pkgs** | **After the PR merges:** publish `@mulmoclaude/core@0.12.0` then `@mulmoclaude/collection-plugin@0.7.3` from `main` (`/publish` skill). | pending merge |
-| 3 | **MulmoServer** | Client: localStorage pick-list cache, `protocolVersion >= 2` gate, block→queue gating, pending-list + delete UI, `queuedOffline` rollback exemption. **Dev-links** the local workspace core during development; pins the published version once step 2 is done. | — |
+| 2 | **shared pkgs** | **Publish DURING the PR** (`smoke` needs it): `@mulmoclaude/core@0.12.0` then `@mulmoclaude/collection-plugin@0.7.3` (`/publish` skill), then re-run failed CI. | ⏳ blocking CI |
+| 3 | **MulmoServer** | Client: localStorage pick-list cache, `protocolVersion >= 2` gate, block→queue gating, pending-list + delete UI, `queuedOffline` rollback exemption. **Dev-links** the local workspace core during development; pins the published version. | — |
 | 4 | — | Manual test end-to-end: phone composes offline → command queues → host reconnect drains / expired command deletes doc + attachments / user deletes a pending item. | — |
 | 5 | **MulmoTerminal** | Bump its `@mulmoclaude/core` dep to the published version; wire its **own** `onExpire(command, uid)` cleanup. Gets drain-order + expiry-delete for free from the shared runner — only the host-specific Storage cleanup is per-host. | — |
 
 **Contract-freeze rule:** the `Command` fields + `HostRunnerOptions.onExpire`
 shape + `protocolVersion` must be settled before step 3 consumes them. A late
-contract change loops back to **step 1** (change core, re-bump), never a
-client-only patch — that would drift MulmoServer from the shipped contract.
+contract change loops back to **step 1** (change core, re-bump + re-publish).
 
 The in-PR version bump is a `chore(release)` that bumps the package versions +
 the `@mulmoclaude/core` / `@mulmoclaude/collection-plugin` dep **ranges** in the
 launcher, **not** the launcher's own `version` (see CLAUDE.md). Earlier
 intermediate publishes (`core@0.11.0`, `collection-plugin@0.7.2`) were superseded
-by `0.12.0` / `0.7.3` before merge — harmless, just unused version numbers.
+by `0.12.0` / `0.7.3` — harmless, just unused version numbers.
 
 ## Non-goals
 
