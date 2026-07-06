@@ -92,7 +92,12 @@ const expireCommand = async (ref: DocumentReference, command: Command, options: 
   } catch (error) {
     options.onEvent?.({ phase: "error", method: command.method, message: `onExpire failed: ${errorMessage(error)}` });
   }
-  await deleteDoc(ref).catch(noop);
+  // Surface a delete failure (permissions / transient network) the same way the
+  // onExpire failure above is surfaced — otherwise the expired doc lingers as
+  // "queued" with no signal as to why cleanup didn't happen.
+  await deleteDoc(ref).catch((error) => {
+    options.onEvent?.({ phase: "error", method: command.method, message: `expire delete failed: ${errorMessage(error)}` });
+  });
   options.onEvent?.({ phase: "done", method: command.method, message: "expired" });
 };
 
@@ -143,9 +148,12 @@ export const startHostRunner = (firestore: Firestore, channel: Channel, handlers
     queuedCommands,
     (snapshot) => {
       const now = Date.now();
-      // Replay a drained batch oldest-first. We sort in memory rather than
-      // orderBy("createdAt") on the query because a Firestore orderBy silently
-      // EXCLUDES docs missing the ordered field — which would drop every
+      // Best-effort oldest-first DISPATCH only. Commands are processed
+      // concurrently (not awaited in turn) and out-of-order completion is fine by
+      // design — chat is asynchronous — so this sort just biases which command
+      // starts first; it is not an ordering guarantee. We still sort in memory
+      // rather than orderBy("createdAt") on the query because a Firestore orderBy
+      // silently EXCLUDES docs missing the field — which would drop every
       // pre-offline-queue command (no createdAt) from the queue entirely.
       const added = snapshot
         .docChanges()

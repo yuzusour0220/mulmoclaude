@@ -51,7 +51,7 @@ export interface Command {
   // Firestore Timestamps, so `isExpired` / `byCreatedAt` stay pure + browser-safe
   // and unit-testable without a Firestore fake. Clock skew over a multi-day expiry
   // window is immaterial. See plans/feat-remote-offline-queue.md.
-  createdAt?: number; // enqueue time — replay ordering + age basis
+  createdAt?: number; // enqueue time — age/display + best-effort dispatch bias (NOT a strict order guarantee; chat is async)
   expiresAt?: number; // deadline; past it the host deletes the command + its staged attachments
   queuedOffline?: boolean; // emitted while the host was offline (gates the remote's attachment rollback)
 }
@@ -61,8 +61,10 @@ export interface Command {
 // injected `now` for deterministic tests; the runner passes `Date.now()`.
 export const isExpired = (command: Pick<Command, "expiresAt">, now: number): boolean => typeof command.expiresAt === "number" && now >= command.expiresAt;
 
-// Replay order for a drained batch: oldest enqueue first. A command with no
-// `createdAt` (pre-offline-queue) sorts as oldest (0) so it is never starved.
+// Best-effort dispatch bias for a drained batch: oldest enqueue first. This is
+// NOT an ordering guarantee — commands run concurrently and may complete out of
+// order (chat is asynchronous, by design); it only nudges which one starts first.
+// A command with no `createdAt` sorts as oldest (0) so it is never starved.
 export const byCreatedAt = (left: Pick<Command, "createdAt">, right: Pick<Command, "createdAt">): number => (left.createdAt ?? 0) - (right.createdAt ?? 0);
 
 export type CommandHandler = (params: JsonObject) => JsonValue | Promise<JsonValue>;

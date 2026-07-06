@@ -66,16 +66,18 @@ New optional fields on the command doc (`@mulmoclaude/core/remote-host`
   "params": { … },
   "status": "queued",
   "createdBy": "remote",
-  "createdAt":  "<serverTimestamp>",  // NEW — replay order + age basis
-  "expiresAt":  "<Timestamp>",        // NEW — host skips + marks error past this
+  "createdAt":  1751760000000,        // NEW — enqueue time (epoch ms); age + best-effort dispatch bias
+  "expiresAt":  1752364800000,        // NEW — deadline (epoch ms); host DELETES past this (doc + attachments)
   "queuedOffline": true               // NEW — set when emitted with host offline;
                                       //   the ONLY signal that exempts the doc
                                       //   from the remote's ack-timeout rollback
 }
 ```
 
-- `createdAt` — server timestamp so the host can replay in send-order and compute
-  age. (Today commands carry no reliable ordering key.)
+- `createdAt` — enqueue time (epoch ms). Used for a **best-effort** oldest-first
+  dispatch bias on drain + age display. **Not** a strict ordering guarantee:
+  commands are processed concurrently and out-of-order completion is by design
+  (chat is asynchronous), so `createdAt` only nudges which starts first.
 - `expiresAt` — remote-chosen wall-clock deadline. The host **deletes** a command
   past it (doc + staged attachments) rather than acting on it, so a weekend of
   queued chats doesn't all spawn on Monday and no bytes are stranded (edge #3).
@@ -126,11 +128,16 @@ is worse than a visible "that role no longer exists" the phone shows on reopen.
 
 ### Edge #3 — Expired commands are deleted (doc + attachments), not error-marked
 
-The drain loop is `docChanges().forEach(... processCommand ...)` — unordered, no
-throttle — so N weekend chats `spawnSystemWorker` near-simultaneously on wake.
+The drain loop is `docChanges().forEach(... processCommand ...)` — commands are
+dispatched concurrently, so N weekend chats `spawnSystemWorker` near-simultaneously
+on wake.
 
-- **Order the drain** — add `orderBy("createdAt")` to the queued query so a batch
-  replays in send-order.
+- **Best-effort drain order, NOT a guarantee.** The runner sorts each drained
+  batch by `createdAt` **in memory** (oldest-first) to bias which command starts
+  first — deliberately *not* `orderBy("createdAt")` on the query, which would
+  silently exclude pre-offline-queue docs missing the field. But processing is
+  concurrent and **out-of-order completion is by design** (chat is asynchronous),
+  so this only nudges dispatch order; it is not a strict replay guarantee.
 - **Expiry ⇒ delete, not error.** Inside `processCommand`, before the handler
   lookup, a command past `expiresAt` is **removed entirely**: delete its staged
   attachments, then `deleteDoc(ref)`. It never reaches the handler and leaves no

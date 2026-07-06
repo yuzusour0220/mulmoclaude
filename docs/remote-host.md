@@ -251,10 +251,12 @@ today's exact behaviour):
   "queuedOffline": true }       // emitted while the host was offline
 ```
 
-- **Ordered drain.** The runner sorts each drained batch by `createdAt` **in
-  memory** (oldest first) — deliberately *not* `orderBy("createdAt")` on the
-  query, which would silently exclude pre-offline-queue docs that have no
-  `createdAt` and drop them from the queue entirely.
+- **Best-effort drain order.** The runner sorts each drained batch by `createdAt`
+  **in memory** (oldest first) to bias which command starts first — but commands
+  are processed concurrently and **out-of-order completion is by design** (chat is
+  asynchronous), so this is not a strict ordering guarantee. In-memory rather than
+  `orderBy("createdAt")` on the query because a Firestore `orderBy` silently
+  excludes pre-offline-queue docs that have no `createdAt`.
 - **Expiry ⇒ delete, not error.** A command past `expiresAt` is removed entirely:
   the runner calls the host's `onExpire(command)` — which deletes the staged
   attachment uploads (`server/remoteHost/onExpire.ts`) — then `deleteDoc`s it. It
