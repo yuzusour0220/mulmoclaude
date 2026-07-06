@@ -6,6 +6,7 @@ import {
   buildHtmlPreviewCsp,
   buildPrintCspContent,
   wrapHtmlWithPreviewCsp,
+  sanitizeCspExtra,
 } from "../../../src/utils/html/previewCsp";
 
 describe("buildHtmlPreviewCsp", () => {
@@ -122,6 +123,60 @@ describe("buildPrintCspContent", () => {
     assert.ok(csp.includes("script-src 'unsafe-inline' https://example.com"));
     assert.ok(csp.includes("img-src http://localhost:5173 https://example.com"));
     assert.ok(!csp.includes("jsdelivr"));
+  });
+});
+
+describe("user CSP extension (config/csp.json)", () => {
+  it("emits no frame-src by default, so iframes stay blocked (default-src 'none')", () => {
+    assert.ok(!buildCustomViewCsp("http://localhost:3001").includes("frame-src"));
+    assert.ok(!buildHtmlPreviewCsp().includes("frame-src"));
+  });
+
+  it("adds a frame-src directive only when the user opts hosts in (Google Maps embed)", () => {
+    const csp = buildCustomViewCsp("http://localhost:3001", HTML_PREVIEW_CSP_ALLOWED_CDNS, { "frame-src": ["https://www.google.com"] });
+    assert.match(csp, /frame-src https:\/\/www\.google\.com/);
+  });
+
+  it("appends extra hosts to a directive that already has a base value", () => {
+    const csp = buildCustomViewCsp("http://localhost:3001", HTML_PREVIEW_CSP_ALLOWED_CDNS, {
+      "script-src": ["https://maps.googleapis.com"],
+      "connect-src": ["https://maps.googleapis.com"],
+    });
+    assert.match(csp, /script-src 'unsafe-inline' [^;]*https:\/\/maps\.googleapis\.com/);
+    // connect-src stays origin-locked PLUS the opted-in host (never a blanket https:)
+    assert.match(csp, /connect-src http:\/\/localhost:3001 https:\/\/maps\.googleapis\.com/);
+  });
+
+  it("preview policy honours extra hosts too", () => {
+    const csp = buildHtmlPreviewCsp("http://localhost:5173", HTML_PREVIEW_CSP_ALLOWED_CDNS, { "frame-src": ["https://www.google.com"] });
+    assert.match(csp, /frame-src https:\/\/www\.google\.com/);
+  });
+});
+
+describe("sanitizeCspExtra", () => {
+  it("keeps plain https origins (scheme + host + optional port)", () => {
+    const out = sanitizeCspExtra({ "frame-src": ["https://www.google.com", "https://example.com:8443"] });
+    assert.deepEqual(out["frame-src"], ["https://www.google.com", "https://example.com:8443"]);
+  });
+
+  it("drops http, wildcards, paths, and unsafe/scheme keyword tokens", () => {
+    const out = sanitizeCspExtra({
+      "script-src": ["http://insecure.example", "https://*.evil.com", "https://ok.com/path", "'unsafe-eval'", "data:", "*", "https://good.com"],
+    });
+    assert.deepEqual(out["script-src"], ["https://good.com"]);
+  });
+
+  it("ignores unknown directives, non-array values, and non-string entries", () => {
+    const out = sanitizeCspExtra({ "default-src": ["https://x.com"], "img-src": "https://x.com", "font-src": [42, null, "https://ok.com"] });
+    assert.equal(out["default-src" as never], undefined);
+    assert.equal(out["img-src"], undefined);
+    assert.deepEqual(out["font-src"], ["https://ok.com"]);
+  });
+
+  it("dedupes and trims, and returns {} for non-object input", () => {
+    assert.deepEqual(sanitizeCspExtra({ "img-src": [" https://a.com ", "https://a.com"] })["img-src"], ["https://a.com"]);
+    assert.deepEqual(sanitizeCspExtra(null), {});
+    assert.deepEqual(sanitizeCspExtra("nope"), {});
   });
 });
 
