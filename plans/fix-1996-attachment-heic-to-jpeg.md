@@ -14,6 +14,14 @@ Claude Messages API only accepts `image/jpeg`, `image/png`, `image/gif`, `image/
 
 The upload pipeline treats every `image/*` MIME as a native content block (`isImageMime` in `packages/client/src/mime.ts`), and the agent packs it as `type: "image"` (`server/agent/config.ts` `buildNativeBlock`) with the on-disk MIME as `media_type`. HEIC bytes then reach Claude verbatim → 400.
 
+## Iteration note — sharp alone is insufficient for HEIC
+
+Initial implementation used `sharp` for every conversion. First real HEIC upload showed sharp's prebuilt libvips ships without the HEVC (x265) codec for licensing reasons: `heif: Error while loading plugin: Support for this compression format has not been built in (11.6003)`. Fallback branch fired correctly (upload didn't fail); JPEG conversion didn't happen; Claude API returned 400 as before.
+
+Fix: use `heic-convert` (npm package bundling WASM libheif, no platform codec dependency) for `image/heic` and `image/heif`. Keep sharp for TIFF / BMP / AVIF (libvips reads these natively without HEVC). Bounce through sharp on every path afterward so `.rotate()` bakes EXIF orientation into the final JPEG and quality is normalised.
+
+Verified end-to-end against the actual failing HEIC from the user's workspace: 967 KB → 1190 KB in 1.8s, 2268×4032 baseline JPEG.
+
 ## Design
 
 Follow the existing PPTX → PDF pattern in `server/api/routes/attachment.ts`:

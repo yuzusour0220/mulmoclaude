@@ -117,7 +117,7 @@ router.post(
         // would have before this branch existed.
         let jpegBuf: Buffer;
         try {
-          jpegBuf = await imageJpegConverter(Buffer.from(parsed.base64, "base64"));
+          jpegBuf = await imageJpegConverter(Buffer.from(parsed.base64, "base64"), parsed.mimeType);
         } catch (convertErr) {
           log.warn("attachments", "upload: image-to-jpeg conversion failed, returning original", {
             path: original.relativePath,

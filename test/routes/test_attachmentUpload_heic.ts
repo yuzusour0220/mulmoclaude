@@ -114,6 +114,9 @@ beforeEach(async () => {
   capturedHookCalls = [];
   const routeMod = await import("../../server/api/routes/attachment.ts");
   const previous = routeMod.setImageJpegConverterForTests(async () => STUB_JPEG_BYTES);
+  // The stub ignores sourceMime — the route just forwards whatever it
+  // was called with. Individual assertions below sanity-check the
+  // MIME plumbing separately when needed.
   restoreConverter = () => {
     routeMod.setImageJpegConverterForTests(previous);
   };
@@ -186,6 +189,29 @@ describe("POST /api/attachments — HEIC → JPEG conversion (#1996)", () => {
       assert.ok(state.body?.path?.endsWith(".heic"), "fallback path retains .heic");
       assert.equal(state.body?.path, state.body?.originalPath, "path === originalPath on fallback");
       assert.equal(state.body?.mimeType, "image/heic", "mimeType preserved on fallback");
+    } finally {
+      routeMod.setImageJpegConverterForTests(previous);
+    }
+  });
+
+  it("passes the source MIME to the converter (branch decoder picks the right decoder)", async () => {
+    // Regression: the default converter picks heic-convert vs sharp
+    // based on the sourceMime arg. If the route forgets to pass it,
+    // TIFF / BMP / AVIF would silently be handed to the HEIC decoder
+    // (or vice-versa). Pin the plumbing here.
+    const routeMod = await import("../../server/api/routes/attachment.ts");
+    const seenMimes: string[] = [];
+    const previous = routeMod.setImageJpegConverterForTests(async (_input, sourceMime) => {
+      seenMimes.push(sourceMime);
+      return STUB_JPEG_BYTES;
+    });
+    try {
+      for (const mime of ["image/heic", "image/heif", "image/tiff", "image/bmp", "image/avif"]) {
+        seenMimes.length = 0;
+        const req = { body: { dataUrl: buildDataUrl(mime, "bytes") } } as unknown as Request;
+        await handler(req, mockRes().res);
+        assert.deepEqual(seenMimes, [mime], `converter received sourceMime=${mime}`);
+      }
     } finally {
       routeMod.setImageJpegConverterForTests(previous);
     }
