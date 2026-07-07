@@ -17,15 +17,22 @@
 // inline code.
 //
 // Required container mounts (see the workflow for the full argv):
-//   /app/node_modules                      — Windows FS via WSL2 (primary,
-//                                            junctions dangle here)
-//   /app/pkg_modules/@mulmoclaude/<name>   — Windows FS per package (fallback)
-//   /app/server-plugins                    — Windows FS: server/plugins/
-//   /repro                                 — Windows FS: test/sandbox-repro/
+//   /app/node_modules                              — Windows FS via WSL2 (primary,
+//                                                    junctions dangle here)
+//   /app/pkg_modules/@mulmoclaude/<name>           — Windows FS per package (fallback)
+//   /app/server-plugins                            — Windows FS: server/plugins/
+//   /app/server/agent/mcp-esm-loader.mjs           — Windows FS: the ESM resolver hook
+//                                                    (#1982) — resolve() live here
+//   /app/server/agent/mcp-esm-bootstrap.mjs        — bootstrap that calls
+//                                                    node:module.register(loader)
+//   /repro                                         — Windows FS: test/sandbox-repro/
 // NODE_PATH=/app/node_modules:/app/pkg_modules
 //
 // Runs on: node:22-slim + a global `tsx` install so this TS file can
-// import the shipped `.ts` source directly.
+// import the shipped `.ts` source directly. The workflow launches with
+// `tsx --import file:///app/server/agent/mcp-esm-bootstrap.mjs` — the
+// bootstrap registers the loader so the ESM step below exercises the
+// shipped resolve hook end-to-end.
 
 import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -118,6 +125,35 @@ step("shipped resolvePresetRoot() returns null for a non-existent preset name", 
   const resolved = resolvePresetRoot("@mulmoclaude/definitely-does-not-exist-plugin");
   if (resolved !== null) throw new Error(`shipped resolver returned ${resolved} for a non-existent package`);
 });
+
+// ── 5. ESM path — the class of bug that #1982 fixed ───────────────────
+// The workflow launches this file with `tsx --import <mcp-esm-loader>`
+// so the loader is registered on this process. Dynamic `import()` goes
+// through the same ESM resolver chain the failing MCP server used
+// (`server/agent/mcp-tools/index.ts:2` static import). Without the
+// loader (or with a regression), Node's ESM resolver would fail on the
+// dangling `@mulmoclaude/*` junction — NODE_PATH does not help ESM.
+
+async function esmImportCheck(): Promise<void> {
+  try {
+    // Bare specifier is critical: this is the shape production code
+    // uses and the exact shape that fails without the loader.
+    const mod = await import("@mulmoclaude/x-plugin");
+    if (typeof mod !== "object" || mod === null) {
+      throw new Error(`ESM import returned non-object: ${typeof mod}`);
+    }
+  } catch (err) {
+    throw new Error(`ESM import failed — loader hook not effective. ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+try {
+  await esmImportCheck();
+  console.log("  ok    ESM import('@mulmoclaude/x-plugin') resolves via mcp-esm-loader");
+} catch (err) {
+  failures++;
+  const message = err instanceof Error ? err.message : String(err);
+  console.log(`  FAIL  ESM import('@mulmoclaude/x-plugin') resolves via mcp-esm-loader\n        ${message}`);
+}
 
 // ──────────────────────────────────────────────────────────────────────
 
