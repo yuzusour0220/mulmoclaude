@@ -10,6 +10,111 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 ---
 
+## [0.9.5] - 2026-07-08
+
+Windows Docker sandbox is now fully functional end-to-end (the ESM half of the resolver gap #1946 / #1982 landed alongside the CJS fix from 0.9.4), HEIC / HEIF attachments transparently convert to JPEG on upload with in-browser preview, and a **user-extensible sandbox CSP** lets the runtime whitelist third-party origins through `config/csp.json` instead of hard-coding them. Remote host gains offline queueing (mobile requests hold until the host comes back). The lint suite got a deep clean: `sonarjs/assertions-in-tests` is now `error`, so an assertion-less test can't slip in unnoticed. 23 non-merge commits since 0.9.4.
+
+### Highlights
+
+#### Windows Docker sandbox: end-to-end fix (#1982)
+- New `server/agent/mcp-esm-loader.mjs` + `mcp-esm-bootstrap.mjs` — an ESM resolver hook registered via `tsx --import` on the MCP child in Docker mode. NODE_PATH is CJS-only per Node's spec, so the previous 0.9.4 fix restored preset loading but left static ESM imports (`import { readXPost } from "@mulmoclaude/x-plugin"`) broken. Now every `@mulmoclaude/*` specifier resolves.
+- Windows CI probe (`test/sandbox-repro/probe.ts` + `.github/workflows/docker_sandbox_windows.yaml`) grew an ESM `import()` step, so this class of regression can't slip through again.
+- **No-op on Linux / macOS** — the hook's fallback only fires when primary resolution fails; the ESM loader is unchanged everywhere else.
+
+#### HEIC / HEIF / TIFF / BMP / AVIF attachments (#1996)
+- Uploader auto-converts these formats to JPEG server-side before the chat surface sees them (heic-convert on the launcher deps).
+- Pre-send preview chip decodes HEIC in the browser (#2000), so the confirmation thumbnail is legible instead of a broken image.
+
+#### User-extensible sandbox CSP (#1989)
+- Sandboxed collection views can now whitelist third-party origins via workspace `config/csp.json`.
+- A CSP-violation notice + boot-time warnings surface misconfigurations to the user instead of failing silently.
+
+#### Remote host offline queueing (step 1 of #1993)
+- Mobile companion's `startChat` requests queue while the host is offline; the host + `@mulmoclaude/core` layer replay them once the presence doc goes live.
+- `advertise host capabilities in the presence doc` (#1992) lands as the discovery half — mobile now knows what the host supports before submitting.
+
+#### Lint: assertions-in-tests as an error (batches #1999 / #2001 / #2005)
+- 26 flagged tests (server / utils / plugins node:test + e2e Playwright specs) rewritten to wrap the target call in `assert.doesNotThrow(...)` / `assert.doesNotReject(...)` — no semantic change, contracts made explicit.
+- Includes a new real boundary test for `deleteProjectSkill`'s user-scope refusal path (was an empty placeholder before), driven by a `userDir` seam so the guard is actually exercised.
+- Rule promoted to `error` in `eslint.config.mjs` — CI blocks a new assertion-less test.
+
+#### Files: "Open in OS" button (#1985)
+- Binary / unsupported previews get an OS-native open button so the file view isn't a dead end when MulmoClaude can't render inline.
+
+#### Sandbox: allow collection view downloads (#1997)
+- File downloads now work from sandboxed collection views (were being blocked by the iframe sandbox flags).
+
+### Added
+- ESM resolver hook + bootstrap for Windows Docker MCP child (#1982 / #1995).
+- HEIC / HEIF / TIFF / BMP / AVIF → JPEG on upload + browser-side HEIC preview (#1996 / #2000).
+- Sandbox CSP allowlist via `config/csp.json` + violation surface (#1989 / #1990).
+- Remote host offline queue for `startChat` + host-capability advertisement (#1992 / #1993).
+- Real unit coverage for `deleteProjectSkill` user-scope refusal via new `userDir` seam (#2001).
+- Files view: "Open in OS" button for binary previews (#1985 / #1988).
+- Smoke: resolve first-party deps from the workspace instead of public npm (#1994) — trims flakiness when a shared package is mid-publish.
+
+### Changed
+- `sonarjs/assertions-in-tests` promoted from `warn` to `error` (#2005). Every existing hit rewritten in advance across #1999 / #2001.
+- Windows Docker CI probe now runs an ESM step (`docker_sandbox_windows.yaml`).
+- `resolvePresetRoot` delegates to Node's resolver for NODE_PATH (#1984, tidies the fallback path #1974 introduced).
+- `@mulmoclaude/collection-plugin` bumped to 0.7.4 in the workspace + published (#1987 for 0.7.1 → 0.7.4 range).
+- Documentation: remote host guide (#1979) + launch plan re-centred on Collections (#1971).
+- `remote-host` transport extracted into `@mulmoclaude/core` (#1980) — reusable across host + mobile pairs.
+
+### Fixed
+- Sandboxed collection view file downloads blocked by iframe flags (#1997).
+- Ref-crossing derived fields in mobile `getItems` failing to resolve (#1978).
+- The `mulmoclaude@0.9.5` launcher publish itself required a cascade publish of `@mulmoclaude/collection-plugin@0.7.4` (skill §2 drift check covers only `@mulmobridge/*` scope). PR #2006 updates the skill so the manual `@mulmoclaude/*` check is now a documented step.
+
+### Security
+- User-extensible sandbox CSP (#1989) narrows what a sandboxed collection view can reach — the default remains locked down; only origins explicitly listed in `config/csp.json` are allowed through.
+
+---
+
+## [0.9.4] - 2026-07-05
+
+Retrospective release entry for the `mulmoclaude@0.9.4` npm publish that shipped without a matching GitHub release. Focused on **Windows Docker sandbox recovery** (root of #1946) and a batch of **remote host / mobile-companion** improvements (session-history summaries, listSkills, attachments over Storage, capability advertisement). 19 non-merge commits since 0.9.3.
+
+### Highlights
+
+#### Windows Docker sandbox: CJS-side fix (#1946)
+- `packages/mulmoclaude/package.json` gets a NODE_PATH fallback so `@mulmoclaude/*` workspace packages resolve inside the Linux container even when the yarn workspace symlinks (Windows junctions) dangle.
+- Follow-up ESM half landed in 0.9.5; the 0.9.4 fix restored the preset loader path only.
+
+#### Remote host / mobile companion polish
+- **Remote view attachments** (#1954): mobile can now share photos / videos / PDFs into a chat via Storage, without pulling them through localhost.
+- **listSkills + free-form `startChat`** (#1947): mobile can enumerate host skills and start chats without picking a role first.
+- **List accounting books + choose role on startChat** (#1962): mobile-side workflow selects a role at chat creation.
+- **Popover UI help** (#1955): explanations for the presence popover so users understand the same-Google-account contract.
+
+#### Collections + Files
+- **Dynamic collection icons** based on data state (#1900 / #1957).
+- **Hide agent-internal top-level dirs by default** (#1896 / #1963) — the file tree stops leaking `chat/` / `summaries/` unless the user opts in.
+
+#### Session history: summary-first
+- **Summary-first, hover for full** (#1958 / #1959) — the session list surfaces the LLM-generated summary; hovering reveals the full first message.
+- **Journal + chat-index: configurable mode + always-on origin filter** (#1944 follow-ups: #1949 / #1951).
+
+### Added
+- Remote-view attachments via Storage (#1954).
+- Mobile `listSkills` + free-form `startChat` (#1947); accounting book picker (#1962).
+- Popover UI help copy on the remote-host presence indicator (#1955).
+- Dynamic collection icons (#1957).
+- Session-history summary-first with hover-for-full (#1959).
+- Files: hide agent-internal top-level dirs by default (#1963).
+- Docs: consolidate what runs in Docker vs host (#1966); Remote Access README section (#1970); CLAUDE.md rule forbidding preemptive launcher version bumps in `chore(release)` (#1948).
+
+### Changed
+- Journal + chat-index: configurable mode + always-on origin filter (#1944 / #1949 / #1951).
+- `mulmocast` bumped to 2.7.0 (#1952).
+
+### Fixed
+- Collections: 409 on file-ancestor import path is Windows-safe (#1967).
+- Windows cross-platform path bugs failing lint_test_windows (#1965).
+- Address CodeRabbit review comments from #1951 (#1953).
+
+---
+
 ## [0.9.3] - 2026-07-03
 
 Two threads dominate this release: **writable remote custom views for the mobile companion** (phase 3–5 of the remote-view work — mobile-optimised LLM-generated views, update/delete over the Firestore channel, and inlined workspace image thumbnails so the phone doesn't reach localhost) and a **batch of correctness fixes** across chat UI, long-message rendering, collection deep-links, notification icon clashes, and the billing recipe. Plus the new CI gate that enforces launcher ↔ shared-package sync (root cause of #1920). 38 non-merge commits since 0.9.2.
