@@ -158,13 +158,24 @@ describe("POST /api/attachments — HEIC → JPEG conversion (#1996)", () => {
   });
 
   it("also converts HEIF / TIFF / BMP / AVIF", async () => {
-    for (const mime of ["image/heif", "image/tiff", "image/bmp", "image/avif"]) {
+    const expectedExt: Readonly<Record<string, string>> = {
+      "image/heif": ".heif",
+      "image/tiff": ".tif",
+      "image/bmp": ".bmp",
+      "image/avif": ".avif",
+    };
+    for (const [mime, ext] of Object.entries(expectedExt)) {
       const req = { body: { dataUrl: buildDataUrl(mime, "fake-bytes") } } as unknown as Request;
       const { res, state } = mockRes();
       await handler(req, res);
       assert.equal(state.status, 200, `${mime} → 200`);
       assert.equal(state.body?.mimeType, "image/jpeg", `${mime} → response mimeType image/jpeg`);
       assert.ok(state.body?.path?.endsWith(".jpg"), `${mime} → path ends .jpg`);
+      // Regression pin (codex on #1998): original is stored as the
+      // concrete extension for `mime`, not `.bin`. Broken MIME_EXT
+      // entries for BMP / AVIF would silently fall through and
+      // strip the archival fidelity `originalPath` promises.
+      assert.ok(state.body?.originalPath?.endsWith(ext), `${mime} → originalPath ends ${ext} (got ${state.body?.originalPath})`);
     }
   });
 
