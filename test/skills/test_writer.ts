@@ -188,26 +188,18 @@ describe("deleteProjectSkill", () => {
     assert.deepEqual(result, { kind: "invalid-slug", slug: "Bad/slug" });
   });
 
-  it.skip("does not touch user-scope skills with the same name", async () => {
-    // We can't override discoverSkills' user scope without injecting
-    // a custom userDir, so this test simulates the user-skill case
-    // by writing a fake user-scope skill via the same mechanism that
-    // discovery uses. Skipped here because deleteProjectSkill calls
-    // `discoverSkills({ workspaceRoot })` which always uses the real
-    // ~/.claude/skills. We test the guard logic via the `not-found`
-    // path above and rely on the e2e + manual smoke for the
-    // user-scope-refusal case.
-    //
-    // (If discoverSkills grows a userDir override for the real
-    // function — currently only `collectSkillsFromDir` is testable —
-    // come back and add a real assertion here.)
-    //
-    // The `.skip` above stops the body from running. This trivial
-    // sanity check on the imported callable satisfies sonarjs's
-    // assertions-in-tests rule without a comment-based disable —
-    // it will only ever fire if the module surface breaks under us.
-    assert.equal(typeof deleteProjectSkill, "function");
-  });
+  // NOTE (user-scope refusal): deleteProjectSkill calls
+  // `discoverSkills({ workspaceRoot })` which always consults the
+  // real `~/.claude/skills`, so unit-testing "must not touch a
+  // user-scope skill with the same name" here would require
+  // injecting a custom userDir override that `discoverSkills`
+  // does not currently expose (only `collectSkillsFromDir` is
+  // testable in isolation). The guard is covered by the e2e-live
+  // suite plus the `not-found` unit path above. When
+  // `discoverSkills` grows a userDir hook, restore a real `it(...)`
+  // exercising this boundary — do NOT reintroduce it as an empty
+  // placeholder that passes vacuously (that was the pre-cleanup
+  // shape flagged by sonarjs).
 
   it("survives a leftover non-SKILL file in the skill dir", async () => {
     await seed("with-extras");
