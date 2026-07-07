@@ -69,13 +69,17 @@ describe("buildMcpConfig", () => {
     assert.equal((server.env as Record<string, string>).NODE_PATH, undefined);
   });
 
-  it("docker server registers the ESM resolver hook via --import (#1982)", async () => {
+  it("docker server registers the ESM resolver hook via a bootstrap that calls register() (#1982)", async () => {
     const config = buildMcpConfig({ chatSessionId: "s", port: 3001, activePlugins: [], useDocker: true }) as Record<string, unknown>;
     const server = (config.mcpServers as Record<string, unknown>).mulmoclaude as Record<string, unknown>;
     const args = server.args as string[];
     const importIdx = args.indexOf("--import");
     assert.ok(importIdx !== -1, "--import flag must be present so the ESM loader hook is registered");
-    assert.equal(args[importIdx + 1], "file:///app/server/agent/mcp-esm-loader.mjs");
+    // Points at the bootstrap — NOT the loader directly. `--import
+    // <loader>` only evaluates the module's top level; a bootstrap
+    // that calls `register()` is what actually wires the resolve
+    // hook into Node's loader chain (Codex review).
+    assert.equal(args[importIdx + 1], "file:///app/server/agent/mcp-esm-bootstrap.mjs");
     // The mcp-server script must still be the LAST arg so tsx treats it
     // as the entry point rather than a flag operand.
     assert.equal(args[args.length - 1], "/app/server/agent/mcp-server.ts");

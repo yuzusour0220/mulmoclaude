@@ -22,14 +22,17 @@
 //   /app/pkg_modules/@mulmoclaude/<name>           — Windows FS per package (fallback)
 //   /app/server-plugins                            — Windows FS: server/plugins/
 //   /app/server/agent/mcp-esm-loader.mjs           — Windows FS: the ESM resolver hook
-//                                                    (#1982) registered via --import
+//                                                    (#1982) — resolve() live here
+//   /app/server/agent/mcp-esm-bootstrap.mjs        — bootstrap that calls
+//                                                    node:module.register(loader)
 //   /repro                                         — Windows FS: test/sandbox-repro/
 // NODE_PATH=/app/node_modules:/app/pkg_modules
 //
 // Runs on: node:22-slim + a global `tsx` install so this TS file can
 // import the shipped `.ts` source directly. The workflow launches with
-// `tsx --import file:///app/server/agent/mcp-esm-loader.mjs` so the ESM
-// step below exercises the shipped loader hook.
+// `tsx --import file:///app/server/agent/mcp-esm-bootstrap.mjs` — the
+// bootstrap registers the loader so the ESM step below exercises the
+// shipped resolve hook end-to-end.
 
 import { existsSync } from "node:fs";
 import { createRequire } from "node:module";

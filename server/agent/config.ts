@@ -31,7 +31,11 @@ export const CONTAINER_WORKSPACE_PATH = "/home/node/mulmoclaude";
 // by reading each pkg's package.json under this root and returning the
 // resolved entry URL (#1982).
 const CONTAINER_WORKSPACE_MODULES_PATH = "/app/pkg_modules";
-const CONTAINER_ESM_LOADER_URL = "file:///app/server/agent/mcp-esm-loader.mjs";
+// `--import` this bootstrap; the bootstrap in turn calls
+// `node:module.register()` on the loader. Pointing `--import`
+// straight at the loader would just evaluate its top level and
+// leave the exported `resolve()` inert.
+const CONTAINER_ESM_BOOTSTRAP_URL = "file:///app/server/agent/mcp-esm-bootstrap.mjs";
 
 // `Skill` is the tool Claude Code uses to execute a discovered
 // `.claude/skills/<name>/SKILL.md`. Because `--allowedTools` is passed
@@ -323,7 +327,7 @@ function buildMulmoclaudeServer(params: { chatSessionId: string; port: number; a
     // as a Node CLI flag; tsx forwards `--import` through. No-op on
     // Linux/macOS Docker (the hook's catch never fires). Native
     // mode never sees this flag.
-    args: useDocker ? ["--import", CONTAINER_ESM_LOADER_URL, mcpServerPath] : [mcpServerPath],
+    args: useDocker ? ["--import", CONTAINER_ESM_BOOTSTRAP_URL, mcpServerPath] : [mcpServerPath],
     env: {
       SESSION_ID: chatSessionId,
       PORT: String(port),
