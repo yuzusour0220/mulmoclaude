@@ -28,6 +28,7 @@
           v-for="(file, index) in pastedFiles"
           :key="file.name + index"
           :data-url="file.dataUrl"
+          :preview-data-url="file.previewDataUrl"
           :filename="file.name"
           :mime="file.mime"
           @remove="removeFileAt(index)"
@@ -131,6 +132,7 @@ import { useImeAwareEnter } from "../composables/useImeAwareEnter";
 import { useSkillsList, type SkillSummary } from "../composables/useSkillsList";
 import { useSlashCommandMenu, handleSlashMenuKeydown } from "../composables/useSlashCommandMenu";
 import type { PastedFile } from "../types/pastedFile";
+import { buildHeicPreviewDataUrl, needsBrowserPreviewConversion } from "../utils/attachment/heicPreview";
 
 export type { PastedFile };
 
@@ -324,10 +326,21 @@ async function processFiles(files: File[]): Promise<void> {
     return;
   }
 
-  const pending = accepted.map(async (file) => {
+  const pending = accepted.map(async (file): Promise<PastedFile | null> => {
     const dataUrl = await readFileAsDataUrl(file);
     if (!dataUrl) return null;
-    return { dataUrl, name: file.name, mime: file.type } satisfies PastedFile;
+    // Browser-side HEIC/HEIF conversion only affects the preview
+    // chip's <img src>. The original `dataUrl` still travels to the
+    // upload endpoint unchanged — server-side heic-convert produces
+    // the JPEG the LLM reads. Failed conversion → previewDataUrl
+    // stays absent and the chip falls back to a file icon.
+    const preview = needsBrowserPreviewConversion(file.type) ? await buildHeicPreviewDataUrl(file) : null;
+    return {
+      dataUrl,
+      name: file.name,
+      mime: file.type,
+      ...(preview ? { previewDataUrl: preview } : {}),
+    };
   });
 
   try {
