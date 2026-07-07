@@ -11,9 +11,14 @@ import assert from "node:assert/strict";
 import { needsBrowserPreviewConversion } from "../../../src/utils/attachment/heicPreview";
 
 describe("needsBrowserPreviewConversion", () => {
-  it("returns true for HEIC / HEIF", () => {
+  it("returns true for HEIC / HEIF (still + sequence)", () => {
     assert.equal(needsBrowserPreviewConversion("image/heic"), true);
     assert.equal(needsBrowserPreviewConversion("image/heif"), true);
+    // Sequence containers — iOS Live Photos / burst mode. Codex on
+    // #2000: without these, a Live Photo silently dropped to the
+    // file-icon fallback.
+    assert.equal(needsBrowserPreviewConversion("image/heic-sequence"), true);
+    assert.equal(needsBrowserPreviewConversion("image/heif-sequence"), true);
   });
 
   it("returns false for MIMEs Chrome renders natively", () => {

@@ -16,12 +16,18 @@
 // leaves `previewDataUrl` unset and the preview component drops
 // back to a file-icon chip.
 
-const HEIF_LIKE_MIMES: ReadonlySet<string> = new Set(["image/heic", "image/heif"]);
+// `image/heic-sequence` / `image/heif-sequence` are the multi-frame
+// container MIMEs iOS emits for burst mode and Live Photos. Codex
+// review on #2000: without these, a Live Photo would silently miss
+// the preview conversion and land in the file-icon fallback.
+const HEIF_LIKE_MIMES: ReadonlySet<string> = new Set(["image/heic", "image/heif", "image/heic-sequence", "image/heif-sequence"]);
 
 /** True when the given MIME identifies a HEIC / HEIF variant Chrome
- *  can't render natively. Kept narrow — TIFF / BMP are technically
- *  in-band for the server-side conversion path but Chrome renders
- *  BMP natively today and heic2any doesn't decode TIFF at all. */
+ *  can't render natively (including the `-sequence` container
+ *  variants for Live Photos / burst mode). Kept narrow — TIFF / BMP
+ *  are technically in-band for the server-side conversion path but
+ *  Chrome renders BMP natively today and heic2any doesn't decode
+ *  TIFF at all. */
 export function needsBrowserPreviewConversion(mime: string): boolean {
   return HEIF_LIKE_MIMES.has(mime);
 }

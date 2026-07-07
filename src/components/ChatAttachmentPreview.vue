@@ -43,7 +43,11 @@ const removeLabel = computed(() => t("chatInput.removeAttachment", { name: props
 // MIMEs Chrome renders directly in an `<img>` tag. HEIC / HEIF and
 // TIFF are absent — those either arrive with a `previewDataUrl`
 // filled in upstream or fall back to the file-icon chip.
-const BROWSER_RENDERABLE_IMAGE_MIMES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp", "image/svg+xml", "image/avif", "image/bmp"]);
+// `image/jpg` is a common non-standard alias the browser's file
+// picker occasionally emits alongside `image/jpeg` — kept in the
+// set so a `.jpg` pick doesn't regress to the file-icon chip
+// (codex review on #2000).
+const BROWSER_RENDERABLE_IMAGE_MIMES = new Set(["image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp", "image/svg+xml", "image/avif", "image/bmp"]);
 
 const imageSrc = computed(() => {
   if (props.previewDataUrl) return props.previewDataUrl;
