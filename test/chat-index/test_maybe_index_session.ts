@@ -188,11 +188,13 @@ describe("maybeIndexSession — unexpected error swallowing", () => {
 
     // This must resolve, not reject — the agent finally block
     // relies on it.
-    await maybeIndexSession({
-      sessionId: "sess-err",
-      workspaceRoot: workspace,
-      deps: { mode: "haiku", summarize: failing, now: () => 0 },
-    });
+    await assert.doesNotReject(
+      maybeIndexSession({
+        sessionId: "sess-err",
+        workspaceRoot: workspace,
+        deps: { mode: "haiku", summarize: failing, now: () => 0 },
+      }),
+    );
   });
 
   it("does not disable the module on unrelated errors", async () => {
