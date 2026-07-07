@@ -135,18 +135,25 @@ describe("POST /api/attachments — HEIC → JPEG conversion (#1996)", () => {
     const { res, state } = mockRes();
     await handler(req, res);
     assert.equal(state.status, 200);
-    assert.ok(state.body, "response body");
-    assert.ok(state.body.path?.endsWith(".jpg"), `path ends with .jpg (got ${state.body.path})`);
-    assert.ok(state.body.originalPath?.endsWith(".heic"), `originalPath ends with .heic (got ${state.body.originalPath})`);
-    assert.equal(state.body.mimeType, "image/jpeg");
+    // Narrow `state.body`'s optional fields once so the block below
+    // sees concrete strings instead of `string | undefined` (mockRes
+    // types the body as an optional JsonResponsePayload for the 400
+    // guards further down).
+    const body = state.body;
+    assert.ok(body, "response body");
+    assert.ok(body.path, "path present");
+    assert.ok(body.originalPath, "originalPath present");
+    assert.ok(body.path.endsWith(".jpg"), `path ends with .jpg (got ${body.path})`);
+    assert.ok(body.originalPath.endsWith(".heic"), `originalPath ends with .heic (got ${body.originalPath})`);
+    assert.equal(body.mimeType, "image/jpeg");
     // Both files land in the same partition + share the same id.
-    const partition = path.posix.dirname(state.body.path);
-    assert.equal(path.posix.dirname(state.body.originalPath), partition);
-    const jpegId = path.posix.basename(state.body.path, ".jpg");
-    const heicId = path.posix.basename(state.body.originalPath, ".heic");
+    const partition = path.posix.dirname(body.path);
+    assert.equal(path.posix.dirname(body.originalPath), partition);
+    const jpegId = path.posix.basename(body.path, ".jpg");
+    const heicId = path.posix.basename(body.originalPath, ".heic");
     assert.equal(jpegId, heicId);
     // Companion bytes match what the stub returned.
-    const onDisk = await readFile(path.join(workspaceRoot, state.body.path));
+    const onDisk = await readFile(path.join(workspaceRoot, body.path));
     assert.deepEqual(onDisk, STUB_JPEG_BYTES);
   });
 
