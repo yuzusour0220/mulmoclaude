@@ -77,6 +77,17 @@ jobs:
             throw "expected NTFS Junction, got '$($x.LinkType)' — probe assumption violated"
           }
 
+      # The probe's ESM check actually LOADS `@mulmoclaude/x-plugin` through
+      # the resolver hook, so its built entry (`dist/index.js`, per the
+      # package's `exports` map) must exist in the mounted dev-workspace dir —
+      # production ships built dist, this repro must too. `yarn install`
+      # doesn't build it (no `prepare` script) and the plugin is a
+      # self-contained bundle (no `@mulmoclaude/core` or npm deps at load
+      # time, `vite build` inlines everything), so building just this one
+      # package is enough for the import to resolve.
+      - name: Build @mulmoclaude/x-plugin (probe imports its built ESM entry)
+        run: yarn workspace @mulmoclaude/x-plugin run build
+
       # windows-latest ships Docker CLI + a Windows-only engine, no Docker
       # Desktop. Docker Desktop in CI needs UI dialogs on first launch and
       # is flake-prone. Instead we use the preinstalled WSL2 with Ubuntu +
