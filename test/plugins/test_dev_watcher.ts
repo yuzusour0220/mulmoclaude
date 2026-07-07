@@ -295,6 +295,6 @@ describe("watchDevPlugins — close()", () => {
     const plugin = fakePlugin("@test/close-twice");
     const rig = makeRig(plugin, 30);
     rig.close();
-    rig.close(); // must not throw
+    assert.doesNotThrow(() => rig.close());
   });
 });
