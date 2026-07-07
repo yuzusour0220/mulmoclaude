@@ -171,8 +171,10 @@ jobs:
             -v "${wsLinux}/packages/plugins/email-plugin:/app/pkg_modules/@mulmoclaude/email-plugin:ro" `
             -v "${wsLinux}/packages/core:/app/pkg_modules/@mulmoclaude/core:ro" `
             -v "${wsLinux}/server/plugins:/app/server-plugins:ro" `
+            -v "${wsLinux}/server/agent/mcp-esm-loader.mjs:/app/server/agent/mcp-esm-loader.mjs:ro" `
+            -v "${wsLinux}/server/agent/mcp-esm-bootstrap.mjs:/app/server/agent/mcp-esm-bootstrap.mjs:ro" `
             -v "${wsLinux}/test/sandbox-repro:/repro:ro" `
             -e NODE_PATH=/app/node_modules:/app/pkg_modules `
             -w /app `
             node:22-slim `
-            bash -c "npm install -g tsx --silent && tsx /repro/probe.ts"
+            bash -c "npm install -g tsx --silent && tsx --import file:///app/server/agent/mcp-esm-bootstrap.mjs /repro/probe.ts"
