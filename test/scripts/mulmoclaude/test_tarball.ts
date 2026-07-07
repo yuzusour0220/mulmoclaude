@@ -22,11 +22,13 @@ describe("allocateRandomPort", () => {
     // Regression guard: if allocateRandomPort forgot to close() the
     // probe server, we'd get EADDRINUSE binding the same port here.
     const port = await tarball.allocateRandomPort();
-    await new Promise<void>((resolve, reject) => {
-      const server = net.createServer();
-      server.once("error", reject);
-      server.listen(port, "127.0.0.1", () => server.close(() => resolve()));
-    });
+    await assert.doesNotReject(
+      new Promise<void>((resolve, reject) => {
+        const server = net.createServer();
+        server.once("error", reject);
+        server.listen(port, "127.0.0.1", () => server.close(() => resolve()));
+      }),
+    );
   });
 
   it("returns distinct ports across parallel calls", async () => {
