@@ -33,6 +33,14 @@
 // `tsx --import file:///app/server/agent/mcp-esm-bootstrap.mjs` — the
 // bootstrap registers the loader so the ESM step below exercises the
 // shipped resolve hook end-to-end.
+//
+// The sibling `test/sandbox-repro/package.json` (`{ "type": "module" }`)
+// is mounted as `/repro/package.json` so tsx transforms this probe as
+// ESM — matching the real MCP server (ESM via the app's type:module
+// package.json) and enabling the top-level `await` in the ESM check
+// below. Without it, tsx treats an ambiguous `.ts` as CJS and esbuild
+// rejects top-level await (`"cjs" output format`) — which broke this
+// canary when an unpinned global `tsx` upgrade flipped that default.
 
 import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
