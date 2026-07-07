@@ -73,7 +73,7 @@ async function decodeForSharp(input: Buffer, sourceMime: string): Promise<Buffer
   // `format: "JPEG"` returns an ArrayBuffer of JPEG bytes. `quality: 1`
   // (0..1 scale — NOT 0..100) minimises the intermediate's own lossy
   // step before sharp re-encodes to UPLOAD_JPEG_QUALITY below.
-  const out = await heicConvert({ buffer: input as unknown as ArrayBufferView, format: "JPEG", quality: 1 });
+  const out = await heicConvert({ buffer: input, format: "JPEG", quality: 1 });
   return Buffer.from(out);
 }
 
