@@ -298,13 +298,13 @@ export default [
       // via PATH is normal operation, not a server-side injection risk.
       "sonarjs/no-os-command-from-path": "off",
       "sonarjs/cors": "off",
-      // Many of our `node:test` cases drive an observed side-effect
-      // (no throw / no log / DOM mutation watched elsewhere) and
-      // intentionally have no inline assert. The rule has no per-case
-      // opt-out, so blocking CI on each one creates churn without
-      // catching real "did we forget the assert?" bugs. Demoted to
-      // warn so reviewers still see it on new tests.
-      "sonarjs/assertions-in-tests": "warn",
+      // Every no-throw / side-effect-only test has been rewritten to
+      // wrap its target call in `assert.doesNotThrow(...)` /
+      // `assert.doesNotReject(...)` (batches #1999 + #2001), so the
+      // rule no longer creates churn. Promoted to `error` so a new
+      // assertion-less test can't slip in unnoticed — reviewers
+      // caught them by eye before, CI enforces it now.
+      "sonarjs/assertions-in-tests": "error",
       // ── eslint-plugin-security tuning ──────────────────────────
       // Three high-volume rules are disabled because they fire on
       // patterns that are normal in this codebase, drowning the
