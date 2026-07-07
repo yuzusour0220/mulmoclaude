@@ -139,7 +139,7 @@ describe("POST /api/attachments — HEIC → JPEG conversion (#1996)", () => {
     // sees concrete strings instead of `string | undefined` (mockRes
     // types the body as an optional JsonResponsePayload for the 400
     // guards further down).
-    const body = state.body;
+    const { body } = state;
     assert.ok(body, "response body");
     assert.ok(body.path, "path present");
     assert.ok(body.originalPath, "originalPath present");
