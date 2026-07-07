@@ -11,7 +11,9 @@
            origin — the view can't read the parent's storage; here there is no
            token to protect, but the phone renders under the same rules and the
            preview must match it exactly). `allow-popups*` lets outbound
-           `target="_blank"` links open as normal tabs. -->
+           `target="_blank"` links open as normal tabs. `allow-downloads` lets
+           a view save files (e.g. an .ics iCalendar export); the phone grants
+           it too, so the preview must match. -->
       <div class="phone-frame">
         <iframe
           ref="iframeEl"
@@ -19,7 +21,7 @@
           data-testid="collection-remote-view-iframe"
           :title="view.label"
           :srcdoc="srcdoc"
-          sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
+          sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox allow-downloads"
           class="phone-screen"
         />
       </div>
