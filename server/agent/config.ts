@@ -648,6 +648,66 @@ function workspaceModuleMounts(packageRoot: string, platform: Platform, toDocker
 // Pure helper that returns the full `docker run ... claude <args>`
 // argv array. Extracted from runAgent so the long flag list can be
 // inspected and tested without spawning a real subprocess.
+// Windows host paths use `\`; Docker's `-v` wants `/`. Pure.
+const toDockerPath = (hostPath: string): string => hostPath.replace(/\\/g, "/");
+
+// Cap/user posture. With SSH-agent forwarding the entrypoint needs 5 caps +
+// HOST_UID/GID to fix /etc/passwd + chown/chmod the socket, then drops them on
+// exec (`setpriv --inh-caps=-all`). Without SSH, run the whole container as the
+// host user — zero caps from the start (pre-#259 posture). Pure.
+export function dockerUserCapArgs(sshAgentForward: boolean, uid: number, gid: number): string[] {
+  if (!sshAgentForward) return ["--user", `${uid}:${gid}`];
+  return [
+    "--cap-add",
+    "CHOWN",
+    "--cap-add",
+    "FOWNER",
+    "--cap-add",
+    "DAC_OVERRIDE",
+    "--cap-add",
+    "SETUID",
+    "--cap-add",
+    "SETGID",
+    "-e",
+    `HOST_UID=${uid}`,
+    "-e",
+    `HOST_GID=${gid}`,
+  ];
+}
+
+interface DockerBindMountOpts {
+  projectRoot: string;
+  packageRoot: string;
+  workspacePath: string;
+  homeDir: string;
+  packagesMount: string[];
+  platform: Platform;
+}
+
+// The `-v` bind mounts, in order. node_modules stays on projectRoot (hoisted
+// deps live next to the consumer's package.json, not mulmoclaude's package dir,
+// #1770); server/src come from packageRoot (repo root in dev, the installed
+// package in npx). Pure given its inputs. Extracted to keep buildDockerSpawnArgs
+// under the max-lines threshold.
+export function dockerBindMountArgs(opts: DockerBindMountOpts): string[] {
+  return [
+    "-v",
+    `${toDockerPath(opts.projectRoot)}/node_modules:/app/node_modules:ro`,
+    "-v",
+    `${toDockerPath(opts.packageRoot)}/server:/app/server:ro`,
+    "-v",
+    `${toDockerPath(opts.packageRoot)}/src:/app/src:ro`,
+    ...opts.packagesMount,
+    ...workspaceModuleMounts(opts.packageRoot, opts.platform, toDockerPath),
+    "-v",
+    `${toDockerPath(opts.workspacePath)}:${CONTAINER_WORKSPACE_PATH}`,
+    "-v",
+    `${toDockerPath(claudeConfigDir(opts.homeDir))}:/home/node/.claude`,
+    "-v",
+    `${toDockerPath(claudeConfigJson(opts.homeDir))}:/home/node/.claude.json`,
+  ];
+}
+
 export function buildDockerSpawnArgs(params: DockerSpawnArgsParams): string[] {
   const {
     workspacePath,
@@ -661,7 +721,6 @@ export function buildDockerSpawnArgs(params: DockerSpawnArgsParams): string[] {
     sandboxAuthArgs = [],
     sshAgentForward = false,
   } = params;
-  const toDockerPath = (hostPath: string): string => hostPath.replace(/\\/g, "/");
   const extraHosts: string[] = platform === "linux" ? ["--add-host", "host.docker.internal:host-gateway"] : [];
   // `packages/` ships in the dev monorepo but NOT in the published
   // mulmoclaude package (the `files` whitelist in
@@ -682,32 +741,7 @@ export function buildDockerSpawnArgs(params: DockerSpawnArgsParams): string[] {
     "-i",
     "--cap-drop",
     "ALL",
-    // When SSH agent forwarding is active, the entrypoint needs root
-    // to fix /etc/passwd, chown /home/node, and chmod the socket.
-    // These 5 caps are the minimum set; setpriv --inh-caps=-all
-    // drops them on exec so Claude runs with zero capabilities.
-    //
-    // When SSH is OFF, use the simpler `--user uid:gid` which runs
-    // the entire container as the host user — zero caps from the
-    // start, identical to the pre-#259 security posture.
-    ...(sshAgentForward
-      ? [
-          "--cap-add",
-          "CHOWN",
-          "--cap-add",
-          "FOWNER",
-          "--cap-add",
-          "DAC_OVERRIDE",
-          "--cap-add",
-          "SETUID",
-          "--cap-add",
-          "SETGID",
-          "-e",
-          `HOST_UID=${uid}`,
-          "-e",
-          `HOST_GID=${gid}`,
-        ]
-      : ["--user", `${uid}:${gid}`]),
+    ...dockerUserCapArgs(sshAgentForward, uid, gid),
     "-e",
     "HOME=/home/node",
     // Wiki-history hook (#763 PR 2) runs inside this container after
@@ -724,25 +758,7 @@ export function buildDockerSpawnArgs(params: DockerSpawnArgsParams): string[] {
     // toolResult into its timeline.
     "-e",
     `MULMOCLAUDE_CHAT_SESSION_ID=${params.chatSessionId}`,
-    "-v",
-    // node_modules stays on projectRoot because hoisted deps live next
-    // to the consumer's package.json, not inside mulmoclaude's package
-    // dir (#1770).
-    `${toDockerPath(projectRoot)}/node_modules:/app/node_modules:ro`,
-    "-v",
-    // server/src come from packageRoot — in dev that's the repo root,
-    // in npx it's `<consumer>/node_modules/mulmoclaude/`.
-    `${toDockerPath(packageRoot)}/server:/app/server:ro`,
-    "-v",
-    `${toDockerPath(packageRoot)}/src:/app/src:ro`,
-    ...packagesMount,
-    ...workspaceModuleMounts(packageRoot, platform, toDockerPath),
-    "-v",
-    `${toDockerPath(workspacePath)}:${CONTAINER_WORKSPACE_PATH}`,
-    "-v",
-    `${toDockerPath(claudeConfigDir(homeDir))}:/home/node/.claude`,
-    "-v",
-    `${toDockerPath(claudeConfigJson(homeDir))}:/home/node/.claude.json`,
+    ...dockerBindMountArgs({ projectRoot, packageRoot, workspacePath, homeDir, packagesMount, platform }),
     ...sandboxAuthArgs,
     ...extraHosts,
     "mulmoclaude-sandbox",

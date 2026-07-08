@@ -191,24 +191,30 @@ export async function loadJsonlInput(jsonlPath: string): Promise<string> {
 
 // --- spawn layer ----------------------------------------------------
 
+// The `claude` CLI argv for one summarization. Pure — extracted so the spawn
+// executor stays small and the flag list is unit-testable on its own.
+export function buildSummarizeCliArgs(input: string, model: SummaryModel): string[] {
+  return [
+    "--print",
+    "--no-session-persistence",
+    "--output-format",
+    "json",
+    "--model",
+    model,
+    "--max-budget-usd",
+    String(MAX_BUDGET_USD),
+    "--json-schema",
+    JSON.stringify(SUMMARY_SCHEMA),
+    "--system-prompt",
+    SYSTEM_PROMPT,
+    "-p",
+    input,
+  ];
+}
+
 function spawnClaudeSummarize(input: string, timeoutMs: number, model: SummaryModel): Promise<string> {
   return new Promise((resolve, reject) => {
-    const args = [
-      "--print",
-      "--no-session-persistence",
-      "--output-format",
-      "json",
-      "--model",
-      model,
-      "--max-budget-usd",
-      String(MAX_BUDGET_USD),
-      "--json-schema",
-      JSON.stringify(SUMMARY_SCHEMA),
-      "--system-prompt",
-      SYSTEM_PROMPT,
-      "-p",
-      input,
-    ];
+    const args = buildSummarizeCliArgs(input, model);
     // Run from tmpdir so claude does not load the project's
     // CLAUDE.md / plugins / memory and inflate the context.
     const proc = spawn(claudeBinPath(), args, {
