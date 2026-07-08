@@ -449,6 +449,8 @@ const enMessages = {
     rendered: "Rendered",
     raw: "Raw",
     closeFile: "Close file",
+    revealInOs: "Show in folder",
+    revealInOsFailed: "Failed to show in folder",
   },
   fileContentRenderer: {
     download: "ZIP",

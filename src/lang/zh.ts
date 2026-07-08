@@ -423,6 +423,8 @@ const zhMessages = {
     rendered: "已渲染",
     raw: "原始",
     closeFile: "关闭文件",
+    revealInOs: "在文件夹中显示",
+    revealInOsFailed: "无法在文件夹中显示",
   },
   fileContentRenderer: {
     download: "ZIP",

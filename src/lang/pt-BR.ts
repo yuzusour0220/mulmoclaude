@@ -429,6 +429,8 @@ const ptBRMessages = {
     rendered: "Renderizado",
     raw: "Fonte",
     closeFile: "Fechar arquivo",
+    revealInOs: "Mostrar na pasta",
+    revealInOsFailed: "Falha ao mostrar na pasta",
   },
   fileContentRenderer: {
     download: "ZIP",

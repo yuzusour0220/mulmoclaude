@@ -437,6 +437,8 @@ const esMessages = {
     rendered: "Renderizado",
     raw: "Fuente",
     closeFile: "Cerrar archivo",
+    revealInOs: "Mostrar en la carpeta",
+    revealInOsFailed: "No se pudo mostrar en la carpeta",
   },
   fileContentRenderer: {
     download: "ZIP",

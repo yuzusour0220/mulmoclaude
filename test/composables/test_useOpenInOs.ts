@@ -8,7 +8,7 @@
 import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { nextTick, ref } from "vue";
-import { useOpenInOs } from "../../src/composables/useOpenInOs.ts";
+import { useOpenInOs, useRevealInOs } from "../../src/composables/useOpenInOs.ts";
 
 interface FetchStubResponse {
   status: number;
@@ -131,6 +131,51 @@ describe("useOpenInOs", () => {
 
     nextResponse = { status: 200, jsonBody: { ok: true } };
     await open();
+    assert.equal(error.value, null);
+  });
+});
+
+describe("useRevealInOs", () => {
+  beforeEach(installFetchStub);
+  afterEach(restoreFetch);
+
+  it("posts to /api/files/reveal with the path in both query and body", async () => {
+    const path = ref<string | null>("docs/report.xlsx");
+    const { reveal } = useRevealInOs(path, () => "fallback");
+    await reveal();
+    assert.equal(fetchCalls.length, 1);
+    const [call] = fetchCalls;
+    assert.match(call.url, /\/api\/files\/reveal\?path=docs%2Freport\.xlsx$/);
+    assert.equal(call.init?.method, "POST");
+    const parsed = JSON.parse(call.init?.body ?? "{}") as { path?: string };
+    assert.equal(parsed.path, "docs/report.xlsx");
+  });
+
+  it("does nothing when selectedPath is null", async () => {
+    const path = ref<string | null>(null);
+    const { busy, error, reveal } = useRevealInOs(path, () => "fallback");
+    await reveal();
+    assert.equal(busy.value, false);
+    assert.equal(error.value, null);
+    assert.equal(fetchCalls.length, 0);
+  });
+
+  it("surfaces server error message when the response says ok:false", async () => {
+    nextResponse = { status: 500, jsonBody: { error: "Failed to reveal file in OS file manager" } };
+    const path = ref<string | null>("a.xlsx");
+    const { error, reveal } = useRevealInOs(path, () => "fallback message");
+    await reveal();
+    assert.equal(error.value, "Failed to reveal file in OS file manager");
+  });
+
+  it("resets error when selectedPath changes to a different file", async () => {
+    nextResponse = { status: 500, jsonBody: { error: "boom" } };
+    const path = ref<string | null>("a.xlsx");
+    const { error, reveal } = useRevealInOs(path, () => "fallback");
+    await reveal();
+    assert.equal(error.value, "boom");
+    path.value = "b.xlsx";
+    await nextTick();
     assert.equal(error.value, null);
   });
 });
