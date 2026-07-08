@@ -9,10 +9,7 @@
 // Authorization headers.
 
 import type { RelayMessage, RelayResponse } from "./types.js";
-
-const INITIAL_BACKOFF_MS = 1000;
-const MAX_BACKOFF_MS = 30000;
-const BACKOFF_MULTIPLIER = 2;
+import { buildRelayUrl, nextBackoffMs, parseRelayMessage, INITIAL_BACKOFF_MS } from "./client-helpers.js";
 
 export interface RelayClientOptions {
   url: string;
@@ -37,9 +34,7 @@ export function createRelayClient(opts: RelayClientOptions): RelayClient {
   let intentionalClose = false;
 
   function buildUrl(): string {
-    const url = new URL(opts.url);
-    url.searchParams.set("token", opts.token);
-    return url.toString();
+    return buildRelayUrl(opts.url, opts.token);
   }
 
   function connect(): void {
@@ -53,13 +48,8 @@ export function createRelayClient(opts: RelayClientOptions): RelayClient {
       };
 
       webSocket.onmessage = (event: MessageEvent) => {
-        if (typeof event.data !== "string") return;
-        try {
-          const msg: RelayMessage = JSON.parse(event.data);
-          opts.onMessage(msg);
-        } catch {
-          // ignore malformed
-        }
+        const msg = parseRelayMessage(event.data);
+        if (msg !== null) opts.onMessage(msg);
       };
 
       webSocket.onclose = () => {
@@ -81,7 +71,7 @@ export function createRelayClient(opts: RelayClientOptions): RelayClient {
     if (reconnectTimer) return;
     reconnectTimer = setTimeout(() => {
       reconnectTimer = null;
-      backoffMs = Math.min(backoffMs * BACKOFF_MULTIPLIER, MAX_BACKOFF_MS);
+      backoffMs = nextBackoffMs(backoffMs);
       connect();
     }, backoffMs);
   }
