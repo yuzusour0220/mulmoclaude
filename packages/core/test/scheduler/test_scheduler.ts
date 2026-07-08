@@ -10,7 +10,11 @@ import {
   configureScheduler,
   initScheduler,
   getSchedulerTasks,
+  getSchedulerTaskState,
+  getSchedulerLogs,
+  recordExternalRun,
   resetSchedulerForTesting,
+  TASK_TRIGGERS,
   type ITaskManager,
   type TaskDefinition,
   type SystemTaskDef,
@@ -171,6 +175,76 @@ test("a scheduled run executes the task and persists state to the injected works
     assert.ok(existsSync(statePath));
     const persisted = JSON.parse(readFileSync(statePath, "utf-8"));
     assert.ok(JSON.stringify(persisted).includes("system:feed"));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// ── external (skill / user) runs — #2012 ──────────────────────────
+
+test("recordExternalRun persists state + a log entry, readable via getSchedulerTaskState", async () => {
+  const root = mkdtempSync(path.join(tmpdir(), "sched-"));
+  try {
+    configure(root);
+    await initScheduler(stubTm({}), []); // no system tasks — just load state + create dirs
+
+    const before = getSchedulerTaskState("skill.news-filter");
+    assert.equal(before.totalRuns, 0);
+    assert.equal(before.lastRunAt, null);
+
+    // Log files partition by the run's `startedAt` day and getSchedulerLogs
+    // reads today's partition, so use a same-day timestamp here.
+    const now = new Date().toISOString();
+    await recordExternalRun({
+      id: "skill.news-filter",
+      name: "news-filter",
+      schedule: { type: SCHEDULE_TYPES.daily, time: "07:30" },
+      scheduledFor: now,
+      startedAt: now,
+      durationMs: 5,
+      trigger: TASK_TRIGGERS.scheduled,
+      errorMessage: null,
+      chatSessionId: "chat-123",
+    });
+
+    const after = getSchedulerTaskState("skill.news-filter");
+    assert.equal(after.totalRuns, 1);
+    assert.equal(after.lastRunResult, "success");
+    assert.equal(after.lastRunAt, now);
+    assert.ok(after.nextScheduledAt, "next run computed from the daily schedule");
+
+    const logs = await getSchedulerLogs({ taskId: "skill.news-filter" });
+    assert.equal(logs.length, 1);
+    assert.equal(logs[0].trigger, "scheduled");
+    assert.equal(logs[0].chatSessionId, "chat-123");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("recordExternalRun records a failed dispatch as an error run", async () => {
+  const root = mkdtempSync(path.join(tmpdir(), "sched-"));
+  try {
+    configure(root);
+    await initScheduler(stubTm({}), []);
+    const now = new Date().toISOString();
+    await recordExternalRun({
+      id: "user.abc",
+      name: "my task",
+      schedule: { type: SCHEDULE_TYPES.interval, intervalMs: 3_600_000 },
+      scheduledFor: now,
+      startedAt: now,
+      durationMs: 1,
+      trigger: TASK_TRIGGERS.manual,
+      errorMessage: "too many background sessions",
+    });
+    const state = getSchedulerTaskState("user.abc");
+    assert.equal(state.lastRunResult, "error");
+    assert.equal(state.lastErrorMessage, "too many background sessions");
+    assert.equal(state.consecutiveFailures, 1);
+    const logs = await getSchedulerLogs({ taskId: "user.abc" });
+    assert.equal(logs[0].result, "error");
+    assert.equal(logs[0].errorMessage, "too many background sessions");
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

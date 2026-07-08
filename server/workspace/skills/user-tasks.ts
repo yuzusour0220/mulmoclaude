@@ -16,6 +16,7 @@ import { SESSION_ORIGINS, type SessionOrigin } from "../../../src/types/session.
 import { log } from "../../system/logger/index.js";
 import { isRecord } from "../../utils/types.js";
 import { makeUuid } from "../../utils/id.js";
+import { recordExternalRun, TASK_TRIGGERS, type TaskTrigger } from "../../events/scheduler-adapter.js";
 
 // ── Types ───────────────────────────────────────────────────────
 
@@ -200,7 +201,7 @@ function serializedRefreshUserTasks(deps: UserTaskDeps): Promise<number> {
 }
 
 async function doRegisterUserTasks(deps: UserTaskDeps): Promise<number> {
-  const { taskManager, startChat } = deps;
+  const { taskManager } = deps;
 
   for (const taskId of registeredUserTaskIds) {
     taskManager.removeTask(taskId);
@@ -220,25 +221,7 @@ async function doRegisterUserTasks(deps: UserTaskDeps): Promise<number> {
       description: `User task: ${task.name}`,
       schedule: task.schedule,
       run: async () => {
-        const chatSessionId = makeUuid();
-        log.info("user-tasks", "running user task", {
-          name: task.name,
-          roleId: task.roleId,
-          chatSessionId,
-        });
-        const result = await startChat({
-          message: task.prompt,
-          roleId: task.roleId,
-          chatSessionId,
-          origin: SESSION_ORIGINS.scheduler,
-        });
-        if (result.kind === "error") {
-          throw new Error(`user task failed: ${result.error ?? "unknown"}`);
-        }
-        log.info("user-tasks", "user task completed", {
-          name: task.name,
-          kind: result.kind,
-        });
+        await fireUserTask(task, TASK_TRIGGERS.scheduled);
       },
     });
 
@@ -254,4 +237,46 @@ async function doRegisterUserTasks(deps: UserTaskDeps): Promise<number> {
   }
 
   return registered;
+}
+
+// Fire one user task: dispatch its prompt as a chat and record the run (history
+// + last/next-run state) so the Automations page reflects it. Throws on dispatch
+// error so the task-manager tick logs the failure.
+async function fireUserTask(task: PersistedUserTask, trigger: TaskTrigger): Promise<string> {
+  if (!cachedUserTaskDeps) throw new Error("user task scheduler not initialized");
+  const { startChat } = cachedUserTaskDeps;
+  const chatSessionId = makeUuid();
+  const startedAt = new Date().toISOString();
+  const startMs = Date.now();
+  log.info("user-tasks", "running user task", { name: task.name, roleId: task.roleId, chatSessionId });
+  const result = await startChat({ message: task.prompt, roleId: task.roleId, chatSessionId, origin: SESSION_ORIGINS.scheduler });
+  const errorMessage = result.kind === "error" ? (result.error ?? "unknown") : null;
+  await recordExternalRun({
+    id: userTaskManagerId(task.id),
+    name: task.name,
+    schedule: task.schedule,
+    scheduledFor: startedAt,
+    startedAt,
+    durationMs: Date.now() - startMs,
+    trigger,
+    errorMessage,
+    chatSessionId,
+  });
+  if (errorMessage !== null) throw new Error(`user task failed: ${errorMessage}`);
+  log.info("user-tasks", "user task completed", { name: task.name, kind: result.kind });
+  return chatSessionId;
+}
+
+/** The task-manager id a user task registers under — used by the API to read
+ *  its execution state (which is keyed by the prefixed id). */
+export function userTaskManagerId(taskId: string): string {
+  return `${USER_TASK_PREFIX}${taskId}`;
+}
+
+/** Manually fire a user task by its (unprefixed) id. Returns the spawned chat
+ *  session id, or null if no such task exists. */
+export async function runUserTaskNow(taskId: string): Promise<string | null> {
+  const task = loadUserTasks().find((userTask) => userTask.id === taskId);
+  if (!task) return null;
+  return fireUserTask(task, TASK_TRIGGERS.manual);
 }
