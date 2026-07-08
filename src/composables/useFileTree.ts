@@ -6,6 +6,7 @@ import type { TreeNode } from "../types/fileTree";
 import { useExpandedDirs } from "./useExpandedDirs";
 import { apiGet } from "../utils/api";
 import { API_ROUTES } from "../config/apiRoutes";
+import { computeAncestorDirs } from "./useFileTree.helpers";
 
 export function useFileTree() {
   const { expand } = useExpandedDirs();
@@ -63,13 +64,7 @@ export function useFileTree() {
   }
 
   async function ensureAncestorsLoaded(filePath: string): Promise<void> {
-    const parts = filePath.split("/").filter(Boolean);
-    if (parts.length <= 1) return;
-    const ancestors: string[] = [];
-    for (let i = 1; i < parts.length; i++) {
-      ancestors.push(parts.slice(0, i).join("/"));
-    }
-    for (const dir of ancestors) {
+    for (const dir of computeAncestorDirs(filePath)) {
       expand(dir);
       await loadDirChildren(dir);
     }
