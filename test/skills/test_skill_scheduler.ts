@@ -74,4 +74,35 @@ describe("skill scheduler visibility + manual run (#2012)", () => {
       rmSync(root, { recursive: true, force: true });
     }
   });
+
+  it("records the run even when startChat rejects, then rethrows (dispatch failure is not lost)", async () => {
+    const root = mkdtempSync(join(tmpdir(), "skillsched-"));
+    try {
+      configureScheduler({
+        workspaceRoot: root,
+        writeFileAtomic: async (filePath, content) => {
+          await mkdir(dirname(filePath), { recursive: true });
+          await writeFile(filePath, content);
+        },
+      });
+      await initScheduler(stubTm(), []);
+      await writeScheduledSkill(root, "boom-skill");
+      await registerScheduledSkills({
+        taskManager: stubTm(),
+        workspaceRoot: root,
+        startChat: async () => {
+          throw new Error("spawn crashed");
+        },
+      });
+
+      await assert.rejects(() => runScheduledSkillNow("skill.boom-skill"), /spawn crashed/);
+
+      const state = getSchedulerTaskState("skill.boom-skill");
+      assert.equal(state.totalRuns, 1);
+      assert.equal(state.lastRunResult, "error");
+      assert.match(state.lastErrorMessage ?? "", /spawn crashed/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
 });
