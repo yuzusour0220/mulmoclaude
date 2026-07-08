@@ -32,7 +32,7 @@ import path from "node:path";
 import { runClaudeCli, ClaudeCliNotFoundError, type Summarize } from "../journal/archivist-cli.js";
 import { WORKSPACE_DIRS, WORKSPACE_FILES } from "../paths.js";
 import { loadAllMemoryEntries } from "./io.js";
-import { makeLlmMemoryClusterer } from "./topic-cluster.js";
+import { makeLlmMemoryClusterer, type MemoryClusterer } from "./topic-cluster.js";
 import { clusterAtomicIntoStaging, topicStagingPath } from "./topic-migrate.js";
 import { swapStagingIntoMemory } from "./topic-swap.js";
 import { MEMORY_TYPES } from "./types.js";
@@ -126,7 +126,7 @@ function shouldDeferForLegacyMigration(workspaceRoot: string): boolean {
   return false;
 }
 
-async function clusterAndSwap(workspaceRoot: string, clusterer: Awaited<ReturnType<typeof makeLlmMemoryClusterer>>): Promise<void> {
+async function clusterAndSwap(workspaceRoot: string, clusterer: MemoryClusterer): Promise<void> {
   try {
     const result = await clusterAtomicIntoStaging(workspaceRoot, clusterer);
     if (result.noop) {
