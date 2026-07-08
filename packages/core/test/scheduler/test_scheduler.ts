@@ -19,6 +19,7 @@ import {
   type TaskDefinition,
   type SystemTaskDef,
 } from "../../src/scheduler/index.ts";
+import { collectDueTasks, listTaskSummaries } from "../../src/scheduler/task-manager.ts";
 
 const stubTm = (over: Partial<ITaskManager>): ITaskManager => ({
   registerTask: () => {},
@@ -98,6 +99,46 @@ test("registerTask rejects duplicate ids; updateSchedule returns false for unkno
   assert.throws(() => manager.registerTask({ id: "a", schedule: { type: SCHEDULE_TYPES.daily, time: "10:00" }, run: async () => {} }));
   assert.equal(manager.updateSchedule("missing", { type: SCHEDULE_TYPES.daily, time: "10:00" }), false);
   assert.equal(manager.updateSchedule("a", { type: SCHEDULE_TYPES.daily, time: "10:00" }), true);
+});
+
+// ── pure helpers extracted from createTaskManager ─────────────────
+
+const makeDef = (over: Partial<TaskDefinition> & { id: string }): TaskDefinition => ({
+  schedule: { type: SCHEDULE_TYPES.interval, intervalMs: 60_000 },
+  run: async () => {},
+  ...over,
+});
+
+test("listTaskSummaries strips run and keeps the summary fields", () => {
+  const registry = new Map<string, TaskDefinition>();
+  assert.deepEqual(listTaskSummaries(registry), []);
+  registry.set("a", makeDef({ id: "a", description: "d", dependsOn: "b" }));
+  const [summary] = listTaskSummaries(registry);
+  assert.deepEqual(summary, {
+    id: "a",
+    description: "d",
+    schedule: { type: SCHEDULE_TYPES.interval, intervalMs: 60_000 },
+    dependsOn: "b",
+  });
+  assert.equal("run" in summary, false);
+});
+
+test("collectDueTasks partitions due tasks and skips disabled/not-due", () => {
+  const midnight = new Date(Date.UTC(2026, 0, 1, 0, 0, 0));
+  const registry = new Map<string, TaskDefinition>();
+  registry.set("indep", makeDef({ id: "indep" }));
+  registry.set("dep", makeDef({ id: "dep", dependsOn: "indep" }));
+  registry.set("off", makeDef({ id: "off", enabled: false }));
+  registry.set("notDue", makeDef({ id: "notDue", schedule: { type: SCHEDULE_TYPES.daily, time: "09:00" } }));
+  const { independent, dependent } = collectDueTasks(midnight, registry, 60_000);
+  assert.deepEqual(
+    independent.map((def) => def.id),
+    ["indep"],
+  );
+  assert.deepEqual(
+    dependent.map((def) => def.id),
+    ["dep"],
+  );
 });
 
 // ── adapter (catch-up + persistence + state) ──────────────────────
