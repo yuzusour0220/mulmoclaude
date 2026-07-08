@@ -436,6 +436,8 @@ const deMessages = {
     rendered: "Gerendert",
     raw: "Roh",
     closeFile: "Datei schließen",
+    revealInOs: "Im Ordner anzeigen",
+    revealInOsFailed: "Ordner konnte nicht geöffnet werden",
   },
   fileContentRenderer: {
     download: "ZIP",

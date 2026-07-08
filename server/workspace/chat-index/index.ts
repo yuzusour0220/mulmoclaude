@@ -105,6 +105,34 @@ export interface BackfillResult {
   skipped: number;
 }
 
+// Index one session for the backfill walk, returning the outcome so the caller
+// keeps ownership of the counters + the module-level `disabled` latch.
+// Extracted to keep backfillAllSessions under the max-lines threshold; covered
+// by test/chat-index/test_maybe_index_session.ts.
+async function indexSessionForBackfill(
+  workspaceRoot: string,
+  sessionId: string,
+  deps: IndexerDeps | undefined,
+  force: boolean,
+  mode: IndexerDeps["mode"],
+): Promise<"indexed" | "skipped" | "disable"> {
+  try {
+    const entry = await indexSession(workspaceRoot, sessionId, { ...(deps ?? {}), ...(force ? { force: true } : {}), mode });
+    if (entry) {
+      log.info("chat-index", "indexed", { sessionId, title: entry.title });
+      return "indexed";
+    }
+    return "skipped";
+  } catch (err) {
+    if (err instanceof ClaudeCliNotFoundError) {
+      log.warn("chat-index", err.message);
+      return "disable";
+    }
+    log.warn("chat-index", "failed to index", { sessionId, error: String(err) });
+    return "skipped";
+  }
+}
+
 export async function backfillAllSessions(
   opts: {
     workspaceRoot?: string;
@@ -138,33 +166,12 @@ export async function backfillAllSessions(
       result.skipped++;
       continue;
     }
-    try {
-      const entry = await indexSession(workspaceRoot, sessionId, {
-        ...(opts.deps ?? {}),
-        ...(force ? { force: true } : {}),
-        mode,
-      });
-      if (entry) {
-        result.indexed++;
-        log.info("chat-index", "indexed", {
-          sessionId,
-          title: entry.title,
-        });
-      } else {
-        result.skipped++;
-      }
-    } catch (err) {
-      if (err instanceof ClaudeCliNotFoundError) {
-        disabled = true;
-        log.warn("chat-index", err.message);
-        result.skipped++;
-        continue;
-      }
+    const outcome = await indexSessionForBackfill(workspaceRoot, sessionId, opts.deps, force, mode);
+    if (outcome === "indexed") {
+      result.indexed++;
+    } else {
       result.skipped++;
-      log.warn("chat-index", "failed to index", {
-        sessionId,
-        error: String(err),
-      });
+      if (outcome === "disable") disabled = true;
     }
   }
   return result;

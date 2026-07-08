@@ -433,6 +433,8 @@ const jaMessages = {
     rendered: "レンダリング",
     raw: "ソース",
     closeFile: "ファイルを閉じる",
+    revealInOs: "ファイルの場所を開く",
+    revealInOsFailed: "フォルダを開けませんでした",
   },
   fileContentRenderer: {
     download: "ZIP",

@@ -352,6 +352,8 @@ const marpPdfFilename = computed(() => {
 
 // "Open in OS" button on the binary / unsupported fallback (#1985).
 // State machine + fetch lives in useOpenInOs so it's unit-testable.
+// ("Show in folder" lives in FileContentHeader so it's available for
+// every file type, not just this fallback.)
 const { busy: openInOsBusy, error: openInOsError, open: openInOs } = useOpenInOs(toRef(props, "selectedPath"), () => t("fileContentRenderer.openInOsFailed"));
 
 const jsonEditing = ref(false);

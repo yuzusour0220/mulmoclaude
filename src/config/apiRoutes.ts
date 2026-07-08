@@ -122,6 +122,12 @@ const HOST_API_ROUTES = {
      *  can be viewed in the native app when in-browser preview
      *  isn't available (#1985). */
     open: "/api/files/open",
+    /** POST { path } — open the file's containing folder in the host
+     *  file manager (file selected on macOS `open -R` / Windows
+     *  `explorer /select,`; Linux opens the folder). Exposed as a
+     *  "Show in folder" button so a generated file can be dragged
+     *  into another app (#1985 follow-up). */
+    reveal: "/api/files/reveal",
   },
 
   // `html` group migrated to META — see `src/plugins/presentHtml/meta.ts`.

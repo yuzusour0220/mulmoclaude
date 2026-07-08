@@ -431,6 +431,8 @@ const koMessages = {
     rendered: "렌더링",
     raw: "원본",
     closeFile: "파일 닫기",
+    revealInOs: "폴더에서 보기",
+    revealInOsFailed: "폴더를 열 수 없습니다",
   },
   fileContentRenderer: {
     download: "ZIP",
