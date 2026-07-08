@@ -32,18 +32,26 @@ export class ClaudeCliFailedError extends Error {
   }
 }
 
+// `opts?.model` is threaded from `Settings → Journal` via maybeRunJournal
+// so the user's model choice reaches the CLI. When undefined we omit the
+// flag entirely and let the CLI use its own default — preserves the
+// pre-#1944 archivist behaviour for direct-CLI callers with no model.
+export function buildClaudeCliArgs(model?: JournalSummaryModel): string[] {
+  const args = ["-p", "--output-format", "text"];
+  if (model) {
+    args.push("--model", model);
+  }
+  return args;
+}
+
+export function buildCliPayload(systemPrompt: string, userPrompt: string): string {
+  return `${systemPrompt}\n\n---\n\n${userPrompt}`;
+}
+
 // Pipe the combined prompt via stdin to dodge shell-argv limits for large day excerpts.
 export const runClaudeCli: Summarize = async (systemPrompt, userPrompt, opts) =>
   new Promise((resolve, reject) => {
-    // `opts?.model` is threaded from `Settings → Journal` via
-    // maybeRunJournal so the user's model choice reaches the CLI.
-    // When undefined we omit the flag entirely and let the CLI use
-    // its own default — preserves the pre-#1944 archivist behaviour
-    // for direct-CLI callers that don't specify a model.
-    const args = ["-p", "--output-format", "text"];
-    if (opts?.model) {
-      args.push("--model", opts.model);
-    }
+    const args = buildClaudeCliArgs(opts?.model);
     const child = spawn(claudeBinPath(), args, {
       stdio: ["pipe", "pipe", "pipe"],
     });
@@ -100,7 +108,7 @@ export const runClaudeCli: Summarize = async (systemPrompt, userPrompt, opts) =>
     });
 
     // Wait for "drain" on backpressure before end() so the buffer fully flushes — large excerpts can hit this path.
-    const payload = `${systemPrompt}\n\n---\n\n${userPrompt}`;
+    const payload = buildCliPayload(systemPrompt, userPrompt);
     const flushed = child.stdin.write(payload);
     if (flushed) {
       child.stdin.end();
