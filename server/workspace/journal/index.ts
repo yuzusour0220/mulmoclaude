@@ -11,7 +11,7 @@ import {
   listDailyFiles as listDailyFilesIO,
   countArchivedTopics as countArchivedIO,
 } from "../../utils/files/journal-io.js";
-import { readState, writeState, isDailyDue, isOptimizationDue } from "./state.js";
+import { readState, writeState, isDailyDue, isOptimizationDue, type JournalState } from "./state.js";
 import { runDailyPass } from "./dailyPass.js";
 import { runOptimizationPass } from "./optimizationPass.js";
 import { buildIndexMarkdown, type IndexTopicEntry, type IndexDailyEntry } from "./indexFile.js";
@@ -95,53 +95,70 @@ async function runJournalPass(opts: MaybeRunJournalOptions, model: JournalSummar
   let nextState = state;
 
   if (daily) {
-    log.info("journal", "running daily pass");
-    const { nextState: afterDaily, result } = await runDailyPass(nextState, {
-      workspaceRoot,
-      summarize,
-      activeSessionIds,
-    });
-    // Only bump lastDailyRunAt when no days were skipped — otherwise transient archivist failures silently lose events.
-    nextState = {
-      ...afterDaily,
-      ...(result.skipped.length === 0 && {
-        lastDailyRunAt: new Date(now).toISOString(),
-      }),
-    };
-    log.info("journal", "daily pass done", {
-      sessions: result.sessionsIngested.length,
-      days: result.daysTouched.length,
-      topicsCreated: result.topicsCreated.length,
-      topicsUpdated: result.topicsUpdated.length,
-      daysSkipped: result.skipped.length,
-    });
+    nextState = await runDailyPhase(nextState, now, { workspaceRoot, summarize, activeSessionIds });
   }
 
   if (optimize) {
-    log.info("journal", "running optimization pass");
-    const { nextState: afterOpt, result } = await runOptimizationPass(nextState, { workspaceRoot, summarize });
-    // Same rule as daily, except "fewer than 2 topics" is still success — bump so we don't re-check every session-end.
-    const optimizationSucceeded = !result.skipped || result.skippedReason === "fewer than 2 topics";
-    nextState = {
-      ...afterOpt,
-      ...(optimizationSucceeded && {
-        lastOptimizationRunAt: new Date(now).toISOString(),
-      }),
-    };
-    if (result.skipped) {
-      log.info("journal", "optimization pass skipped", {
-        reason: result.skippedReason,
-      });
-    } else {
-      log.info("journal", "optimization pass done", {
-        merged: result.mergedSlugs.length,
-        archived: result.archivedSlugs.length,
-      });
-    }
+    nextState = await runOptimizationPhase(nextState, now, { workspaceRoot, summarize });
   }
 
   await rebuildIndex(workspaceRoot);
   await writeState(workspaceRoot, nextState);
+}
+
+interface DailyPhaseDeps {
+  workspaceRoot: string;
+  summarize: Summarize;
+  activeSessionIds: ReadonlySet<string>;
+}
+
+async function runDailyPhase(state: JournalState, now: number, deps: DailyPhaseDeps): Promise<JournalState> {
+  log.info("journal", "running daily pass");
+  const { nextState: afterDaily, result } = await runDailyPass(state, deps);
+  // Only bump lastDailyRunAt when no days were skipped — otherwise transient archivist failures silently lose events.
+  const nextState = {
+    ...afterDaily,
+    ...(result.skipped.length === 0 && {
+      lastDailyRunAt: new Date(now).toISOString(),
+    }),
+  };
+  log.info("journal", "daily pass done", {
+    sessions: result.sessionsIngested.length,
+    days: result.daysTouched.length,
+    topicsCreated: result.topicsCreated.length,
+    topicsUpdated: result.topicsUpdated.length,
+    daysSkipped: result.skipped.length,
+  });
+  return nextState;
+}
+
+interface OptimizationPhaseDeps {
+  workspaceRoot: string;
+  summarize: Summarize;
+}
+
+async function runOptimizationPhase(state: JournalState, now: number, deps: OptimizationPhaseDeps): Promise<JournalState> {
+  log.info("journal", "running optimization pass");
+  const { nextState: afterOpt, result } = await runOptimizationPass(state, deps);
+  // Same rule as daily, except "fewer than 2 topics" is still success — bump so we don't re-check every session-end.
+  const optimizationSucceeded = !result.skipped || result.skippedReason === "fewer than 2 topics";
+  const nextState = {
+    ...afterOpt,
+    ...(optimizationSucceeded && {
+      lastOptimizationRunAt: new Date(now).toISOString(),
+    }),
+  };
+  if (result.skipped) {
+    log.info("journal", "optimization pass skipped", {
+      reason: result.skippedReason,
+    });
+  } else {
+    log.info("journal", "optimization pass done", {
+      merged: result.mergedSlugs.length,
+      archived: result.archivedSlugs.length,
+    });
+  }
+  return nextState;
 }
 
 async function rebuildIndex(workspaceRoot: string): Promise<void> {
