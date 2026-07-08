@@ -48,8 +48,8 @@ export function createRelayClient(opts: RelayClientOptions): RelayClient {
       };
 
       webSocket.onmessage = (event: MessageEvent) => {
-        const msg = parseRelayMessage(event.data);
-        if (msg !== null) opts.onMessage(msg);
+        const parsed = parseRelayMessage(event.data);
+        if (parsed.ok) opts.onMessage(parsed.msg);
       };
 
       webSocket.onclose = () => {

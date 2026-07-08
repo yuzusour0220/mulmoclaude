@@ -53,30 +53,34 @@ describe("parseRelayMessage", () => {
       text: "hello",
       receivedAt: "2026-07-09T00:00:00.000Z",
     };
-    assert.deepEqual(parseRelayMessage(JSON.stringify(message)), message);
+    assert.deepEqual(parseRelayMessage(JSON.stringify(message)), { ok: true, msg: message });
   });
 
-  it("returns null for a number", () => {
-    assert.equal(parseRelayMessage(42), null);
+  it('reports ok:true for the JSON literal "null" so onMessage still fires', () => {
+    assert.deepEqual(parseRelayMessage("null"), { ok: true, msg: null });
   });
 
-  it("returns null for an object", () => {
-    assert.equal(parseRelayMessage({ id: "id-1" }), null);
+  it("returns ok:false for a number", () => {
+    assert.deepEqual(parseRelayMessage(42), { ok: false });
   });
 
-  it("returns null for undefined", () => {
-    assert.equal(parseRelayMessage(undefined), null);
+  it("returns ok:false for an object", () => {
+    assert.deepEqual(parseRelayMessage({ id: "id-1" }), { ok: false });
   });
 
-  it("returns null for null", () => {
-    assert.equal(parseRelayMessage(null), null);
+  it("returns ok:false for undefined", () => {
+    assert.deepEqual(parseRelayMessage(undefined), { ok: false });
   });
 
-  it("returns null for malformed JSON", () => {
-    assert.equal(parseRelayMessage("{not json"), null);
+  it("returns ok:false for the null value (non-string frame)", () => {
+    assert.deepEqual(parseRelayMessage(null), { ok: false });
   });
 
-  it("returns null for an empty string", () => {
-    assert.equal(parseRelayMessage(""), null);
+  it("returns ok:false for malformed JSON", () => {
+    assert.deepEqual(parseRelayMessage("{not json"), { ok: false });
+  });
+
+  it("returns ok:false for an empty string", () => {
+    assert.deepEqual(parseRelayMessage(""), { ok: false });
   });
 });

@@ -19,12 +19,18 @@ export function nextBackoffMs(currentMs: number): number {
   return Math.min(currentMs * BACKOFF_MULTIPLIER, MAX_BACKOFF_MS);
 }
 
-export function parseRelayMessage(data: unknown): RelayMessage | null {
-  if (typeof data !== "string") return null;
+// `{ ok: false }` is distinct from a successfully-parsed `null` payload:
+// the source JSON `"null"` parses to `null` and must still reach
+// `onMessage`, whereas a non-string frame or malformed JSON must not.
+// Collapsing to `RelayMessage | null` would drop the former.
+export type ParsedRelayMessage = { ok: true; msg: RelayMessage } | { ok: false };
+
+export function parseRelayMessage(data: unknown): ParsedRelayMessage {
+  if (typeof data !== "string") return { ok: false };
   try {
     const msg: RelayMessage = JSON.parse(data);
-    return msg;
+    return { ok: true, msg };
   } catch {
-    return null;
+    return { ok: false };
   }
 }
