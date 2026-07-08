@@ -6,6 +6,7 @@ import { PUBSUB_CHANNELS, type SessionsChannelPayload } from "../config/pubsubCh
 import type { SessionSummary } from "../types/session";
 import { apiDelete, apiGet, apiPost } from "../utils/api";
 import { applySessionDiff } from "../utils/session/mergeSessions";
+import { applyBookmarkFlag } from "./useSessionHistory.helpers";
 import { usePubSub } from "./usePubSub";
 
 interface SessionsResponse {
@@ -65,7 +66,7 @@ export function useSessionHistory(): UseSessionHistory {
     // Optimistic local update so the green-icon flip is immediate;
     // the pub/sub round-trip will reaffirm via the cursor diff (meta
     // mtime feeds into changeMs) and also reach other tabs.
-    sessions.value = sessions.value.map((session) => (session.id === sessionId ? { ...session, isBookmarked: bookmarked } : session));
+    sessions.value = applyBookmarkFlag(sessions.value, sessionId, bookmarked);
     return true;
   }
 
