@@ -72,7 +72,7 @@ function serializedRefresh(deps: SkillSchedulerDeps): Promise<number> {
 }
 
 async function doRegister(deps: SkillSchedulerDeps): Promise<number> {
-  const { taskManager, workspaceRoot, startChat } = deps;
+  const { taskManager, workspaceRoot } = deps;
 
   // Unregister all previously registered skill tasks
   for (const taskId of registeredTaskIds) {
@@ -87,37 +87,7 @@ async function doRegister(deps: SkillSchedulerDeps): Promise<number> {
   for (const skill of skills) {
     const info = readSkillScheduleInfo(skill);
     if (!info) continue;
-
-    const { schedule, roleId } = info;
-    const taskId = `${SKILL_TASK_PREFIX}${skill.name}`;
-
-    taskManager.registerTask({
-      id: taskId,
-      description: `Scheduled skill: ${skill.name} — ${skill.description}`,
-      schedule,
-      run: async () => {
-        const chatSessionId = makeUuid();
-        log.info("skills", "running scheduled skill", {
-          name: skill.name,
-          roleId,
-          chatSessionId,
-        });
-        const result = await startChat({
-          message: `/${skill.name}`,
-          roleId,
-          chatSessionId,
-          origin: SESSION_ORIGINS.skill,
-        });
-        if (result.kind === "error") {
-          throw new Error(`scheduled skill failed: ${result.error ?? "unknown"}`);
-        }
-        log.info("skills", "scheduled skill completed", {
-          name: skill.name,
-          kind: result.kind,
-        });
-      },
-    });
-
+    const taskId = registerSkillTask(deps, skill, info);
     registeredTaskIds.add(taskId);
     registered++;
   }
@@ -130,6 +100,42 @@ async function doRegister(deps: SkillSchedulerDeps): Promise<number> {
   }
 
   return registered;
+}
+
+// Register one scheduled skill with the task-manager and return its task ID.
+function registerSkillTask(deps: SkillSchedulerDeps, skill: Skill, info: SkillScheduleInfo): string {
+  const { taskManager, startChat } = deps;
+  const { schedule, roleId } = info;
+  const taskId = `${SKILL_TASK_PREFIX}${skill.name}`;
+
+  taskManager.registerTask({
+    id: taskId,
+    description: `Scheduled skill: ${skill.name} — ${skill.description}`,
+    schedule,
+    run: async () => {
+      const chatSessionId = makeUuid();
+      log.info("skills", "running scheduled skill", {
+        name: skill.name,
+        roleId,
+        chatSessionId,
+      });
+      const result = await startChat({
+        message: `/${skill.name}`,
+        roleId,
+        chatSessionId,
+        origin: SESSION_ORIGINS.skill,
+      });
+      if (result.kind === "error") {
+        throw new Error(`scheduled skill failed: ${result.error ?? "unknown"}`);
+      }
+      log.info("skills", "scheduled skill completed", {
+        name: skill.name,
+        kind: result.kind,
+      });
+    },
+  });
+
+  return taskId;
 }
 
 // Read schedule + roleId in one file read (avoid reading the same
