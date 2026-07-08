@@ -10,13 +10,13 @@
 import { discoverSkills } from "./discovery.js";
 import type { Skill } from "./types.js";
 import type { ITaskManager, TaskSchedule } from "../../events/task-manager/index.js";
-import { recordExternalRun, TASK_TRIGGERS, type TaskTrigger } from "../../events/scheduler-adapter.js";
+import { TASK_TRIGGERS, type TaskTrigger } from "../../events/scheduler-adapter.js";
+import { fireScheduledChat } from "./scheduled-run.js";
 import { parseSkillFrontmatter } from "./parser.js";
 import { log } from "../../system/logger/index.js";
 import { readFileSync } from "fs";
 import { DEFAULT_ROLE_ID } from "../../../src/config/roles.js";
 import { SESSION_ORIGINS, type SessionOrigin } from "../../../src/types/session.js";
-import { makeUuid } from "../../utils/id.js";
 
 interface SkillScheduleInfo {
   schedule: TaskSchedule;
@@ -124,31 +124,21 @@ async function doRegister(deps: SkillSchedulerDeps): Promise<number> {
 }
 
 // Fire one scheduled skill: dispatch `/skill-name` as a chat and record the run
-// (history + last/next-run state) so it shows on the Automations page. Throws on
-// dispatch error so the task-manager tick logs the failure.
+// (history + last/next-run state) so it shows on the Automations page.
 async function fireSkillTask(task: ScheduledSkillTask, trigger: TaskTrigger): Promise<string> {
   if (!cachedDeps) throw new Error("skill scheduler not initialized");
-  const { startChat } = cachedDeps;
-  const chatSessionId = makeUuid();
-  const startedAt = new Date().toISOString();
-  const startMs = Date.now();
-  log.info("skills", "running scheduled skill", { name: task.name, roleId: task.roleId, chatSessionId });
-  const result = await startChat({ message: `/${task.name}`, roleId: task.roleId, chatSessionId, origin: SESSION_ORIGINS.skill });
-  const errorMessage = result.kind === "error" ? (result.error ?? "unknown") : null;
-  await recordExternalRun({
+  return fireScheduledChat({
     id: task.id,
     name: task.name,
     schedule: task.schedule,
-    scheduledFor: startedAt,
-    startedAt,
-    durationMs: Date.now() - startMs,
+    message: `/${task.name}`,
+    roleId: task.roleId,
+    origin: SESSION_ORIGINS.skill,
     trigger,
-    errorMessage,
-    chatSessionId,
+    logScope: "skills",
+    failureLabel: "scheduled skill",
+    startChat: cachedDeps.startChat,
   });
-  if (errorMessage !== null) throw new Error(`scheduled skill failed: ${errorMessage}`);
-  log.info("skills", "scheduled skill completed", { name: task.name, kind: result.kind });
-  return chatSessionId;
 }
 
 /** All registered skill tasks, for the Automations list (origin: "skill"). */

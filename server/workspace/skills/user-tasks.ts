@@ -16,7 +16,8 @@ import { SESSION_ORIGINS, type SessionOrigin } from "../../../src/types/session.
 import { log } from "../../system/logger/index.js";
 import { isRecord } from "../../utils/types.js";
 import { makeUuid } from "../../utils/id.js";
-import { recordExternalRun, TASK_TRIGGERS, type TaskTrigger } from "../../events/scheduler-adapter.js";
+import { TASK_TRIGGERS, type TaskTrigger } from "../../events/scheduler-adapter.js";
+import { fireScheduledChat } from "./scheduled-run.js";
 
 // ── Types ───────────────────────────────────────────────────────
 
@@ -240,31 +241,21 @@ async function doRegisterUserTasks(deps: UserTaskDeps): Promise<number> {
 }
 
 // Fire one user task: dispatch its prompt as a chat and record the run (history
-// + last/next-run state) so the Automations page reflects it. Throws on dispatch
-// error so the task-manager tick logs the failure.
+// + last/next-run state) so the Automations page reflects it.
 async function fireUserTask(task: PersistedUserTask, trigger: TaskTrigger): Promise<string> {
   if (!cachedUserTaskDeps) throw new Error("user task scheduler not initialized");
-  const { startChat } = cachedUserTaskDeps;
-  const chatSessionId = makeUuid();
-  const startedAt = new Date().toISOString();
-  const startMs = Date.now();
-  log.info("user-tasks", "running user task", { name: task.name, roleId: task.roleId, chatSessionId });
-  const result = await startChat({ message: task.prompt, roleId: task.roleId, chatSessionId, origin: SESSION_ORIGINS.scheduler });
-  const errorMessage = result.kind === "error" ? (result.error ?? "unknown") : null;
-  await recordExternalRun({
+  return fireScheduledChat({
     id: userTaskManagerId(task.id),
     name: task.name,
     schedule: task.schedule,
-    scheduledFor: startedAt,
-    startedAt,
-    durationMs: Date.now() - startMs,
+    message: task.prompt,
+    roleId: task.roleId,
+    origin: SESSION_ORIGINS.scheduler,
     trigger,
-    errorMessage,
-    chatSessionId,
+    logScope: "user-tasks",
+    failureLabel: "user task",
+    startChat: cachedUserTaskDeps.startChat,
   });
-  if (errorMessage !== null) throw new Error(`user task failed: ${errorMessage}`);
-  log.info("user-tasks", "user task completed", { name: task.name, kind: result.kind });
-  return chatSessionId;
 }
 
 /** The task-manager id a user task registers under — used by the API to read
