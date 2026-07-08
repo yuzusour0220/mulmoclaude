@@ -12,7 +12,7 @@
 
 import { Router, Request, Response } from "express";
 import { extname } from "path";
-import { saveAttachment, saveCompanion, stripDataUri } from "../../utils/files/attachment-store.js";
+import { saveAttachment, saveCompanion, stripDataUri, type SavedAttachment } from "../../utils/files/attachment-store.js";
 import { convertPptxToPdf } from "../../agent/attachmentConverter.js";
 import { CLAUDE_UNSUPPORTED_IMAGE_MIMES, sharpConvertToJpeg, type ConvertToJpeg } from "../../utils/files/image-jpeg-convert.js";
 import { errorMessage } from "../../utils/errors.js";
@@ -63,89 +63,99 @@ interface UploadAttachmentError {
   error: string;
 }
 
-router.post(
-  API_ROUTES.attachments.upload,
-  async (req: Request<object, unknown, UploadAttachmentBody>, res: Response<UploadAttachmentResponse | UploadAttachmentError>) => {
-    const { dataUrl, filename } = req.body;
-    if (!dataUrl) {
-      badRequest(res, "dataUrl is required");
-      return;
-    }
-    const parsed = stripDataUri(dataUrl);
-    if (!parsed) {
-      badRequest(res, "dataUrl must be a data: URI");
-      return;
-    }
-    log.info("attachments", "upload: start", {
-      mimeType: parsed.mimeType,
-      filename,
-      bytes: Math.floor((parsed.base64.length * 3) / 4),
+type UploadResponse = Response<UploadAttachmentResponse | UploadAttachmentError>;
+
+// PPTX → PDF companion branch. LibreOffice unavailable → return the
+// original PPTX path and let the agent loop produce its existing
+// fallback text block. Surfaces a warn so it doesn't disappear
+// silently in environments where conversion is expected.
+async function respondWithPptxCompanion(res: UploadResponse, original: SavedAttachment, base64: string): Promise<void> {
+  const pdfBuf = await convertPptxToPdf(base64);
+  if (!pdfBuf) {
+    log.warn("attachments", "upload: pptx conversion unavailable, returning original", {
+      path: original.relativePath,
     });
-    try {
-      const original = await saveAttachment(parsed.base64, parsed.mimeType);
-      if (parsed.mimeType === PPTX_MIME) {
-        const pdfBuf = await convertPptxToPdf(parsed.base64);
-        if (!pdfBuf) {
-          // LibreOffice unavailable — return the original PPTX path
-          // and let the agent loop produce its existing fallback
-          // text block. Surfaces a warn so it doesn't disappear
-          // silently in environments where conversion is expected.
-          log.warn("attachments", "upload: pptx conversion unavailable, returning original", {
-            path: original.relativePath,
-          });
-          res.json({ path: original.relativePath, originalPath: original.relativePath, mimeType: original.mimeType });
-          return;
-        }
-        const pdfPath = await saveCompanion(original.relativePath, pdfBuf, ".pdf");
-        log.info("attachments", "upload: ok", {
-          path: pdfPath,
-          originalPath: original.relativePath,
-          conversion: "pptx-to-pdf",
-        });
-        res.json({ path: pdfPath, originalPath: original.relativePath, mimeType: "application/pdf" });
-        return;
-      }
-      if (CLAUDE_UNSUPPORTED_IMAGE_MIMES.has(parsed.mimeType)) {
-        // HEIC / HEIF / TIFF / BMP / AVIF — Claude API rejects these
-        // as `image.source.media_type`, so convert to JPEG at upload
-        // and hand the LLM the companion. The original still lives on
-        // disk (archival) and the EXIF sidecar hook has already run
-        // against it in `saveAttachment` — GPS / orientation are
-        // preserved independently of the JPEG. On sharp / libheif
-        // failure we log a warn and return the original path so the
-        // upload isn't lost; the caller then hits the same 400 it
-        // would have before this branch existed.
-        let jpegBuf: Buffer;
-        try {
-          jpegBuf = await imageJpegConverter(Buffer.from(parsed.base64, "base64"), parsed.mimeType);
-        } catch (convertErr) {
-          log.warn("attachments", "upload: image-to-jpeg conversion failed, returning original", {
-            path: original.relativePath,
-            sourceMime: parsed.mimeType,
-            error: errorMessage(convertErr),
-          });
-          res.json({ path: original.relativePath, originalPath: original.relativePath, mimeType: original.mimeType });
-          return;
-        }
-        const jpegPath = await saveCompanion(original.relativePath, jpegBuf, ".jpg");
-        log.info("attachments", "upload: ok", {
-          path: jpegPath,
-          originalPath: original.relativePath,
-          conversion: `${parsed.mimeType}-to-jpeg`,
-        });
-        res.json({ path: jpegPath, originalPath: original.relativePath, mimeType: "image/jpeg" });
-        return;
-      }
-      log.info("attachments", "upload: ok", {
-        path: original.relativePath,
-        ext: extname(original.relativePath),
-      });
-      res.json({ path: original.relativePath, originalPath: original.relativePath, mimeType: original.mimeType });
-    } catch (err) {
-      log.error("attachments", "upload: threw", { error: errorMessage(err) });
-      serverError(res, errorMessage(err));
+    res.json({ path: original.relativePath, originalPath: original.relativePath, mimeType: original.mimeType });
+    return;
+  }
+  const pdfPath = await saveCompanion(original.relativePath, pdfBuf, ".pdf");
+  log.info("attachments", "upload: ok", {
+    path: pdfPath,
+    originalPath: original.relativePath,
+    conversion: "pptx-to-pdf",
+  });
+  res.json({ path: pdfPath, originalPath: original.relativePath, mimeType: "application/pdf" });
+}
+
+// HEIC / HEIF / TIFF / BMP / AVIF — Claude API rejects these as
+// `image.source.media_type`, so convert to JPEG at upload and hand
+// the LLM the companion. The original still lives on disk (archival)
+// and the EXIF sidecar hook has already run against it in
+// `saveAttachment` — GPS / orientation are preserved independently of
+// the JPEG. On sharp / libheif failure we log a warn and return the
+// original path so the upload isn't lost; the caller then hits the
+// same 400 it would have before this branch existed.
+async function respondWithJpegCompanion(res: UploadResponse, original: SavedAttachment, base64: string, sourceMime: string): Promise<void> {
+  let jpegBuf: Buffer;
+  try {
+    jpegBuf = await imageJpegConverter(Buffer.from(base64, "base64"), sourceMime);
+  } catch (convertErr) {
+    log.warn("attachments", "upload: image-to-jpeg conversion failed, returning original", {
+      path: original.relativePath,
+      sourceMime,
+      error: errorMessage(convertErr),
+    });
+    res.json({ path: original.relativePath, originalPath: original.relativePath, mimeType: original.mimeType });
+    return;
+  }
+  const jpegPath = await saveCompanion(original.relativePath, jpegBuf, ".jpg");
+  log.info("attachments", "upload: ok", {
+    path: jpegPath,
+    originalPath: original.relativePath,
+    conversion: `${sourceMime}-to-jpeg`,
+  });
+  res.json({ path: jpegPath, originalPath: original.relativePath, mimeType: "image/jpeg" });
+}
+
+async function handleUploadAttachment(req: Request<object, unknown, UploadAttachmentBody>, res: UploadResponse): Promise<void> {
+  const { dataUrl, filename } = req.body;
+  if (!dataUrl) {
+    badRequest(res, "dataUrl is required");
+    return;
+  }
+  const parsed = stripDataUri(dataUrl);
+  if (!parsed) {
+    badRequest(res, "dataUrl must be a data: URI");
+    return;
+  }
+  log.info("attachments", "upload: start", {
+    mimeType: parsed.mimeType,
+    filename,
+    bytes: Math.floor((parsed.base64.length * 3) / 4),
+  });
+  try {
+    const original = await saveAttachment(parsed.base64, parsed.mimeType);
+    if (parsed.mimeType === PPTX_MIME) {
+      await respondWithPptxCompanion(res, original, parsed.base64);
+      return;
     }
-  },
+    if (CLAUDE_UNSUPPORTED_IMAGE_MIMES.has(parsed.mimeType)) {
+      await respondWithJpegCompanion(res, original, parsed.base64, parsed.mimeType);
+      return;
+    }
+    log.info("attachments", "upload: ok", {
+      path: original.relativePath,
+      ext: extname(original.relativePath),
+    });
+    res.json({ path: original.relativePath, originalPath: original.relativePath, mimeType: original.mimeType });
+  } catch (err) {
+    log.error("attachments", "upload: threw", { error: errorMessage(err) });
+    serverError(res, errorMessage(err));
+  }
+}
+
+router.post(API_ROUTES.attachments.upload, async (req: Request<object, unknown, UploadAttachmentBody>, res: UploadResponse) =>
+  handleUploadAttachment(req, res),
 );
 
 export default router;
