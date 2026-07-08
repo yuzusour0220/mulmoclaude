@@ -9,7 +9,7 @@
       :class="revealInOsError ? 'text-red-500' : 'text-gray-400 hover:text-gray-700'"
       :disabled="revealInOsBusy"
       :title="revealInOsError || t('fileContentHeader.revealInOs')"
-      :aria-label="t('fileContentHeader.revealInOs')"
+      :aria-label="revealAriaLabel"
       data-testid="file-reveal-in-os"
       @click="revealInOs"
     >
@@ -37,7 +37,7 @@
 </template>
 
 <script setup lang="ts">
-import { toRef } from "vue";
+import { computed, toRef } from "vue";
 import { useI18n } from "vue-i18n";
 import { formatDateTime } from "../utils/format/date";
 import { formatBytes } from "../utils/format/bytes";
@@ -66,4 +66,12 @@ const {
   error: revealInOsError,
   reveal: revealInOs,
 } = useRevealInOs(toRef(props, "selectedPath"), () => t("fileContentHeader.revealInOsFailed"));
+
+// Screen readers only get the accessible name, not the visual red/title
+// error state — fold the error into the aria-label so a failed reveal is
+// conveyed non-visually.
+const revealAriaLabel = computed(() => {
+  const label = t("fileContentHeader.revealInOs");
+  return revealInOsError.value ? `${label} – ${revealInOsError.value}` : label;
+});
 </script>

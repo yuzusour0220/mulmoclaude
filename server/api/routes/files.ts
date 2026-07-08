@@ -33,7 +33,7 @@ import { spawn } from "node:child_process";
 // host). Client-side error handling depends on this signal.
 function spawnDetachedOsCommand(command: string, args: readonly string[], label: string): Promise<boolean> {
   return new Promise<boolean>((resolve) => {
-    const child = spawn(command, args as string[], { detached: true, stdio: "ignore" });
+    const child = spawn(command, args, { detached: true, stdio: "ignore" });
     let settled = false;
     child.once("error", (err) => {
       if (settled) return;
