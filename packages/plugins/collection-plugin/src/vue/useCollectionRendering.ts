@@ -6,6 +6,10 @@
 // templates render (ref labels, money/currency, derived formulas, embed
 // rows). Pure-but-stateful: instantiate ONCE per collection surface and
 // pass the returned object down to child panels.
+//
+// The pure, reactivity-free transforms this composable relies on live in
+// `useCollectionRendering.helpers.ts` (plain TS, unit-tested); only the
+// ref/computed/watch-bound glue stays here.
 
 import { ref, type Ref } from "vue";
 import { collectionUi } from "./uiContext";
@@ -16,16 +20,31 @@ import type {
   CollectionSchema,
   CollectionFieldSpec as FieldSpec,
   CollectionFieldType as FieldType,
-  CollectionDetailResponse,
   EmbedCache,
   EmbedRow,
   EmbedView,
   RefCache,
-  RefDisplayMap,
   RefOption,
   RefRecordCache,
-  RefRecordMap,
 } from "@mulmoclaude/core/collection";
+import {
+  buildEmbedOptions,
+  buildRefDisplayMap,
+  buildRefRecordMap,
+  currencySymbolForLocale,
+  detailText,
+  formatCell,
+  formatMoney,
+  hasTableRows,
+  inputTypeFor,
+  isExternalUrl,
+  resolveCurrency,
+  sortedRefOptions,
+  stepForFieldType,
+  tableRows,
+  uniqueEmbedTargets,
+  uniqueRefTargets,
+} from "./useCollectionRendering.helpers";
 
 export interface CollectionRendering {
   refCache: Ref<RefCache>;
@@ -55,15 +74,6 @@ export interface CollectionRendering {
   derivedDisplay: (field: FieldSpec, computedValue: unknown, record: CollectionItem | null) => string;
 }
 
-// `<input type="number">` defaults to step="1", which makes the browser
-// reject any decimal value (e.g. 0.1) as invalid. Emit step="any" for
-// numeric fields so fractional values can be entered and saved.
-export function stepForFieldType(type: FieldType): string | undefined {
-  if (type === "money") return "0.01";
-  if (type === "number") return "any";
-  return undefined;
-}
-
 export function useCollectionRendering(collection: Ref<CollectionDetail | null>, locale: Ref<string>): CollectionRendering {
   const refCache = ref<RefCache>({});
   const refRecordCache = ref<RefRecordCache>({});
@@ -73,53 +83,6 @@ export function useCollectionRendering(collection: Ref<CollectionDetail | null>,
     refCache.value = {};
     refRecordCache.value = {};
     embedCache.value = {};
-  }
-
-  function uniqueRefTargets(schema: CollectionSchema): string[] {
-    const targets = new Set<string>();
-    const walk = (fields: Record<string, FieldSpec>): void => {
-      for (const field of Object.values(fields)) {
-        if (field.type === "ref" && typeof field.to === "string" && field.to.length > 0) targets.add(field.to);
-        // Sub-fields of a table can also be refs; walk one level deep
-        // (nested tables are schema-rejected, so one recursion suffices).
-        if (field.type === "table" && field.of) walk(field.of);
-      }
-    };
-    walk(schema.fields);
-    return [...targets];
-  }
-
-  function uniqueEmbedTargets(schema: CollectionSchema): string[] {
-    const targets = new Set<string>();
-    // Embeds are top-level only (the schema rejects `embed` inside a
-    // table's `of`), so no recursion.
-    for (const field of Object.values(schema.fields)) {
-      if (field.type === "embed" && typeof field.to === "string" && field.to.length > 0) targets.add(field.to);
-    }
-    return [...targets];
-  }
-
-  function buildRefDisplayMap(detail: CollectionDetailResponse): RefDisplayMap {
-    const { fields, primaryKey } = detail.collection.schema;
-    const displayField = "name" in fields ? "name" : "title" in fields ? "title" : primaryKey;
-    const map: RefDisplayMap = {};
-    for (const item of detail.items) {
-      const slugRaw = item[primaryKey];
-      if (typeof slugRaw !== "string" || slugRaw.length === 0) continue;
-      const displayRaw = item[displayField];
-      map[slugRaw] = typeof displayRaw === "string" && displayRaw.length > 0 ? displayRaw : slugRaw;
-    }
-    return map;
-  }
-
-  function buildRefRecordMap(detail: CollectionDetailResponse): RefRecordMap {
-    const { schema } = detail.collection;
-    const map: RefRecordMap = {};
-    for (const item of detail.items) {
-      const slugRaw = item[schema.primaryKey];
-      if (typeof slugRaw === "string" && slugRaw.length > 0) map[slugRaw] = deriveAll(schema, item, {});
-    }
-    return map;
   }
 
   async function loadLinkedCollections(schema: CollectionSchema, expectedSlug: string): Promise<void> {
@@ -166,10 +129,7 @@ export function useCollectionRendering(collection: Ref<CollectionDetail | null>,
 
   function refOptions(targetSlug: string): RefOption[] {
     const map = refCache.value[targetSlug];
-    if (!map) return [];
-    return Object.entries(map)
-      .map(([slug, display]) => ({ slug, display }))
-      .sort((left, right) => left.display.localeCompare(right.display));
+    return map ? sortedRefOptions(map) : [];
   }
 
   /** Dropdown options for an `embed` field's per-record picker (`idField`):
@@ -178,18 +138,7 @@ export function useCollectionRendering(collection: Ref<CollectionDetail | null>,
    *  that aren't also `ref` targets (the profile collection, say). */
   function embedOptions(targetSlug: string): RefOption[] {
     const data = embedCache.value[targetSlug];
-    if (!data) return [];
-    const { fields, primaryKey } = data.schema;
-    const displayField = "name" in fields ? "name" : "title" in fields ? "title" : primaryKey;
-    return data.items
-      .map((item) => {
-        const slug = String(item[primaryKey] ?? "");
-        const labelRaw = item[displayField];
-        const display = typeof labelRaw === "string" && labelRaw.length > 0 ? labelRaw : slug;
-        return { slug, display };
-      })
-      .filter((opt) => opt.slug.length > 0)
-      .sort((left, right) => left.display.localeCompare(right.display));
+    return data ? buildEmbedOptions(data.schema, data.items) : [];
   }
 
   function resolveEmbed(field: FieldSpec, record: CollectionItem | null): { schema: CollectionSchema | null; item: CollectionItem | null } {
@@ -230,45 +179,8 @@ export function useCollectionRendering(collection: Ref<CollectionDetail | null>,
     return out;
   }
 
-  function resolveCurrency(field: FieldSpec, record: CollectionItem | null | undefined): string | undefined {
-    if (field.currencyField && record) {
-      const code = record[field.currencyField];
-      if (typeof code === "string" && code.trim().length > 0) return code;
-    }
-    return field.currency;
-  }
-
   function currencySymbol(currency: string | undefined): string {
-    const code = currency && currency.length > 0 ? currency : "USD";
-    try {
-      const parts = new Intl.NumberFormat(locale.value, { style: "currency", currency: code }).formatToParts(0);
-      return parts.find((entry) => entry.type === "currency")?.value ?? code;
-    } catch {
-      return code;
-    }
-  }
-
-  function formatMoney(value: unknown, currency: string | undefined, displayLocale: string): string {
-    if (value === undefined || value === "") return "—";
-    const amount = typeof value === "number" ? value : Number(value);
-    if (!Number.isFinite(amount)) return String(value);
-    const currencyCode = currency && currency.length > 0 ? currency : "USD";
-    try {
-      return new Intl.NumberFormat(displayLocale, { style: "currency", currency: currencyCode }).format(amount);
-    } catch {
-      return String(amount);
-    }
-  }
-
-  function formatCell(value: unknown, type: FieldType): string {
-    if (value === undefined || value === null || value === "") return "—";
-    if (type === "markdown" && typeof value === "string") return value.length > 80 ? `${value.slice(0, 80)}…` : value;
-    if (typeof value === "string" || typeof value === "number") return String(value);
-    return JSON.stringify(value);
-  }
-
-  function isExternalUrl(value: unknown): boolean {
-    return typeof value === "string" && /^https?:\/\//i.test(value);
+    return currencySymbolForLocale(currency, locale.value);
   }
 
   // A `file` field holds a workspace-relative path. When it points at an
@@ -288,33 +200,10 @@ export function useCollectionRendering(collection: Ref<CollectionDetail | null>,
     return collectionUi().fileRoutePath(value);
   }
 
-  function detailText(value: unknown): string {
-    if (value === undefined || value === null || value === "") return "—";
-    return String(value);
-  }
-
-  function tableRows(value: unknown): Record<string, unknown>[] {
-    if (!Array.isArray(value)) return [];
-    return value.filter((row): row is Record<string, unknown> => Boolean(row) && typeof row === "object" && !Array.isArray(row));
-  }
-
-  function hasTableRows(value: unknown): boolean {
-    return tableRows(value).length > 0;
-  }
-
   function formatSubCell(subField: FieldSpec, value: unknown, record: CollectionItem | null): string {
     if (subField.type === "money") return formatMoney(value, resolveCurrency(subField, record), locale.value);
     if (subField.type === "ref" && subField.to && typeof value === "string" && value.length > 0) return refDisplay(subField.to, value);
     return formatCell(value, subField.type);
-  }
-
-  function inputTypeFor(type: FieldType): string {
-    if (type === "email") return "email";
-    if (type === "number") return "number";
-    if (type === "money") return "number";
-    if (type === "date") return "date";
-    if (type === "datetime") return "datetime-local";
-    return "text";
   }
 
   const stepFor = stepForFieldType;
