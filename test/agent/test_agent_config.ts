@@ -7,6 +7,8 @@ import { __resetForTests as resetTokenState, generateAndWriteToken } from "../..
 import {
   buildCliArgs,
   buildDockerSpawnArgs,
+  dockerUserCapArgs,
+  dockerBindMountArgs,
   buildMcpConfig,
   buildUserMessageLine,
   CONTAINER_WORKSPACE_PATH,
@@ -912,5 +914,55 @@ describe("buildMcpConfig — bearer token env (#325)", () => {
     const server = servers.mulmoclaude as Record<string, unknown>;
     const env = server.env as Record<string, string>;
     assert.equal(env.MULMOCLAUDE_AUTH_TOKEN, undefined);
+  });
+});
+
+describe("dockerUserCapArgs", () => {
+  it("runs the container as the host user (zero caps) when SSH forward is off", () => {
+    assert.deepEqual(dockerUserCapArgs(false, 501, 20), ["--user", "501:20"]);
+  });
+
+  it("adds the 5 minimum caps + HOST_UID/GID (no --user) when SSH forward is on", () => {
+    const args = dockerUserCapArgs(true, 501, 20);
+    assert.ok(!args.includes("--user"), "must not also pass --user");
+    for (const cap of ["CHOWN", "FOWNER", "DAC_OVERRIDE", "SETUID", "SETGID"]) {
+      assert.ok(args.includes(cap), `missing cap ${cap}`);
+    }
+    assert.ok(args.includes("HOST_UID=501"));
+    assert.ok(args.includes("HOST_GID=20"));
+  });
+});
+
+describe("dockerBindMountArgs", () => {
+  const opts = {
+    projectRoot: "/proj",
+    packageRoot: "/pkg",
+    workspacePath: "/ws",
+    homeDir: "/home/u",
+    packagesMount: ["-v", "/pkg/packages:/app/packages:ro"],
+    platform: "linux" as Platform,
+  };
+
+  it("mounts node_modules from projectRoot and server/src from packageRoot, read-only", () => {
+    const args = dockerBindMountArgs(opts);
+    assert.ok(args.includes("/proj/node_modules:/app/node_modules:ro"));
+    assert.ok(args.includes("/pkg/server:/app/server:ro"));
+    assert.ok(args.includes("/pkg/src:/app/src:ro"));
+  });
+
+  it("splices in the caller's packagesMount and mounts the workspace + .claude config", () => {
+    const args = dockerBindMountArgs(opts);
+    assert.ok(args.includes("/pkg/packages:/app/packages:ro"), "packagesMount not spliced in");
+    assert.ok(
+      args.some((arg) => arg.startsWith("/ws:")),
+      "workspace mount missing",
+    );
+    assert.ok(args.some((arg) => arg.endsWith(":/home/node/.claude")));
+    assert.ok(args.some((arg) => arg.endsWith(":/home/node/.claude.json")));
+  });
+
+  it("converts Windows backslash host paths to forward slashes for -v", () => {
+    const args = dockerBindMountArgs({ ...opts, projectRoot: "C:\\Users\\me\\proj" });
+    assert.ok(args.includes("C:/Users/me/proj/node_modules:/app/node_modules:ro"));
   });
 });
