@@ -31,17 +31,14 @@ import { spawn } from "node:child_process";
 // but we CAN distinguish "spawn succeeded" from "command not found /
 // permission denied" (e.g. `xdg-open` missing on a headless Linux
 // host). Client-side error handling depends on this signal.
-export function openInHostOs(absPath: string): Promise<boolean> {
-  const { platform } = process;
-  const [command, args] =
-    platform === "darwin" ? (["open", [absPath]] as const) : platform === "win32" ? (["explorer.exe", [absPath]] as const) : (["xdg-open", [absPath]] as const);
+function spawnDetachedOsCommand(command: string, args: readonly string[], label: string): Promise<boolean> {
   return new Promise<boolean>((resolve) => {
-    const child = spawn(command, args, { detached: true, stdio: "ignore" });
+    const child = spawn(command, args as string[], { detached: true, stdio: "ignore" });
     let settled = false;
     child.once("error", (err) => {
       if (settled) return;
       settled = true;
-      log.warn("files", "open: spawn error", { platform, error: err.message });
+      log.warn("files", `${label}: spawn error`, { platform: process.platform, error: err.message });
       resolve(false);
     });
     child.once("spawn", () => {
@@ -51,6 +48,32 @@ export function openInHostOs(absPath: string): Promise<boolean> {
       resolve(true);
     });
   });
+}
+
+export function openInHostOs(absPath: string): Promise<boolean> {
+  const { platform } = process;
+  const [command, args] =
+    platform === "darwin" ? (["open", [absPath]] as const) : platform === "win32" ? (["explorer.exe", [absPath]] as const) : (["xdg-open", [absPath]] as const);
+  return spawnDetachedOsCommand(command, args, "open");
+}
+
+// Reveal the file in the host file manager. macOS `open -R` and
+// Windows `explorer /select,` open the containing folder with the
+// file selected; Linux `xdg-open <dir>` opens the folder only —
+// there's no portable "select this item" across the many Linux file
+// managers, and landing next to the file is enough for drag-and-drop
+// (#1985 follow-up). Same argv-array (no shell) discipline as
+// `openInHostOs` so a filename with shell metacharacters can never be
+// reinterpreted as command syntax.
+export function revealInHostOs(absPath: string): Promise<boolean> {
+  const { platform } = process;
+  const [command, args] =
+    platform === "darwin"
+      ? (["open", ["-R", absPath]] as const)
+      : platform === "win32"
+        ? (["explorer.exe", [`/select,${absPath}`]] as const)
+        : (["xdg-open", [path.dirname(absPath)]] as const);
+  return spawnDetachedOsCommand(command, args, "reveal");
 }
 
 const router = Router();
@@ -1157,13 +1180,22 @@ router.get(API_ROUTES.files.raw, (req: Request<object, unknown, unknown, PathQue
 // unsupported preview so a `.xlsx` / `.pptx` reachable via the file
 // tree can be viewed in Excel / Keynote when in-browser preview isn't
 // available (#1985). Cross-platform: macOS `open`, Linux `xdg-open`,
-// Windows `start` (via cmd). Workspace-scoped path validation same as
-// every other files route. Accepts `path` from body OR query so a
-// swallowed body doesn't stop the button (belt + suspenders).
+// Windows `explorer.exe`. Workspace-scoped path validation same as
+// every other files route.
 interface OpenFileRequest {
   path?: unknown;
 }
-router.post(API_ROUTES.files.open, async (req: Request<object, unknown, OpenFileRequest, PathQuery>, res: Response<{ ok: boolean } | ErrorResponse>) => {
+
+// Shared by the /open and /reveal routes: validate the workspace-scoped
+// path, run the platform action, and map the spawn result to the JSON
+// contract. Accepts `path` from body OR query so a swallowed body
+// doesn't stop the button (belt + suspenders).
+async function handleOsFileAction(
+  req: Request<object, unknown, OpenFileRequest, PathQuery>,
+  res: Response<{ ok: boolean } | ErrorResponse>,
+  action: (absPath: string) => Promise<boolean>,
+  failureMessage: string,
+): Promise<void> {
   const bodyPath = typeof req.body?.path === "string" ? req.body.path : "";
   const queryPath = getOptionalStringQuery(req, "path") ?? "";
   const requestedPath = bodyPath || queryPath;
@@ -1173,13 +1205,24 @@ router.post(API_ROUTES.files.open, async (req: Request<object, unknown, OpenFile
   }
   const ctx = resolveAndStatFileByPath(requestedPath, res);
   if (!ctx) return;
-  const spawned = await openInHostOs(ctx.absPath);
+  const spawned = await action(ctx.absPath);
   if (!spawned) {
-    serverError(res, "Failed to launch OS file handler");
+    serverError(res, failureMessage);
     return;
   }
   res.json({ ok: true });
-});
+}
+
+router.post(API_ROUTES.files.open, (req: Request<object, unknown, OpenFileRequest, PathQuery>, res: Response<{ ok: boolean } | ErrorResponse>) =>
+  handleOsFileAction(req, res, openInHostOs, "Failed to launch OS file handler"),
+);
+
+// POST /api/files/reveal — open the file's containing folder in the
+// host file manager (file selected on macOS / Windows) so a generated
+// file can be dragged into another app (#1985 follow-up).
+router.post(API_ROUTES.files.reveal, (req: Request<object, unknown, OpenFileRequest, PathQuery>, res: Response<{ ok: boolean } | ErrorResponse>) =>
+  handleOsFileAction(req, res, revealInHostOs, "Failed to reveal file in OS file manager"),
+);
 
 router.get(API_ROUTES.files.refRoots, async (_req: Request, res: Response<TreeNode[]>) => {
   log.info("files", "GET ref-roots: start");

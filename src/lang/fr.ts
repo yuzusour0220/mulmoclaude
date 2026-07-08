@@ -427,6 +427,8 @@ const frMessages = {
     rendered: "Rendu",
     raw: "Source",
     closeFile: "Fermer le fichier",
+    revealInOs: "Afficher dans le dossier",
+    revealInOsFailed: "Échec de l'affichage dans le dossier",
   },
   fileContentRenderer: {
     download: "ZIP",
