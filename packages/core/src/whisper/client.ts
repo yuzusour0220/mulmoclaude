@@ -4,6 +4,8 @@
 // pushed via `onState`; the host wraps this into its own reactivity (Vue refs,
 // React state, …). No framework dependency. See plans/done/feat-extract-whisper-package.md.
 
+import { computeRms, containerTypeFromMime, evaluateVad, type VadConfig } from "./client-helpers.ts";
+
 // Map a UI locale to a Whisper language code. UI language is a strong prior for
 // the spoken language; "auto" lets Whisper detect it from the audio.
 const LOCALE_TO_WHISPER: Record<string, string> = {
@@ -29,6 +31,7 @@ const SILENCE_MS = 800;
 const MAX_SEGMENT_MS = 20_000;
 const MONITOR_INTERVAL_MS = 100;
 const AVAILABILITY_POLL_MS = 2_000;
+const VAD_CONFIG: VadConfig = { speechRms: SPEECH_RMS, silenceMs: SILENCE_MS, maxSegmentMs: MAX_SEGMENT_MS };
 
 function pickRecorderMime(): string | undefined {
   const candidates = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"];
@@ -43,12 +46,6 @@ function blobToDataUrl(blob: Blob): Promise<string> {
     reader.onerror = () => reject(reader.error ?? new Error("FileReader failed"));
     reader.readAsDataURL(blob);
   });
-}
-
-function computeRms(buffer: Float32Array): number {
-  let sum = 0;
-  for (const sample of buffer) sum += sample * sample;
-  return Math.sqrt(sum / buffer.length);
 }
 
 function toMessage(err: unknown): string {
@@ -193,14 +190,10 @@ export function createVoiceCapture(transport: VoiceCaptureTransport, language: (
       .finally(() => setPending(-1));
   }
 
-  function containerType(): string {
-    return mimeType.split(";")[0] || "audio/webm";
-  }
-
   function onSegmentStop(): void {
     const hadSpeech = segmentHasSpeech;
     const gen = segmentGeneration;
-    const blob = new Blob(chunks, { type: containerType() });
+    const blob = new Blob(chunks, { type: containerTypeFromMime(mimeType) });
     if (listening) startRecorder();
     if (hadSpeech && blob.size > 0 && gen === generation) enqueue(blob, gen);
   }
@@ -228,15 +221,10 @@ export function createVoiceCapture(transport: VoiceCaptureTransport, language: (
     if (!analyser) return;
     analyser.getFloatTimeDomainData(vadBuffer);
     const rms = computeRms(vadBuffer);
-    const now = Date.now();
-    if (rms > SPEECH_RMS) {
-      segmentHasSpeech = true;
-      silenceStart = null;
-    } else if (segmentHasSpeech) {
-      if (silenceStart === null) silenceStart = now;
-      else if (now - silenceStart > SILENCE_MS) cutSegment();
-    }
-    if (segmentHasSpeech && now - segmentStart > MAX_SEGMENT_MS) cutSegment();
+    const { hasSpeech, silenceStart: nextSilence, cut } = evaluateVad({ hasSpeech: segmentHasSpeech, silenceStart }, segmentStart, rms, Date.now(), VAD_CONFIG);
+    segmentHasSpeech = hasSpeech;
+    silenceStart = nextSilence;
+    if (cut) cutSegment();
   }
 
   async function start(): Promise<boolean> {

@@ -9,11 +9,13 @@ import { readFile } from "node:fs/promises";
 import { setTimeout as delay } from "node:timers/promises";
 import { errorMessage, NOOP_LOGGER, ONE_MINUTE_MS, ONE_SECOND_MS, type WhisperLogger } from "./internal.ts";
 import { modelFilePath, type WhisperModelName } from "./models.ts";
+import { appendStderrTail, buildServerArgs, parseInferenceText } from "./sidecar-helpers.ts";
 
 const HOST = "127.0.0.1";
 const READY_TIMEOUT_MS = 60 * ONE_SECOND_MS;
 const READY_POLL_INTERVAL_MS = 500;
 const INFERENCE_TIMEOUT_MS = 2 * ONE_MINUTE_MS;
+const STDERR_TAIL_MAX_CHARS = 4_000;
 
 interface ActiveSidecar {
   readonly port: number;
@@ -63,7 +65,7 @@ async function waitUntilReady(port: number): Promise<void> {
 function drainStderr(proc: ChildProcess, tail: { text: string }): void {
   proc.stderr?.setEncoding("utf8");
   proc.stderr?.on("data", (chunk: string) => {
-    tail.text = (tail.text + chunk).slice(-4000);
+    tail.text = appendStderrTail(tail.text, chunk, STDERR_TAIL_MAX_CHARS);
   });
 }
 
@@ -99,14 +101,6 @@ function waitForReadyOrFailure(proc: ChildProcess, port: number): Promise<void> 
   });
 }
 
-function parseInferenceText(data: unknown): string {
-  if (typeof data === "object" && data !== null && "text" in data) {
-    const { text } = data as { text: unknown };
-    if (typeof text === "string") return text;
-  }
-  return "";
-}
-
 export function createSidecar(modelsDir: string, serverBinary = "whisper-server", logger: WhisperLogger = NOOP_LOGGER): Sidecar {
   let sidecar: ActiveSidecar | null = null;
   let starting: { model: WhisperModelName; promise: Promise<ActiveSidecar> } | null = null;
@@ -131,7 +125,7 @@ export function createSidecar(modelsDir: string, serverBinary = "whisper-server"
   async function startSidecar(model: WhisperModelName): Promise<ActiveSidecar> {
     const token = ++startToken;
     const port = await findFreePort();
-    const args = ["--model", modelFilePath(modelsDir, model), "--host", HOST, "--port", String(port)];
+    const args = buildServerArgs(modelFilePath(modelsDir, model), HOST, port);
     logger.info("sidecar: spawning", { model, port });
     const proc = spawn(serverBinary, args, { stdio: ["ignore", "ignore", "pipe"] });
     startingProc = proc;

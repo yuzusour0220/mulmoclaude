@@ -65,6 +65,20 @@ export interface ModelStatus {
   error?: string;
 }
 
+/** Report status precedence: an in-flight download wins, then an on-disk ready
+ *  file, then the last transient state (idle if none). Pure so the precedence
+ *  is unit-testable without touching the filesystem. */
+export function pickModelStatus(live: ModelStatus | undefined, isReady: boolean): ModelStatus {
+  if (live?.state === "downloading") return live;
+  if (isReady) return { state: "ready" };
+  return live ?? { state: "idle" };
+}
+
+/** Parse a `Content-Length` header to a byte count; unknown / malformed → 0. */
+export function parseContentLength(header: string | null): number {
+  return Number(header) || 0;
+}
+
 // Abort a download if no bytes arrive for this long (stalled connection).
 const DOWNLOAD_STALL_TIMEOUT_MS = ONE_MINUTE_MS;
 
@@ -79,10 +93,7 @@ export function createModelDownloader(modelsDir: string, logger: WhisperLogger =
   const downloadStatus = new Map<WhisperModelName, ModelStatus>();
 
   function getStatus(name: WhisperModelName): ModelStatus {
-    const live = downloadStatus.get(name);
-    if (live?.state === "downloading") return live;
-    if (isModelReady(modelsDir, name)) return { state: "ready" };
-    return live ?? { state: "idle" };
+    return pickModelStatus(downloadStatus.get(name), isModelReady(modelsDir, name));
   }
 
   async function streamToFile(
@@ -128,7 +139,7 @@ export function createModelDownloader(modelsDir: string, logger: WhisperLogger =
       if (!response.ok || !response.body) {
         throw new Error(`download failed: HTTP ${response.status}`);
       }
-      const total = Number(response.headers.get("content-length")) || 0;
+      const total = parseContentLength(response.headers.get("content-length"));
       resetStall();
       await streamToFile(response.body, partial, total, name, resetStall);
       if (statSync(partial).size < spec.minBytes) {
