@@ -42,6 +42,14 @@ export interface DevPluginChangedPayload {
   serverSideChange: boolean;
 }
 
+/** Sort the debounced file set and flag whether the server entry
+ *  (`dist/index.js`) is among the changes. */
+export function summarizeChangedFiles(files: ReadonlySet<string>): DevPluginChangedPayload {
+  const changedFiles = Array.from(files).sort();
+  const serverSideChange = changedFiles.some(isServerEntry);
+  return { changedFiles, serverSideChange };
+}
+
 export interface WatchDevPluginsOptions {
   /** Called once per debounce burst per plugin. */
   publish: (pluginName: string, payload: DevPluginChangedPayload) => void;
@@ -102,10 +110,9 @@ export function watchDevPlugins(plugins: readonly RuntimePlugin[], opts: WatchDe
           pendingFiles.delete(plugin.name);
           timers.delete(plugin.name);
           if (!files || files.size === 0) return;
-          const changedFiles = Array.from(files).sort();
-          const serverSideChange = changedFiles.some(isServerEntry);
-          if (serverSideChange) opts.warnServerSideChange?.(plugin.name);
-          opts.publish(plugin.name, { changedFiles, serverSideChange });
+          const summary = summarizeChangedFiles(files);
+          if (summary.serverSideChange) opts.warnServerSideChange?.(plugin.name);
+          opts.publish(plugin.name, summary);
         }, debounceMs),
       );
     });
