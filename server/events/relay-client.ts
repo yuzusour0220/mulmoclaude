@@ -14,20 +14,11 @@ import type { ChatService } from "@mulmobridge/chat-service";
 import { ONE_SECOND_MS } from "../utils/time.js";
 import { errorMessage } from "../utils/errors.js";
 import { resolveRelayBridgeOptions } from "./resolveRelayBridgeOptions.js";
+import { buildExternalChatId, buildRelayUrl, formatReplyText, isRelayMessage, isTerminalCloseCode, nextReconnectMs } from "./relay-client-helpers.js";
 
 type RelayFn = ChatService["relay"];
 
 // ── Types ────────────────────────────────────────────────────
-
-interface RelayMessage {
-  id: string;
-  platform: string;
-  senderId: string;
-  chatId: string;
-  text: string;
-  receivedAt: string;
-  replyToken?: string;
-}
 
 interface RelayResponse {
   platform: string;
@@ -61,29 +52,6 @@ const MIN_RECONNECT_MS = ONE_SECOND_MS;
 const MAX_RECONNECT_MS = 30 * ONE_SECOND_MS;
 const MAX_RESPONSE_QUEUE = 100;
 
-// Close codes that indicate a permanent/terminal error — no point
-// reconnecting until the configuration is fixed.
-const TERMINAL_CLOSE_CODES = new Set([
-  1008, // Policy violation (e.g. auth rejected)
-  4401, // Custom: unauthorized
-  4403, // Custom: forbidden
-]);
-
-// ── Helpers ─────────────────────────────────────────────────
-
-function isRelayMessage(value: unknown): value is RelayMessage {
-  if (!value || typeof value !== "object") return false;
-  const obj = value as Record<string, unknown>;
-  return (
-    typeof obj.id === "string" &&
-    typeof obj.platform === "string" &&
-    typeof obj.chatId === "string" &&
-    typeof obj.text === "string" &&
-    obj.text !== "" &&
-    obj.chatId !== ""
-  );
-}
-
 // ── Factory ─────────────────────────────────────────────────
 
 export function connectRelay(deps: RelayClientDeps): RelayClientHandle {
@@ -95,17 +63,11 @@ export function connectRelay(deps: RelayClientDeps): RelayClientHandle {
   let stopped = false;
   const responseQueue: RelayResponse[] = [];
 
-  function buildUrl(): string {
-    const url = new URL(relayUrl);
-    url.searchParams.set("token", relayToken);
-    return url.toString();
-  }
-
   function connect(): void {
     if (stopped) return;
 
     try {
-      socket = new WebSocket(buildUrl());
+      socket = new WebSocket(buildRelayUrl(relayUrl, relayToken));
     } catch (err) {
       logger.error(LOG_PREFIX, "failed to create WebSocket", {
         error: errorMessage(err),
@@ -126,7 +88,7 @@ export function connectRelay(deps: RelayClientDeps): RelayClientHandle {
 
     socket.on("close", (code, reason) => {
       socket = null;
-      if (TERMINAL_CLOSE_CODES.has(code)) {
+      if (isTerminalCloseCode(code)) {
         logger.error(LOG_PREFIX, "terminal close, not reconnecting", {
           code,
           reason: String(reason),
@@ -155,7 +117,7 @@ export function connectRelay(deps: RelayClientDeps): RelayClientHandle {
       reconnectTimer = null;
       connect();
     }, reconnectMs);
-    reconnectMs = Math.min(reconnectMs * 2, MAX_RECONNECT_MS);
+    reconnectMs = nextReconnectMs(reconnectMs, MAX_RECONNECT_MS);
   }
 
   async function handleMessage(raw: string): Promise<void> {
@@ -182,11 +144,7 @@ export function connectRelay(deps: RelayClientDeps): RelayClientHandle {
       textLength: msg.text.length,
     });
 
-    // Double-underscore separator avoids collisions — platform names
-    // are from a fixed set (PLATFORMS constant) and none contain "__".
-    // Single "-" is unsafe because "google-chat" + "X" collides with
-    // "google" + "chat-X".
-    const externalChatId = `${msg.platform}__${msg.chatId}`;
+    const externalChatId = buildExternalChatId(msg.platform, msg.chatId);
 
     try {
       // Per-platform default-role resolution (#739). Mirrors the
@@ -203,7 +161,7 @@ export function connectRelay(deps: RelayClientDeps): RelayClientHandle {
         bridgeOptions,
       });
 
-      const replyText = result.kind === "ok" ? result.reply : `Error: ${result.message}`;
+      const replyText = formatReplyText(result);
 
       sendResponse({
         platform: msg.platform,
