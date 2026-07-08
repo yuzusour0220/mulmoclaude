@@ -195,7 +195,7 @@ export async function spawnSystemWorker(args: {
 }
 
 export async function startChat(params: StartChatParams): Promise<StartChatResult> {
-  const { message, roleId, chatSessionId, selectedImageData, attachments, userTimezone } = params;
+  const { message, roleId, chatSessionId, selectedImageData, attachments } = params;
   // Bridge-only compat: external bridge clients may still populate
   // `selectedImageData`. Fold it into `attachments` so the rest of
   // this function only deals with one input shape.
@@ -272,6 +272,22 @@ export async function startChat(params: StartChatParams): Promise<StartChatResul
     return { kind: "error", error: "Invalid attachments payload", status: 400 };
   }
 
+  const validOrigin = await persistUserTurn(params, { isFirstTurn, attachedPaths });
+  await dispatchAgentRun(params, { extras, resultsFilePath, abortController, validOrigin });
+
+  return { kind: "started", chatSessionId };
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────
+
+// Persist the user turn: write session metadata, count the query,
+// append the user message to the jsonl, and broadcast it to other
+// tabs viewing this session. Returns the validated origin so the
+// dispatch phase can reuse it.
+async function persistUserTurn(params: StartChatParams, ctx: { isFirstTurn: boolean; attachedPaths: string[] }): Promise<SessionOrigin | undefined> {
+  const { message, roleId, chatSessionId } = params;
+  const { isFirstTurn, attachedPaths } = ctx;
+
   // Now persist the user message so callers (and other tabs) see the
   // turn. Metadata first — it powers the sidebar title cache; the
   // append follows so the jsonl is always a superset of what metadata
@@ -306,6 +322,20 @@ export async function startChat(params: StartChatParams): Promise<StartChatResul
     ...(attachedPaths.length > 0 ? { attachments: attachedPaths } : {}),
   });
 
+  return validOrigin;
+}
+
+// Build the LLM-bound message (journal pointer + attached-file
+// markers) and kick off the detached background agent run. The
+// background run itself is fire-and-forget; this awaits only the
+// claudeSessionId read that must precede it.
+async function dispatchAgentRun(
+  params: StartChatParams,
+  ctx: { extras: RequestExtras; resultsFilePath: string; abortController: AbortController; validOrigin: SessionOrigin | undefined },
+): Promise<void> {
+  const { message, roleId, chatSessionId, userTimezone } = params;
+  const { extras, resultsFilePath, abortController, validOrigin } = ctx;
+
   const role = getRole(roleId);
   const claudeSessionId = await readClaudeSessionIdFromSession(chatSessionId);
 
@@ -333,11 +363,7 @@ export async function startChat(params: StartChatParams): Promise<StartChatResul
     userTimezone,
     origin: validOrigin,
   });
-
-  return { kind: "started", chatSessionId };
 }
-
-// ── Helpers ──────────────────────────────────────────────────────────
 
 interface RequestExtras {
   attachments: Attachment[] | undefined;
