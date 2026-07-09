@@ -116,6 +116,11 @@ async function streamToFile(
     fileStream.end();
     await once(fileStream, "finish");
   } catch (err) {
+    // `createWriteStream` opens lazily. Destroying it while that open is still
+    // in flight lets the open's own failure land later as an `error` event with
+    // no listener — an uncaughtException that kills the process. `err` already
+    // carries the real cause, so absorb the late one.
+    fileStream.on("error", () => {});
     fileStream.destroy();
     throw err;
   }
