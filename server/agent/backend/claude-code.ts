@@ -11,7 +11,7 @@
 
 import { spawn, type ChildProcessByStdio } from "child_process";
 import type { Readable, Writable } from "stream";
-import { buildCliArgs, buildDockerSpawnArgs, buildUserMessageLine } from "../config.js";
+import { buildCliArgs, buildDockerSpawnArgs, buildUserMessageLine, type CliArgsParams } from "../config.js";
 import { resolveSandboxAuth } from "../sandboxMounts.js";
 import { getCachedReferenceDirs, referenceDirMountArgs } from "../../workspace/reference-dirs.js";
 import { createStreamParser, type AgentEvent, type RawStreamEvent } from "../stream.js";
@@ -179,15 +179,21 @@ async function* readAgentEvents(proc: ClaudeProc, abortSignal?: AbortSignal): As
   if (errorEvent) yield errorEvent;
 }
 
-async function* runClaudeAgent(input: AgentInput): AsyncGenerator<AgentEvent> {
-  const cliArgs = buildCliArgs({
+// The one non-pass-through mapping is `sessionToken` -> `claudeSessionId`
+// (the CLI's `--resume` id); the rest forward verbatim.
+export function cliArgsForInput(input: AgentInput): CliArgsParams {
+  return {
     systemPrompt: input.systemPrompt,
     activePlugins: input.activePlugins,
     claudeSessionId: input.sessionToken,
     mcpConfigPath: input.mcpConfigPath,
     extraAllowedTools: input.extraAllowedTools,
     effortLevel: input.effortLevel,
-  });
+  };
+}
+
+async function* runClaudeAgent(input: AgentInput): AsyncGenerator<AgentEvent> {
+  const cliArgs = buildCliArgs(cliArgsForInput(input));
 
   // spawnClaude can throw synchronously when `claudeBinPath()` fails
   // to locate `claude.exe` on Windows — surface that through the same
