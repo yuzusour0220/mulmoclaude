@@ -490,9 +490,7 @@ export default [
       "packages/plugins/collection-plugin/src/vue/useCollectionRendering.ts",
       "packages/relay/src/client.ts",
       "server/events/relay-client.ts",
-      "server/system/credentials.ts",
       "src/composables/useFileTree.ts",
-      "src/composables/useSessionHistory.ts",
     ],
     rules: {
       "max-lines-per-function": ["warn", { max: 50, skipBlankLines: true, skipComments: true, IIFEs: true }],

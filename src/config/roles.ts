@@ -68,6 +68,7 @@ export const ROLES: Role[] = [
     queries: [
       "Tell me about this app, MulmoClaude.",
       "What are collections in this app, and how do I build one just by describing what I want?",
+      "How do I access MulmoClaude from my phone with the remote host feature, and how secure is it?",
       "What is the wiki in this app and how do I use it?",
       "Tell me about the sandbox feature of this app.",
       "What is the role of the Gemini API key in this app?",
