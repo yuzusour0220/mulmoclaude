@@ -493,7 +493,6 @@ export default [
       "server/system/credentials.ts",
       "server/workspace/journal/archivist-cli.ts",
       "src/composables/useFileTree.ts",
-      "src/composables/useSessionHistory.ts",
     ],
     rules: {
       "max-lines-per-function": ["warn", { max: 50, skipBlankLines: true, skipComments: true, IIFEs: true }],
