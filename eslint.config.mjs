@@ -491,7 +491,6 @@ export default [
       "packages/relay/src/client.ts",
       "server/api/routes/agent.ts",
       "server/events/relay-client.ts",
-      "server/plugins/dev-watcher.ts",
       "server/system/credentials.ts",
       "server/workspace/journal/archivist-cli.ts",
       "src/composables/useFileSelection.ts",
