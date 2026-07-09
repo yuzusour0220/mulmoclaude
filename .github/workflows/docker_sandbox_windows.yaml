@@ -189,3 +189,75 @@ jobs:
             -w /app `
             node:22-slim `
             bash -c "npm install -g tsx --silent && tsx --import file:///app/server/agent/mcp-esm-bootstrap.mjs /repro/probe.ts"
+
+      # ── #2052 diagnostics ────────────────────────────────────────────
+      # The probe above runs from /repro, whose sibling package.json says
+      # `type: module` — so it exercises the ESM resolver hook. The real MCP
+      # child runs /app/server/agent/mcp-server.ts, and dockerBindMountArgs()
+      # never mounts a package.json under /app. These steps put the SAME
+      # diagnostic file in the production package scope and read off which
+      # module format Node actually picks, with and without a /app manifest.
+      #
+      # They REPORT; they do not gate the job. Reading the log is the point.
+
+      - name: "#2052 — diagnose: production layout (no /app/package.json)"
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          $wsWin = "${{ github.workspace }}"
+          $drive = $wsWin.Substring(0, 1).ToLower()
+          $rest = $wsWin.Substring(3) -replace '\\', '/'
+          $wsLinux = "/mnt/$drive/$rest"
+
+          wsl -d Ubuntu-22.04 -u root -- docker run --rm `
+            -v "${wsLinux}/node_modules:/app/node_modules:ro" `
+            -v "${wsLinux}/packages/plugins/x-plugin:/app/pkg_modules/@mulmoclaude/x-plugin:ro" `
+            -v "${wsLinux}/server:/app/server:ro" `
+            -v "${wsLinux}/test/sandbox-repro/diagnose-2052.ts:/app/server/agent/diagnose-2052.ts:ro" `
+            -e NODE_PATH=/app/node_modules:/app/pkg_modules `
+            -w /app `
+            node:22-slim `
+            bash -c "npm install -g tsx --silent && tsx --import file:///app/server/agent/mcp-esm-bootstrap.mjs /app/server/agent/diagnose-2052.ts"
+
+      - name: "#2052 — diagnose: same, but with a {type:module} /app/package.json"
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          $wsWin = "${{ github.workspace }}"
+          $drive = $wsWin.Substring(0, 1).ToLower()
+          $rest = $wsWin.Substring(3) -replace '\\', '/'
+          $wsLinux = "/mnt/$drive/$rest"
+
+          # The candidate fix, expressed as one extra bind mount.
+          wsl -d Ubuntu-22.04 -u root -- docker run --rm `
+            -v "${wsLinux}/node_modules:/app/node_modules:ro" `
+            -v "${wsLinux}/packages/plugins/x-plugin:/app/pkg_modules/@mulmoclaude/x-plugin:ro" `
+            -v "${wsLinux}/server:/app/server:ro" `
+            -v "${wsLinux}/test/sandbox-repro/package.json:/app/package.json:ro" `
+            -v "${wsLinux}/test/sandbox-repro/diagnose-2052.ts:/app/server/agent/diagnose-2052.ts:ro" `
+            -e NODE_PATH=/app/node_modules:/app/pkg_modules `
+            -w /app `
+            node:22-slim `
+            bash -c "npm install -g tsx --silent && tsx --import file:///app/server/agent/mcp-esm-bootstrap.mjs /app/server/agent/diagnose-2052.ts"
+
+      - name: "#2052 — reproduce the crash verbatim (static import, production layout)"
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          $wsWin = "${{ github.workspace }}"
+          $drive = $wsWin.Substring(0, 1).ToLower()
+          $rest = $wsWin.Substring(3) -replace '\\', '/'
+          $wsLinux = "/mnt/$drive/$rest"
+
+          # Expected to exit non-zero BEFORE the fix, with the exact
+          # `Cannot find module '@mulmoclaude/x-plugin'` + `Require stack:`
+          # trace from the issue. That is the reproduction.
+          wsl -d Ubuntu-22.04 -u root -- docker run --rm `
+            -v "${wsLinux}/node_modules:/app/node_modules:ro" `
+            -v "${wsLinux}/packages/plugins/x-plugin:/app/pkg_modules/@mulmoclaude/x-plugin:ro" `
+            -v "${wsLinux}/server:/app/server:ro" `
+            -v "${wsLinux}/test/sandbox-repro/static-import-2052.ts:/app/server/agent/static-import-2052.ts:ro" `
+            -e NODE_PATH=/app/node_modules:/app/pkg_modules `
+            -w /app `
+            node:22-slim `
+            bash -c "npm install -g tsx --silent && tsx --import file:///app/server/agent/mcp-esm-bootstrap.mjs /app/server/agent/static-import-2052.ts"
