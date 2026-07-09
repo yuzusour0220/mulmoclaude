@@ -8,14 +8,11 @@ import securityPlugin from "eslint-plugin-security";
 import importPlugin from "eslint-plugin-import";
 import vuePlugin from "eslint-plugin-vue";
 import vueParser from "vue-eslint-parser";
-import vueI18n from "@intlify/eslint-plugin-vue-i18n"
+import vueI18n from "@intlify/eslint-plugin-vue-i18n";
 
 export default [
   {
-    files: [
-      "{src,test}/**/*.{js,ts,yaml,yml,vue}",
-      "assets/html/js/**/*.js",
-    ],
+    files: ["{src,test}/**/*.{js,ts,yaml,yml,vue}", "assets/html/js/**/*.js"],
   },
   {
     ignores: [
@@ -112,11 +109,7 @@ export default [
     },
   },
   {
-    files: [
-      "**/utils/html_render.ts",
-      "src/utils/dom/**/*.ts",
-      "src/composables/**/*.ts",
-    ],
+    files: ["**/utils/html_render.ts", "src/utils/dom/**/*.ts", "src/composables/**/*.ts"],
     languageOptions: {
       globals: {
         ...globals.browser,
@@ -147,12 +140,7 @@ export default [
           // Don't flag object property keys — external API payloads
           // legitimately use short keys like `id`, `to`, `n`, `e`.
           properties: "never",
-          exceptions: [
-            "_",
-            "i",
-            "j",
-            "ok"
-          ],
+          exceptions: ["_", "i", "j", "ok"],
         },
       ],
       // Catch TDZ-style `use-before-define` (e.g. accessing a `const`
@@ -259,13 +247,16 @@ export default [
       complexity: ["error", { max: 15 }],
       "max-depth": ["error", { max: 4 }],
       "max-params": ["error", { max: 6 }],
-      // Soft-launched as `warn` per CLAUDE.md's 20-line target — starts
-      // as advisory nudges so existing violations don't block CI. Bumping
-      // to `error` (or lowering `max`) once the count is drained is a
-      // one-line follow-up. skipBlankLines + skipComments so heavily-
-      // documented small functions don't count as "long"; IIFEs kept in
-      // so top-level `(() => { … })()` blocks are measured too.
-      "max-lines-per-function": ["warn", { max: 50, skipBlankLines: true, skipComments: true, IIFEs: true }],
+      // Ratcheted to `error` so no NEW function can exceed the 50-line
+      // budget. Pre-existing violations that resist a behavior-preserving
+      // split are pinned to `warn` in the grandfather block at the end of
+      // this config (search "max-lines-per-function grandfather"). Drain
+      // then delete entries there; do NOT add new files to it — a new
+      // over-budget function must be split, not grandfathered.
+      // skipBlankLines + skipComments so heavily-documented small
+      // functions don't count as "long"; IIFEs kept in so top-level
+      // `(() => { … })()` blocks are measured too.
+      "max-lines-per-function": ["error", { max: 50, skipBlankLines: true, skipComments: true, IIFEs: true }],
       quotes: "off",
       "no-shadow": "error",
       "no-param-reassign": "error",
@@ -466,7 +457,8 @@ export default [
             },
             {
               group: ["**/tools/**"],
-              message: "Plugin code must not import value bindings from the host tool registry (`src/tools/*`). Type imports are allowed (`PluginRegistration`, `ToolPlugin`).",
+              message:
+                "Plugin code must not import value bindings from the host tool registry (`src/tools/*`). Type imports are allowed (`PluginRegistration`, `ToolPlugin`).",
               allowTypeImports: true,
             },
             {
@@ -480,4 +472,35 @@ export default [
     },
   },
   eslintConfigPrettier,
+  // ── max-lines-per-function grandfather ──────────────────────────
+  // These files hold pre-existing functions over the 50-line budget
+  // that resist a behavior-preserving split: async generators (yielded
+  // code can't move out), factory closures over mutable state, Vue
+  // composables (reactive refs), and impure Promise executors / fs
+  // watchers. See docs/lint-policy.md. The rule is `error` repo-wide
+  // (above); this block pins these known offenders to `warn` so CI
+  // stays green while they remain backlog. As each is drained, remove
+  // its entry; when the list is empty, delete this block. Do NOT add
+  // new files — a new over-budget function must be split, not listed.
+  {
+    files: [
+      "packages/core/src/whisper/client.ts",
+      "packages/core/src/whisper/models.ts",
+      "packages/core/src/whisper/sidecar.ts",
+      "packages/plugins/collection-plugin/src/vue/useCollectionRendering.ts",
+      "packages/relay/src/client.ts",
+      "server/agent/backend/claude-code.ts",
+      "server/api/routes/agent.ts",
+      "server/events/relay-client.ts",
+      "server/plugins/dev-watcher.ts",
+      "server/system/credentials.ts",
+      "server/workspace/journal/archivist-cli.ts",
+      "src/composables/useFileSelection.ts",
+      "src/composables/useFileTree.ts",
+      "src/composables/useSessionHistory.ts",
+    ],
+    rules: {
+      "max-lines-per-function": ["warn", { max: 50, skipBlankLines: true, skipComments: true, IIFEs: true }],
+    },
+  },
 ];
