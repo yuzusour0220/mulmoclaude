@@ -189,108 +189,148 @@ export function createResponseQueue(deps: ResponseQueueDeps): ResponseQueue {
   return { enqueue, send, flush };
 }
 
+// ── Socket wiring ───────────────────────────────────────────
+
+// Mutable state shared across the factory's helpers. Kept as a single object
+// so the module-scope helpers can be typed against one shape rather than
+// threading each field through their signatures.
+export interface RelayState {
+  socket: WebSocket | null;
+  reconnectMs: number;
+  reconnectTimer: ReturnType<typeof setTimeout> | null;
+  stopped: boolean;
+}
+
+// Try to write `response` over the live socket. Returns false when there is
+// no socket or it isn't OPEN (caller queues instead). On a write error the
+// callback re-enqueues via `onEnqueue`; a synchronous throw (rare, e.g. socket
+// already CLOSED between the OPEN check and .send) is caught and reported as
+// "not sent" so the caller can queue.
+export function attemptSocketSend(state: RelayState, response: RelayResponse, logger: Logger, onEnqueue: () => void): boolean {
+  const live = state.socket;
+  if (!live || live.readyState !== WebSocket.OPEN) return false;
+  try {
+    live.send(JSON.stringify(response), (err) => {
+      if (err && !state.stopped) {
+        logger.warn(LOG_PREFIX, "send failed, requeueing", { platform: response.platform, chatId: response.chatId, error: err.message });
+        onEnqueue();
+      }
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Arm the exponential-backoff reconnect timer. No-op after `stopRelay` set
+// `stopped` — otherwise a fire-in-flight timer would resurrect the socket
+// after a manual disconnect.
+function scheduleReconnectStep(state: RelayState, logger: Logger, connect: () => void): void {
+  if (state.stopped) return;
+  logger.info(LOG_PREFIX, "reconnecting", { delayMs: state.reconnectMs });
+  state.reconnectTimer = setTimeout(() => {
+    state.reconnectTimer = null;
+    connect();
+  }, state.reconnectMs);
+  state.reconnectMs = nextReconnectMs(state.reconnectMs, MAX_RECONNECT_MS);
+}
+
+// Manual shutdown. `stopped = true` MUST happen before `socket.close()` — the
+// close event will still fire, and without the guard the close handler would
+// schedule a reconnect after we asked to stop.
+export function stopRelay(state: RelayState, logger: Logger): void {
+  state.stopped = true;
+  if (state.reconnectTimer) {
+    clearTimeout(state.reconnectTimer);
+    state.reconnectTimer = null;
+  }
+  if (state.socket) {
+    state.socket.close(1000, "shutdown");
+    state.socket = null;
+  }
+  logger.info(LOG_PREFIX, "stopped");
+}
+
+interface AttachSocketHandlersDeps {
+  relayUrl: string;
+  logger: Logger;
+  relay: RelayFn;
+  queue: ResponseQueue;
+  onOpen: () => void;
+  onCloseAny: () => void;
+  onCloseTransient: () => void;
+}
+
+// Attaches open / message / close / error listeners to a live socket. The
+// close handler branches by `isTerminalCloseCode`; the caller supplies
+// `onCloseAny` (always fires — used to null the parent's `socket` ref) and
+// `onCloseTransient` (fires only on a non-terminal close — used to schedule
+// reconnect). Kept at module scope so `connectRelay` stays under the
+// per-function line cap.
+function attachSocketHandlers(socket: WebSocket, deps: AttachSocketHandlersDeps): void {
+  const { relayUrl, logger, relay, queue, onOpen, onCloseAny, onCloseTransient } = deps;
+
+  socket.on("open", () => {
+    logger.info(LOG_PREFIX, "connected", { url: relayUrl });
+    onOpen();
+    queue.flush();
+  });
+
+  socket.on("message", (data) => {
+    handleRelayMessage(String(data), { relay, logger, sendResponse: queue.send });
+  });
+
+  socket.on("close", (code, reason) => {
+    onCloseAny();
+    if (isTerminalCloseCode(code)) {
+      logger.error(LOG_PREFIX, "terminal close, not reconnecting", { code, reason: String(reason) });
+      return;
+    }
+    logger.info(LOG_PREFIX, "disconnected", { code, reason: String(reason) });
+    onCloseTransient();
+  });
+
+  socket.on("error", (err) => {
+    logger.warn(LOG_PREFIX, "connection error", { error: err.message });
+    // close event will follow, triggering reconnect
+  });
+}
+
 // ── Factory ─────────────────────────────────────────────────
 
 export function connectRelay(deps: RelayClientDeps): RelayClientHandle {
   const { relayUrl, relayToken, relay, logger } = deps;
-
-  let socket: WebSocket | null = null;
-  let reconnectMs = MIN_RECONNECT_MS;
-  let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-  let stopped = false;
-  const queue = createResponseQueue({ logger, trySend });
-
+  const state: RelayState = { socket: null, reconnectMs: MIN_RECONNECT_MS, reconnectTimer: null, stopped: false };
+  const queue = createResponseQueue({
+    logger,
+    trySend: (response) => attemptSocketSend(state, response, logger, () => queue.enqueue(response)),
+  });
+  function scheduleReconnect(): void {
+    scheduleReconnectStep(state, logger, connect);
+  }
   function connect(): void {
-    if (stopped) return;
-
+    if (state.stopped) return;
     try {
-      socket = new WebSocket(buildRelayUrl(relayUrl, relayToken));
+      state.socket = new WebSocket(buildRelayUrl(relayUrl, relayToken));
     } catch (err) {
-      logger.error(LOG_PREFIX, "failed to create WebSocket", {
-        error: errorMessage(err),
-      });
+      logger.error(LOG_PREFIX, "failed to create WebSocket", { error: errorMessage(err) });
       scheduleReconnect();
       return;
     }
-
-    socket.on("open", () => {
-      logger.info(LOG_PREFIX, "connected", { url: relayUrl });
-      reconnectMs = MIN_RECONNECT_MS;
-      queue.flush();
-    });
-
-    socket.on("message", (data) => {
-      handleRelayMessage(String(data), { relay, logger, sendResponse: queue.send });
-    });
-
-    socket.on("close", (code, reason) => {
-      socket = null;
-      if (isTerminalCloseCode(code)) {
-        logger.error(LOG_PREFIX, "terminal close, not reconnecting", {
-          code,
-          reason: String(reason),
-        });
-        return;
-      }
-      logger.info(LOG_PREFIX, "disconnected", {
-        code,
-        reason: String(reason),
-      });
-      scheduleReconnect();
-    });
-
-    socket.on("error", (err) => {
-      logger.warn(LOG_PREFIX, "connection error", {
-        error: err.message,
-      });
-      // close event will follow, triggering reconnect
+    attachSocketHandlers(state.socket, {
+      relayUrl,
+      logger,
+      relay,
+      queue,
+      onOpen: () => {
+        state.reconnectMs = MIN_RECONNECT_MS;
+      },
+      onCloseAny: () => {
+        state.socket = null;
+      },
+      onCloseTransient: scheduleReconnect,
     });
   }
-
-  function scheduleReconnect(): void {
-    if (stopped) return;
-    logger.info(LOG_PREFIX, "reconnecting", { delayMs: reconnectMs });
-    reconnectTimer = setTimeout(() => {
-      reconnectTimer = null;
-      connect();
-    }, reconnectMs);
-    reconnectMs = nextReconnectMs(reconnectMs, MAX_RECONNECT_MS);
-  }
-
-  function trySend(response: RelayResponse): boolean {
-    if (!socket || socket.readyState !== WebSocket.OPEN) return false;
-    try {
-      socket.send(JSON.stringify(response), (err) => {
-        if (err && !stopped) {
-          logger.warn(LOG_PREFIX, "send failed, requeueing", {
-            platform: response.platform,
-            chatId: response.chatId,
-            error: err.message,
-          });
-          queue.enqueue(response);
-        }
-      });
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  function disconnect(): void {
-    stopped = true;
-    if (reconnectTimer) {
-      clearTimeout(reconnectTimer);
-      reconnectTimer = null;
-    }
-    if (socket) {
-      socket.close(1000, "shutdown");
-      socket = null;
-    }
-    logger.info(LOG_PREFIX, "stopped");
-  }
-
-  // Start immediately
   connect();
-
-  return { disconnect };
+  return { disconnect: () => stopRelay(state, logger) };
 }
