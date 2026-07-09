@@ -17,7 +17,7 @@ const READY_POLL_INTERVAL_MS = 500;
 const INFERENCE_TIMEOUT_MS = 2 * ONE_MINUTE_MS;
 const STDERR_TAIL_MAX_CHARS = 4_000;
 
-interface ActiveSidecar {
+export interface ActiveSidecar {
   readonly port: number;
   readonly proc: ChildProcess;
   readonly model: WhisperModelName;
@@ -101,7 +101,60 @@ function waitForReadyOrFailure(proc: ChildProcess, port: number): Promise<void> 
   });
 }
 
-export function createSidecar(modelsDir: string, serverBinary = "whisper-server", logger: WhisperLogger = NOOP_LOGGER): Sidecar {
+// POST the wav to whisper-server's `/inference` and return the transcript.
+// Isolated from the lifecycle so the HTTP contract is unit-testable without a
+// live child (stub `fetch`, hand it a real wav path).
+export async function postInference(port: number, wavPath: string, language: string): Promise<string> {
+  const buf = await readFile(wavPath);
+  const form = new FormData();
+  form.append("file", new Blob([buf], { type: "audio/wav" }), "audio.wav");
+  form.append("response_format", "json");
+  form.append("language", language || "auto");
+  let res: Response;
+  try {
+    res = await fetch(`http://${HOST}:${port}/inference`, { method: "POST", body: form, signal: AbortSignal.timeout(INFERENCE_TIMEOUT_MS) });
+  } catch (err) {
+    throw new Error(`whisper-server request failed: ${errorMessage(err)}`);
+  }
+  if (!res.ok) throw new Error(`whisper-server returned HTTP ${res.status}`);
+  return parseInferenceText(await res.json());
+}
+
+export interface SidecarLaunch {
+  readonly proc: ChildProcess;
+  readonly port: number;
+}
+
+// The impure primitives the start lifecycle depends on, injected so the
+// cancellation / single-flight / model-switch logic can be driven with fakes.
+export interface StartLifecycleDeps {
+  /** Spawn the whisper-server child on a free port; resolves before readiness. */
+  spawnServer: (model: WhisperModelName) => Promise<SidecarLaunch>;
+  /** Resolve once the child answers HTTP, or reject on spawn failure / early exit. */
+  waitReady: (proc: ChildProcess, port: number) => Promise<void>;
+  logger: WhisperLogger;
+}
+
+export interface StartLifecycle {
+  ensureSidecar: (model: WhisperModelName) => Promise<ActiveSidecar>;
+  shutdown: () => void;
+}
+
+function defaultSpawnServer(modelsDir: string, serverBinary: string, logger: WhisperLogger): StartLifecycleDeps["spawnServer"] {
+  return async (model: WhisperModelName): Promise<SidecarLaunch> => {
+    const port = await findFreePort();
+    const args = buildServerArgs(modelFilePath(modelsDir, model), HOST, port);
+    logger.info("sidecar: spawning", { model, port });
+    const proc = spawn(serverBinary, args, { stdio: ["ignore", "ignore", "pipe"] });
+    return { proc, port };
+  };
+}
+
+// Owns the single warm child's lifecycle: which model is live, the in-flight
+// start, and the cancellation token. Kept as a factory closure so the mutable
+// state is encapsulated rather than threaded through parameters.
+export function createStartLifecycle(deps: StartLifecycleDeps): StartLifecycle {
+  const { spawnServer, waitReady, logger } = deps;
   let sidecar: ActiveSidecar | null = null;
   let starting: { model: WhisperModelName; promise: Promise<ActiveSidecar> } | null = null;
   // The child of an in-flight start (before it's published as `sidecar`), plus a
@@ -124,10 +177,7 @@ export function createSidecar(modelsDir: string, serverBinary = "whisper-server"
 
   async function startSidecar(model: WhisperModelName): Promise<ActiveSidecar> {
     const token = ++startToken;
-    const port = await findFreePort();
-    const args = buildServerArgs(modelFilePath(modelsDir, model), HOST, port);
-    logger.info("sidecar: spawning", { model, port });
-    const proc = spawn(serverBinary, args, { stdio: ["ignore", "ignore", "pipe"] });
+    const { proc, port } = await spawnServer(model);
     startingProc = proc;
     const stderrTail = { text: "" };
     drainStderr(proc, stderrTail);
@@ -139,7 +189,7 @@ export function createSidecar(modelsDir: string, serverBinary = "whisper-server"
       if (sidecar?.proc === proc) sidecar = null;
     });
     try {
-      await waitForReadyOrFailure(proc, port);
+      await waitReady(proc, port);
     } catch (err) {
       proc.kill();
       throw new Error(`whisper-server failed to start: ${errorMessage(err)} — stderr: ${stderrTail.text.slice(-500)}`);
@@ -184,30 +234,28 @@ export function createSidecar(modelsDir: string, serverBinary = "whisper-server"
     }
   }
 
+  return { ensureSidecar, shutdown };
+}
+
+export function createSidecar(modelsDir: string, serverBinary = "whisper-server", logger: WhisperLogger = NOOP_LOGGER): Sidecar {
+  const lifecycle = createStartLifecycle({
+    spawnServer: defaultSpawnServer(modelsDir, serverBinary, logger),
+    waitReady: waitForReadyOrFailure,
+    logger,
+  });
+
   async function warmup(model: WhisperModelName): Promise<void> {
     try {
-      await ensureSidecar(model);
+      await lifecycle.ensureSidecar(model);
     } catch (err) {
       logger.warn("sidecar: warmup failed", { model, error: errorMessage(err) });
     }
   }
 
   async function transcribeWav(wavPath: string, language: string, model: WhisperModelName): Promise<string> {
-    const active = await ensureSidecar(model);
-    const buf = await readFile(wavPath);
-    const form = new FormData();
-    form.append("file", new Blob([buf], { type: "audio/wav" }), "audio.wav");
-    form.append("response_format", "json");
-    form.append("language", language || "auto");
-    let res: Response;
-    try {
-      res = await fetch(`http://${HOST}:${active.port}/inference`, { method: "POST", body: form, signal: AbortSignal.timeout(INFERENCE_TIMEOUT_MS) });
-    } catch (err) {
-      throw new Error(`whisper-server request failed: ${errorMessage(err)}`);
-    }
-    if (!res.ok) throw new Error(`whisper-server returned HTTP ${res.status}`);
-    return parseInferenceText(await res.json());
+    const active = await lifecycle.ensureSidecar(model);
+    return postInference(active.port, wavPath, language);
   }
 
-  return { transcribeWav, warmup, shutdown };
+  return { transcribeWav, warmup, shutdown: lifecycle.shutdown };
 }
