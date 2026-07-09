@@ -2,7 +2,7 @@
 // current selection. Extracted from FilesView.vue (#507 step 5).
 
 import { computed, watch, type Ref } from "vue";
-import type { FileContent } from "./useFileSelection";
+import type { FileContent } from "./useFileContentLoader";
 import { wrapHtmlWithPreviewCsp } from "../utils/html/previewCsp";
 import { cspExtra, loadCspExtra } from "./useCspExtra";
 import { tokenizeJson, tokenizeJsonl, prettyJson } from "../utils/format/jsonSyntax";
