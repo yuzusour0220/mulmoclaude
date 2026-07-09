@@ -77,17 +77,7 @@ function isTokenExpired(raw: string): boolean {
  * OAuth token. The CLI handles the refresh internally and writes the new
  * token back to the macOS Keychain.
  */
-async function renewTokenViaPty(): Promise<boolean> {
-  // Dynamic import — node-pty is a native module that may not be present
-  // on all platforms. Guard with try/catch.
-  let pty: typeof import("node-pty");
-  try {
-    pty = await import("node-pty");
-  } catch {
-    log.error("credentials", "node-pty not available, cannot renew token");
-    return false;
-  }
-
+function awaitTokenRenewal(pty: typeof import("node-pty")): Promise<boolean> {
   return new Promise((resolve) => {
     const proc = pty.spawn("claude", [], {
       name: "xterm-color",
@@ -159,6 +149,20 @@ async function renewTokenViaPty(): Promise<boolean> {
       }
     }, PTY_INPUT_DELAY_MS);
   });
+}
+
+async function renewTokenViaPty(): Promise<boolean> {
+  // Dynamic import — node-pty is a native module that may not be present
+  // on all platforms. Guard with try/catch.
+  let pty: typeof import("node-pty");
+  try {
+    pty = await import("node-pty");
+  } catch {
+    log.error("credentials", "node-pty not available, cannot renew token");
+    return false;
+  }
+
+  return awaitTokenRenewal(pty);
 }
 
 /**
