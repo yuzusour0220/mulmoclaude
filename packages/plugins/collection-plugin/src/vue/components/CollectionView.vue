@@ -2231,6 +2231,7 @@ watch(
       view.value = (slug && readCollectionViewMode(slug)) || "table";
       anchorOverride.value = null;
       kanbanOverride.value = null;
+      addMenuOpen.value = false;
       // A sort belongs to a collection's own schema, so don't carry it across —
       // restore the new collection's stored (shared) sort instead.
       sortState.value = storedSortFor(slug);
