@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { computeAncestorDirs } from "../../src/composables/useFileTree.helpers.ts";
+import { computeAncestorDirs, withEntry, withoutEntry } from "../../src/composables/useFileTree.helpers.ts";
 
 // Ancestor directory list a file's lazy-load walk iterates: shallowest
 // first, EXCLUDING the file's own leaf, `[]` for a root-level file.
@@ -36,5 +36,58 @@ describe("computeAncestorDirs", () => {
   it("treats a slash-only path as having no real segments", () => {
     assert.deepEqual(computeAncestorDirs("/"), []);
     assert.deepEqual(computeAncestorDirs("///"), []);
+  });
+});
+
+// Copy-on-write Map helpers: a `ref<Map>` only re-renders when the Map
+// identity changes, so both MUST return a fresh Map and never mutate the
+// input.
+
+describe("withEntry", () => {
+  it("returns a NEW Map with the key set, leaving the input untouched", () => {
+    const original = new Map<string, number>([["a", 1]]);
+    const next = withEntry(original, "b", 2);
+    assert.notEqual(next, original);
+    assert.deepEqual(
+      [...next],
+      [
+        ["a", 1],
+        ["b", 2],
+      ],
+    );
+    assert.deepEqual([...original], [["a", 1]]);
+  });
+
+  it("overwrites an existing key on the copy only", () => {
+    const original = new Map<string, number>([["a", 1]]);
+    const next = withEntry(original, "a", 9);
+    assert.equal(next.get("a"), 9);
+    assert.equal(original.get("a"), 1);
+  });
+});
+
+describe("withoutEntry", () => {
+  it("returns a NEW Map without the key, leaving the input untouched", () => {
+    const original = new Map<string, number>([
+      ["a", 1],
+      ["b", 2],
+    ]);
+    const next = withoutEntry(original, "a");
+    assert.notEqual(next, original);
+    assert.deepEqual([...next], [["b", 2]]);
+    assert.deepEqual(
+      [...original],
+      [
+        ["a", 1],
+        ["b", 2],
+      ],
+    );
+  });
+
+  it("is a no-op copy when the key is absent", () => {
+    const original = new Map<string, number>([["a", 1]]);
+    const next = withoutEntry(original, "missing");
+    assert.notEqual(next, original);
+    assert.deepEqual([...next], [["a", 1]]);
   });
 });

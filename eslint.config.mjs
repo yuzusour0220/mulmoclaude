@@ -483,13 +483,7 @@ export default [
   // its entry; when the list is empty, delete this block. Do NOT add
   // new files — a new over-budget function must be split, not listed.
   {
-    files: [
-      "packages/core/src/whisper/client.ts",
-      "packages/core/src/whisper/sidecar.ts",
-      "packages/relay/src/client.ts",
-      "server/events/relay-client.ts",
-      "src/composables/useFileTree.ts",
-    ],
+    files: ["packages/core/src/whisper/client.ts", "packages/core/src/whisper/sidecar.ts", "packages/relay/src/client.ts", "server/events/relay-client.ts"],
     rules: {
       "max-lines-per-function": ["warn", { max: 50, skipBlankLines: true, skipComments: true, IIFEs: true }],
     },
