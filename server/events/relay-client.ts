@@ -2,12 +2,8 @@
 //
 // Connects to the Relay (Cloudflare Workers) and forwards incoming
 // platform messages to the chat-service relay function. Handles
-// reconnection with exponential backoff.
-//
-// NOTE: packages/relay/src/client.ts is a parallel implementation
-// for browser/edge environments using the global WebSocket API.
-// This module uses the `socket` npm package for Node.js. If you change
-// reconnection logic or URL handling here, check the other file too.
+// reconnection with exponential backoff. Uses the `ws` npm package,
+// so it is Node-only — there is no longer a browser/edge counterpart.
 
 import WebSocket from "ws";
 import type { ChatService } from "@mulmobridge/chat-service";
