@@ -10,8 +10,8 @@ function collector(): { states: VoiceCaptureState[]; onState: (state: VoiceCaptu
 
 describe("createCaptureState", () => {
   it("does not emit on creation", () => {
-    const { states } = collector();
-    createCaptureState(collector().onState);
+    const { states, onState } = collector();
+    createCaptureState(onState);
     assert.equal(states.length, 0);
   });
 
