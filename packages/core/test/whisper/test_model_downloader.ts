@@ -106,6 +106,31 @@ describe("createModelDownloader.ensure — download orchestration", () => {
     await first;
   });
 
+  it("absorbs a partial-file open that fails after the stream already errored", async () => {
+    // The stream errors synchronously, so `streamToFile` destroys the write
+    // stream while `createWriteStream`'s open() is still in libuv's threadpool.
+    // Removing the dir makes that open land ENOENT — it must not escape as an
+    // uncaughtException (node:test would fail the whole file).
+    globalThis.fetch = async () => {
+      const errored = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.error(new Error("stream died"));
+        },
+      });
+      return new Response(errored, { headers: { "content-length": "1024" } });
+    };
+    const dir = makeModelsDir();
+    const downloader = createModelDownloader(dir);
+
+    await downloader.ensure(MODEL);
+    rmSync(dir, { recursive: true, force: true });
+    await flushMicrotasks();
+    await flushMicrotasks();
+    await flushMicrotasks();
+
+    assert.equal(downloader.getStatus(MODEL).state, "error");
+  });
+
   it("aborts a stalled download once the stall timeout elapses", async (ctx) => {
     mock.timers.enable({ apis: ["setTimeout"] });
     ctx.after(() => mock.timers.reset());
