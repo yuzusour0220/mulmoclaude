@@ -489,7 +489,6 @@ export default [
       "packages/core/src/whisper/sidecar.ts",
       "packages/plugins/collection-plugin/src/vue/useCollectionRendering.ts",
       "packages/relay/src/client.ts",
-      "server/api/routes/agent.ts",
       "server/events/relay-client.ts",
       "server/plugins/dev-watcher.ts",
       "server/system/credentials.ts",
