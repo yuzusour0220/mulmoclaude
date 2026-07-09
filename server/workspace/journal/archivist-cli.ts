@@ -1,6 +1,6 @@
 // Spawning the Claude Code CLI runs summarization against the user's subscription quota rather than the API-key budget.
 
-import { spawn } from "node:child_process";
+import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { CLI_SUBPROCESS_TIMEOUT_MS } from "../../utils/time.js";
 import { claudeBinPath, ClaudeCliNotFoundError } from "../../utils/claudeBin.js";
 
@@ -48,6 +48,32 @@ export function buildCliPayload(systemPrompt: string, userPrompt: string): strin
   return `${systemPrompt}\n\n---\n\n${userPrompt}`;
 }
 
+interface ChildOutput {
+  stdout: string;
+  stderr: string;
+}
+
+function collectChildOutput(child: ChildProcessWithoutNullStreams): ChildOutput {
+  const output: ChildOutput = { stdout: "", stderr: "" };
+  child.stdout.on("data", (chunk: Buffer) => {
+    output.stdout += chunk.toString();
+  });
+  child.stderr.on("data", (chunk: Buffer) => {
+    output.stderr += chunk.toString();
+  });
+  return output;
+}
+
+// Wait for "drain" on backpressure before end() so the buffer fully flushes — large excerpts can hit this path.
+function writeStdinAndClose(child: ChildProcessWithoutNullStreams, payload: string): void {
+  const flushed = child.stdin.write(payload);
+  if (flushed) {
+    child.stdin.end();
+  } else {
+    child.stdin.once("drain", () => child.stdin.end());
+  }
+}
+
 // Pipe the combined prompt via stdin to dodge shell-argv limits for large day excerpts.
 export const runClaudeCli: Summarize = async (systemPrompt, userPrompt, opts) =>
   new Promise((resolve, reject) => {
@@ -56,8 +82,7 @@ export const runClaudeCli: Summarize = async (systemPrompt, userPrompt, opts) =>
       stdio: ["pipe", "pipe", "pipe"],
     });
 
-    let stdout = "";
-    let stderr = "";
+    const output = collectChildOutput(child);
     let timedOut = false;
     let settled = false;
 
@@ -65,13 +90,6 @@ export const runClaudeCli: Summarize = async (systemPrompt, userPrompt, opts) =>
       timedOut = true;
       child.kill("SIGKILL");
     }, CLI_TIMEOUT_MS);
-
-    child.stdout.on("data", (chunk: Buffer) => {
-      stdout += chunk.toString();
-    });
-    child.stderr.on("data", (chunk: Buffer) => {
-      stderr += chunk.toString();
-    });
 
     child.on("error", (err: Error & { code?: string }) => {
       if (settled) return;
@@ -89,13 +107,13 @@ export const runClaudeCli: Summarize = async (systemPrompt, userPrompt, opts) =>
       settled = true;
       clearTimeout(timeout);
       if (timedOut) {
-        reject(new ClaudeCliFailedError(null, `timed out after ${CLI_TIMEOUT_MS}ms\n${stderr}`));
+        reject(new ClaudeCliFailedError(null, `timed out after ${CLI_TIMEOUT_MS}ms\n${output.stderr}`));
         return;
       }
       if (code === 0) {
-        resolve(stdout);
+        resolve(output.stdout);
       } else {
-        reject(new ClaudeCliFailedError(code, stderr));
+        reject(new ClaudeCliFailedError(code, output.stderr));
       }
     });
 
@@ -107,12 +125,5 @@ export const runClaudeCli: Summarize = async (systemPrompt, userPrompt, opts) =>
       reject(err);
     });
 
-    // Wait for "drain" on backpressure before end() so the buffer fully flushes — large excerpts can hit this path.
-    const payload = buildCliPayload(systemPrompt, userPrompt);
-    const flushed = child.stdin.write(payload);
-    if (flushed) {
-      child.stdin.end();
-    } else {
-      child.stdin.once("drain", () => child.stdin.end());
-    }
+    writeStdinAndClose(child, buildCliPayload(systemPrompt, userPrompt));
   });
