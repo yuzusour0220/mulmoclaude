@@ -206,6 +206,14 @@ async function packOneWorkspacePackage({ packageDir, destDir, runCommandImpl = r
   return path.join(destDir, filename);
 }
 
+// npm reads a `file:` specifier as a URL-ish path, where `\` is not a separator.
+// `path.join` emits `\` on Windows, so normalise to `/` — Windows filesystem APIs
+// accept forward slashes. `sep` is injectable so the Windows shape is testable on
+// any host; on POSIX it defaults to `/`, leaving a literal `\` in a filename alone.
+export function toFileSpecifier(tarballPath, sep = path.sep) {
+  return `file:${tarballPath.split(sep).join("/")}`;
+}
+
 // Pack the launcher's first-party workspace dependency closure into `packDir` and
 // return an npm `overrides` map { name: "file:<abs tarball>" }. This is what lets
 // the smoke install a launcher pinned to a bumped-but-unpublished shared package
@@ -220,7 +228,7 @@ export async function packWorkspaceOverrides({ root, packDir, runCommandImpl = r
     const pkg = byName.get(name);
     if (!pkg) continue;
     const tarballPath = await packOneWorkspacePackage({ packageDir: pkg.dir, destDir: packDir, runCommandImpl, packTimeoutMs });
-    overrides[name] = `file:${tarballPath}`;
+    overrides[name] = toFileSpecifier(tarballPath);
   }
   return overrides;
 }

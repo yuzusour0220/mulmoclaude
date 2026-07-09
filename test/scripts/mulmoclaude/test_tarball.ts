@@ -207,6 +207,20 @@ describe("computeFirstPartyClosure", () => {
   });
 });
 
+describe("toFileSpecifier", () => {
+  it("leaves a POSIX path untouched", () => {
+    assert.equal(tarball.toFileSpecifier("/tmp/packs/core-1.0.0.tgz", "/"), "file:/tmp/packs/core-1.0.0.tgz");
+  });
+
+  it("normalises Windows separators so npm sees a URL-ish path", () => {
+    assert.equal(tarball.toFileSpecifier("\\tmp\\packs\\core-1.0.0.tgz", "\\"), "file:/tmp/packs/core-1.0.0.tgz");
+  });
+
+  it("keeps the drive letter on an absolute Windows path", () => {
+    assert.equal(tarball.toFileSpecifier("C:\\Users\\ci\\packs\\core-1.0.0.tgz", "\\"), "file:C:/Users/ci/packs/core-1.0.0.tgz");
+  });
+});
+
 describe("packWorkspaceOverrides", () => {
   it("packs only the launcher's first-party closure and maps each to a file: tarball", async () => {
     const enumerateImpl = async () => [

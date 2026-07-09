@@ -74,6 +74,11 @@ export function enumerateWorkspacePackages(
  *  excluding the root itself. Third-party deps are naturally excluded. */
 export function computeFirstPartyClosure(packages: Array<{ name: string; deps: string[] }>, rootName: string): Set<string>;
 
+/** Build an npm `file:` specifier from a native tarball path, normalising the
+ *  platform separator to `/`. `sep` defaults to `path.sep`; pass it explicitly
+ *  to exercise the Windows shape from a POSIX host. */
+export function toFileSpecifier(tarballPath: string, sep?: string): string;
+
 export interface PackWorkspaceOverridesOptions {
   root: string;
   packDir: string;
