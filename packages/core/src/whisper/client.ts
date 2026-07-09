@@ -84,13 +84,24 @@ export interface VoiceCapture {
   dispose: () => void;
 }
 
-export function createVoiceCapture(transport: VoiceCaptureTransport, language: () => string, callbacks: VoiceCaptureCallbacks): VoiceCapture {
+export interface CaptureStateController {
+  setAvailable: (value: boolean) => void;
+  setListening: (value: boolean) => void;
+  setPending: (delta: number) => void;
+  isListening: () => boolean;
+}
+
+// Owns the three observable flags. Each setter emits only on an actual change so
+// the host's reactivity never churns on a no-op write. `pending` is a private
+// counter; `transcribing` is true exactly while at least one send is in flight.
+export function createCaptureState(onState?: (state: VoiceCaptureState) => void): CaptureStateController {
   let available = false;
   let listening = false;
   let transcribing = false;
+  let pending = 0;
 
   function emit(): void {
-    callbacks.onState?.({ available, listening, transcribing });
+    onState?.({ available, listening, transcribing });
   }
   function setAvailable(value: boolean): void {
     if (available !== value) {
@@ -104,29 +115,6 @@ export function createVoiceCapture(transport: VoiceCaptureTransport, language: (
       emit();
     }
   }
-
-  let stream: MediaStream | null = null;
-  let audioCtx: AudioContext | null = null;
-  let analyser: AnalyserNode | null = null;
-  let vadBuffer = new Float32Array(0);
-  let monitorHandle: number | null = null;
-  let recorder: MediaRecorder | null = null;
-  let chunks: Blob[] = [];
-  let mimeType = "";
-  let segmentHasSpeech = false;
-  let silenceStart: number | null = null;
-  let segmentStart = 0;
-  let pending = 0;
-  let queue: Promise<void> = Promise.resolve();
-  let availabilityPollHandle: number | null = null;
-  // Bumped on stop(). Segments captured / sends resolved under an older
-  // generation are dropped, so a late transcript never leaks across sessions.
-  let generation = 0;
-  let segmentGeneration = 0;
-  // Single-flight guard for start(): true between entry and the moment capture
-  // is set up (or the attempt aborts), so a second start can't race the first.
-  let startInFlight = false;
-
   function setPending(delta: number): void {
     pending += delta;
     const next = pending > 0;
@@ -136,47 +124,86 @@ export function createVoiceCapture(transport: VoiceCaptureTransport, language: (
     }
   }
 
-  function stopAvailabilityPoll(): void {
+  return { setAvailable, setListening, setPending, isListening: () => listening };
+}
+
+export interface AvailabilityPoller {
+  refresh: () => Promise<void>;
+  stop: () => void;
+}
+
+// Owns the polling timer. `refresh` mirrors transport readiness into
+// `setAvailable`; while a model is downloading it self-schedules so `available`
+// flips as soon as the download finishes. A `getStatus` throw fails closed
+// (unavailable) and tears the timer down.
+export function createAvailabilityPoller(transport: VoiceCaptureTransport, setAvailable: (value: boolean) => void): AvailabilityPoller {
+  let availabilityPollHandle: number | null = null;
+
+  function stop(): void {
     if (availabilityPollHandle !== null) {
       window.clearInterval(availabilityPollHandle);
       availabilityPollHandle = null;
     }
   }
 
-  async function refreshAvailability(): Promise<void> {
+  async function refresh(): Promise<void> {
     let status: { ready: boolean; downloading: boolean };
     try {
       status = await transport.getStatus();
     } catch {
       setAvailable(false);
-      stopAvailabilityPoll();
+      stop();
       return;
     }
     setAvailable(status.ready);
     if (status.downloading) {
       if (availabilityPollHandle === null) {
         availabilityPollHandle = window.setInterval(() => {
-          void refreshAvailability();
+          void refresh();
         }, AVAILABILITY_POLL_MS);
       }
     } else {
-      stopAvailabilityPoll();
+      stop();
     }
   }
 
+  return { refresh, stop };
+}
+
+export interface SegmentQueueOptions {
+  transport: VoiceCaptureTransport;
+  language: () => string;
+  callbacks: VoiceCaptureCallbacks;
+  setPending: (delta: number) => void;
+  // Read-only epoch seam: the queue never mutates the generation, it only reads
+  // the parent's current value to drop segments captured under an older session.
+  getGeneration: () => number;
+}
+
+export interface SegmentQueue {
+  enqueue: (blob: Blob, gen: number) => void;
+}
+
+// Owns the serialized send chain. Each blob is transcribed in capture order; the
+// generation is checked at entry and again after transcription so a segment
+// belonging to a session the user already left is dropped silently.
+export function createSegmentQueue(options: SegmentQueueOptions): SegmentQueue {
+  const { transport, language, callbacks, setPending, getGeneration } = options;
+  let queue: Promise<void> = Promise.resolve();
+
   async function sendSegment(blob: Blob, gen: number): Promise<void> {
-    if (gen !== generation) return;
+    if (gen !== getGeneration()) return;
     try {
       const dataUrl = await blobToDataUrl(blob);
       const result = await transport.transcribe(dataUrl, language());
-      if (gen !== generation) return;
+      if (gen !== getGeneration()) return;
       const text = result.text.trim();
       if (text.length === 0) callbacks.onEmpty?.();
       else callbacks.onTranscript(text);
     } catch (err) {
       // Generation-guard the failure path too: a send rejected after stop()/
       // session change belongs to a session the user already left.
-      if (gen === generation) callbacks.onError?.(toMessage(err));
+      if (gen === getGeneration()) callbacks.onError?.(toMessage(err));
     }
   }
 
@@ -190,12 +217,46 @@ export function createVoiceCapture(transport: VoiceCaptureTransport, language: (
       .finally(() => setPending(-1));
   }
 
+  return { enqueue };
+}
+
+export function createVoiceCapture(transport: VoiceCaptureTransport, language: () => string, callbacks: VoiceCaptureCallbacks): VoiceCapture {
+  const state = createCaptureState(callbacks.onState);
+  const poller = createAvailabilityPoller(transport, state.setAvailable);
+
+  let stream: MediaStream | null = null;
+  let audioCtx: AudioContext | null = null;
+  let analyser: AnalyserNode | null = null;
+  let vadBuffer = new Float32Array(0);
+  let monitorHandle: number | null = null;
+  let recorder: MediaRecorder | null = null;
+  let chunks: Blob[] = [];
+  let mimeType = "";
+  let segmentHasSpeech = false;
+  let silenceStart: number | null = null;
+  let segmentStart = 0;
+  // Bumped on stop(). Segments captured / sends resolved under an older
+  // generation are dropped, so a late transcript never leaks across sessions.
+  let generation = 0;
+  let segmentGeneration = 0;
+  // Single-flight guard for start(): true between entry and the moment capture
+  // is set up (or the attempt aborts), so a second start can't race the first.
+  let startInFlight = false;
+
+  const segments = createSegmentQueue({
+    transport,
+    language,
+    callbacks,
+    setPending: state.setPending,
+    getGeneration: () => generation,
+  });
+
   function onSegmentStop(): void {
     const hadSpeech = segmentHasSpeech;
     const gen = segmentGeneration;
     const blob = new Blob(chunks, { type: containerTypeFromMime(mimeType) });
-    if (listening) startRecorder();
-    if (hadSpeech && blob.size > 0 && gen === generation) enqueue(blob, gen);
+    if (state.isListening()) startRecorder();
+    if (hadSpeech && blob.size > 0 && gen === generation) segments.enqueue(blob, gen);
   }
 
   function startRecorder(): void {
@@ -230,7 +291,7 @@ export function createVoiceCapture(transport: VoiceCaptureTransport, language: (
   async function start(): Promise<boolean> {
     // Single-flight: `listening` only flips true AFTER getUserMedia resolves, so
     // a benign skip returns true (a start is already active / in progress).
-    if (startInFlight || listening) return true;
+    if (startInFlight || state.isListening()) return true;
     startInFlight = true;
     const startGen = generation;
     try {
@@ -258,7 +319,7 @@ export function createVoiceCapture(transport: VoiceCaptureTransport, language: (
       analyser.fftSize = 2048;
       vadBuffer = new Float32Array(analyser.fftSize);
       audioCtx.createMediaStreamSource(stream).connect(analyser);
-      setListening(true);
+      state.setListening(true);
       startRecorder();
       monitorHandle = window.setInterval(monitorTick, MONITOR_INTERVAL_MS);
       return true;
@@ -271,7 +332,7 @@ export function createVoiceCapture(transport: VoiceCaptureTransport, language: (
     // Bump the generation so any in-flight/queued segment is dropped rather than
     // applied after the user stops or switches sessions.
     generation += 1;
-    setListening(false);
+    state.setListening(false);
     if (monitorHandle !== null) {
       window.clearInterval(monitorHandle);
       monitorHandle = null;
@@ -288,9 +349,9 @@ export function createVoiceCapture(transport: VoiceCaptureTransport, language: (
   }
 
   function dispose(): void {
-    stopAvailabilityPoll();
+    poller.stop();
     stop();
   }
 
-  return { refreshAvailability, start, stop, dispose };
+  return { refreshAvailability: poller.refresh, start, stop, dispose };
 }
