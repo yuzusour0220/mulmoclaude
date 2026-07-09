@@ -263,7 +263,7 @@ import { computed, defineAsyncComponent, ref, watch, type Component } from "vue"
 import { useI18n } from "vue-i18n";
 import TextResponseView from "../plugins/textResponse/View.vue";
 import SystemFileBanner from "./SystemFileBanner.vue";
-import type { FileContent } from "../composables/useFileSelection";
+import type { FileContent } from "../composables/useFileContentLoader";
 import type { ToolResultComplete } from "gui-chat-protocol/vue";
 import type { TextResponseData } from "../plugins/textResponse/types";
 import { JSON_TOKEN_CLASS } from "../utils/format/jsonSyntax";
