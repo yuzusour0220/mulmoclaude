@@ -120,16 +120,15 @@ export async function postInference(port: number, wavPath: string, language: str
   return parseInferenceText(await res.json());
 }
 
-export interface SidecarLaunch {
-  readonly proc: ChildProcess;
-  readonly port: number;
-}
-
 // The impure primitives the start lifecycle depends on, injected so the
 // cancellation / single-flight / model-switch logic can be driven with fakes.
 export interface StartLifecycleDeps {
-  /** Spawn the whisper-server child on a free port; resolves before readiness. */
-  spawnServer: (model: WhisperModelName) => Promise<SidecarLaunch>;
+  /** Reserve a free TCP port for the next child — the sole async step of a start. */
+  allocatePort: () => Promise<number>;
+  /** Spawn the whisper-server child on `port`. MUST be synchronous so the spawn
+   *  and the `startingProc` handoff stay in one tick: `shutdown()` has to be able
+   *  to kill an in-flight child immediately, with no await gap after it exists. */
+  spawnServer: (model: WhisperModelName, port: number) => ChildProcess;
   /** Resolve once the child answers HTTP, or reject on spawn failure / early exit. */
   waitReady: (proc: ChildProcess, port: number) => Promise<void>;
   logger: WhisperLogger;
@@ -140,13 +139,11 @@ export interface StartLifecycle {
   shutdown: () => void;
 }
 
-function defaultSpawnServer(modelsDir: string, serverBinary: string, logger: WhisperLogger): StartLifecycleDeps["spawnServer"] {
-  return async (model: WhisperModelName): Promise<SidecarLaunch> => {
-    const port = await findFreePort();
+export function defaultSpawnServer(modelsDir: string, serverBinary: string, logger: WhisperLogger): StartLifecycleDeps["spawnServer"] {
+  return (model: WhisperModelName, port: number): ChildProcess => {
     const args = buildServerArgs(modelFilePath(modelsDir, model), HOST, port);
     logger.info("sidecar: spawning", { model, port });
-    const proc = spawn(serverBinary, args, { stdio: ["ignore", "ignore", "pipe"] });
-    return { proc, port };
+    return spawn(serverBinary, args, { stdio: ["ignore", "ignore", "pipe"] });
   };
 }
 
@@ -154,7 +151,7 @@ function defaultSpawnServer(modelsDir: string, serverBinary: string, logger: Whi
 // start, and the cancellation token. Kept as a factory closure so the mutable
 // state is encapsulated rather than threaded through parameters.
 export function createStartLifecycle(deps: StartLifecycleDeps): StartLifecycle {
-  const { spawnServer, waitReady, logger } = deps;
+  const { allocatePort, spawnServer, waitReady, logger } = deps;
   let sidecar: ActiveSidecar | null = null;
   let starting: { model: WhisperModelName; promise: Promise<ActiveSidecar> } | null = null;
   // The child of an in-flight start (before it's published as `sidecar`), plus a
@@ -177,7 +174,8 @@ export function createStartLifecycle(deps: StartLifecycleDeps): StartLifecycle {
 
   async function startSidecar(model: WhisperModelName): Promise<ActiveSidecar> {
     const token = ++startToken;
-    const { proc, port } = await spawnServer(model);
+    const port = await allocatePort();
+    const proc = spawnServer(model, port);
     startingProc = proc;
     const stderrTail = { text: "" };
     drainStderr(proc, stderrTail);
@@ -239,6 +237,7 @@ export function createStartLifecycle(deps: StartLifecycleDeps): StartLifecycle {
 
 export function createSidecar(modelsDir: string, serverBinary = "whisper-server", logger: WhisperLogger = NOOP_LOGGER): Sidecar {
   const lifecycle = createStartLifecycle({
+    allocatePort: findFreePort,
     spawnServer: defaultSpawnServer(modelsDir, serverBinary, logger),
     waitReady: waitForReadyOrFailure,
     logger,

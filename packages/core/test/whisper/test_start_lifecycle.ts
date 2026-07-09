@@ -1,14 +1,15 @@
 import { describe, it, afterEach } from "node:test";
 import assert from "node:assert/strict";
-import { spawn, type ChildProcess } from "node:child_process";
+import { spawn, ChildProcess } from "node:child_process";
 
 import { NOOP_LOGGER } from "../../src/whisper/internal.ts";
-import { createStartLifecycle } from "../../src/whisper/sidecar.ts";
+import { createStartLifecycle, defaultSpawnServer } from "../../src/whisper/sidecar.ts";
 import type { WhisperModelName } from "../../src/whisper/models.ts";
 
-// Drive the lifecycle with a fake `spawnServer` that hands back a REAL but inert
-// child (so `proc` is a genuine ChildProcess — no unsafe cast) and a fake
-// `waitReady` whose readiness we resolve/reject on demand. No sockets, no HTTP.
+// Drive the lifecycle with a fake, SYNCHRONOUS `spawnServer` that hands back a
+// REAL but inert child (so `proc` is a genuine ChildProcess — no unsafe cast)
+// and a fake `waitReady` whose readiness we resolve/reject on demand. Port
+// allocation is the one async step, matching the production seam. No HTTP.
 const INERT_SCRIPT = "setInterval(function () {}, 1e9);";
 const spawned: ChildProcess[] = [];
 
@@ -58,14 +59,14 @@ function makeHarness(): Harness {
   const launches: Launch[] = [];
   const gateByProc = new Map<ChildProcess, ReadyGate>();
   const lifecycle = createStartLifecycle({
-    spawnServer: async (model) => {
+    allocatePort: async () => 40000 + launches.length,
+    spawnServer: (model, port) => {
       spawnCalls.push(model);
       const proc = spawnInert();
       const gate = makeReadyGate();
       gateByProc.set(proc, gate);
-      const port = 40000 + launches.length;
       launches.push({ proc, port, gate });
-      return { proc, port };
+      return proc;
     },
     waitReady: (proc) => gateByProc.get(proc)?.promise ?? Promise.reject(new Error("waitReady for unknown proc")),
     logger: NOOP_LOGGER,
@@ -79,6 +80,7 @@ describe("createStartLifecycle", () => {
 
     const first = harness.lifecycle.ensureSidecar("base");
     const second = harness.lifecycle.ensureSidecar("base");
+    await flushMicrotasks(); // let the single start reach spawn
     assert.equal(harness.spawnCalls.length, 1);
 
     harness.launches[0].gate.resolve();
@@ -92,6 +94,7 @@ describe("createStartLifecycle", () => {
     const harness = makeHarness();
 
     const pending = harness.lifecycle.ensureSidecar("base");
+    await flushMicrotasks();
     harness.launches[0].gate.resolve();
     const active = await pending;
     assert.equal(active.proc.killed, false);
@@ -115,6 +118,7 @@ describe("createStartLifecycle", () => {
 
     // A fresh start must spawn a brand-new child, not resurrect the stale one.
     const retry = harness.lifecycle.ensureSidecar("base");
+    await flushMicrotasks();
     assert.equal(harness.spawnCalls.length, 2);
     harness.launches[1].gate.resolve();
     const active = await retry;
@@ -126,13 +130,15 @@ describe("createStartLifecycle", () => {
     const harness = makeHarness();
 
     const pBase = harness.lifecycle.ensureSidecar("base");
+    await flushMicrotasks();
     harness.launches[0].gate.resolve();
     const base = await pBase;
     assert.equal(base.model, "base");
     assert.equal(base.proc.killed, false);
 
     const pSmall = harness.lifecycle.ensureSidecar("small");
-    assert.equal(base.proc.killed, true); // switching shut the old child down first
+    assert.equal(base.proc.killed, true); // switching shuts the old child down synchronously
+    await flushMicrotasks();
     assert.equal(harness.spawnCalls.length, 2);
 
     harness.launches[1].gate.resolve();
@@ -153,8 +159,60 @@ describe("createStartLifecycle", () => {
 
     // The failed start left no in-flight `starting` behind — a retry spawns again.
     const retry = harness.lifecycle.ensureSidecar("base");
+    await flushMicrotasks();
     assert.equal(harness.spawnCalls.length, 2);
     harness.launches[1].gate.resolve();
     assert.equal((await retry).model, "base");
+  });
+
+  // Regression: shutdown must be able to kill a child the instant it is spawned.
+  // The child is only ever exposed to shutdown via `startingProc`, assigned in
+  // the SAME synchronous tick as the (synchronous) spawn — so once port
+  // allocation resolves and the child exists, a shutdown reaches it with no await
+  // gap, rather than the child surviving until waitReady times out.
+  it("shutdown immediately kills a child once it is spawned (spawn/track adjacency)", async () => {
+    let releasePort!: (port: number) => void;
+    const portReady = new Promise<number>((res) => {
+      releasePort = res;
+    });
+    const children: ChildProcess[] = [];
+    const gates: ReadyGate[] = [];
+    const gateByProc = new Map<ChildProcess, ReadyGate>();
+    const lifecycle = createStartLifecycle({
+      allocatePort: () => portReady,
+      spawnServer: () => {
+        const proc = spawnInert();
+        const gate = makeReadyGate();
+        gateByProc.set(proc, gate);
+        gates.push(gate);
+        children.push(proc);
+        return proc;
+      },
+      waitReady: (proc) => gateByProc.get(proc)?.promise ?? Promise.reject(new Error("unknown proc")),
+      logger: NOOP_LOGGER,
+    });
+
+    const pending = lifecycle.ensureSidecar("base");
+    assert.equal(children.length, 0); // still awaiting the port — nothing spawned yet
+
+    releasePort(45000);
+    await flushMicrotasks(); // port resolves → spawn + startingProc handoff, one tick
+
+    assert.equal(children.length, 1);
+    const [child] = children;
+    assert.equal(child.killed, false);
+    lifecycle.shutdown(); // reaches the in-flight child with no await gap
+    assert.equal(child.killed, true);
+
+    gates[0].resolve(); // let waitReady settle so the (now-stale) start reaches its cancellation check
+    await assert.rejects(pending, /whisper-server start cancelled/);
+  });
+
+  it("the default spawnServer is synchronous (keeps spawn adjacent to the startingProc handoff)", () => {
+    const spawnServer = defaultSpawnServer("/tmp/whisper-models", process.execPath, NOOP_LOGGER);
+    const result = spawnServer("base", 45001);
+    spawned.push(result);
+    assert.ok(result instanceof ChildProcess); // a live child, not a Promise
+    assert.equal(typeof result.kill, "function");
   });
 });
