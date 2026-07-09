@@ -487,7 +487,6 @@ export default [
       "packages/core/src/whisper/client.ts",
       "packages/core/src/whisper/models.ts",
       "packages/core/src/whisper/sidecar.ts",
-      "packages/plugins/collection-plugin/src/vue/useCollectionRendering.ts",
       "packages/relay/src/client.ts",
       "server/events/relay-client.ts",
       "src/composables/useFileTree.ts",
