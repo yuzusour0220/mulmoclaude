@@ -967,6 +967,93 @@ function isRecoverableStaleSession(event: { type: string; message?: unknown }, f
   return failoverAttemptsRemaining > 0 && event.type === EVENT_TYPES.error && typeof event.message === "string" && isStaleSessionError(event.message);
 }
 
+// What the failover stream loop reads to (re)invoke `runAgent`. A
+// subset of `BackgroundRunParams` — the per-turn teardown fields
+// (resultsFilePath, requestStartedAt, toolArgsCache, origin) stay in
+// `runAgentInBackground`.
+interface FailoverStreamArgs {
+  decoratedMessage: string;
+  role: ReturnType<typeof getRole>;
+  chatSessionId: string;
+  claudeSessionId: string | undefined;
+  abortSignal: AbortSignal;
+  attachments: Attachment[] | undefined;
+  userTimezone: string | undefined;
+}
+
+// Drive `runAgent` for one turn, retrying once without `--resume` when
+// the stored claude session id turns out to be stale (#211). Returns
+// whether a real error event was yielded, so the caller's `finally` can
+// decide hidden-worker cleanup. Split out of `runAgentInBackground` to
+// keep that function under the max-lines-per-function budget.
+async function runAgentStreamWithFailover(args: FailoverStreamArgs, eventCtx: EventContext): Promise<boolean> {
+  const { decoratedMessage, role, chatSessionId, claudeSessionId, abortSignal, attachments, userTimezone } = args;
+
+  // Retry budget for the stale `--resume` id fail-over (#211). Only
+  // meaningful when we entered with a `claudeSessionId`; a fresh
+  // session can't hit that error. One retry max so a looping CLI
+  // bug can't stack infinite replays of the transcript.
+  let failoverAttemptsRemaining = claudeSessionId ? 1 : 0;
+  let currentMessage = decoratedMessage;
+  let currentClaudeSessionId = claudeSessionId;
+  // Tracks whether this run yielded a real error event, so the caller's
+  // finally can decide whether a hidden worker session's files are safe
+  // to delete (success) or should be kept for inspection (error).
+  let didError = false;
+
+  while (true) {
+    let staleSessionDetected = false;
+    for await (const event of runAgent({
+      message: currentMessage,
+      role,
+      workspacePath,
+      sessionId: chatSessionId,
+      port: PORT,
+      claudeSessionId: currentClaudeSessionId,
+      abortSignal,
+      attachments,
+      userTimezone,
+    })) {
+      if (isRecoverableStaleSession(event, failoverAttemptsRemaining)) {
+        // Swallow the error — we're about to recover. `break`
+        // abandons the current generator; since the event is only
+        // yielded after the CLI has already exited non-zero, the
+        // subprocess is dead by this point and there's nothing to
+        // clean up beyond what `for await`'s return() already does.
+        staleSessionDetected = true;
+        failoverAttemptsRemaining--;
+        break;
+      }
+      // A yielded error event (non-zero Claude exit, missing binary, a tool
+      // surfacing an error) is a real failure even though the generator
+      // didn't throw — record it so `finalizeRun`'s hidden-worker cleanup and
+      // the agent-ingest completion hook see `didError`. The stale-session
+      // failover above breaks earlier, so a recoverable id doesn't count.
+      if (event.type === EVENT_TYPES.error) didError = true;
+      await handleAgentEvent(event, eventCtx);
+    }
+    if (!staleSessionDetected) break;
+
+    // Stale `--resume` recovery: clear the bad id from meta so the
+    // next *external* read of this session doesn't see it, build a
+    // natural-language preamble from the jsonl we already have,
+    // and loop back to `runAgent` without `--resume`. Surface a
+    // status event so the UI pause doesn't look like a hang.
+    log.warn("agent", "stale claude session id — retrying without --resume", {
+      chatSessionId,
+    });
+    await clearClaudeId(chatSessionId);
+    const preamble = await readTranscriptPreamble(chatSessionId);
+    currentMessage = preamble ? `${preamble}${decoratedMessage}` : decoratedMessage;
+    currentClaudeSessionId = undefined;
+    pushSessionEvent(chatSessionId, {
+      type: EVENT_TYPES.status,
+      message: "Previous session unavailable — continuing with local transcript.",
+    });
+  }
+  return didError;
+}
+
 async function runAgentInBackground(params: BackgroundRunParams): Promise<void> {
   const { decoratedMessage, role, chatSessionId, claudeSessionId, abortSignal, resultsFilePath, requestStartedAt, toolArgsCache, attachments, userTimezone } =
     params;
@@ -979,69 +1066,13 @@ async function runAgentInBackground(params: BackgroundRunParams): Promise<void> 
     pendingSkill: null,
   };
 
-  // Retry budget for the stale `--resume` id fail-over (#211). Only
-  // meaningful when we entered with a `claudeSessionId`; a fresh
-  // session can't hit that error. One retry max so a looping CLI
-  // bug can't stack infinite replays of the transcript.
-  let failoverAttemptsRemaining = claudeSessionId ? 1 : 0;
-  let currentMessage = decoratedMessage;
-  let currentClaudeSessionId = claudeSessionId;
-  // Tracks whether this run threw, so the finally can decide whether a
-  // hidden worker session's files are safe to delete (success) or
-  // should be kept for inspection (error).
+  // Tracks whether this run threw or yielded an error event, so the
+  // finally can decide whether a hidden worker session's files are safe
+  // to delete (success) or should be kept for inspection (error).
   let didError = false;
 
   try {
-    while (true) {
-      let staleSessionDetected = false;
-      for await (const event of runAgent({
-        message: currentMessage,
-        role,
-        workspacePath,
-        sessionId: chatSessionId,
-        port: PORT,
-        claudeSessionId: currentClaudeSessionId,
-        abortSignal,
-        attachments,
-        userTimezone,
-      })) {
-        if (isRecoverableStaleSession(event, failoverAttemptsRemaining)) {
-          // Swallow the error — we're about to recover. `break`
-          // abandons the current generator; since the event is only
-          // yielded after the CLI has already exited non-zero, the
-          // subprocess is dead by this point and there's nothing to
-          // clean up beyond what `for await`'s return() already does.
-          staleSessionDetected = true;
-          failoverAttemptsRemaining--;
-          break;
-        }
-        // A yielded error event (non-zero Claude exit, missing binary, a tool
-        // surfacing an error) is a real failure even though the generator
-        // didn't throw — record it so `finalizeRun`'s hidden-worker cleanup and
-        // the agent-ingest completion hook see `didError`. The stale-session
-        // failover above returns earlier, so a recoverable id doesn't count.
-        if (event.type === EVENT_TYPES.error) didError = true;
-        await handleAgentEvent(event, eventCtx);
-      }
-      if (!staleSessionDetected) break;
-
-      // Stale `--resume` recovery: clear the bad id from meta so the
-      // next *external* read of this session doesn't see it, build a
-      // natural-language preamble from the jsonl we already have,
-      // and loop back to `runAgent` without `--resume`. Surface a
-      // status event so the UI pause doesn't look like a hang.
-      log.warn("agent", "stale claude session id — retrying without --resume", {
-        chatSessionId,
-      });
-      await clearClaudeId(chatSessionId);
-      const preamble = await readTranscriptPreamble(chatSessionId);
-      currentMessage = preamble ? `${preamble}${decoratedMessage}` : decoratedMessage;
-      currentClaudeSessionId = undefined;
-      pushSessionEvent(chatSessionId, {
-        type: EVENT_TYPES.status,
-        message: "Previous session unavailable — continuing with local transcript.",
-      });
-    }
+    didError = await runAgentStreamWithFailover({ decoratedMessage, role, chatSessionId, claudeSessionId, abortSignal, attachments, userTimezone }, eventCtx);
     // Flush any accumulated streaming text as a single consolidated
     // line in the jsonl. This prevents per-chunk lines that would
     // appear as separate cards on session reload.
