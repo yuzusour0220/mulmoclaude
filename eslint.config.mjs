@@ -490,7 +490,6 @@ export default [
       "packages/plugins/collection-plugin/src/vue/useCollectionRendering.ts",
       "packages/relay/src/client.ts",
       "server/events/relay-client.ts",
-      "server/plugins/dev-watcher.ts",
       "server/system/credentials.ts",
       "server/workspace/journal/archivist-cli.ts",
       "src/composables/useFileTree.ts",
