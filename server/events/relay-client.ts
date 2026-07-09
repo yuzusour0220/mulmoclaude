@@ -10,7 +10,15 @@ import type { ChatService } from "@mulmobridge/chat-service";
 import { ONE_SECOND_MS } from "../utils/time.js";
 import { errorMessage } from "../utils/errors.js";
 import { resolveRelayBridgeOptions } from "./resolveRelayBridgeOptions.js";
-import { buildExternalChatId, buildRelayUrl, formatReplyText, isRelayMessage, isTerminalCloseCode, nextReconnectMs } from "./relay-client-helpers.js";
+import {
+  buildExternalChatId,
+  buildRelayUrl,
+  formatReplyText,
+  isRelayMessage,
+  isTerminalCloseCode,
+  nextReconnectMs,
+  type RelayMessage,
+} from "./relay-client-helpers.js";
 
 type RelayFn = ChatService["relay"];
 
@@ -48,6 +56,139 @@ const MIN_RECONNECT_MS = ONE_SECOND_MS;
 const MAX_RECONNECT_MS = 30 * ONE_SECOND_MS;
 const MAX_RESPONSE_QUEUE = 100;
 
+// ── Incoming message handling ────────────────────────────────
+
+interface HandleRelayMessageDeps {
+  relay: RelayFn;
+  logger: Logger;
+  sendResponse: (response: RelayResponse) => void;
+}
+
+function replyTo(msg: RelayMessage, text: string, sendResponse: (response: RelayResponse) => void): void {
+  sendResponse({
+    platform: msg.platform,
+    chatId: msg.chatId,
+    text,
+    replyToken: msg.replyToken,
+  });
+}
+
+// Parse one raw relay frame, forward it to the chat-service relay
+// function, and ship the reply back. Closes over no socket / timer /
+// mutable state, so it is unit-testable in isolation.
+export async function handleRelayMessage(raw: string, deps: HandleRelayMessageDeps): Promise<void> {
+  const { relay, logger, sendResponse } = deps;
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    logger.warn(LOG_PREFIX, "invalid JSON from relay", {
+      length: raw.length,
+    });
+    return;
+  }
+
+  if (!isRelayMessage(parsed)) {
+    logger.warn(LOG_PREFIX, "malformed relay message");
+    return;
+  }
+  const msg = parsed;
+
+  logger.info(LOG_PREFIX, "message received", {
+    id: msg.id,
+    platform: msg.platform,
+    chatId: msg.chatId,
+    textLength: msg.text.length,
+  });
+
+  const externalChatId = buildExternalChatId(msg.platform, msg.chatId);
+
+  try {
+    // Per-platform default-role resolution (#739). Mirrors the
+    // bridges-side handshake (#729): each platform can pin its own
+    // default role via `RELAY_<PLATFORM>_DEFAULT_ROLE`, with
+    // `RELAY_DEFAULT_ROLE` as the blanket fallback. The helper
+    // never forwards `RELAY_TOKEN` / `RELAY_URL` — they aren't on
+    // the recognised-keys allowlist.
+    const bridgeOptions = resolveRelayBridgeOptions(msg.platform, process.env);
+    const result = await relay({
+      transportId: TRANSPORT_ID,
+      externalChatId,
+      text: msg.text,
+      bridgeOptions,
+    });
+
+    replyTo(msg, formatReplyText(result), sendResponse);
+  } catch (err) {
+    logger.error(LOG_PREFIX, "relay processing failed", {
+      id: msg.id,
+      error: errorMessage(err),
+    });
+    replyTo(msg, "Error: failed to process message", sendResponse);
+  }
+}
+
+// ── Response queue ───────────────────────────────────────────
+
+interface ResponseQueue {
+  enqueue: (response: RelayResponse) => void;
+  send: (response: RelayResponse) => void;
+  flush: () => void;
+}
+
+interface ResponseQueueDeps {
+  logger: Logger;
+  trySend: (response: RelayResponse) => boolean;
+}
+
+// A bounded FIFO of outgoing responses that owns its own buffer. The
+// live socket stays in the parent; `trySend` is injected as the
+// transport strategy (it returns false when the socket is missing /
+// not OPEN), so the queue never touches the socket directly.
+export function createResponseQueue(deps: ResponseQueueDeps): ResponseQueue {
+  const { logger, trySend } = deps;
+  const responseQueue: RelayResponse[] = [];
+
+  function enqueue(response: RelayResponse): void {
+    if (responseQueue.length >= MAX_RESPONSE_QUEUE) {
+      logger.error(LOG_PREFIX, "response queue full, dropping oldest", {
+        platform: response.platform,
+        chatId: response.chatId,
+      });
+      responseQueue.shift();
+    }
+    responseQueue.push(response);
+  }
+
+  function send(response: RelayResponse): void {
+    if (trySend(response)) return;
+    enqueue(response);
+    logger.error(LOG_PREFIX, "response queued (not connected)", {
+      platform: response.platform,
+      chatId: response.chatId,
+      queueSize: responseQueue.length,
+    });
+  }
+
+  function flush(): void {
+    if (responseQueue.length === 0) return;
+    logger.info(LOG_PREFIX, "flushing response queue", {
+      count: responseQueue.length,
+    });
+    // `trySend` returns false when the socket isn't OPEN, so it alone
+    // gates the drain — stop at the first response we can't send and
+    // leave it (plus the rest) queued for the next flush.
+    while (responseQueue.length > 0) {
+      const [response] = responseQueue;
+      if (!trySend(response)) break;
+      responseQueue.shift();
+    }
+  }
+
+  return { enqueue, send, flush };
+}
+
 // ── Factory ─────────────────────────────────────────────────
 
 export function connectRelay(deps: RelayClientDeps): RelayClientHandle {
@@ -57,7 +198,7 @@ export function connectRelay(deps: RelayClientDeps): RelayClientHandle {
   let reconnectMs = MIN_RECONNECT_MS;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   let stopped = false;
-  const responseQueue: RelayResponse[] = [];
+  const queue = createResponseQueue({ logger, trySend });
 
   function connect(): void {
     if (stopped) return;
@@ -75,11 +216,11 @@ export function connectRelay(deps: RelayClientDeps): RelayClientHandle {
     socket.on("open", () => {
       logger.info(LOG_PREFIX, "connected", { url: relayUrl });
       reconnectMs = MIN_RECONNECT_MS;
-      flushResponseQueue();
+      queue.flush();
     });
 
     socket.on("message", (data) => {
-      handleMessage(String(data));
+      handleRelayMessage(String(data), { relay, logger, sendResponse: queue.send });
     });
 
     socket.on("close", (code, reason) => {
@@ -116,80 +257,6 @@ export function connectRelay(deps: RelayClientDeps): RelayClientHandle {
     reconnectMs = nextReconnectMs(reconnectMs, MAX_RECONNECT_MS);
   }
 
-  async function handleMessage(raw: string): Promise<void> {
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(raw);
-    } catch {
-      logger.warn(LOG_PREFIX, "invalid JSON from relay", {
-        length: raw.length,
-      });
-      return;
-    }
-
-    if (!isRelayMessage(parsed)) {
-      logger.warn(LOG_PREFIX, "malformed relay message");
-      return;
-    }
-    const msg = parsed;
-
-    logger.info(LOG_PREFIX, "message received", {
-      id: msg.id,
-      platform: msg.platform,
-      chatId: msg.chatId,
-      textLength: msg.text.length,
-    });
-
-    const externalChatId = buildExternalChatId(msg.platform, msg.chatId);
-
-    try {
-      // Per-platform default-role resolution (#739). Mirrors the
-      // bridges-side handshake (#729): each platform can pin its own
-      // default role via `RELAY_<PLATFORM>_DEFAULT_ROLE`, with
-      // `RELAY_DEFAULT_ROLE` as the blanket fallback. The helper
-      // never forwards `RELAY_TOKEN` / `RELAY_URL` — they aren't on
-      // the recognised-keys allowlist.
-      const bridgeOptions = resolveRelayBridgeOptions(msg.platform, process.env);
-      const result = await relay({
-        transportId: TRANSPORT_ID,
-        externalChatId,
-        text: msg.text,
-        bridgeOptions,
-      });
-
-      const replyText = formatReplyText(result);
-
-      sendResponse({
-        platform: msg.platform,
-        chatId: msg.chatId,
-        text: replyText,
-        replyToken: msg.replyToken,
-      });
-    } catch (err) {
-      logger.error(LOG_PREFIX, "relay processing failed", {
-        id: msg.id,
-        error: errorMessage(err),
-      });
-      sendResponse({
-        platform: msg.platform,
-        chatId: msg.chatId,
-        text: "Error: failed to process message",
-        replyToken: msg.replyToken,
-      });
-    }
-  }
-
-  function enqueueResponse(response: RelayResponse): void {
-    if (responseQueue.length >= MAX_RESPONSE_QUEUE) {
-      logger.error(LOG_PREFIX, "response queue full, dropping oldest", {
-        platform: response.platform,
-        chatId: response.chatId,
-      });
-      responseQueue.shift();
-    }
-    responseQueue.push(response);
-  }
-
   function trySend(response: RelayResponse): boolean {
     if (!socket || socket.readyState !== WebSocket.OPEN) return false;
     try {
@@ -200,35 +267,12 @@ export function connectRelay(deps: RelayClientDeps): RelayClientHandle {
             chatId: response.chatId,
             error: err.message,
           });
-          enqueueResponse(response);
+          queue.enqueue(response);
         }
       });
       return true;
     } catch {
       return false;
-    }
-  }
-
-  function sendResponse(response: RelayResponse): void {
-    if (trySend(response)) return;
-    enqueueResponse(response);
-    logger.error(LOG_PREFIX, "response queued (not connected)", {
-      platform: response.platform,
-      chatId: response.chatId,
-      queueSize: responseQueue.length,
-    });
-  }
-
-  function flushResponseQueue(): void {
-    if (responseQueue.length === 0) return;
-    logger.info(LOG_PREFIX, "flushing response queue", {
-      count: responseQueue.length,
-    });
-    while (responseQueue.length > 0) {
-      if (!socket || socket.readyState !== WebSocket.OPEN) break;
-      const [response] = responseQueue;
-      if (!trySend(response)) break;
-      responseQueue.shift();
     }
   }
 
