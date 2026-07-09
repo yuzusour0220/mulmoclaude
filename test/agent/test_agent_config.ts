@@ -7,6 +7,7 @@ import { __resetForTests as resetTokenState, generateAndWriteToken } from "../..
 import {
   buildCliArgs,
   buildDockerSpawnArgs,
+  buildMulmoclaudeServer,
   dockerUserCapArgs,
   dockerBindMountArgs,
   buildMcpConfig,
@@ -17,6 +18,7 @@ import {
   resolveMcpConfigPaths,
   rewriteLocalhostForDocker,
   userServerAllowedToolNames,
+  workspaceModuleMounts,
 } from "../../server/agent/config.js";
 import type { McpServerSpec } from "../../server/system/config.js";
 
@@ -964,5 +966,48 @@ describe("dockerBindMountArgs", () => {
   it("converts Windows backslash host paths to forward slashes for -v", () => {
     const args = dockerBindMountArgs({ ...opts, projectRoot: "C:\\Users\\me\\proj" });
     assert.ok(args.includes("C:/Users/me/proj/node_modules:/app/node_modules:ro"));
+  });
+});
+
+// #2052: `test/agent/test_mcp_docker_smoke.ts` used to hardcode its `docker run`
+// argv, so PR #1974 (the /app/pkg_modules fallback) and PR #1995 (the --import
+// bootstrap) shipped without the smoke test ever seeing them. It kept
+// reproducing the pre-#1974 layout, and a Windows user re-reported the old
+// error as proof the fixes hadn't landed. The smoke test now derives its argv
+// from the shipped builders; these assertions pin that wiring on every PR,
+// where the Docker-dependent smoke test cannot run.
+describe("MCP child wiring (regression guard for #2052)", () => {
+  const REPO_ROOT = join(import.meta.dirname, "../..");
+  const identity = (hostPath: string): string => hostPath;
+
+  it("gives the Docker child the /app/pkg_modules fallback on NODE_PATH", () => {
+    const spec = buildMulmoclaudeServer({ chatSessionId: "s", port: 1, activePlugins: [], useDocker: true });
+    assert.equal(spec.env.NODE_PATH, "/app/node_modules:/app/pkg_modules");
+  });
+
+  it("registers the ESM resolver bootstrap via --import on the Docker child", () => {
+    const spec = buildMulmoclaudeServer({ chatSessionId: "s", port: 1, activePlugins: [], useDocker: true });
+    assert.equal(spec.command, "tsx");
+    assert.deepEqual(spec.args.slice(0, 2), ["--import", "file:///app/server/agent/mcp-esm-bootstrap.mjs"]);
+    assert.equal(spec.args.at(-1), "/app/server/agent/mcp-server.ts");
+  });
+
+  it("leaves the native child alone: no NODE_PATH, no --import", () => {
+    const spec = buildMulmoclaudeServer({ chatSessionId: "s", port: 1, activePlugins: [], useDocker: false });
+    assert.equal(spec.env.NODE_PATH, undefined);
+    assert.equal(spec.args.includes("--import"), false);
+  });
+
+  it("mounts every workspace package under /app/pkg_modules on win32 only", () => {
+    const win = workspaceModuleMounts(REPO_ROOT, "win32", identity);
+    assert.ok(
+      win.some((arg) => arg.endsWith(":/app/pkg_modules/@mulmoclaude/x-plugin:ro")),
+      `x-plugin fallback mount missing from: ${win.join(" ")}`,
+    );
+    assert.ok(
+      win.some((arg) => arg.endsWith(":/app/pkg_modules/@mulmoclaude/core:ro")),
+      `core fallback mount missing from: ${win.join(" ")}`,
+    );
+    assert.deepEqual(workspaceModuleMounts(REPO_ROOT, "linux", identity), []);
   });
 });

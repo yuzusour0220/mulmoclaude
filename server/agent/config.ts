@@ -292,13 +292,25 @@ function resolvePackageRoot(): string {
 // the agent's registry (#1770).
 const LOCAL_MCP_SERVER_PATH = join(dirname(fileURLToPath(import.meta.url)), "mcp-server.ts");
 
-function buildMulmoclaudeServer(params: { chatSessionId: string; port: number; activePlugins: string[]; useDocker: boolean }): object {
+/** The `mcpServers.mulmoclaude` entry Claude Code spawns over stdio.
+ *  Exported so `test/agent/test_mcp_docker_smoke.ts` drives the container
+ *  with the SHIPPED command/args/env instead of a hand-copied duplicate —
+ *  the drift that let #1974 and #1995 ship without the smoke test ever
+ *  seeing them (#2052). */
+export interface McpStdioServerSpec {
+  type: "stdio";
+  command: string;
+  args: string[];
+  env: Record<string, string>;
+}
+
+export function buildMulmoclaudeServer(params: { chatSessionId: string; port: number; activePlugins: string[]; useDocker: boolean }): McpStdioServerSpec {
   const { chatSessionId, port, activePlugins, useDocker } = params;
   const projectRoot = resolveProjectRoot();
   const command = useDocker ? "tsx" : join(projectRoot, "node_modules/.bin/tsx");
   const mcpServerPath = useDocker ? "/app/server/agent/mcp-server.ts" : LOCAL_MCP_SERVER_PATH;
 
-  const dockerEnv = useDocker
+  const dockerEnv: Record<string, string> = useDocker
     ? {
         MCP_HOST: "host.docker.internal",
         NODE_PATH: `/app/node_modules:${CONTAINER_WORKSPACE_MODULES_PATH}`,
@@ -311,7 +323,7 @@ function buildMulmoclaudeServer(params: { chatSessionId: string; port: number; a
   // <workspace>/.session-token, but env is faster and works in Docker
   // where the token file may not be bind-mounted.
   const token = getCurrentToken();
-  const authEnv = token ? { MULMOCLAUDE_AUTH_TOKEN: token } : {};
+  const authEnv: Record<string, string> = token ? { MULMOCLAUDE_AUTH_TOKEN: token } : {};
 
   return {
     // Claude Code 2.1.x requires the explicit `type: "stdio"` field
@@ -635,7 +647,7 @@ function scopedPackageName(pkgDir: string): string | null {
 // copy of each `@mulmoclaude/*` package under CONTAINER_WORKSPACE_MODULES_PATH
 // (#1946 — the yarn-workspace junctions dangle inside the Linux container).
 // Empty on every other platform and on npx installs (no `packages/`).
-function workspaceModuleMounts(packageRoot: string, platform: Platform, toDockerPath: (hostPath: string) => string): string[] {
+export function workspaceModuleMounts(packageRoot: string, platform: Platform, toDockerPath: (hostPath: string) => string): string[] {
   if (platform !== "win32") return [];
   const mounts: string[] = [];
   for (const dir of workspacePackageDirs(packageRoot)) {
