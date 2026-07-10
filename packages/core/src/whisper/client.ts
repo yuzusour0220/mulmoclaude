@@ -305,7 +305,10 @@ async function bootstrapCapture(callbacks: VoiceCaptureCallbacks, generationAtSt
   try {
     audioGraph.attach(acquired);
   } catch (err) {
-    acquired.getTracks().forEach((track) => track.stop());
+    // teardown() is null-safe and closes any half-created AudioContext AND
+    // stops the mic tracks — the pre-refactor code only stopped tracks and
+    // leaked the context (codex/CodeRabbit findings on this PR).
+    audioGraph.teardown();
     throw err;
   }
   return { audioGraph, mimeType };
