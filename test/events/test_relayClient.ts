@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import type { ChatService } from "@mulmobridge/chat-service";
-import { createResponseQueue, handleRelayMessage } from "../../server/events/relay-client.js";
+import { attemptSocketSend, createResponseQueue, handleRelayMessage, stopRelay, type RelayState } from "../../server/events/relay-client.js";
 
 type RelayFn = ChatService["relay"];
 type RelayParams = Parameters<RelayFn>[0];
@@ -328,5 +328,153 @@ describe("createResponseQueue", () => {
     queue.flush();
 
     assert.deepEqual(delivered, [makeResponse(1)]);
+  });
+});
+
+// ── attemptSocketSend / stopRelay direct tests ───────────────
+
+interface FakeSocket {
+  readyState: number;
+  send: (payload: string, callback: (err: Error | undefined) => void) => void;
+  close: (code?: number, reason?: string) => void;
+  sent: string[];
+  closed: { code?: number; reason?: string }[];
+}
+
+// WebSocket.OPEN is 1 per the RFC 6455 spec and the `ws` npm package.
+const OPEN = 1;
+
+function makeFakeSocket(overrides: Partial<FakeSocket> = {}): FakeSocket {
+  const socket: FakeSocket = {
+    readyState: OPEN,
+    sent: [],
+    closed: [],
+    send: (payload, callback) => {
+      socket.sent.push(payload);
+      callback(undefined);
+    },
+    close: (code, reason) => {
+      socket.closed.push({ code, reason });
+    },
+    ...overrides,
+  };
+  return socket;
+}
+
+function makeResp(seq: number): { platform: string; chatId: string; text: string } {
+  return { platform: "line", chatId: `c-${seq}`, text: `body-${seq}` };
+}
+
+describe("attemptSocketSend", () => {
+  it("returns false and does not send when state.socket is null (queue-instead path)", () => {
+    const { logger } = createFakeLogger();
+    const state: RelayState = { socket: null, reconnectMs: 1000, reconnectTimer: null, stopped: false };
+    let enqueued = 0;
+    const result = attemptSocketSend(state, makeResp(1), logger, () => {
+      enqueued += 1;
+    });
+    assert.equal(result, false);
+    assert.equal(enqueued, 0);
+  });
+
+  it("returns false when the socket exists but readyState is not OPEN", () => {
+    const { logger } = createFakeLogger();
+    const socket = makeFakeSocket({ readyState: 0 }); // CONNECTING
+    const state: RelayState = { socket: socket as unknown as RelayState["socket"], reconnectMs: 1000, reconnectTimer: null, stopped: false };
+    const result = attemptSocketSend(state, makeResp(1), logger, () => {});
+    assert.equal(result, false);
+    assert.equal(socket.sent.length, 0);
+  });
+
+  it("returns true and writes the JSON payload when the socket is OPEN", () => {
+    const { logger } = createFakeLogger();
+    const socket = makeFakeSocket();
+    const state: RelayState = { socket: socket as unknown as RelayState["socket"], reconnectMs: 1000, reconnectTimer: null, stopped: false };
+    const result = attemptSocketSend(state, makeResp(7), logger, () => {});
+    assert.equal(result, true);
+    assert.deepEqual(JSON.parse(socket.sent[0]), makeResp(7));
+  });
+
+  it("re-enqueues via onEnqueue when the async send callback reports an error and state.stopped is false", () => {
+    const { logger, findByMsg } = createFakeLogger();
+    const socket = makeFakeSocket({
+      send: (_payload, callback) => callback(new Error("write EPIPE")),
+    });
+    const state: RelayState = { socket: socket as unknown as RelayState["socket"], reconnectMs: 1000, reconnectTimer: null, stopped: false };
+    let enqueued = 0;
+    attemptSocketSend(state, makeResp(1), logger, () => {
+      enqueued += 1;
+    });
+    assert.equal(enqueued, 1);
+    assert.equal(findByMsg("send failed, requeueing")?.level, "warn");
+  });
+
+  it("does NOT re-enqueue when the async send error fires after state.stopped flipped true (shutting-down race)", () => {
+    // Fixes the corner case where a disconnect interleaves with an in-flight
+    // send; re-adding to the queue after stopRelay would just leak entries.
+    const { logger } = createFakeLogger();
+    const socket = makeFakeSocket({
+      send: (_payload, callback) => callback(new Error("closing")),
+    });
+    const state: RelayState = { socket: socket as unknown as RelayState["socket"], reconnectMs: 1000, reconnectTimer: null, stopped: true };
+    let enqueued = 0;
+    attemptSocketSend(state, makeResp(1), logger, () => {
+      enqueued += 1;
+    });
+    assert.equal(enqueued, 0);
+  });
+
+  it("returns false when socket.send synchronously throws (e.g. socket already closed)", () => {
+    const { logger } = createFakeLogger();
+    const socket = makeFakeSocket({
+      send: () => {
+        throw new Error("socket closed");
+      },
+    });
+    const state: RelayState = { socket: socket as unknown as RelayState["socket"], reconnectMs: 1000, reconnectTimer: null, stopped: false };
+    const result = attemptSocketSend(state, makeResp(1), logger, () => {});
+    assert.equal(result, false);
+  });
+});
+
+describe("stopRelay", () => {
+  it("flips stopped, clears the timer, closes the socket with code 1000, and logs 'stopped'", () => {
+    const { logger, findByMsg } = createFakeLogger();
+    const socket = makeFakeSocket();
+    const timer = setTimeout(() => {}, 999_999);
+    const state: RelayState = { socket: socket as unknown as RelayState["socket"], reconnectMs: 1000, reconnectTimer: timer, stopped: false };
+    stopRelay(state, logger);
+    assert.equal(state.stopped, true);
+    assert.equal(state.reconnectTimer, null);
+    assert.equal(state.socket, null);
+    assert.deepEqual(socket.closed[0], { code: 1000, reason: "shutdown" });
+    assert.equal(findByMsg("stopped")?.level, "info");
+  });
+
+  it("is a no-op-except-logging when nothing is armed (state already stopped-like)", () => {
+    // Guards the reverse-of-happy-path: a caller that shuts down before
+    // the first connect() must not throw on the null socket / null timer.
+    const { logger, findByMsg } = createFakeLogger();
+    const state: RelayState = { socket: null, reconnectMs: 1000, reconnectTimer: null, stopped: false };
+    stopRelay(state, logger);
+    assert.equal(state.stopped, true);
+    assert.equal(findByMsg("stopped")?.level, "info");
+  });
+
+  it("guarantees stopped is set BEFORE any close side-effect, so a close-event-driven reconnect is guarded", () => {
+    // Simulates the ordering the WebSocket spec forces on us: `close()`
+    // schedules the close event. If a caller queried state.stopped inside
+    // that handler, it must already read true.
+    const { logger } = createFakeLogger();
+    let stoppedAtCloseTime: boolean | null = null;
+    const state: RelayState = { socket: null, reconnectMs: 1000, reconnectTimer: null, stopped: false };
+    const socket = makeFakeSocket({
+      close: () => {
+        stoppedAtCloseTime = state.stopped;
+      },
+    });
+    state.socket = socket as unknown as RelayState["socket"];
+    stopRelay(state, logger);
+    assert.equal(stoppedAtCloseTime, true, "stopped must be true by the time socket.close() runs");
   });
 });
