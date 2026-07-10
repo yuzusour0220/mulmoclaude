@@ -66,7 +66,7 @@
           </template>
         </i18n-t>
         <div class="flex flex-col items-center gap-1 pt-1">
-          <img :src="qrDataUrl" :alt="MOBILE_URL" class="h-32 w-32" data-testid="remote-host-qr" />
+          <img :src="qrDataUrl" alt="" aria-hidden="true" class="h-32 w-32" data-testid="remote-host-qr" />
           <p>{{ t("remoteHost.qrHint") }}</p>
         </div>
       </div>
