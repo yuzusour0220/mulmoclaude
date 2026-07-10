@@ -14,7 +14,7 @@ The substance of an assistant is not the AI model — the model is just the engi
 
 Nurturing takes an environment, and MulmoClaude provides one: a place to accumulate memories (a personal wiki that Claude builds and maintains itself), a place to keep your data (schema-driven collections, feeds, plain files), and a place to build apps just for you — no programming knowledge required. You say "I want something like this" in everyday words, and Claude builds the small app you need: a restaurant list, an invoice tracker, vocabulary practice — software for an audience of one. Right after install the garden is empty; you plant seeds and tend the soil, and grow an assistant that is yours alone.
 
-And the assistant is not tied to your desk. Log in from your phone — or a messaging app you already use — and you reach the same assistant living on your computer. The relay server only passes messages; it keeps no data and no apps.
+And the assistant is not tied to your desk. Log in from your phone — or a messaging app you already use — and you reach the same assistant living on your computer. The relay server only carries messages in transit — your memories, data, and apps never leave your computer.
 
 Under the hood, MulmoClaude is an AI-native application platform: capabilities are plugins in a single registry (today: a full accounting system with real server-side bookkeeping logic, a personal wiki, an SEC-filings reader, and more), Claude acts as a universal controller that composes across them, and chat summons the right GUI for each task — markdown, charts, forms, wikis, spreadsheets, or 3D scenes.
 
