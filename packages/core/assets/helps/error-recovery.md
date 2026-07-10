@@ -206,9 +206,10 @@ Nothing to do by hand: the mount list is derived from the `packages/` tree, so e
 (`@mulmoclaude/*`, `@mulmobridge/*`, …) is covered. If you see this anyway:
 
 ```bash
-# Confirm the package really is missing from the fallback, not just unbuilt.
-docker run --rm -v "<repo>/packages/<pkg>:/app/pkg_modules/<name>:ro" node:22-slim \
-  ls /app/pkg_modules/<name>/package.json
+# Check the SHIPPED mount list, not a hand-mounted copy: does the package the
+# child failed on appear in what workspaceModuleMounts() actually produces?
+node_modules/.bin/tsx test/sandbox-repro/print-mcp-container-spec.ts \
+  | grep pkg_modules/<name>       # <name> e.g. @mulmobridge/protocol
 
 # The workspace dists must exist — production ships built output.
 yarn build:packages:dev

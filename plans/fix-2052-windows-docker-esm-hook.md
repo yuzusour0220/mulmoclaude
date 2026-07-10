@@ -72,7 +72,7 @@ condition would have broken it.
 Measured, not guessed. Running the real `mcp-server.ts` under the production spec with dangling
 junctions:
 
-```
+```text
 Error: Cannot find module '@mulmobridge/protocol'
 Require stack:
 - /app/src/types/events.ts
