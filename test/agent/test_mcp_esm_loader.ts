@@ -28,6 +28,21 @@ describe("splitScopedSpecifier", () => {
       subpath: "./util/log",
     });
   });
+
+  // #2052: the loader hardcoded `@mulmoclaude/`. yarn junctions EVERY workspace
+  // package, so `@mulmobridge/protocol` — which the MCP child reaches through
+  // src/types/events.ts — dangled on Windows with no fallback and killed the
+  // server at load.
+  it("handles any workspace scope, not just @mulmoclaude", () => {
+    assert.deepEqual(splitScopedSpecifier("@mulmobridge/protocol"), {
+      pkg: "@mulmobridge/protocol",
+      subpath: ".",
+    });
+    assert.deepEqual(splitScopedSpecifier("@receptron/task-scheduler/sub"), {
+      pkg: "@receptron/task-scheduler",
+      subpath: "./sub",
+    });
+  });
 });
 
 describe("pickEntry", () => {

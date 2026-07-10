@@ -1010,4 +1010,24 @@ describe("MCP child wiring (regression guard for #2052)", () => {
     );
     assert.deepEqual(workspaceModuleMounts(REPO_ROOT, "linux", identity), []);
   });
+
+  // The actual #2052 production bug: the fallback only covered `@mulmoclaude/*`,
+  // but yarn junctions EVERY workspace package. `@mulmobridge/protocol` (reached
+  // via src/types/events.ts) and `@mulmobridge/client` dangled inside the Linux
+  // container on a Windows host, so the MCP child died at load with
+  // MODULE_NOT_FOUND and every tool — `handlePermission` included — disappeared.
+  it("covers non-@mulmoclaude workspace scopes the MCP child imports", () => {
+    const win = workspaceModuleMounts(REPO_ROOT, "win32", identity);
+    for (const pkg of ["@mulmobridge/protocol", "@mulmobridge/client"]) {
+      assert.ok(
+        win.some((arg) => arg.endsWith(`:/app/pkg_modules/${pkg}:ro`)),
+        `${pkg} fallback mount missing — the MCP child cannot load without it`,
+      );
+    }
+  });
+
+  it("skips the unscoped launcher package", () => {
+    const win = workspaceModuleMounts(REPO_ROOT, "win32", identity);
+    assert.ok(!win.some((arg) => arg.endsWith(":/app/pkg_modules/mulmoclaude:ro")));
+  });
 });

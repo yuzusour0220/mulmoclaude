@@ -59,13 +59,47 @@ and `test/sandbox-repro/package.json` is `{"private": true, "type": "module"}`. 
 puts the probe in ESM mode, so the hook fires and the probe goes green — while the real MCP
 child, which has no such file, runs CJS. The probe validates a configuration that does not ship.
 
-### F4 — `@mulmoclaude/core` violates the repo's own export rule
+### F4 — WITHDRAWN. `@mulmoclaude/core`'s `workspace-setup` is ESM-only on purpose
 
-CLAUDE.md: *"Package exports: include `require` and `default` conditions (Docker CJS mode)"*.
-`./workspace-setup` and `./workspace-setup/slug` expose only `types` / `import` / `default`.
-Under CJS they fall through to an ESM `default`. Latent, and it must be fixed regardless.
+I flagged the missing `require` condition on `./workspace-setup` as a rule violation. It is not:
+`vite.esm.config.ts` builds that entry ESM-only because it uses `import.meta.url` for asset
+resolution, which cannot be emitted as CJS. There is no `.cjs` to point a `require` condition at,
+and Node's `require(esm)` (>= 22.12) loads it fine — as the end-to-end run confirms. Adding the
+condition would have broken it.
 
-## The one thing still unmeasured
+### F5 — THE ACTUAL BUG: the fallback only ever covered `@mulmoclaude/*`
+
+Measured, not guessed. Running the real `mcp-server.ts` under the production spec with dangling
+junctions:
+
+```
+Error: Cannot find module '@mulmobridge/protocol'
+Require stack:
+- /app/src/types/events.ts
+- /app/server/agent/mcp-tools/spawnBackgroundChat.ts
+- /app/server/agent/mcp-tools/index.ts
+- /app/server/agent/mcp-server.ts
+```
+
+yarn junctions **every** workspace package — `packages/*`, `packages/bridges/*`,
+`packages/plugins/*`, `packages/services/*`. But:
+
+- `workspacePackageDirs()` scanned only `packages/core` + `packages/plugins/*`
+- `scopedPackageName()` accepted only names starting with `@mulmoclaude/`
+- `mcp-esm-loader.mjs` hardcoded `const SCOPE = "@mulmoclaude/"`
+
+So `@mulmobridge/protocol` (reached through `src/types/events.ts`) and `@mulmobridge/client` had
+no `/app/pkg_modules` fallback. On Windows their junctions dangle, the MCP child dies at load, and
+every tool — `handlePermission` included — disappears from the agent registry. **That is symptom 1.**
+
+Proof, same container, only the scope filter changed:
+
+| `scopedPackageName` accepts | result |
+|---|---|
+| `@mulmoclaude/` only (before) | `Cannot find module '@mulmobridge/protocol'`, exit 1 |
+| any `@scope/` (after) | `serverInfo` + `handlePermission` in `tools/list`, exit 0 |
+
+## Superseded: the one thing that was unmeasured
 
 In the **real** layout (CJS + `NODE_PATH=/app/node_modules:/app/pkg_modules`), does
 `require("@mulmoclaude/x-plugin")` fall through `Module.globalPaths` to `/app/pkg_modules`,
@@ -108,10 +142,12 @@ mounted server tree, so the graph is ESM and PR #1995's hook actually applies. A
 complement: `module.registerHooks()` (Node 22) installs **synchronous** hooks that also cover
 `require()`, which would make the fix format-agnostic. Choose after reading P2, not before.
 
-### P4 — close F4
+### P4 — fix F5 (the real bug)
 
-Add `require` conditions to `@mulmoclaude/core`'s `./workspace-setup` and
-`./workspace-setup/slug` exports, and make sure the built `.cjs` targets exist.
+- `workspacePackageDirs()` walks `packages/*` and descends one level into grouping dirs
+  (`plugins/`, `bridges/`, `services/`), matching the workspace globs structurally.
+- `scopedPackageName()` accepts any `@scope/` name; only the unscoped `mulmoclaude` launcher is skipped.
+- `mcp-esm-loader.mjs` drops its hardcoded scope for the same reason.
 
 ### P5 — permanent regression coverage
 

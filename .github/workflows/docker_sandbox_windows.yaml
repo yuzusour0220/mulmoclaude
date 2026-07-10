@@ -88,6 +88,13 @@ jobs:
       - name: Build @mulmoclaude/x-plugin (probe imports its built ESM entry)
         run: yarn workspace @mulmoclaude/x-plugin run build
 
+      # The #2052 end-to-end step boots the real mcp-server.ts, which imports
+      # @mulmoclaude/core, @mulmobridge/protocol, @mulmobridge/client and the
+      # preset plugins through their built `dist/`. Production ships built dist;
+      # this repro must too.
+      - name: Build every workspace package (the e2e MCP child imports their dist)
+        run: yarn build:packages:dev
+
       # windows-latest ships Docker CLI + a Windows-only engine, no Docker
       # Desktop. Docker Desktop in CI needs UI dialogs on first launch and
       # is flake-prone. Instead we use the preinstalled WSL2 with Ubuntu +
@@ -241,6 +248,49 @@ jobs:
             -w /app `
             node:22-slim `
             bash -c "npm install -g tsx --silent && tsx --import file:///app/server/agent/mcp-esm-bootstrap.mjs /app/server/agent/diagnose-2052.ts"
+
+      # ── #2052 end-to-end: the real MCP child, the shipped mounts ──────
+      # The regression this closes: `workspacePackageDirs()` only listed
+      # `@mulmoclaude/*`, so `@mulmobridge/protocol` (reached via
+      # src/types/events.ts) had no /app/pkg_modules fallback. Its junction
+      # dangled inside the container and mcp-server.ts died at load — every
+      # tool, `handlePermission` included, vanished from the agent registry.
+      #
+      # Mounts / env / argv come from the SHIPPED builders via
+      # print-mcp-container-spec.ts, so this can never drift the way the
+      # hardcoded smoke test did.
+      - name: "#2052 — end-to-end: real mcp-server.ts answers initialize + tools/list"
+        shell: pwsh
+        run: |
+          $wsWin = "${{ github.workspace }}"
+          $drive = $wsWin.Substring(0, 1).ToLower()
+          $rest = $wsWin.Substring(3) -replace '\\', '/'
+          $wsLinux = "/mnt/$drive/$rest"
+
+          $spec = & node_modules/.bin/tsx test/sandbox-repro/print-mcp-container-spec.ts | ConvertFrom-Json
+
+          $dockerArgs = @("run", "--rm", "-i")
+          $dockerArgs += @("-v", "${wsLinux}/node_modules:/app/node_modules:ro")
+          $dockerArgs += @("-v", "${wsLinux}/packages:/app/packages:ro")
+          $dockerArgs += @("-v", "${wsLinux}/server:/app/server:ro")
+          $dockerArgs += @("-v", "${wsLinux}/src:/app/src:ro")
+          $dockerArgs += @("-v", "${wsLinux}/test/sandbox-repro:/repro:ro")
+          foreach ($mount in $spec.pkgModuleMounts) { $dockerArgs += @("-v", $mount) }
+          foreach ($entry in $spec.env.PSObject.Properties) { $dockerArgs += @("-e", "$($entry.Name)=$($entry.Value)") }
+          $dockerArgs += @("-w", "/app", "node:22-slim", "bash", "-c",
+            "npm install -g tsx --silent && cat /repro/mcp-handshake.jsonl | $($spec.command) $($spec.args -join ' ')")
+
+          Write-Host "pkg_modules mounts: $($spec.pkgModuleMounts.Count)"
+          $out = wsl -d Ubuntu-22.04 -u root -- docker @dockerArgs 2>&1 | Out-String
+          Write-Host $out
+
+          if ($out -notmatch '"serverInfo"') {
+            throw "MCP server never answered initialize — the child died at load. See stderr above."
+          }
+          if ($out -notmatch '"name":"handlePermission"') {
+            throw "tools/list did not include handlePermission — this is the #2052 symptom."
+          }
+          Write-Host "OK: mcp-server.ts started and listed handlePermission under real NTFS junctions."
 
       - name: "#2052 — reproduce the crash verbatim (static import, production layout)"
         shell: pwsh

@@ -618,26 +618,52 @@ export interface DockerSpawnArgsParams {
   sshAgentForward?: boolean;
 }
 
-// The workspace-package dirs that ship as `@mulmoclaude/*` — `packages/core`
-// plus every `packages/plugins/*`. Source/dev layout only (npx installs have
-// no `packages/`), so an absent dir yields an empty list.
+// Every workspace-package dir under `packages/`, matching the root manifest's
+// `packages/*` + `packages/<group>/*` globs structurally: a child that carries a
+// package.json IS a package; one that doesn't is a grouping dir (`plugins/`,
+// `bridges/`, `services/`) we descend one level into. Derived from the tree, not
+// from the root package.json, so a packaged install without a `workspaces` field
+// still behaves.
+//
+// This used to hardcode `packages/core` + `packages/plugins/*`, which missed
+// `packages/protocol` (`@mulmobridge/protocol`) and `packages/client`. yarn
+// junctions EVERY workspace package on Windows, so the ones this list omitted
+// dangled inside the Linux container with no `/app/pkg_modules` fallback — and
+// the MCP child, which reaches `@mulmobridge/protocol` through
+// `src/types/events.ts`, died at load with MODULE_NOT_FOUND. Every tool,
+// `handlePermission` included, then vanished from the agent's registry (#2052).
+//
+// Source/dev layout only (npx installs have no `packages/`), so an absent dir
+// yields an empty list.
 function workspacePackageDirs(packageRoot: string): string[] {
-  const core = join(packageRoot, "packages", "core");
-  const pluginsDir = join(packageRoot, "packages", "plugins");
-  const plugins = existsSync(pluginsDir)
-    ? readdirSync(pluginsDir, { withFileTypes: true })
-        .filter((entry) => entry.isDirectory())
-        .map((entry) => join(pluginsDir, entry.name))
-    : [];
-  return [core, ...plugins].filter((dir) => existsSync(join(dir, "package.json")));
+  const packagesDir = join(packageRoot, "packages");
+  if (!existsSync(packagesDir)) return [];
+  const dirs: string[] = [];
+  for (const entry of readdirSync(packagesDir, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    const dir = join(packagesDir, entry.name);
+    if (existsSync(join(dir, "package.json"))) {
+      dirs.push(dir);
+      continue;
+    }
+    for (const child of readdirSync(dir, { withFileTypes: true })) {
+      if (!child.isDirectory()) continue;
+      const childDir = join(dir, child.name);
+      if (existsSync(join(childDir, "package.json"))) dirs.push(childDir);
+    }
+  }
+  return dirs;
 }
 
-// The `@mulmoclaude/<name>` a package declares, or null if it isn't one of
-// ours / is unreadable — a malformed package.json never breaks a spawn.
+// The scoped name a workspace package declares, or null when it is unscoped
+// (the `mulmoclaude` launcher) or unreadable — a malformed package.json never
+// breaks a spawn. Any scope counts: `@mulmoclaude/*`, `@mulmobridge/*`,
+// `@receptron/*`. Restricting this to `@mulmoclaude/` is what left
+// `@mulmobridge/protocol` unmounted (#2052).
 function scopedPackageName(pkgDir: string): string | null {
   try {
     const { name } = JSON.parse(readFileSync(join(pkgDir, "package.json"), "utf-8")) as { name?: unknown };
-    return typeof name === "string" && name.startsWith("@mulmoclaude/") ? name : null;
+    return typeof name === "string" && name.startsWith("@") ? name : null;
   } catch {
     return null;
   }
