@@ -142,6 +142,7 @@ const ptBRMessages = {
     description: "O acesso remoto permite que um dispositivo móvel se conecte às coleções e feeds deste MulmoClaude.",
     howTo: "No seu telefone, abra {url} e entre com a mesma conta do Google.",
     customViewHint: "Para uma visualização adaptada ao celular, peça ao Claude para criar uma {keyword} (não uma custom view comum).",
+    qrHint: "Ou escaneie este código QR com a câmera do seu celular.",
   },
   sidebarHeader: {
     home: "Ir para o chat mais recente",
