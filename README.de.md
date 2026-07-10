@@ -8,11 +8,17 @@
 
 [English](README.md) · [日本語](README.ja.md) · [简体中文](README.zh.md) · [한국어](README.ko.md) · [Español](README.es.md) · [Português (BR)](README.pt-BR.md) · [Français](README.fr.md) · **Deutsch**
 
+**Einen KI-Assistenten, der alles über Sie weiß und Ihnen rund um die Uhr zur Seite steht, gibt es nirgendwo zu kaufen. Sie können keinen kaufen — Sie können nur einen großziehen. MulmoClaude ist ein Werkzeug, um Ihren eigenen KI-Assistenten großzuziehen — auf Ihrem eigenen Computer.**
+
+Die Substanz eines Assistenten ist nicht das KI-Modell — das Modell ist nur der Motor. Was einen Assistenten wertvoll macht, ist, wie viel er über Sie weiß: Ihre Gespräche, Ihren Kalender, Ihre Notizen, Ihre Daten und die Anwendungen, die Sie nutzen. Etwas so Wichtiges sollte keinem einzelnen Dienstanbieter anvertraut werden — je länger Sie ihn nutzen, desto schwerer wird der Abschied. MulmoClaude ist Open Source und läuft lokal, sodass alles, was Ihr Assistent ansammelt — Erinnerungen, Daten, Anwendungen — in Ihren eigenen Händen bleibt, als einfache Dateien in Ihrem Workspace.
+
+Großziehen braucht eine Umgebung, und MulmoClaude stellt sie bereit: einen Ort, um Erinnerungen anzusammeln (ein persönliches Wiki, das Claude selbst aufbaut und pflegt), einen Ort für Ihre Daten (schemagesteuerte Collections, Feeds, einfache Dateien) und einen Ort, um Anwendungen nur für Sie zu bauen — ganz ohne Programmierkenntnisse. Sie sagen in Alltagssprache „ich hätte gern so etwas“, und Claude baut die kleine Anwendung, die Sie brauchen: eine Restaurantliste, einen Rechnungs-Tracker, Vokabeltraining — Software für ein Publikum von einer Person. Direkt nach der Installation ist der Garten noch leer; Sie säen Samen, pflegen den Boden und ziehen einen Assistenten groß, der nur Ihnen gehört.
+
+Und der Assistent ist nicht an Ihren Schreibtisch gebunden. Melden Sie sich vom Telefon an — oder über eine Messaging-App, die Sie bereits nutzen — und Sie erreichen denselben Assistenten, der auf Ihrem Computer lebt. Der Relay-Server leitet nur Nachrichten weiter; er speichert weder Daten noch Anwendungen.
+
+Unter der Haube ist MulmoClaude eine KI-native Anwendungsplattform: Fähigkeiten sind Plugins in einem einzigen Register (heute: ein vollständiges Buchhaltungssystem mit echter serverseitiger Buchführungslogik, ein persönliches Wiki, ein SEC-Filings-Reader und mehr), Claude fungiert als universeller Controller, der über sie hinweg komponiert, und der Chat ruft die passende GUI für jede Aufgabe auf — Markdown, Diagramme, Formulare, Wikis, Tabellenkalkulationen oder 3D-Szenen.
+
 > **[How AI-Native Applications Should Be Built](MANIFEST.md)** — die Architektur-, UX- und Protokollthese hinter MulmoClaude.
-
-MulmoClaude ist eine Open-Source-, KI-native Anwendungsplattform, die lokal auf Ihrer Maschine läuft. Statt isolierter Anwendungen werden Fähigkeiten als Plugins innerhalb eines einzigen Registers aufgebaut. Zu den Anwendungen, die heute darauf laufen, gehören ein vollständiges Buchhaltungssystem (mit echter serverseitiger Buchführungslogik), ein persönliches Wiki und ein SEC-Filings-Reader (Edgar). Claude fungiert als universeller Controller, der über diese Plugins hinweg komponiert.
-
-Sie interagieren in natürlicher Sprache, und Claude ruft die passende GUI für die Aufgabe auf — antwortet in Markdown, Diagrammen, Formularen, Wikis, Tabellenkalkulationen oder 3D-Szenen. Alle Daten leben als einfache Dateien in Ihrem Workspace.
 
 ## Schnellstart
 

@@ -8,11 +8,17 @@
 
 [English](README.md) · [日本語](README.ja.md) · [简体中文](README.zh.md) · [한국어](README.ko.md) · **Español** · [Português (BR)](README.pt-BR.md) · [Français](README.fr.md) · [Deutsch](README.de.md)
 
+**Un asistente de IA que lo sabe todo sobre ti y te acompaña las 24 horas del día no se vende en ninguna parte. No puedes comprarlo — solo puedes cultivarlo. MulmoClaude es una herramienta para cultivar tu propio asistente de IA, en tu propio ordenador.**
+
+La sustancia de un asistente no es el modelo de IA — el modelo es solo el motor. Lo que hace valioso a un asistente es cuánto sabe sobre ti: tus conversaciones, tu calendario, tus notas, tus datos y las aplicaciones que usas. Algo tan importante no debería confiarse a ningún proveedor de servicios — cuanto más tiempo lo uses, más difícil se vuelve marcharse. MulmoClaude es de código abierto y se ejecuta localmente, así que todo lo que tu asistente acumula — recuerdos, datos, aplicaciones — permanece en tus propias manos, como archivos planos en tu workspace.
+
+Cultivar requiere un entorno, y MulmoClaude lo proporciona: un lugar para acumular recuerdos (una wiki personal que Claude construye y mantiene por sí mismo), un lugar para guardar tus datos (colecciones basadas en esquemas, feeds, archivos planos) y un lugar para crear aplicaciones solo para ti — sin necesidad de conocimientos de programación. Dices "quiero algo así" con palabras cotidianas, y Claude construye la pequeña aplicación que necesitas: una lista de restaurantes, un gestor de facturas, práctica de vocabulario — software para una audiencia de una sola persona. Justo después de instalarlo, el jardín está vacío; siembras semillas, cuidas la tierra y cultivas un asistente que es solo tuyo.
+
+Y el asistente no está atado a tu escritorio. Inicia sesión desde tu teléfono — o desde una app de mensajería que ya uses — y llegas al mismo asistente que vive en tu ordenador. El servidor de retransmisión solo pasa mensajes; no guarda ni datos ni aplicaciones.
+
+Por debajo, MulmoClaude es una plataforma de aplicaciones AI-nativa: las capacidades son plugins dentro de un único registro (hoy: un sistema contable completo con lógica real de contabilidad del lado del servidor, una wiki personal, un lector de documentos de la SEC y más), Claude actúa como un controlador universal que compone a través de ellos, y el chat invoca la GUI adecuada para cada tarea — markdown, gráficos, formularios, wikis, hojas de cálculo o escenas 3D.
+
 > **[How AI-Native Applications Should Be Built](MANIFEST.md)** — la tesis sobre arquitectura, UX y protocolo que hay detrás de MulmoClaude.
-
-MulmoClaude es una plataforma de aplicaciones AI-nativa, de código abierto, que se ejecuta localmente en tu máquina. En lugar de aplicaciones aisladas, las capacidades se construyen como plugins dentro de un único registro. Las aplicaciones que se ejecutan en ella hoy incluyen un sistema contable completo (con lógica real de contabilidad del lado del servidor), una wiki personal y un lector de documentos de la SEC (Edgar). Claude actúa como un controlador universal que compone a través de estos plugins.
-
-Interactúas en lenguaje natural, y Claude invoca la GUI adecuada para la tarea — respondiendo en markdown, gráficos, formularios, wikis, hojas de cálculo o escenas 3D. Todos los datos viven como archivos planos en tu workspace.
 
 ## Inicio rápido
 
