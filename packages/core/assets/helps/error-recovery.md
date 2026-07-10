@@ -177,3 +177,49 @@ yourself — additions to `config/helps/error-recovery.md` are managed
 by the project maintainers so the canonical copy in
 `packages/core/assets/helps/error-recovery.md` and the installed copy
 stay in sync.
+
+## Sandbox MCP server dies at load — `Cannot find module '@…/…'`
+
+### Symptoms
+
+- Chatting fails before any tool runs, with:
+  `Error: MCP tool mcp__mulmoclaude__handlePermission (passed via --permission-prompt-tool) not found.`
+- Or, in the server log: `[agent-stderr] Error: Cannot find module '@mulmobridge/protocol'`
+  followed by a `Require stack:` listing `/app/server/agent/mcp-server.ts`.
+- Windows hosts only, sandbox (Docker) mode only. macOS / Linux are unaffected.
+
+### Cause
+
+`yarn` links workspace packages into `node_modules/` as **NTFS junctions** on Windows. Those
+junctions store an absolute Windows target (`C:\Users\…`), which does not exist inside the Linux
+sandbox container — every one of them dangles there, and Node's resolver skips them.
+
+`server/agent/config.ts` bind-mounts a junction-free copy of each workspace package at
+`/app/pkg_modules/<name>` and puts that dir on the child's `NODE_PATH`. If a package the MCP child
+imports is **missing from that mount list**, its junction is the only path Node can see, so the
+child dies at load and the agent loses every MCP tool at once — `handlePermission` included, which
+is why the CLI complains about the permission-prompt tool rather than about the module.
+
+### Fix
+
+Nothing to do by hand: the mount list is derived from the `packages/` tree, so every scope
+(`@mulmoclaude/*`, `@mulmobridge/*`, …) is covered. If you see this anyway:
+
+```bash
+# Confirm the package really is missing from the fallback, not just unbuilt.
+docker run --rm -v "<repo>/packages/<pkg>:/app/pkg_modules/<name>:ro" node:22-slim \
+  ls /app/pkg_modules/<name>/package.json
+
+# The workspace dists must exist — production ships built output.
+yarn build:packages:dev
+```
+
+A stale `dist/` looks identical from the outside: the mount is there, but its `exports` target is
+absent. Rebuild before suspecting the mounts.
+
+### Regression coverage
+
+`.github/workflows/docker_sandbox_windows.yaml` boots the real `mcp-server.ts` inside a Linux
+container from a Windows host (WSL2 + native `dockerd`), with the same mounts / env / argv the
+shipped builders produce, and asserts `handlePermission` comes back over the MCP handshake. See
+`docs/windows-docker-ci.md`.
