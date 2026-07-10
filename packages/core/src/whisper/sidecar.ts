@@ -147,6 +147,45 @@ export function defaultSpawnServer(modelsDir: string, serverBinary: string, logg
   };
 }
 
+// Wires the three listeners every whisper-server child needs: stderr drain,
+// permanent `error` handler (an unhandled 'error' from ENOENT etc. would crash
+// the host), and `exit` handler that both logs and lets the caller decide
+// whether this proc is still the active one (identity check via `onExit` — a
+// stale process must not evict a newer live sidecar).
+function instrumentChildProcess(proc: ChildProcess, model: WhisperModelName, logger: WhisperLogger, onExit: (exited: ChildProcess) => void): { text: string } {
+  const stderrTail = { text: "" };
+  drainStderr(proc, stderrTail);
+  proc.on("error", (err) => logger.warn("sidecar: process error", { model, error: errorMessage(err) }));
+  proc.on("exit", (code) => {
+    logger.warn("sidecar: exited", { model, code, stderrTail: stderrTail.text.slice(-500) });
+    onExit(proc);
+  });
+  return stderrTail;
+}
+
+// Await server readiness; on failure, kill the child and surface both the
+// underlying error and the tail of stderr (whisper-server usually explains its
+// crash there). Kept at module scope so `startSidecar` stays under the
+// per-function line cap.
+async function awaitReadyOrThrow(proc: ChildProcess, port: number, stderrTail: { text: string }, waitReady: StartLifecycleDeps["waitReady"]): Promise<void> {
+  try {
+    await waitReady(proc, port);
+  } catch (err) {
+    proc.kill();
+    throw new Error(`whisper-server failed to start: ${errorMessage(err)} — stderr: ${stderrTail.text.slice(-500)}`);
+  }
+}
+
+// Abort a start that was raced by `shutdown()` (or a newer start). Compares
+// the token captured at start entry against the current token; if they differ,
+// kill the freshly-booted child rather than publish it after shutdown returned.
+function throwIfStartCancelled(startedToken: number, currentToken: number, proc: ChildProcess): void {
+  if (startedToken !== currentToken) {
+    proc.kill();
+    throw new Error("whisper-server start cancelled");
+  }
+}
+
 // Owns the single warm child's lifecycle: which model is live, the in-flight
 // start, and the cancellation token. Kept as a factory closure so the mutable
 // state is encapsulated rather than threaded through parameters.
@@ -162,14 +201,10 @@ export function createStartLifecycle(deps: StartLifecycleDeps): StartLifecycle {
 
   function shutdown(): void {
     startToken += 1;
-    if (startingProc) {
-      startingProc.kill();
-      startingProc = null;
-    }
-    if (sidecar) {
-      sidecar.proc.kill();
-      sidecar = null;
-    }
+    startingProc?.kill();
+    startingProc = null;
+    sidecar?.proc.kill();
+    sidecar = null;
   }
 
   async function startSidecar(model: WhisperModelName): Promise<ActiveSidecar> {
@@ -177,41 +212,23 @@ export function createStartLifecycle(deps: StartLifecycleDeps): StartLifecycle {
     const port = await allocatePort();
     const proc = spawnServer(model, port);
     startingProc = proc;
-    const stderrTail = { text: "" };
-    drainStderr(proc, stderrTail);
-    // Permanent error listener — a missing one would let a process 'error'
-    // (e.g. ENOENT) throw uncaught and crash the host.
-    proc.on("error", (err) => logger.warn("sidecar: process error", { model, error: errorMessage(err) }));
-    proc.on("exit", (code) => {
-      logger.warn("sidecar: exited", { model, code, stderrTail: stderrTail.text.slice(-500) });
-      if (sidecar?.proc === proc) sidecar = null;
-    });
+    // onExit fires when THIS proc exits: only null out `sidecar` if it's still the live one.
+    const stderrTail = instrumentChildProcess(proc, model, logger, (exited) => sidecar?.proc === exited && (sidecar = null));
     try {
-      await waitReady(proc, port);
-    } catch (err) {
-      proc.kill();
-      throw new Error(`whisper-server failed to start: ${errorMessage(err)} — stderr: ${stderrTail.text.slice(-500)}`);
+      await awaitReadyOrThrow(proc, port, stderrTail, waitReady);
     } finally {
       if (startingProc === proc) startingProc = null;
     }
-    // shutdown() (or a newer start) ran while we were booting — discard this
-    // child instead of publishing a sidecar after shutdown returned.
-    // eslint-disable-next-line security/detect-possible-timing-attacks -- in-memory start-cancellation token, not an auth compare
-    if (token !== startToken) {
-      proc.kill();
-      throw new Error("whisper-server start cancelled");
-    }
+    throwIfStartCancelled(token, startToken, proc);
     sidecar = { port, proc, model };
     logger.info("sidecar: ready", { model, port });
     return sidecar;
   }
 
-  // Module-scoped spawn so it isn't a loop closure (no-loop-func). Only ever one
-  // start is in flight at a time, so clearing `starting` on settle is safe.
+  // Own function so it isn't a loop closure (no-loop-func). Only ever one start
+  // is in flight at a time, so clearing `starting` on settle is safe.
   function beginStart(model: WhisperModelName): Promise<ActiveSidecar> {
-    const promise = startSidecar(model).finally(() => {
-      starting = null;
-    });
+    const promise = startSidecar(model).finally(() => (starting = null));
     starting = { model, promise };
     return promise;
   }

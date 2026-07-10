@@ -472,20 +472,4 @@ export default [
     },
   },
   eslintConfigPrettier,
-  // ── max-lines-per-function grandfather ──────────────────────────
-  // These files hold pre-existing functions over the 50-line budget
-  // that resist a behavior-preserving split: async generators (yielded
-  // code can't move out), factory closures over mutable state, Vue
-  // composables (reactive refs), and impure Promise executors / fs
-  // watchers. See docs/lint-policy.md. The rule is `error` repo-wide
-  // (above); this block pins these known offenders to `warn` so CI
-  // stays green while they remain backlog. As each is drained, remove
-  // its entry; when the list is empty, delete this block. Do NOT add
-  // new files — a new over-budget function must be split, not listed.
-  {
-    files: ["packages/core/src/whisper/sidecar.ts", "server/events/relay-client.ts"],
-    rules: {
-      "max-lines-per-function": ["warn", { max: 50, skipBlankLines: true, skipComments: true, IIFEs: true }],
-    },
-  },
 ];

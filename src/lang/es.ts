@@ -147,6 +147,7 @@ const esMessages = {
     description: "El acceso remoto permite que un dispositivo móvil se conecte a las colecciones y feeds de este MulmoClaude.",
     howTo: "En tu teléfono, abre {url} e inicia sesión con la misma cuenta de Google.",
     customViewHint: "Para una vista compatible con móviles, pide a Claude que cree una {keyword} (no una custom view normal).",
+    qrHint: "O escanea este código QR con la cámara de tu teléfono.",
   },
   sidebarHeader: {
     home: "Ir al chat más reciente",

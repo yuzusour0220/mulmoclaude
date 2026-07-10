@@ -162,6 +162,7 @@ const enMessages = {
     description: "Remote access lets a mobile device connect to this MulmoClaude's collections and feeds.",
     howTo: "On your phone, open {url} and sign in with the same Google account.",
     customViewHint: "For a mobile-friendly view, ask Claude to build a {keyword} (not a regular custom view).",
+    qrHint: "Or scan this QR code with your phone's camera.",
   },
   sidebarHeader: {
     home: "Go to latest chat",

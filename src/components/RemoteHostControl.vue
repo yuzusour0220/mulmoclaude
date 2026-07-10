@@ -55,16 +55,20 @@
 
       <div class="mt-3 pt-2 border-t border-gray-100 text-[11px] leading-snug text-gray-600 space-y-2" data-testid="remote-host-help">
         <p>{{ t("remoteHost.description") }}</p>
-        <i18n-t keypath="remoteHost.howTo" tag="p" scope="global">
-          <template #url>
-            <a :href="MOBILE_URL" target="_blank" rel="noopener noreferrer" class="font-mono text-blue-600 hover:underline break-all">{{ MOBILE_URL }}</a>
-          </template>
-        </i18n-t>
         <i18n-t keypath="remoteHost.customViewHint" tag="p" scope="global">
           <template #keyword>
             <code class="px-1 py-0.5 rounded bg-gray-100 text-gray-800">custom remote view</code>
           </template>
         </i18n-t>
+        <i18n-t keypath="remoteHost.howTo" tag="p" scope="global">
+          <template #url>
+            <a :href="MOBILE_URL" target="_blank" rel="noopener noreferrer" class="font-mono text-blue-600 hover:underline break-all">{{ MOBILE_URL }}</a>
+          </template>
+        </i18n-t>
+        <div class="flex flex-col items-center gap-1 pt-1">
+          <img :src="qrDataUrl" alt="" aria-hidden="true" class="h-32 w-32" data-testid="remote-host-qr" />
+          <p>{{ t("remoteHost.qrHint") }}</p>
+        </div>
       </div>
     </div>
   </div>
@@ -80,6 +84,7 @@
 import { onBeforeUnmount, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { GoogleAuthProvider, signInWithPopup } from "firebase/auth";
+import { renderSVG } from "uqr";
 
 import { auth } from "../config/firebase";
 import { API_ROUTES } from "../config/apiRoutes";
@@ -99,6 +104,8 @@ const { t } = useI18n();
 // Mobile companion PWA. Shown in the popover as help text; not fetched from
 // this desktop app, so no runtime env override is needed.
 const MOBILE_URL = "https://mulmoserver.web.app";
+// Rendered to a data URL (uqr output is ASCII-only SVG) so no v-html is needed.
+const qrDataUrl = `data:image/svg+xml;base64,${btoa(renderSVG(MOBILE_URL))}`;
 
 const open = ref(false);
 const busy = ref(false);
