@@ -144,6 +144,7 @@ const deMessages = {
     description: "Mit Remote-Zugriff kann ein Mobilgerät auf die Sammlungen und Feeds dieser MulmoClaude-Instanz zugreifen.",
     howTo: "Öffne auf deinem Smartphone {url} und melde dich mit demselben Google-Konto an.",
     customViewHint: "Für eine mobiltaugliche Ansicht bitte Claude, statt einer normalen Custom View eine {keyword} zu bauen.",
+    qrHint: "Oder scanne diesen QR-Code mit der Handykamera.",
   },
   sidebarHeader: {
     home: "Zum neuesten Chat",

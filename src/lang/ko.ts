@@ -148,6 +148,7 @@ const koMessages = {
     description: "원격 액세스를 사용하면 모바일 기기에서 이 MulmoClaude의 컬렉션과 피드에 연결할 수 있습니다.",
     howTo: "휴대폰에서 {url} 을(를) 열고 같은 Google 계정으로 로그인하세요.",
     customViewHint: "모바일에 최적화된 뷰가 필요하다면, 일반 custom view가 아닌 {keyword} 를(을) 만들어 달라고 Claude에게 요청하세요.",
+    qrHint: "휴대폰 카메라로 이 QR 코드를 스캔해도 열 수 있습니다.",
   },
   sidebarHeader: {
     home: "최신 채팅으로 이동",
