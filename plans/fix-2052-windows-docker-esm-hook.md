@@ -28,11 +28,11 @@ Windows 23H2 + Docker Desktop (WSL2), source checkout, sandbox ON, at commit `c1
 `test/agent/test_mcp_docker_smoke.ts` **hardcodes** its `docker run` argv instead of deriving
 it from the shipped builders. It is missing everything the two prior fixes added:
 
-| production (`server/agent/config.ts`) | the smoke test |
-|---|---|
-| `workspaceModuleMounts()` → `-v <pkg>:/app/pkg_modules/@mulmoclaude/<name>:ro` (PR #1974) | **absent** |
-| `NODE_PATH=/app/node_modules:/app/pkg_modules` (PR #1974) | `NODE_PATH=/app/node_modules` |
-| `tsx --import file:///app/server/agent/mcp-esm-bootstrap.mjs <server>` (PR #1995) | `tsx <server>` |
+| production (`server/agent/config.ts`)                                                     | the smoke test                |
+| ----------------------------------------------------------------------------------------- | ----------------------------- |
+| `workspaceModuleMounts()` → `-v <pkg>:/app/pkg_modules/@mulmoclaude/<name>:ro` (PR #1974) | **absent**                    |
+| `NODE_PATH=/app/node_modules:/app/pkg_modules` (PR #1974)                                 | `NODE_PATH=/app/node_modules` |
+| `tsx --import file:///app/server/agent/mcp-esm-bootstrap.mjs <server>` (PR #1995)         | `tsx <server>`                |
 
 So the test reproduces the **pre-#1974** configuration. Its failure is an artifact of the test,
 not evidence that PR #1995 is broken. A test that cannot see the fix cannot verify the fix.
@@ -94,10 +94,10 @@ every tool — `handlePermission` included — disappears from the agent registr
 
 Proof, same container, only the scope filter changed:
 
-| `scopedPackageName` accepts | result |
-|---|---|
-| `@mulmoclaude/` only (before) | `Cannot find module '@mulmobridge/protocol'`, exit 1 |
-| any `@scope/` (after) | `serverInfo` + `handlePermission` in `tools/list`, exit 0 |
+| `scopedPackageName` accepts   | result                                                    |
+| ----------------------------- | --------------------------------------------------------- |
+| `@mulmoclaude/` only (before) | `Cannot find module '@mulmobridge/protocol'`, exit 1      |
+| any `@scope/` (after)         | `serverInfo` + `handlePermission` in `tools/list`, exit 0 |
 
 ## Superseded: the one thing that was unmeasured
 
