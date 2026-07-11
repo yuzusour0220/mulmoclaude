@@ -10,6 +10,26 @@ const ONE_SECOND_MS = 1000;
 const ONE_MINUTE_MS = 60 * ONE_SECOND_MS;
 const ONE_HOUR_MS = 60 * ONE_MINUTE_MS;
 
+// Gap between the START of each independently-due task within one tick. When
+// many tasks come due at the same minute (system journal + feed-refresh + a few
+// user tasks all at 20:00 UTC), firing every chat in the same event-loop turn
+// floods the machine; the mulmoclaude MCP broker each chat spawns then boots
+// under contention and can lose the startup race to the CLI's first tool call,
+// so that turn fails with `handlePermission not found` (#2057). Spacing the
+// launches by a second gives each broker room to connect. Far under one tick
+// (a handful of tasks spread over a few seconds), so nothing is delayed past
+// its window.
+const DEFAULT_FIRING_STAGGER_MS = ONE_SECOND_MS;
+
+const realSleep = (delayMs: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, delayMs));
+
+/** Delay before the Nth independently-due task in a tick starts. */
+type StaggerFn = (index: number) => Promise<void>;
+
+function makeStagger(staggerMs: number, sleep: (delayMs: number) => Promise<void>): StaggerFn {
+  return (index: number) => (staggerMs > 0 && index > 0 ? sleep(index * staggerMs) : Promise.resolve());
+}
+
 /** Minimal logger the engine logs through. Absent one, runs silent. */
 export interface SchedulerLogger {
   info: (message: string, data?: Record<string, unknown>) => void;
@@ -61,6 +81,11 @@ export interface TaskManagerOptions {
   tickMs?: number; // default: ONE_MINUTE_MS
   now?: () => Date; // default: () => new Date()
   log?: SchedulerLogger; // default: noop
+  /** Gap between the start of each independently-due task in a tick (#2057).
+   *  Default DEFAULT_FIRING_STAGGER_MS; 0 fires them all at once. */
+  firingStaggerMs?: number;
+  /** Injected so tests advance time without real timers. Default setTimeout. */
+  sleep?: (delayMs: number) => Promise<void>;
 }
 
 function isDue(now: Date, schedule: TaskSchedule, tickMs: number): boolean {
@@ -134,14 +159,22 @@ async function runDependentChain(dependent: TaskDefinition[], currentTime: Date,
   }
 }
 
-async function runTick(now: () => Date, registry: Map<string, TaskDefinition>, tickMs: number, log: SchedulerLogger): Promise<void> {
+async function runTick(now: () => Date, registry: Map<string, TaskDefinition>, tickMs: number, log: SchedulerLogger, stagger: StaggerFn): Promise<void> {
   const currentTime = now();
   const { independent, dependent } = collectDueTasks(currentTime, registry, tickMs);
 
   // Per-invocation set — success does not leak across tick() calls.
   const succeeded = new Set<string>();
 
-  await Promise.all(independent.map((def) => runAndTrack(def, currentTime, succeeded, log)));
+  // Staggered start (#2057), still concurrent: each fires after its own delay
+  // but the tick awaits them all, preserving the previous "all due tasks ran
+  // this tick" contract.
+  await Promise.all(
+    independent.map(async (def, index) => {
+      await stagger(index);
+      await runAndTrack(def, currentTime, succeeded, log);
+    }),
+  );
 
   await runDependentChain(dependent, currentTime, succeeded, log);
 }
@@ -159,10 +192,12 @@ export function createTaskManager(options?: TaskManagerOptions): ITaskManager {
   const tickMs = options?.tickMs ?? ONE_MINUTE_MS;
   const now = options?.now ?? (() => new Date());
   const log = options?.log ?? NOOP_LOG;
+  const staggerMs = options?.firingStaggerMs ?? DEFAULT_FIRING_STAGGER_MS;
+  const stagger = makeStagger(staggerMs, options?.sleep ?? realSleep);
   const registry = new Map<string, TaskDefinition>();
   let timer: ReturnType<typeof setInterval> | null = null;
 
-  const onTick = () => runTick(now, registry, tickMs, log);
+  const onTick = () => runTick(now, registry, tickMs, log, stagger);
 
   return {
     async tick() {

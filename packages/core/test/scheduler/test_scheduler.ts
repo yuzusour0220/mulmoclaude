@@ -93,6 +93,53 @@ test("dependsOn enforces ordering within a tick; dependent skipped if dep fails"
   assert.deepEqual(order2, []); // child never runs because dep did not succeed
 });
 
+test("staggers the start of independently-due tasks by firingStaggerMs (#2057)", async () => {
+  const requestedDelays: number[] = [];
+  const ran: string[] = [];
+  const manager = createTaskManager({
+    tickMs: 60_000,
+    now: () => new Date(Date.UTC(2026, 0, 1, 0, 0, 0)),
+    firingStaggerMs: 500,
+    sleep: async (delayMs) => {
+      requestedDelays.push(delayMs);
+    },
+  });
+  for (const taskId of ["a", "b", "c"]) {
+    manager.registerTask({
+      id: taskId,
+      schedule: { type: SCHEDULE_TYPES.interval, intervalMs: 60_000 },
+      run: async () => {
+        ran.push(taskId);
+      },
+    });
+  }
+  await manager.tick();
+  assert.deepEqual(ran.sort(), ["a", "b", "c"]); // every due task still runs this tick
+  // First task starts immediately (no sleep); the rest are offset by index * gap.
+  assert.deepEqual(requestedDelays, [500, 1000]);
+});
+
+test("firingStaggerMs: 0 fires all due tasks without any delay", async () => {
+  const requestedDelays: number[] = [];
+  const manager = createTaskManager({
+    tickMs: 60_000,
+    now: () => new Date(Date.UTC(2026, 0, 1, 0, 0, 0)),
+    firingStaggerMs: 0,
+    sleep: async (delayMs) => {
+      requestedDelays.push(delayMs);
+    },
+  });
+  for (const taskId of ["a", "b"]) {
+    manager.registerTask({
+      id: taskId,
+      schedule: { type: SCHEDULE_TYPES.interval, intervalMs: 60_000 },
+      run: async () => {},
+    });
+  }
+  await manager.tick();
+  assert.deepEqual(requestedDelays, []);
+});
+
 test("registerTask rejects duplicate ids; updateSchedule returns false for unknown", () => {
   const manager = createTaskManager();
   manager.registerTask({ id: "a", schedule: { type: SCHEDULE_TYPES.daily, time: "09:00" }, run: async () => {} });
