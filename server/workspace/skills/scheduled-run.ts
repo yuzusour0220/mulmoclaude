@@ -9,6 +9,7 @@ import type { SessionOrigin } from "../../../src/types/session.js";
 import { log } from "../../system/logger/index.js";
 import { makeUuid } from "../../utils/id.js";
 import { errorMessage } from "../../utils/errors.js";
+import { registerCompletionHook, unregisterCompletionHook } from "../../agent/backgroundSessions.js";
 
 type StartChat = (params: { message: string; roleId: string; chatSessionId: string; origin?: SessionOrigin }) => Promise<{ kind: string; error?: string }>;
 
@@ -30,33 +31,57 @@ export interface ScheduledDispatch {
 
 /** Dispatch one scheduled task's chat and record the run. Returns the spawned
  *  chat session id; throws on a dispatch error so the task-manager tick logs the
- *  failure. `startChat` returns after *starting* the session, so the recorded
- *  run reflects the dispatch, not the chat's eventual outcome. The run is
- *  recorded in EVERY case — success, an error result, OR a rejected promise —
- *  before rethrowing, so a failed dispatch still leaves a trace in history/state. */
+ *  failure.
+ *
+ *  Outcome recording (#2057): a spawned chat can still fail its FIRST turn — the
+ *  MCP broker loses the startup race and the run does nothing — yet `startChat`
+ *  returns success the moment it *spawns*. Recording at dispatch would log that
+ *  as `"result":"success"` with an 8 ms duration, hiding the failure from
+ *  unattended operation. So:
+ *   - a DISPATCH failure (never spawned) is recorded immediately, then rethrown;
+ *   - a successful dispatch records the REAL outcome from the turn's completion
+ *     hook, giving an honest success/error verdict and a real duration. */
 export async function fireScheduledChat(dispatch: ScheduledDispatch): Promise<string> {
-  const { id, name, schedule, message, roleId, origin, trigger, logScope, failureLabel, startChat } = dispatch;
+  const { name, message, roleId, origin, logScope, failureLabel, startChat } = dispatch;
   const chatSessionId = makeUuid();
   const startedAt = new Date().toISOString();
   const startMs = Date.now();
   log.info(logScope, "running scheduled task", { name, roleId, chatSessionId });
 
+  // Register BEFORE dispatch: `startChat` fire-and-forgets the background run,
+  // so a fast-failing turn can reach `finalizeRun` before we'd otherwise get to
+  // register — dropping the run record entirely. Registering first makes the
+  // hook atomic with the spawn; the dispatch-failure branch rolls it back.
+  registerCompletionHook(chatSessionId, ({ didError }) =>
+    recordRun(dispatch, chatSessionId, startedAt, startMs, didError ? `${failureLabel} run did not complete successfully` : null),
+  );
+
   const failure = await dispatchFailure(() => startChat({ message, roleId, chatSessionId, origin }));
 
+  if (failure !== null) {
+    // No turn spawned → the hook will never fire. Drop it and record now.
+    unregisterCompletionHook(chatSessionId);
+    await recordRun(dispatch, chatSessionId, startedAt, startMs, failure);
+    throw new Error(`${failureLabel} failed: ${failure}`);
+  }
+
+  log.info(logScope, "scheduled task dispatched", { name, chatSessionId });
+  return chatSessionId;
+}
+
+/** Persist one run's state + history entry. `runError` null = success. */
+async function recordRun(dispatch: ScheduledDispatch, chatSessionId: string, startedAt: string, startMs: number, runError: string | null): Promise<void> {
   await recordExternalRun({
-    id,
-    name,
-    schedule,
+    id: dispatch.id,
+    name: dispatch.name,
+    schedule: dispatch.schedule,
     scheduledFor: startedAt,
     startedAt,
     durationMs: Date.now() - startMs,
-    trigger,
-    errorMessage: failure,
+    trigger: dispatch.trigger,
+    errorMessage: runError,
     chatSessionId,
   });
-  if (failure !== null) throw new Error(`${failureLabel} failed: ${failure}`);
-  log.info(logScope, "scheduled task completed", { name, chatSessionId });
-  return chatSessionId;
 }
 
 /** Run the dispatch and normalize its outcome to an error string (or null on

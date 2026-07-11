@@ -10,6 +10,33 @@ const ONE_SECOND_MS = 1000;
 const ONE_MINUTE_MS = 60 * ONE_SECOND_MS;
 const ONE_HOUR_MS = 60 * ONE_MINUTE_MS;
 
+// Gap between the START of each independently-due task within one tick. When
+// many tasks come due at the same minute (system journal + feed-refresh + a few
+// user tasks all at 20:00 UTC), firing every chat in the same event-loop turn
+// floods the machine; the mulmoclaude MCP broker each chat spawns then boots
+// under contention and can lose the startup race to the CLI's first tool call,
+// so that turn fails with `handlePermission not found` (#2057). Spacing the
+// launches by a second gives each broker room to connect. Far under one tick
+// (a handful of tasks spread over a few seconds), so nothing is delayed past
+// its window.
+const DEFAULT_FIRING_STAGGER_MS = ONE_SECOND_MS;
+
+// The total stagger must stay well inside one tick, or the tail tasks start in a
+// LATER tick window and two ticks overlap. Cap all starts to this fraction of
+// `tickMs` regardless of task count or the configured gap — this keeps a debug
+// `tickMs === firingStaggerMs` (see server boot) from degenerating.
+const MAX_STAGGER_FRACTION_OF_TICK = 0.5;
+
+const realSleep = (delayMs: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, delayMs));
+
+// Per-task stagger step: the configured gap, shrunk so the last of `count` tasks
+// still starts within MAX_STAGGER_FRACTION_OF_TICK of the tick. 0 disables it.
+function staggerStepMs(staggerMs: number, tickMs: number, count: number): number {
+  if (staggerMs <= 0 || count <= 1) return 0;
+  const maxStepMs = (tickMs * MAX_STAGGER_FRACTION_OF_TICK) / (count - 1);
+  return Math.min(staggerMs, maxStepMs);
+}
+
 /** Minimal logger the engine logs through. Absent one, runs silent. */
 export interface SchedulerLogger {
   info: (message: string, data?: Record<string, unknown>) => void;
@@ -61,6 +88,11 @@ export interface TaskManagerOptions {
   tickMs?: number; // default: ONE_MINUTE_MS
   now?: () => Date; // default: () => new Date()
   log?: SchedulerLogger; // default: noop
+  /** Gap between the start of each independently-due task in a tick (#2057).
+   *  Default DEFAULT_FIRING_STAGGER_MS; 0 fires them all at once. */
+  firingStaggerMs?: number;
+  /** Injected so tests advance time without real timers. Default setTimeout. */
+  sleep?: (delayMs: number) => Promise<void>;
 }
 
 function isDue(now: Date, schedule: TaskSchedule, tickMs: number): boolean {
@@ -134,16 +166,32 @@ async function runDependentChain(dependent: TaskDefinition[], currentTime: Date,
   }
 }
 
-async function runTick(now: () => Date, registry: Map<string, TaskDefinition>, tickMs: number, log: SchedulerLogger): Promise<void> {
+interface TickConfig {
+  tickMs: number;
+  staggerMs: number;
+  sleep: (delayMs: number) => Promise<void>;
+  log: SchedulerLogger;
+}
+
+async function runTick(now: () => Date, registry: Map<string, TaskDefinition>, cfg: TickConfig): Promise<void> {
   const currentTime = now();
-  const { independent, dependent } = collectDueTasks(currentTime, registry, tickMs);
+  const { independent, dependent } = collectDueTasks(currentTime, registry, cfg.tickMs);
 
   // Per-invocation set — success does not leak across tick() calls.
   const succeeded = new Set<string>();
 
-  await Promise.all(independent.map((def) => runAndTrack(def, currentTime, succeeded, log)));
+  // Staggered start (#2057), still concurrent: each fires after its own capped
+  // delay but the tick awaits them all, preserving the previous "all due tasks
+  // ran this tick" contract.
+  const stepMs = staggerStepMs(cfg.staggerMs, cfg.tickMs, independent.length);
+  await Promise.all(
+    independent.map(async (def, index) => {
+      if (stepMs > 0 && index > 0) await cfg.sleep(index * stepMs);
+      await runAndTrack(def, currentTime, succeeded, cfg.log);
+    }),
+  );
 
-  await runDependentChain(dependent, currentTime, succeeded, log);
+  await runDependentChain(dependent, currentTime, succeeded, cfg.log);
 }
 
 export function listTaskSummaries(registry: Map<string, TaskDefinition>): TaskSummary[] {
@@ -155,14 +203,42 @@ export function listTaskSummaries(registry: Map<string, TaskDefinition>): TaskSu
   }));
 }
 
-export function createTaskManager(options?: TaskManagerOptions): ITaskManager {
+// A tick runner that skips re-entry: if the previous tick is still draining its
+// staggered starts, drop this one so a slow tick + short tickMs can never run
+// two ticks concurrently.
+function makeGuardedTick(now: () => Date, registry: Map<string, TaskDefinition>, cfg: TickConfig): () => Promise<void> {
+  let ticking = false;
+  return async () => {
+    if (ticking) return;
+    ticking = true;
+    try {
+      await runTick(now, registry, cfg);
+    } finally {
+      ticking = false;
+    }
+  };
+}
+
+function resolveTickConfig(options?: TaskManagerOptions): { tickMs: number; now: () => Date; cfg: TickConfig } {
   const tickMs = options?.tickMs ?? ONE_MINUTE_MS;
-  const now = options?.now ?? (() => new Date());
-  const log = options?.log ?? NOOP_LOG;
+  return {
+    tickMs,
+    now: options?.now ?? (() => new Date()),
+    cfg: {
+      tickMs,
+      staggerMs: options?.firingStaggerMs ?? DEFAULT_FIRING_STAGGER_MS,
+      sleep: options?.sleep ?? realSleep,
+      log: options?.log ?? NOOP_LOG,
+    },
+  };
+}
+
+export function createTaskManager(options?: TaskManagerOptions): ITaskManager {
+  const { tickMs, now, cfg } = resolveTickConfig(options);
+  const { log } = cfg;
   const registry = new Map<string, TaskDefinition>();
   let timer: ReturnType<typeof setInterval> | null = null;
-
-  const onTick = () => runTick(now, registry, tickMs, log);
+  const onTick = makeGuardedTick(now, registry, cfg);
 
   return {
     async tick() {

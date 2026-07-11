@@ -7,6 +7,7 @@ import { __resetForTests as resetTokenState, generateAndWriteToken } from "../..
 import {
   buildCliArgs,
   buildDockerSpawnArgs,
+  buildMulmoclaudeServer,
   dockerUserCapArgs,
   dockerBindMountArgs,
   buildMcpConfig,
@@ -17,6 +18,7 @@ import {
   resolveMcpConfigPaths,
   rewriteLocalhostForDocker,
   userServerAllowedToolNames,
+  workspaceModuleMounts,
 } from "../../server/agent/config.js";
 import type { McpServerSpec } from "../../server/system/config.js";
 
@@ -430,6 +432,56 @@ describe("buildDockerSpawnArgs", () => {
     try {
       const args = buildDockerSpawnArgs({ ...baseParams(), platform: "win32" as Platform, packageRoot: root });
       assert.ok(!args.some((token) => token.includes(":/app/pkg_modules/")));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  // #2056: npx can nest deps in `<packageRoot>/node_modules` instead of
+  // hoisting them to `<projectRoot>/node_modules` (version conflict, or a
+  // half-deduped npx cache). Only projectRoot's node_modules is mounted to
+  // /app/node_modules, so those nested deps are invisible and the broker dies
+  // at load. Mount the nested tree onto /app/pkg_modules (on NODE_PATH + the
+  // ESM hook path). Platform-agnostic — the npx nesting happens on macOS too.
+  it("mounts nested packageRoot/node_modules at /app/pkg_modules in the npx layout (#2056)", async () => {
+    const root = mkdtempSync(join(tmpdir(), "mc-npxroot-"));
+    try {
+      mkdirSync(join(root, "node_modules", "@mulmoclaude", "chart-plugin"), { recursive: true });
+      const args = buildDockerSpawnArgs({ ...baseParams(), projectRoot: "/consumer", packageRoot: root });
+      const toDocker = (hostPath: string): string => hostPath.replace(/\\/g, "/");
+      assert.ok(args.includes(`${toDocker(join(root, "node_modules"))}:/app/pkg_modules:ro`));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("adds no nested-node_modules mount in the dev layout where packageRoot === projectRoot (#2056)", async () => {
+    const root = mkdtempSync(join(tmpdir(), "mc-devroot-"));
+    try {
+      mkdirSync(join(root, "node_modules", "express"), { recursive: true });
+      const args = buildDockerSpawnArgs({ ...baseParams(), projectRoot: root, packageRoot: root });
+      assert.ok(!args.some((token) => token.endsWith(":/app/pkg_modules:ro")));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  // The nested-tree mount (whole dir at /app/pkg_modules) and the per-package
+  // mounts (/app/pkg_modules/@scope/name) would collide — a child bind mount
+  // into a read-only parent fails `docker run`. They must stay exclusive. An
+  // install-from-source / `npm link` on Windows has BOTH a `packages/` tree AND
+  // a distinct packageRoot with a nested node_modules; the per-package mounts
+  // own /app/pkg_modules there, so the whole-tree mount must NOT be added.
+  it("skips the nested mount when a packages/ tree is present, avoiding a /app/pkg_modules collision (#2056)", async () => {
+    const root = mkdtempSync(join(tmpdir(), "mc-srcinstall-"));
+    try {
+      seedWorkspacePackages(root); // creates packages/…
+      mkdirSync(join(root, "node_modules", "@mulmoclaude", "chart-plugin"), { recursive: true });
+      const args = buildDockerSpawnArgs({ ...baseParams(), platform: "win32" as Platform, projectRoot: "/consumer", packageRoot: root });
+      // Per-package mounts present (workspaceModuleMounts owns /app/pkg_modules)…
+      assert.ok(args.some((token) => token.includes("/app/pkg_modules/@mulmoclaude/core:ro")));
+      // …and the whole-tree nested mount is NOT added (no collision).
+      assert.ok(!args.some((token) => token.endsWith(":/app/pkg_modules:ro")));
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -964,5 +1016,68 @@ describe("dockerBindMountArgs", () => {
   it("converts Windows backslash host paths to forward slashes for -v", () => {
     const args = dockerBindMountArgs({ ...opts, projectRoot: "C:\\Users\\me\\proj" });
     assert.ok(args.includes("C:/Users/me/proj/node_modules:/app/node_modules:ro"));
+  });
+});
+
+// #2052: `test/agent/test_mcp_docker_smoke.ts` used to hardcode its `docker run`
+// argv, so PR #1974 (the /app/pkg_modules fallback) and PR #1995 (the --import
+// bootstrap) shipped without the smoke test ever seeing them. It kept
+// reproducing the pre-#1974 layout, and a Windows user re-reported the old
+// error as proof the fixes hadn't landed. The smoke test now derives its argv
+// from the shipped builders; these assertions pin that wiring on every PR,
+// where the Docker-dependent smoke test cannot run.
+describe("MCP child wiring (regression guard for #2052)", () => {
+  const REPO_ROOT = join(import.meta.dirname, "../..");
+  const identity = (hostPath: string): string => hostPath;
+
+  it("gives the Docker child the /app/pkg_modules fallback on NODE_PATH", () => {
+    const spec = buildMulmoclaudeServer({ chatSessionId: "s", port: 1, activePlugins: [], useDocker: true });
+    assert.equal(spec.env.NODE_PATH, "/app/node_modules:/app/pkg_modules");
+  });
+
+  it("registers the ESM resolver bootstrap via --import on the Docker child", () => {
+    const spec = buildMulmoclaudeServer({ chatSessionId: "s", port: 1, activePlugins: [], useDocker: true });
+    assert.equal(spec.command, "tsx");
+    assert.deepEqual(spec.args.slice(0, 2), ["--import", "file:///app/server/agent/mcp-esm-bootstrap.mjs"]);
+    assert.equal(spec.args.at(-1), "/app/server/agent/mcp-server.ts");
+  });
+
+  it("leaves the native child alone: no NODE_PATH, no --import", () => {
+    const spec = buildMulmoclaudeServer({ chatSessionId: "s", port: 1, activePlugins: [], useDocker: false });
+    assert.equal(spec.env.NODE_PATH, undefined);
+    assert.equal(spec.args.includes("--import"), false);
+  });
+
+  it("mounts every workspace package under /app/pkg_modules on win32 only", () => {
+    const win = workspaceModuleMounts(REPO_ROOT, "win32", identity);
+    assert.ok(
+      win.some((arg) => arg.endsWith(":/app/pkg_modules/@mulmoclaude/x-plugin:ro")),
+      `x-plugin fallback mount missing from: ${win.join(" ")}`,
+    );
+    assert.ok(
+      win.some((arg) => arg.endsWith(":/app/pkg_modules/@mulmoclaude/core:ro")),
+      `core fallback mount missing from: ${win.join(" ")}`,
+    );
+    assert.deepEqual(workspaceModuleMounts(REPO_ROOT, "linux", identity), []);
+  });
+
+  // The actual #2052 production bug: the fallback only covered `@mulmoclaude/*`,
+  // but yarn junctions EVERY workspace package. `@mulmobridge/protocol` (reached
+  // via src/types/events.ts) and `@mulmobridge/client` dangled inside the Linux
+  // container on a Windows host, so the MCP child died at load with
+  // MODULE_NOT_FOUND and every tool — `handlePermission` included — disappeared.
+  it("covers non-@mulmoclaude workspace scopes the MCP child imports", () => {
+    const win = workspaceModuleMounts(REPO_ROOT, "win32", identity);
+    for (const pkg of ["@mulmobridge/protocol", "@mulmobridge/client"]) {
+      assert.ok(
+        win.some((arg) => arg.endsWith(`:/app/pkg_modules/${pkg}:ro`)),
+        `${pkg} fallback mount missing — the MCP child cannot load without it`,
+      );
+    }
+  });
+
+  it("skips the unscoped launcher package", () => {
+    const win = workspaceModuleMounts(REPO_ROOT, "win32", identity);
+    assert.ok(!win.some((arg) => arg.endsWith(":/app/pkg_modules/mulmoclaude:ro")));
   });
 });

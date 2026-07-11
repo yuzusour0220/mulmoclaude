@@ -10,10 +10,12 @@
 // `server/agent/mcp-tools/index.ts` fail before any of that fires,
 // because the ESM loader has no equivalent to NODE_PATH.
 //
-// Fix: when a `@mulmoclaude/*` specifier fails default resolution,
-// read the corresponding package.json under `/app/pkg_modules/` and
-// return the resolved entry file URL. Supports both exports-map and
-// legacy `main` shapes, plus subpath imports (`@mulmoclaude/pkg/sub`).
+// Fix: when a scoped specifier fails default resolution, read the
+// corresponding package.json under `/app/pkg_modules/` and return the
+// resolved entry file URL. Supports both exports-map and legacy `main`
+// shapes, plus subpath imports (`@scope/pkg/sub`). Any scope, because
+// yarn junctions every workspace package — `@mulmobridge/protocol`
+// dangles on Windows exactly like `@mulmoclaude/*` (#2052).
 //
 // No-op on Linux/macOS Docker (primary resolution succeeds via POSIX
 // symlinks in `/app/node_modules`, the catch never fires). Only
@@ -25,19 +27,20 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
-const SCOPE = "@mulmoclaude/";
 const FALLBACK_ROOT = "/app/pkg_modules";
 
 // Exported for the unit test (test/agent/test_mcp_esm_loader.ts). The
 // runtime hook does not consume the export.
+//
+// Any scope, not just `@mulmoclaude/`: yarn junctions every workspace package,
+// so `@mulmobridge/protocol` dangles on Windows exactly like `@mulmoclaude/*`
+// does. Hardcoding one scope here mirrored the same omission in config.ts's
+// `scopedPackageName`, and left the MCP child unable to load (#2052).
 export function splitScopedSpecifier(specifier) {
-  const rest = specifier.slice(SCOPE.length);
-  const firstSlash = rest.indexOf("/");
-  if (firstSlash === -1) return { pkg: specifier, subpath: "." };
-  return {
-    pkg: `${SCOPE}${rest.slice(0, firstSlash)}`,
-    subpath: `./${rest.slice(firstSlash + 1)}`,
-  };
+  const parts = specifier.split("/");
+  const pkg = `${parts[0]}/${parts[1]}`;
+  const subpath = parts.length > 2 ? `./${parts.slice(2).join("/")}` : ".";
+  return { pkg, subpath };
 }
 
 // Walk a conditional-export block preferring `import.default` >
@@ -88,7 +91,8 @@ export function resolveFromFallback(pkg, subpath, fallbackRoot = FALLBACK_ROOT) 
 }
 
 export async function resolve(specifier, context, nextResolve) {
-  if (!specifier.startsWith(SCOPE)) {
+  // Only scoped bare specifiers (`@scope/pkg[/sub]`) can be workspace junctions.
+  if (!specifier.startsWith("@") || !specifier.includes("/")) {
     return nextResolve(specifier, context);
   }
   try {

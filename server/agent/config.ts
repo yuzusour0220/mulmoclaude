@@ -292,13 +292,25 @@ function resolvePackageRoot(): string {
 // the agent's registry (#1770).
 const LOCAL_MCP_SERVER_PATH = join(dirname(fileURLToPath(import.meta.url)), "mcp-server.ts");
 
-function buildMulmoclaudeServer(params: { chatSessionId: string; port: number; activePlugins: string[]; useDocker: boolean }): object {
+/** The `mcpServers.mulmoclaude` entry Claude Code spawns over stdio.
+ *  Exported so `test/agent/test_mcp_docker_smoke.ts` drives the container
+ *  with the SHIPPED command/args/env instead of a hand-copied duplicate —
+ *  the drift that let #1974 and #1995 ship without the smoke test ever
+ *  seeing them (#2052). */
+export interface McpStdioServerSpec {
+  type: "stdio";
+  command: string;
+  args: string[];
+  env: Record<string, string>;
+}
+
+export function buildMulmoclaudeServer(params: { chatSessionId: string; port: number; activePlugins: string[]; useDocker: boolean }): McpStdioServerSpec {
   const { chatSessionId, port, activePlugins, useDocker } = params;
   const projectRoot = resolveProjectRoot();
   const command = useDocker ? "tsx" : join(projectRoot, "node_modules/.bin/tsx");
   const mcpServerPath = useDocker ? "/app/server/agent/mcp-server.ts" : LOCAL_MCP_SERVER_PATH;
 
-  const dockerEnv = useDocker
+  const dockerEnv: Record<string, string> = useDocker
     ? {
         MCP_HOST: "host.docker.internal",
         NODE_PATH: `/app/node_modules:${CONTAINER_WORKSPACE_MODULES_PATH}`,
@@ -311,7 +323,7 @@ function buildMulmoclaudeServer(params: { chatSessionId: string; port: number; a
   // <workspace>/.session-token, but env is faster and works in Docker
   // where the token file may not be bind-mounted.
   const token = getCurrentToken();
-  const authEnv = token ? { MULMOCLAUDE_AUTH_TOKEN: token } : {};
+  const authEnv: Record<string, string> = token ? { MULMOCLAUDE_AUTH_TOKEN: token } : {};
 
   return {
     // Claude Code 2.1.x requires the explicit `type: "stdio"` field
@@ -606,26 +618,52 @@ export interface DockerSpawnArgsParams {
   sshAgentForward?: boolean;
 }
 
-// The workspace-package dirs that ship as `@mulmoclaude/*` — `packages/core`
-// plus every `packages/plugins/*`. Source/dev layout only (npx installs have
-// no `packages/`), so an absent dir yields an empty list.
+// Every workspace-package dir under `packages/`, matching the root manifest's
+// `packages/*` + `packages/<group>/*` globs structurally: a child that carries a
+// package.json IS a package; one that doesn't is a grouping dir (`plugins/`,
+// `bridges/`, `services/`) we descend one level into. Derived from the tree, not
+// from the root package.json, so a packaged install without a `workspaces` field
+// still behaves.
+//
+// This used to hardcode `packages/core` + `packages/plugins/*`, which missed
+// `packages/protocol` (`@mulmobridge/protocol`) and `packages/client`. yarn
+// junctions EVERY workspace package on Windows, so the ones this list omitted
+// dangled inside the Linux container with no `/app/pkg_modules` fallback — and
+// the MCP child, which reaches `@mulmobridge/protocol` through
+// `src/types/events.ts`, died at load with MODULE_NOT_FOUND. Every tool,
+// `handlePermission` included, then vanished from the agent's registry (#2052).
+//
+// Source/dev layout only (npx installs have no `packages/`), so an absent dir
+// yields an empty list.
 function workspacePackageDirs(packageRoot: string): string[] {
-  const core = join(packageRoot, "packages", "core");
-  const pluginsDir = join(packageRoot, "packages", "plugins");
-  const plugins = existsSync(pluginsDir)
-    ? readdirSync(pluginsDir, { withFileTypes: true })
-        .filter((entry) => entry.isDirectory())
-        .map((entry) => join(pluginsDir, entry.name))
-    : [];
-  return [core, ...plugins].filter((dir) => existsSync(join(dir, "package.json")));
+  const packagesDir = join(packageRoot, "packages");
+  if (!existsSync(packagesDir)) return [];
+  const dirs: string[] = [];
+  for (const entry of readdirSync(packagesDir, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    const dir = join(packagesDir, entry.name);
+    if (existsSync(join(dir, "package.json"))) {
+      dirs.push(dir);
+      continue;
+    }
+    for (const child of readdirSync(dir, { withFileTypes: true })) {
+      if (!child.isDirectory()) continue;
+      const childDir = join(dir, child.name);
+      if (existsSync(join(childDir, "package.json"))) dirs.push(childDir);
+    }
+  }
+  return dirs;
 }
 
-// The `@mulmoclaude/<name>` a package declares, or null if it isn't one of
-// ours / is unreadable — a malformed package.json never breaks a spawn.
+// The scoped name a workspace package declares, or null when it is unscoped
+// (the `mulmoclaude` launcher) or unreadable — a malformed package.json never
+// breaks a spawn. Any scope counts: `@mulmoclaude/*`, `@mulmobridge/*`,
+// `@receptron/*`. Restricting this to `@mulmoclaude/` is what left
+// `@mulmobridge/protocol` unmounted (#2052).
 function scopedPackageName(pkgDir: string): string | null {
   try {
     const { name } = JSON.parse(readFileSync(join(pkgDir, "package.json"), "utf-8")) as { name?: unknown };
-    return typeof name === "string" && name.startsWith("@mulmoclaude/") ? name : null;
+    return typeof name === "string" && name.startsWith("@") ? name : null;
   } catch {
     return null;
   }
@@ -635,7 +673,7 @@ function scopedPackageName(pkgDir: string): string | null {
 // copy of each `@mulmoclaude/*` package under CONTAINER_WORKSPACE_MODULES_PATH
 // (#1946 — the yarn-workspace junctions dangle inside the Linux container).
 // Empty on every other platform and on npx installs (no `packages/`).
-function workspaceModuleMounts(packageRoot: string, platform: Platform, toDockerPath: (hostPath: string) => string): string[] {
+export function workspaceModuleMounts(packageRoot: string, platform: Platform, toDockerPath: (hostPath: string) => string): string[] {
   if (platform !== "win32") return [];
   const mounts: string[] = [];
   for (const dir of workspacePackageDirs(packageRoot)) {
@@ -643,6 +681,32 @@ function workspaceModuleMounts(packageRoot: string, platform: Platform, toDocker
     if (name) mounts.push("-v", `${toDockerPath(dir)}:${CONTAINER_WORKSPACE_MODULES_PATH}/${name}:ro`);
   }
   return mounts;
+}
+
+// npx installs can leave some deps in the NESTED `<packageRoot>/node_modules`
+// instead of hoisting them to `<projectRoot>/node_modules` — npm does this on a
+// dependency version conflict, and on overwrite-updates that leave the npx cache
+// only half-deduped (observed: `@mulmoclaude/chart-plugin` / `html-plugin` /
+// `@gui-chat-plugin/camera`). Only `<projectRoot>/node_modules` is mounted to
+// `/app/node_modules`, so those nested deps are invisible in the container and
+// the MCP child dies at load with MODULE_NOT_FOUND — the same all-tools-vanish
+// failure as #2052, a different cause (#2056). Mount the nested tree at
+// `/app/pkg_modules`, already on the child's `NODE_PATH` + ESM-hook search path,
+// so both CJS and ESM resolution find it. This mounts the WHOLE nested tree at
+// `/app/pkg_modules`, while `workspaceModuleMounts` mounts individual packages
+// UNDER it (`/app/pkg_modules/@scope/name`) — the two would collide (a child
+// bind mount into a read-only parent fails `docker run`). They must be mutually
+// exclusive, so skip this whenever a `packages/` tree is present: that's the
+// source layout `workspaceModuleMounts` owns (dev, or an install-from-source /
+// `npm link` that copied the full repo, not just the published `files`). A true
+// npx install has a distinct `packageRoot` and NO `packages/`, which is the only
+// shape this mount serves.
+function nestedNodeModulesMount(projectRoot: string, packageRoot: string, toDocker: (hostPath: string) => string): string[] {
+  if (packageRoot === projectRoot) return [];
+  if (existsSync(join(packageRoot, "packages"))) return [];
+  const nested = join(packageRoot, "node_modules");
+  if (!existsSync(nested)) return [];
+  return ["-v", `${toDocker(nested)}:${CONTAINER_WORKSPACE_MODULES_PATH}:ro`];
 }
 
 // Pure helper that returns the full `docker run ... claude <args>`
@@ -699,6 +763,7 @@ export function dockerBindMountArgs(opts: DockerBindMountOpts): string[] {
     `${toDockerPath(opts.packageRoot)}/src:/app/src:ro`,
     ...opts.packagesMount,
     ...workspaceModuleMounts(opts.packageRoot, opts.platform, toDockerPath),
+    ...nestedNodeModulesMount(opts.projectRoot, opts.packageRoot, toDockerPath),
     "-v",
     `${toDockerPath(opts.workspacePath)}:${CONTAINER_WORKSPACE_PATH}`,
     "-v",

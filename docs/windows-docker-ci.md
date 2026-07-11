@@ -10,10 +10,10 @@ walks `<dir>/node_modules/<pkg>/package.json` misses the package.
 
 Two bugs of this shape have shipped and been fixed:
 
-| Issue | Symptom | Fix |
-|---|---|---|
-| [#1946](https://github.com/receptron/mulmoclaude/issues/1946) | MCP server dies at load: `MODULE_NOT_FOUND: @mulmoclaude/x-plugin` | PR [#1974](https://github.com/receptron/mulmoclaude/pull/1974) mounts each workspace package at `/app/pkg_modules/@mulmoclaude/<name>` and appends that dir to `NODE_PATH` so Node's CJS resolver falls through it |
-| [#1982](https://github.com/receptron/mulmoclaude/issues/1982) | Silent preset-plugin load failure — `spotify` / `debug` / `edgar` / `email` MCP tools missing | PR [#1984](https://github.com/receptron/mulmoclaude/pull/1984) replaces the hand-rolled parent-walk in `resolvePresetRoot()` with `require.resolve.paths()`, which inherits the NODE_PATH fallback |
+| Issue                                                         | Symptom                                                                                       | Fix                                                                                                                                                                                                                |
+| ------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| [#1946](https://github.com/receptron/mulmoclaude/issues/1946) | MCP server dies at load: `MODULE_NOT_FOUND: @mulmoclaude/x-plugin`                            | PR [#1974](https://github.com/receptron/mulmoclaude/pull/1974) mounts each workspace package at `/app/pkg_modules/@mulmoclaude/<name>` and appends that dir to `NODE_PATH` so Node's CJS resolver falls through it |
+| [#1982](https://github.com/receptron/mulmoclaude/issues/1982) | Silent preset-plugin load failure — `spotify` / `debug` / `edgar` / `email` MCP tools missing | PR [#1984](https://github.com/receptron/mulmoclaude/pull/1984) replaces the hand-rolled parent-walk in `resolvePresetRoot()` with `require.resolve.paths()`, which inherits the NODE_PATH fallback                 |
 
 Both bugs were reported by Windows users and fixed blind (the maintainers
 run on macOS / Linux). CI didn't catch either regression because there's no
@@ -172,6 +172,27 @@ which point at `dist/` files that aren't built in this CI job — the check
 would fail without proving anything about the resolver.
 `require.resolve.paths()` returns the search-path list without touching
 main entries.
+
+## The end-to-end step: boot the real MCP child (#2052)
+
+The probe above proves the _preset resolver_ survives dangling junctions. It says nothing about
+whether the MCP child actually **starts**. #2052 slipped through exactly there: the fallback mount
+list covered `@mulmoclaude/*` but not `@mulmobridge/protocol`, which `mcp-server.ts` reaches through
+`src/types/events.ts`. Every unit test passed; the child died at load on Windows and the agent lost
+all its tools.
+
+So the workflow also runs the real `server/agent/mcp-server.ts` in the container and speaks the MCP
+handshake to it (`test/sandbox-repro/mcp-handshake.jsonl`), asserting `handlePermission` comes back
+in `tools/list`.
+
+Crucially, the mounts, env and argv are **not written in the workflow**. They come from
+`test/sandbox-repro/print-mcp-container-spec.ts`, which calls the shipped `buildMulmoclaudeServer()`
+and `workspaceModuleMounts()`. Hand-copied container args are how #2052 hid for two releases: the
+Docker smoke test duplicated them and silently kept reproducing the pre-fix layout, so two shipped
+fixes were invisible to it. Derive; never duplicate.
+
+This step needs `yarn build:packages:dev` — the child imports the workspace packages' built `dist/`,
+and production ships built output.
 
 ## Gotchas
 
