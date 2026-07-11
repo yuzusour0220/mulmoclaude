@@ -13,7 +13,7 @@ Windows 23H2 + Docker Desktop (WSL2), source checkout, sandbox ON, at commit `c1
 
 1. Chatting → `ERROR [agent-stderr] Error: MCP tool mcp__mulmoclaude__handlePermission (passed via --permission-prompt-tool) not found.`
 2. `npx tsx --test test/agent/test_mcp_docker_smoke.ts` → **the exact same error text as before PR #1974**:
-   ```
+   ```text
    node:internal/modules/cjs/loader:1430
    Error: Cannot find module '@mulmoclaude/x-plugin'
    Require stack:
