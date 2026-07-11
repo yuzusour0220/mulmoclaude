@@ -692,12 +692,18 @@ export function workspaceModuleMounts(packageRoot: string, platform: Platform, t
 // the MCP child dies at load with MODULE_NOT_FOUND — the same all-tools-vanish
 // failure as #2052, a different cause (#2056). Mount the nested tree at
 // `/app/pkg_modules`, already on the child's `NODE_PATH` + ESM-hook search path,
-// so both CJS and ESM resolution find it. Only the npx layout has a distinct
-// `packageRoot`; in dev `packageRoot === projectRoot` with no nested
-// `node_modules`, and `workspaceModuleMounts` owns `/app/pkg_modules` there — the
-// two never both target it (dev has no npx nesting; npx has no `packages/`).
+// so both CJS and ESM resolution find it. This mounts the WHOLE nested tree at
+// `/app/pkg_modules`, while `workspaceModuleMounts` mounts individual packages
+// UNDER it (`/app/pkg_modules/@scope/name`) — the two would collide (a child
+// bind mount into a read-only parent fails `docker run`). They must be mutually
+// exclusive, so skip this whenever a `packages/` tree is present: that's the
+// source layout `workspaceModuleMounts` owns (dev, or an install-from-source /
+// `npm link` that copied the full repo, not just the published `files`). A true
+// npx install has a distinct `packageRoot` and NO `packages/`, which is the only
+// shape this mount serves.
 function nestedNodeModulesMount(projectRoot: string, packageRoot: string, toDocker: (hostPath: string) => string): string[] {
   if (packageRoot === projectRoot) return [];
+  if (existsSync(join(packageRoot, "packages"))) return [];
   const nested = join(packageRoot, "node_modules");
   if (!existsSync(nested)) return [];
   return ["-v", `${toDocker(nested)}:${CONTAINER_WORKSPACE_MODULES_PATH}:ro`];

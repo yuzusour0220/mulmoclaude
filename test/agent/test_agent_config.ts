@@ -466,6 +466,27 @@ describe("buildDockerSpawnArgs", () => {
     }
   });
 
+  // The nested-tree mount (whole dir at /app/pkg_modules) and the per-package
+  // mounts (/app/pkg_modules/@scope/name) would collide — a child bind mount
+  // into a read-only parent fails `docker run`. They must stay exclusive. An
+  // install-from-source / `npm link` on Windows has BOTH a `packages/` tree AND
+  // a distinct packageRoot with a nested node_modules; the per-package mounts
+  // own /app/pkg_modules there, so the whole-tree mount must NOT be added.
+  it("skips the nested mount when a packages/ tree is present, avoiding a /app/pkg_modules collision (#2056)", async () => {
+    const root = mkdtempSync(join(tmpdir(), "mc-srcinstall-"));
+    try {
+      seedWorkspacePackages(root); // creates packages/…
+      mkdirSync(join(root, "node_modules", "@mulmoclaude", "chart-plugin"), { recursive: true });
+      const args = buildDockerSpawnArgs({ ...baseParams(), platform: "win32" as Platform, projectRoot: "/consumer", packageRoot: root });
+      // Per-package mounts present (workspaceModuleMounts owns /app/pkg_modules)…
+      assert.ok(args.some((token) => token.includes("/app/pkg_modules/@mulmoclaude/core:ro")));
+      // …and the whole-tree nested mount is NOT added (no collision).
+      assert.ok(!args.some((token) => token.endsWith(":/app/pkg_modules:ro")));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   // The package bin script (`npx mulmoclaude` / `node packages/mulmoclaude/bin/...`)
   // sets cwd to the package dir, where yarn-workspace dev installs leave an
   // empty `node_modules/`. If the default falls back to `process.cwd()` the
