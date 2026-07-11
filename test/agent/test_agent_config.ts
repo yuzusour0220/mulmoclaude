@@ -437,6 +437,35 @@ describe("buildDockerSpawnArgs", () => {
     }
   });
 
+  // #2056: npx can nest deps in `<packageRoot>/node_modules` instead of
+  // hoisting them to `<projectRoot>/node_modules` (version conflict, or a
+  // half-deduped npx cache). Only projectRoot's node_modules is mounted to
+  // /app/node_modules, so those nested deps are invisible and the broker dies
+  // at load. Mount the nested tree onto /app/pkg_modules (on NODE_PATH + the
+  // ESM hook path). Platform-agnostic — the npx nesting happens on macOS too.
+  it("mounts nested packageRoot/node_modules at /app/pkg_modules in the npx layout (#2056)", async () => {
+    const root = mkdtempSync(join(tmpdir(), "mc-npxroot-"));
+    try {
+      mkdirSync(join(root, "node_modules", "@mulmoclaude", "chart-plugin"), { recursive: true });
+      const args = buildDockerSpawnArgs({ ...baseParams(), projectRoot: "/consumer", packageRoot: root });
+      const toDocker = (hostPath: string): string => hostPath.replace(/\\/g, "/");
+      assert.ok(args.includes(`${toDocker(join(root, "node_modules"))}:/app/pkg_modules:ro`));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("adds no nested-node_modules mount in the dev layout where packageRoot === projectRoot (#2056)", async () => {
+    const root = mkdtempSync(join(tmpdir(), "mc-devroot-"));
+    try {
+      mkdirSync(join(root, "node_modules", "express"), { recursive: true });
+      const args = buildDockerSpawnArgs({ ...baseParams(), projectRoot: root, packageRoot: root });
+      assert.ok(!args.some((token) => token.endsWith(":/app/pkg_modules:ro")));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   // The package bin script (`npx mulmoclaude` / `node packages/mulmoclaude/bin/...`)
   // sets cwd to the package dir, where yarn-workspace dev installs leave an
   // empty `node_modules/`. If the default falls back to `process.cwd()` the

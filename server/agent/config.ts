@@ -683,6 +683,26 @@ export function workspaceModuleMounts(packageRoot: string, platform: Platform, t
   return mounts;
 }
 
+// npx installs can leave some deps in the NESTED `<packageRoot>/node_modules`
+// instead of hoisting them to `<projectRoot>/node_modules` — npm does this on a
+// dependency version conflict, and on overwrite-updates that leave the npx cache
+// only half-deduped (observed: `@mulmoclaude/chart-plugin` / `html-plugin` /
+// `@gui-chat-plugin/camera`). Only `<projectRoot>/node_modules` is mounted to
+// `/app/node_modules`, so those nested deps are invisible in the container and
+// the MCP child dies at load with MODULE_NOT_FOUND — the same all-tools-vanish
+// failure as #2052, a different cause (#2056). Mount the nested tree at
+// `/app/pkg_modules`, already on the child's `NODE_PATH` + ESM-hook search path,
+// so both CJS and ESM resolution find it. Only the npx layout has a distinct
+// `packageRoot`; in dev `packageRoot === projectRoot` with no nested
+// `node_modules`, and `workspaceModuleMounts` owns `/app/pkg_modules` there — the
+// two never both target it (dev has no npx nesting; npx has no `packages/`).
+function nestedNodeModulesMount(projectRoot: string, packageRoot: string, toDocker: (hostPath: string) => string): string[] {
+  if (packageRoot === projectRoot) return [];
+  const nested = join(packageRoot, "node_modules");
+  if (!existsSync(nested)) return [];
+  return ["-v", `${toDocker(nested)}:${CONTAINER_WORKSPACE_MODULES_PATH}:ro`];
+}
+
 // Pure helper that returns the full `docker run ... claude <args>`
 // argv array. Extracted from runAgent so the long flag list can be
 // inspected and tested without spawning a real subprocess.
@@ -737,6 +757,7 @@ export function dockerBindMountArgs(opts: DockerBindMountOpts): string[] {
     `${toDockerPath(opts.packageRoot)}/src:/app/src:ro`,
     ...opts.packagesMount,
     ...workspaceModuleMounts(opts.packageRoot, opts.platform, toDockerPath),
+    ...nestedNodeModulesMount(opts.projectRoot, opts.packageRoot, toDockerPath),
     "-v",
     `${toDockerPath(opts.workspacePath)}:${CONTAINER_WORKSPACE_PATH}`,
     "-v",
