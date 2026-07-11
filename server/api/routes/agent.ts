@@ -1088,6 +1088,15 @@ async function streamOnce(
   return { recovery, didError };
 }
 
+// A recovery-triggering error is swallowed before `handleAgentEvent`, so it
+// skips the boundary flush — the aborted pass's streamed text (and any pending
+// skill flag) would otherwise concatenate into the REPLAYED pass's consolidated
+// jsonl entry. Discard that partial state so each attempt persists cleanly.
+function discardAbortedPass(eventCtx: EventContext): void {
+  eventCtx.textAccumulator.length = 0;
+  eventCtx.pendingSkill = null;
+}
+
 // Drive `runAgent` for one turn, recovering once from a stale `--resume` id
 // (#211) and once from the transient broker startup race (#2057). Returns
 // whether a real error event was yielded, so the caller's `finally` can decide
@@ -1124,6 +1133,7 @@ async function runAgentStreamWithFailover(args: FailoverStreamArgs, eventCtx: Ev
     didError = didError || pass.didError;
     if (!pass.recovery) break;
 
+    discardAbortedPass(eventCtx);
     if (pass.recovery === "stale") {
       budgets.stale--;
       currentMessage = await recoverStaleSession(chatSessionId, decoratedMessage);
