@@ -148,4 +148,41 @@ describe("skill scheduler visibility + manual run (#2012)", () => {
       rmSync(root, { recursive: true, force: true });
     }
   });
+
+  // The completion hook must be registered BEFORE dispatch: startChat
+  // fire-and-forgets the background run, so a fast-finishing turn can complete
+  // (finalizeRun → runCompletionHook) before fireScheduledChat's post-await
+  // code. If the hook were registered after, that run record would be dropped.
+  it("records a run that finishes during dispatch (hook registered pre-dispatch, #2057)", async () => {
+    const root = mkdtempSync(join(tmpdir(), "skillsched-"));
+    try {
+      configureScheduler({
+        workspaceRoot: root,
+        writeFileAtomic: async (filePath, content) => {
+          await mkdir(dirname(filePath), { recursive: true });
+          await writeFile(filePath, content);
+        },
+      });
+      await initScheduler(stubTm(), []);
+      await writeScheduledSkill(root, "fast-skill");
+      await registerScheduledSkills({
+        taskManager: stubTm(),
+        workspaceRoot: root,
+        // Simulate the background run completing DURING dispatch.
+        startChat: async (params) => {
+          await runCompletionHook(params.chatSessionId, { didError: false });
+          return { kind: "started" };
+        },
+      });
+
+      const chatSessionId = await runScheduledSkillNow("skill.fast-skill");
+      assert.ok(chatSessionId);
+      // Recorded despite finishing before dispatch returned — hook pre-existed.
+      const state = getSchedulerTaskState("skill.fast-skill");
+      assert.equal(state.totalRuns, 1);
+      assert.equal(state.lastRunResult, "success");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
 });

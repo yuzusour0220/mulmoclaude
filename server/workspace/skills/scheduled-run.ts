@@ -9,7 +9,7 @@ import type { SessionOrigin } from "../../../src/types/session.js";
 import { log } from "../../system/logger/index.js";
 import { makeUuid } from "../../utils/id.js";
 import { errorMessage } from "../../utils/errors.js";
-import { registerCompletionHook } from "../../agent/backgroundSessions.js";
+import { registerCompletionHook, unregisterCompletionHook } from "../../agent/backgroundSessions.js";
 
 type StartChat = (params: { message: string; roleId: string; chatSessionId: string; origin?: SessionOrigin }) => Promise<{ kind: string; error?: string }>;
 
@@ -48,17 +48,23 @@ export async function fireScheduledChat(dispatch: ScheduledDispatch): Promise<st
   const startMs = Date.now();
   log.info(logScope, "running scheduled task", { name, roleId, chatSessionId });
 
+  // Register BEFORE dispatch: `startChat` fire-and-forgets the background run,
+  // so a fast-failing turn can reach `finalizeRun` before we'd otherwise get to
+  // register — dropping the run record entirely. Registering first makes the
+  // hook atomic with the spawn; the dispatch-failure branch rolls it back.
+  registerCompletionHook(chatSessionId, ({ didError }) =>
+    recordRun(dispatch, chatSessionId, startedAt, startMs, didError ? `${failureLabel} run did not complete successfully` : null),
+  );
+
   const failure = await dispatchFailure(() => startChat({ message, roleId, chatSessionId, origin }));
 
   if (failure !== null) {
+    // No turn spawned → the hook will never fire. Drop it and record now.
+    unregisterCompletionHook(chatSessionId);
     await recordRun(dispatch, chatSessionId, startedAt, startMs, failure);
     throw new Error(`${failureLabel} failed: ${failure}`);
   }
 
-  // Spawn succeeded — record when the turn actually finishes (see docstring).
-  registerCompletionHook(chatSessionId, ({ didError }) =>
-    recordRun(dispatch, chatSessionId, startedAt, startMs, didError ? `${failureLabel} run did not complete successfully` : null),
-  );
   log.info(logScope, "scheduled task dispatched", { name, chatSessionId });
   return chatSessionId;
 }
