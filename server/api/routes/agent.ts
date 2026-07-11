@@ -20,6 +20,8 @@ import { getRole } from "../../workspace/roles.js";
 import { runAgent } from "../../agent/index.js";
 import { prependJournalPointer } from "../../agent/prompt.js";
 import { buildTranscriptPreamble, isStaleSessionError } from "../../agent/resumeFailover.js";
+import { isMcpBrokerNotReadyError } from "../../agent/mcpBrokerFailover.js";
+import { ONE_SECOND_MS } from "../../utils/time.js";
 import { getOrCreateSession, beginRun, endRun, cancelRun, pushSessionEvent, pushToolResult, getActiveSessionIds } from "../../events/session-store/index.js";
 import { workspacePath } from "../../workspace/workspace.js";
 import { discoverSkills } from "../../workspace/skills/discovery.js";
@@ -963,8 +965,80 @@ export const _splitSkillAndReplyForTest = splitSkillAndReply;
 
 /** A stale `--resume` failure we can recover from by retrying without it: an
  *  error event carrying a stale-session message, while failover budget remains. */
-function isRecoverableStaleSession(event: { type: string; message?: unknown }, failoverAttemptsRemaining: number): boolean {
-  return failoverAttemptsRemaining > 0 && event.type === EVENT_TYPES.error && typeof event.message === "string" && isStaleSessionError(event.message);
+function isRecoverableStaleSession(event: { type: string; message?: unknown }, attemptsRemaining: number): boolean {
+  return attemptsRemaining > 0 && event.type === EVENT_TYPES.error && typeof event.message === "string" && isStaleSessionError(event.message);
+}
+
+/** The transient MCP-broker startup race (#2057): the CLI couldn't resolve the
+ *  permission-prompt tool because the broker's stdio wasn't connected when the
+ *  first tool call ran. Recoverable by waiting a moment and replaying the SAME
+ *  turn — nothing executed, the first tool call is what failed. Hits fresh
+ *  sessions too, so it carries a budget independent of `--resume`. */
+function isRecoverableBrokerNotReady(event: { type: string; message?: unknown }, attemptsRemaining: number): boolean {
+  return attemptsRemaining > 0 && event.type === EVENT_TYPES.error && typeof event.message === "string" && isMcpBrokerNotReadyError(event.message);
+}
+
+// How long to let the broker finish connecting before replaying (#2057). The
+// forensics show it comes up a few seconds after losing the race.
+const BROKER_RECONNECT_WAIT_MS = 3 * ONE_SECOND_MS;
+
+// Abortable wait so a stop during the retry pause ends promptly instead of
+// spawning a doomed replay after the user already cancelled.
+const abortableSleep = (delayMs: number, signal: AbortSignal): Promise<void> =>
+  new Promise((resolve) => {
+    if (signal.aborted) {
+      resolve();
+      return;
+    }
+    const timer = setTimeout(resolve, delayMs);
+    signal.addEventListener(
+      "abort",
+      () => {
+        clearTimeout(timer);
+        resolve();
+      },
+      { once: true },
+    );
+  });
+
+type RecoveryKind = "stale" | "broker" | null;
+
+interface RetryBudgets {
+  stale: number;
+  broker: number;
+}
+
+/** Classify an event into the one recovery it warrants, or null. Budgets are
+ *  consumed by the caller after a successful classification. */
+function detectRecovery(event: { type: string; message?: unknown }, budgets: RetryBudgets): RecoveryKind {
+  if (isRecoverableStaleSession(event, budgets.stale)) return "stale";
+  if (isRecoverableBrokerNotReady(event, budgets.broker)) return "broker";
+  return null;
+}
+
+// Clear the stale `--resume` id and rebuild the turn from the local jsonl so the
+// replay carries context without the bad session id (#211). Returns the message
+// to replay; the caller drops the claude session id.
+async function recoverStaleSession(chatSessionId: string, decoratedMessage: string): Promise<string> {
+  log.warn("agent", "stale claude session id — retrying without --resume", { chatSessionId });
+  await clearClaudeId(chatSessionId);
+  const preamble = await readTranscriptPreamble(chatSessionId);
+  pushSessionEvent(chatSessionId, {
+    type: EVENT_TYPES.status,
+    message: "Previous session unavailable — continuing with local transcript.",
+  });
+  return preamble ? `${preamble}${decoratedMessage}` : decoratedMessage;
+}
+
+// Wait for the broker to connect, then let the caller replay the same turn
+// unchanged (#2057). Surfaces a status event so the pause isn't read as a hang.
+async function recoverBrokerNotReady(chatSessionId: string, abortSignal: AbortSignal): Promise<void> {
+  log.warn("agent", "mulmoclaude MCP broker not ready — retrying after a short wait", { chatSessionId });
+  pushSessionEvent(chatSessionId, {
+    type: EVENT_TYPES.status,
+    message: "Tools are still starting up — retrying…",
+  });
+  await abortableSleep(BROKER_RECONNECT_WAIT_MS, abortSignal);
 }
 
 // What the failover stream loop reads to (re)invoke `runAgent`. A
@@ -981,29 +1055,61 @@ interface FailoverStreamArgs {
   userTimezone: string | undefined;
 }
 
-// Drive `runAgent` for one turn, retrying once without `--resume` when
-// the stored claude session id turns out to be stale (#211). Returns
-// whether a real error event was yielded, so the caller's `finally` can
-// decide hidden-worker cleanup. Split out of `runAgentInBackground` to
-// keep that function under the max-lines-per-function budget.
+// One pass of `runAgent`: handle every non-recovery event inline and return the
+// recovery the stream asked for (or null) plus whether a real error surfaced. A
+// recovery-triggering event is swallowed (the caller retries); its error is not
+// counted, so a recovered pass reports didError=false.
+async function streamOnce(
+  runArgs: Parameters<typeof runAgent>[0],
+  budgets: RetryBudgets,
+  eventCtx: EventContext,
+): Promise<{ recovery: RecoveryKind; didError: boolean }> {
+  let recovery: RecoveryKind = null;
+  let didError = false;
+  // A broker-not-ready replay is only safe when NOTHING executed — the failing
+  // first tool call is blocked at the permission check. Once ANY tool has
+  // completed successfully (an auto-approved Bash/Write, or a tool that ran
+  // before a later permission check failed), replaying would double-execute it,
+  // so downgrade the broker recovery to a plain error at that point (#2057).
+  let ranTool = false;
+  for await (const event of runAgent(runArgs)) {
+    if (event.type === EVENT_TYPES.toolCallResult && event.isError !== true) ranTool = true;
+    recovery = detectRecovery(event, budgets);
+    if (recovery === "broker" && ranTool) recovery = null;
+    // Swallow the error — the caller is about to recover. `break` abandons the
+    // generator; the event is only yielded after the CLI exited, so the
+    // subprocess is already dead and `for await`'s return() is the only cleanup.
+    if (recovery) break;
+    // A yielded error event (non-zero exit, missing binary, a tool surfacing an
+    // error) is a real failure even though the generator didn't throw.
+    if (event.type === EVENT_TYPES.error) didError = true;
+    await handleAgentEvent(event, eventCtx);
+  }
+  return { recovery, didError };
+}
+
+// Drive `runAgent` for one turn, recovering once from a stale `--resume` id
+// (#211) and once from the transient broker startup race (#2057). Returns
+// whether a real error event was yielded, so the caller's `finally` can decide
+// hidden-worker cleanup. Split out of `runAgentInBackground` to keep that
+// function under the max-lines-per-function budget.
 async function runAgentStreamWithFailover(args: FailoverStreamArgs, eventCtx: EventContext): Promise<boolean> {
   const { decoratedMessage, role, chatSessionId, claudeSessionId, abortSignal, attachments, userTimezone } = args;
 
-  // Retry budget for the stale `--resume` id fail-over (#211). Only
-  // meaningful when we entered with a `claudeSessionId`; a fresh
-  // session can't hit that error. One retry max so a looping CLI
-  // bug can't stack infinite replays of the transcript.
-  let failoverAttemptsRemaining = claudeSessionId ? 1 : 0;
+  // One retry each. Stale-`--resume` only applies when we entered with an id (a
+  // fresh session can't hit it); the broker race can hit a fresh session too.
+  // One max apiece so a looping CLI bug can't stack infinite replays.
+  const budgets: RetryBudgets = { stale: claudeSessionId ? 1 : 0, broker: 1 };
   let currentMessage = decoratedMessage;
   let currentClaudeSessionId = claudeSessionId;
-  // Tracks whether this run yielded a real error event, so the caller's
-  // finally can decide whether a hidden worker session's files are safe
-  // to delete (success) or should be kept for inspection (error).
   let didError = false;
 
   while (true) {
-    let staleSessionDetected = false;
-    for await (const event of runAgent({
+    // A stop before the (re)spawn must not run another turn. Guards the first
+    // pass and both recovery replays — runAgent has no already-aborted guard of
+    // its own, and an already-aborted signal never fires the CLI abort handler.
+    if (abortSignal.aborted) break;
+    const runArgs = {
       message: currentMessage,
       role,
       workspacePath,
@@ -1013,43 +1119,19 @@ async function runAgentStreamWithFailover(args: FailoverStreamArgs, eventCtx: Ev
       abortSignal,
       attachments,
       userTimezone,
-    })) {
-      if (isRecoverableStaleSession(event, failoverAttemptsRemaining)) {
-        // Swallow the error — we're about to recover. `break`
-        // abandons the current generator; since the event is only
-        // yielded after the CLI has already exited non-zero, the
-        // subprocess is dead by this point and there's nothing to
-        // clean up beyond what `for await`'s return() already does.
-        staleSessionDetected = true;
-        failoverAttemptsRemaining--;
-        break;
-      }
-      // A yielded error event (non-zero Claude exit, missing binary, a tool
-      // surfacing an error) is a real failure even though the generator
-      // didn't throw — record it so `finalizeRun`'s hidden-worker cleanup and
-      // the agent-ingest completion hook see `didError`. The stale-session
-      // failover above breaks earlier, so a recoverable id doesn't count.
-      if (event.type === EVENT_TYPES.error) didError = true;
-      await handleAgentEvent(event, eventCtx);
-    }
-    if (!staleSessionDetected) break;
+    };
+    const pass = await streamOnce(runArgs, budgets, eventCtx);
+    didError = didError || pass.didError;
+    if (!pass.recovery) break;
 
-    // Stale `--resume` recovery: clear the bad id from meta so the
-    // next *external* read of this session doesn't see it, build a
-    // natural-language preamble from the jsonl we already have,
-    // and loop back to `runAgent` without `--resume`. Surface a
-    // status event so the UI pause doesn't look like a hang.
-    log.warn("agent", "stale claude session id — retrying without --resume", {
-      chatSessionId,
-    });
-    await clearClaudeId(chatSessionId);
-    const preamble = await readTranscriptPreamble(chatSessionId);
-    currentMessage = preamble ? `${preamble}${decoratedMessage}` : decoratedMessage;
-    currentClaudeSessionId = undefined;
-    pushSessionEvent(chatSessionId, {
-      type: EVENT_TYPES.status,
-      message: "Previous session unavailable — continuing with local transcript.",
-    });
+    if (pass.recovery === "stale") {
+      budgets.stale--;
+      currentMessage = await recoverStaleSession(chatSessionId, decoratedMessage);
+      currentClaudeSessionId = undefined;
+    } else {
+      budgets.broker--;
+      await recoverBrokerNotReady(chatSessionId, abortSignal);
+    }
   }
   return didError;
 }
@@ -1122,6 +1204,10 @@ async function finalizeRun(chatSessionId: string, origin: SessionOrigin | undefi
     return;
   }
 
+  // Visible sessions (scheduler / skill / user chats) may also register a
+  // one-shot completion hook — a scheduled run reconciles its recorded outcome
+  // against the turn's real result here (#2057). No-op when none is registered.
+  await runCompletionHook(chatSessionId, { didError }).catch(logBackgroundError("completion-hook"));
   runPostTurnSideEffects(chatSessionId, requestStartedAt);
 }
 

@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { configureScheduler, initScheduler, getSchedulerTaskState, resetSchedulerForTesting } from "@mulmoclaude/core/scheduler";
 import { registerScheduledSkills, getScheduledSkills, runScheduledSkillNow } from "../../server/workspace/skills/scheduler.js";
+import { runCompletionHook } from "../../server/agent/backgroundSessions.js";
 import type { ITaskManager } from "../../server/events/task-manager/index.js";
 
 const stubTm = (over: Partial<ITaskManager> = {}): ITaskManager => ({
@@ -63,7 +64,13 @@ describe("skill scheduler visibility + manual run (#2012)", () => {
       assert.equal(calls.length, 1);
       assert.equal(calls[0].message, "/news-filter");
 
-      // B: the run is recorded as state (history/last-run) under the skill id.
+      // B: a successful DISPATCH does not record a run yet — the outcome is
+      // recorded from the turn's completion hook, not at spawn time (#2057), so
+      // a run that spawns but fails its first turn can't log a false success.
+      assert.equal(getSchedulerTaskState("skill.news-filter").totalRuns, 0);
+
+      // The turn finishes without error → recorded as a successful run.
+      await runCompletionHook(chatSessionId, { didError: false });
       const state = getSchedulerTaskState("skill.news-filter");
       assert.equal(state.totalRuns, 1);
       assert.equal(state.lastRunResult, "success");
@@ -101,6 +108,42 @@ describe("skill scheduler visibility + manual run (#2012)", () => {
       assert.equal(state.totalRuns, 1);
       assert.equal(state.lastRunResult, "error");
       assert.match(state.lastErrorMessage ?? "", /spawn crashed/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  // #2057: the failure this whole family is about — a run that SPAWNS fine but
+  // loses the MCP-broker startup race and does nothing. Its completion hook
+  // reports didError, so it must be recorded as an error, never a false success.
+  it("records a spawned-but-failed turn as an error run, not a false success (#2057)", async () => {
+    const root = mkdtempSync(join(tmpdir(), "skillsched-"));
+    try {
+      configureScheduler({
+        workspaceRoot: root,
+        writeFileAtomic: async (filePath, content) => {
+          await mkdir(dirname(filePath), { recursive: true });
+          await writeFile(filePath, content);
+        },
+      });
+      await initScheduler(stubTm(), []);
+      await writeScheduledSkill(root, "race-skill");
+      await registerScheduledSkills({
+        taskManager: stubTm(),
+        workspaceRoot: root,
+        startChat: async () => ({ kind: "started" }),
+      });
+
+      const chatSessionId = await runScheduledSkillNow("skill.race-skill");
+      assert.ok(chatSessionId);
+      // Dispatch succeeded, so nothing is recorded yet…
+      assert.equal(getSchedulerTaskState("skill.race-skill").totalRuns, 0);
+
+      // …then the turn finishes having errored (broker never came up).
+      await runCompletionHook(chatSessionId, { didError: true });
+      const state = getSchedulerTaskState("skill.race-skill");
+      assert.equal(state.totalRuns, 1);
+      assert.equal(state.lastRunResult, "error");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
