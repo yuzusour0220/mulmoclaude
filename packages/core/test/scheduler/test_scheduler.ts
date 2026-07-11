@@ -119,6 +119,31 @@ test("staggers the start of independently-due tasks by firingStaggerMs (#2057)",
   assert.deepEqual(requestedDelays, [500, 1000]);
 });
 
+test("caps the total stagger to half a tick so tasks never spill into the next tick (#2057)", async () => {
+  // Debug-mode shape: tickMs == firingStaggerMs. Without the cap the 2nd task
+  // would start a full tick late and ticks would overlap. The cap shrinks the
+  // step to (tickMs * 0.5) / (count - 1) = (1000 * 0.5) / 2 = 250ms.
+  const requestedDelays: number[] = [];
+  const manager = createTaskManager({
+    tickMs: 1000,
+    now: () => new Date(Date.UTC(2026, 0, 1, 0, 0, 0)),
+    firingStaggerMs: 1000,
+    sleep: async (delayMs) => {
+      requestedDelays.push(delayMs);
+    },
+  });
+  for (const taskId of ["a", "b", "c"]) {
+    manager.registerTask({
+      id: taskId,
+      schedule: { type: SCHEDULE_TYPES.interval, intervalMs: 1000 },
+      run: async () => {},
+    });
+  }
+  await manager.tick();
+  assert.deepEqual(requestedDelays, [250, 500]);
+  assert.ok(Math.max(...requestedDelays) < 1000, "last start stays within the tick");
+});
+
 test("firingStaggerMs: 0 fires all due tasks without any delay", async () => {
   const requestedDelays: number[] = [];
   const manager = createTaskManager({
