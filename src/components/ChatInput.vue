@@ -461,15 +461,16 @@ watch(slashMenuOpen, (open) => {
 });
 
 function onKeydown(event: KeyboardEvent): void {
-  if (slashMenuOpen.value && handleSlashMenuKeydown(slashMenu, event, { isImeConfirmation: imeEnter.isImeConfirmation, onSelect: selectSlashSkill })) {
-    return;
-  }
-  // Ctrl/Cmd+Enter inserts a newline instead of sending. A textarea does
-  // not do this natively (only plain / Shift+Enter insert one), so we
-  // splice it in at the caret ourselves.
+  // Ctrl/Cmd+Enter inserts a newline instead of sending. Checked before the
+  // slash menu so the chord still works while a skill is highlighted (the
+  // menu's Enter handler would otherwise select it). A textarea does not
+  // insert on this chord natively, so we splice it in at the caret.
   if (isNewlineChord(event)) {
     event.preventDefault();
     insertNewlineAtCursor();
+    return;
+  }
+  if (slashMenuOpen.value && handleSlashMenuKeydown(slashMenu, event, { isImeConfirmation: imeEnter.isImeConfirmation, onSelect: selectSlashSkill })) {
     return;
   }
   imeEnter.onKeydown(event);
