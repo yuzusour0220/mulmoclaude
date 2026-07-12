@@ -62,8 +62,13 @@ test.describe("chat input buffer while running", () => {
         webSocket.send(`0${JSON.stringify(HANDSHAKE)}`);
         webSocket.onMessage((msg) => {
           const text = String(msg);
-          if (text === "2") return webSocket.send("3");
-          if (text === "40") return webSocket.send(`40${JSON.stringify({ sid: "mock-socket-sid" })}`);
+          if (text === "2") {
+            webSocket.send("3");
+            return;
+          }
+          if (text === "40") {
+            webSocket.send(`40${JSON.stringify({ sid: "mock-socket-sid" })}`);
+          }
         });
         pushSessionsRefresh = () => webSocket.send(`42${JSON.stringify(["data", { channel: "sessions", data: { updated: true } }])}`);
       },
