@@ -42,6 +42,8 @@ const jaMessages = {
     placeholder: "Claude にメッセージ…",
     send: "送信",
     stop: "停止",
+    runningPlaceholder: "実行中… Enter で後で送るキューに追加",
+    removeBuffered: "キューのメッセージを削除",
     attachFile: "ファイルを添付",
     fileTooLarge: "ファイルが大きすぎます（{sizeMB} MB）。上限は 30 MB です。",
     unsupportedFileType: "対応していないファイル形式です。画像・PDF・DOCX・XLSX・PPTX・テキストファイルを使用してください。",

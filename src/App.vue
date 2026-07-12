@@ -150,6 +150,7 @@
           ref="chatInputRef"
           v-model="userInput"
           v-model:pasted-files="pastedFiles"
+          v-model:buffered-messages="currentBufferedMessages"
           :is-running="activeSessionRunning"
           :queries="sessionRoleQueries"
           :session-id="currentSessionId"
@@ -286,6 +287,7 @@
             ref="chatInputRef"
             v-model="userInput"
             v-model:pasted-files="pastedFiles"
+            v-model:buffered-messages="currentBufferedMessages"
             :is-running="activeSessionRunning"
             :queries="sessionRoleQueries"
             :session-id="currentSessionId"
@@ -367,6 +369,7 @@ import { resolvePastedAttachment } from "./utils/agent/pastedAttachment";
 import { applyAgentEvent, type AgentEventContext } from "./utils/agent/eventDispatch";
 import { pushErrorMessage, beginUserTurn, updateResult, applyToolResultToSession } from "./utils/session/sessionHelpers";
 import { parseCollectionSlashSeed, makeSyntheticCollectionResult, hasRealCollectionResult } from "./utils/collections/presentSeed";
+import { mergeBufferedIntoDraft } from "./utils/chat/buffer";
 import { roleName, roleIcon } from "./utils/role/icon";
 import { createEmptySession } from "./utils/session/sessionFactory";
 import { buildLoadedSession, parseSessionEntries } from "./utils/session/sessionEntries";
@@ -493,6 +496,18 @@ const { shortcuts } = useShortcuts();
 
 const userInput = ref("");
 const pastedFiles = ref<PastedFile[]>([]);
+// Messages the user sends while a run is in flight queue here instead of
+// dispatching, keyed by the session they belong to so concurrent runs in
+// different sessions never mix. `currentBufferedMessages` is the displayed
+// session's queue; it merges back into `userInput` when that session's run
+// finishes (see watch below).
+const bufferedMessagesBySession = ref<Record<string, string[]>>({});
+const currentBufferedMessages = computed<string[]>({
+  get: () => bufferedMessagesBySession.value[currentSessionId.value] ?? [],
+  set: (messages) => {
+    bufferedMessagesBySession.value = { ...bufferedMessagesBySession.value, [currentSessionId.value]: messages };
+  },
+});
 const activePane = ref<"sidebar" | "main">("sidebar");
 
 const { sessions, historyError, fetchSessions, setBookmark, deleteSession: deleteSessionFromHistory } = useSessionHistory();
@@ -1113,8 +1128,16 @@ async function resolveAttachmentPaths(files: PastedFile[]): Promise<AttachmentRe
 }
 
 async function sendMessage(text?: string) {
-  const message = typeof text === "string" ? text : userInput.value.trim();
-  if (!message || activeSessionRunning.value) return;
+  const fromInput = typeof text !== "string";
+  const message = fromInput ? userInput.value.trim() : text.trim();
+  if (!message) return;
+  // Run in flight: queue instead of dispatching. The input isn't locked,
+  // so the user keeps composing; queued lines come back on completion.
+  if (activeSessionRunning.value) {
+    currentBufferedMessages.value = [...currentBufferedMessages.value, message];
+    if (fromInput) userInput.value = "";
+    return;
+  }
   userInput.value = "";
   const filesSnapshot = [...pastedFiles.value];
   pastedFiles.value = [];
@@ -1148,6 +1171,19 @@ async function sendMessage(text?: string) {
     unsubscribeSession(session.id);
   }
 }
+
+// Drain the displayed session's queued messages back into the input once
+// its run finishes. Keyed by `currentSessionId`, so switching to another
+// session shows (and later drains) that session's own queue — a background
+// run in a different session never dumps its queue into the wrong input.
+watch([activeSessionRunning, currentSessionId], () => {
+  if (activeSessionRunning.value) return;
+  const queued = currentBufferedMessages.value;
+  if (queued.length === 0) return;
+  userInput.value = mergeBufferedIntoDraft(queued, userInput.value);
+  currentBufferedMessages.value = [];
+  focusChatInput();
+});
 
 // Stop the in-flight agent run for the displayed session. The server's
 // /api/agent/cancel aborts the AbortController, kills the Claude
