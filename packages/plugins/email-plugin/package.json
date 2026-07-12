@@ -30,13 +30,13 @@
     "@types/nodemailer": "^8.0.0",
     "tsx": "^4.23.0",
     "typescript": "^6.0.3",
-    "vite": "^8.1.3",
+    "vite": "^8.1.4",
     "vite-plugin-dts": "^5.0.3",
     "zod": "^4.4.3"
   },
   "license": "MIT",
   "dependencies": {
-    "imapflow": "^1.4.6",
+    "imapflow": "^1.4.7",
     "mailparser": "^3.9.14",
     "nodemailer": "^9.0.3"
   }
