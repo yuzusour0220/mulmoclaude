@@ -426,7 +426,9 @@ Primero, ejecuta `claude mcp` una vez en una terminal y completa el flujo OAuth 
 Añade servidores MCP externos sin editar JSON a mano. Se admiten dos tipos:
 
 - **HTTP** — servidores remotos (p. ej. `https://example.com/mcp`). Funciona en cada modo; en Docker, las URL `localhost` / `127.0.0.1` se reescriben automáticamente a `host.docker.internal`.
-- **Stdio** — subproceso local, restringido a `npx` / `node` / `tsx` por seguridad. Cuando el sandbox de Docker está habilitado, las rutas de los scripts deben estar dentro del workspace para que se resuelvan dentro del contenedor.
+- **Stdio** — subproceso local (p. ej. un MCP con `npx`), restringido a `npx` / `node` / `tsx` por seguridad. Se ejecuta en el host cuando el sandbox de Docker está **desactivado**. Cuando el sandbox está **activado**, las entradas stdio se **descartan por defecto** (la imagen mínima del sandbox no puede alojar runtimes arbitrarios) — usa `"hostExecInDocker": true` para ejecutar una en el host detrás de una pasarela `stdio ↔ HTTP`. Consulta [docs/mcp-sandbox.md](docs/mcp-sandbox.md).
+
+Pasa credenciales a un servidor stdio con un mapa **`env`** (`"env": { "IMAP_PASS": "…" }`). Los valores son literales y se guardan en `mcp.json` (modo `0600`, pero en **texto plano** — protección por permisos de archivo, no una bóveda). Todos los detalles, incluida la opción `hostExecInDocker` y cómo llega `env` al proceso, están en [docs/mcp-sandbox.md](docs/mcp-sandbox.md).
 
 La configuración vive bajo `<workspace>/config/`:
 
@@ -478,6 +480,25 @@ Restricciones que el servidor aplica al cargar el archivo:
 - El `url` HTTP debe parsearse como `http:` o `https:`.
 - El `command` de Stdio está restringido a `npx`, `node` o `tsx`.
 - Las entradas que fallan la validación se descartan silenciosamente al cargar (se registra una advertencia); el resto del archivo se sigue aplicando.
+
+**Ejemplo** — un servidor stdio con credenciales que también se ejecuta bajo el sandbox de Docker (p. ej. un MCP de IMAP):
+
+```json
+{
+  "mcpServers": {
+    "imap": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "some-imap-mcp"],
+      "env": { "IMAP_HOST": "imap.example.com", "IMAP_USER": "me", "IMAP_PASS": "secret" },
+      "hostExecInDocker": true,
+      "enabled": true
+    }
+  }
+}
+```
+
+`hostExecInDocker` ejecuta deliberadamente este único servidor en el host (fuera del sandbox) — actívalo solo para servidores en los que confíes. Con el sandbox desactivado se ignora (el servidor ya se ejecuta en el host).
 
 **Ejemplo de `settings.json`**:
 

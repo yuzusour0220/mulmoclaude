@@ -428,7 +428,9 @@ Führen Sie zunächst einmal `claude mcp` in einem Terminal aus und durchlaufen 
 Fügen Sie externe MCP-Server ohne manuelles JSON-Editieren hinzu. Zwei Typen werden unterstützt:
 
 - **HTTP** — Remote-Server (z. B. `https://example.com/mcp`). Funktioniert in jedem Modus; in Docker werden `localhost` / `127.0.0.1`-URLs automatisch auf `host.docker.internal` umgeschrieben.
-- **Stdio** — lokaler Subprozess, aus Sicherheitsgründen auf `npx` / `node` / `tsx` beschränkt. Wenn Docker-Sandboxing aktiviert ist, müssen Skriptpfade im Workspace liegen, damit sie innerhalb des Containers aufgelöst werden.
+- **Stdio** — lokaler Subprozess (z. B. ein `npx`-MCP), aus Sicherheitsgründen auf `npx` / `node` / `tsx` beschränkt. Läuft auf dem Host, wenn die Docker-Sandbox **aus** ist. Ist die Sandbox **an**, werden Stdio-Einträge **standardmäßig verworfen** (das minimale Sandbox-Image kann keine beliebigen Laufzeiten hosten) — mit `"hostExecInDocker": true` läuft ein solcher Server stattdessen auf dem Host hinter einem `stdio ↔ HTTP`-Gateway. Siehe [docs/mcp-sandbox.md](docs/mcp-sandbox.md).
+
+Übergib Anmeldedaten an einen Stdio-Server mit einer **`env`**-Map (`"env": { "IMAP_PASS": "…" }`). Werte sind wörtlich und werden in `mcp.json` gespeichert (Modus `0600`, aber **im Klartext** — Schutz per Dateiberechtigung, kein Tresor). Alle Details, einschließlich des `hostExecInDocker`-Opt-ins und wie `env` den Prozess erreicht, stehen in [docs/mcp-sandbox.md](docs/mcp-sandbox.md).
 
 Die Konfiguration befindet sich unter `<workspace>/config/`:
 
@@ -480,6 +482,25 @@ Einschränkungen, die der Server beim Laden der Datei durchsetzt:
 - HTTP-`url` muss als `http:` oder `https:` parsebar sein.
 - Stdio-`command` ist auf `npx`, `node` oder `tsx` beschränkt.
 - Einträge, die die Validierung nicht bestehen, werden beim Laden stillschweigend verworfen (eine Warnung wird protokolliert); der Rest der Datei wird weiterhin angewendet.
+
+**Beispiel** — ein Stdio-Server mit Anmeldedaten, der auch unter der Docker-Sandbox läuft (z. B. ein IMAP-MCP):
+
+```json
+{
+  "mcpServers": {
+    "imap": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "some-imap-mcp"],
+      "env": { "IMAP_HOST": "imap.example.com", "IMAP_USER": "me", "IMAP_PASS": "secret" },
+      "hostExecInDocker": true,
+      "enabled": true
+    }
+  }
+}
+```
+
+`hostExecInDocker` lässt diesen einen Server absichtlich auf dem Host (außerhalb der Sandbox) laufen — aktiviere es nur für Server, denen du vertraust. Ist die Sandbox aus, wird es ignoriert (der Server läuft ohnehin auf dem Host).
 
 **Beispiel-`settings.json`**:
 

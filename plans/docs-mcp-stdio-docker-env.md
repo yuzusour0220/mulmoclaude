@@ -24,7 +24,7 @@
     ゲートウェイの仕組み・リスク・フォールバック）
   - 「Passing environment variables」節を追加（`env` の届き方、リテラル/平文 0600 注意）
   - 「What MulmoClaude does in practice」に例外、「Workarounds」に opt-in を反映
-- `README.md` / `README.ja.md`
+- `README.md` および全翻訳（`README.{ja,de,es,fr,ko,pt-BR,zh}.md`）
   - Stdio の説明を Docker 挙動込みで正確化（既定 drop ＋ `hostExecInDocker`）
   - `env`（平文/0600）を追記
   - IMAP を想定した stdio + env + `hostExecInDocker` の例を追加
