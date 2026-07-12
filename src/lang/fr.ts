@@ -35,6 +35,8 @@ const frMessages = {
     placeholder: "Message à Claude…",
     send: "Envoyer",
     stop: "Arrêter",
+    runningPlaceholder: "En cours… appuyez sur Entrée pour mettre en file",
+    removeBuffered: "Supprimer le message en file",
     attachFile: "Joindre un fichier",
     fileTooLarge: "Fichier trop volumineux ({sizeMB} Mo). La limite est de 30 Mo.",
     unsupportedFileType: "Type de fichier non pris en charge. Acceptés : images, PDF, DOCX, XLSX, PPTX, fichiers texte.",

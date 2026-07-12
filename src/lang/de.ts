@@ -35,6 +35,8 @@ const deMessages = {
     placeholder: "Nachricht an Claude…",
     send: "Senden",
     stop: "Stoppen",
+    runningPlaceholder: "Läuft… Enter reiht die Nachricht ein",
+    removeBuffered: "Nachricht aus Warteschlange entfernen",
     attachFile: "Datei anhängen",
     fileTooLarge: "Datei zu groß ({sizeMB} MB). Das Maximum beträgt 30 MB.",
     unsupportedFileType: "Dateityp nicht unterstützt. Akzeptiert: Bilder, PDF, DOCX, XLSX, PPTX, Textdateien.",

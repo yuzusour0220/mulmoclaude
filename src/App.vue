@@ -150,6 +150,7 @@
           ref="chatInputRef"
           v-model="userInput"
           v-model:pasted-files="pastedFiles"
+          v-model:buffered-messages="bufferedMessages"
           :is-running="activeSessionRunning"
           :queries="sessionRoleQueries"
           :session-id="currentSessionId"
@@ -286,6 +287,7 @@
             ref="chatInputRef"
             v-model="userInput"
             v-model:pasted-files="pastedFiles"
+            v-model:buffered-messages="bufferedMessages"
             :is-running="activeSessionRunning"
             :queries="sessionRoleQueries"
             :session-id="currentSessionId"
@@ -367,6 +369,7 @@ import { resolvePastedAttachment } from "./utils/agent/pastedAttachment";
 import { applyAgentEvent, type AgentEventContext } from "./utils/agent/eventDispatch";
 import { pushErrorMessage, beginUserTurn, updateResult, applyToolResultToSession } from "./utils/session/sessionHelpers";
 import { parseCollectionSlashSeed, makeSyntheticCollectionResult, hasRealCollectionResult } from "./utils/collections/presentSeed";
+import { mergeBufferedIntoDraft } from "./utils/chat/buffer";
 import { roleName, roleIcon } from "./utils/role/icon";
 import { createEmptySession } from "./utils/session/sessionFactory";
 import { buildLoadedSession, parseSessionEntries } from "./utils/session/sessionEntries";
@@ -493,6 +496,12 @@ const { shortcuts } = useShortcuts();
 
 const userInput = ref("");
 const pastedFiles = ref<PastedFile[]>([]);
+// Messages the user sends while a run is in flight queue here instead of
+// dispatching. `bufferedForSessionId` records which session they belong
+// to so switching away doesn't dump them into the wrong input; they merge
+// back into `userInput` when that session's run finishes (see watch below).
+const bufferedMessages = ref<string[]>([]);
+const bufferedForSessionId = ref("");
 const activePane = ref<"sidebar" | "main">("sidebar");
 
 const { sessions, historyError, fetchSessions, setBookmark, deleteSession: deleteSessionFromHistory } = useSessionHistory();
@@ -1113,8 +1122,17 @@ async function resolveAttachmentPaths(files: PastedFile[]): Promise<AttachmentRe
 }
 
 async function sendMessage(text?: string) {
-  const message = typeof text === "string" ? text : userInput.value.trim();
-  if (!message || activeSessionRunning.value) return;
+  const fromInput = typeof text !== "string";
+  const message = fromInput ? userInput.value.trim() : text.trim();
+  if (!message) return;
+  // Run in flight: queue instead of dispatching. The input isn't locked,
+  // so the user keeps composing; queued lines come back on completion.
+  if (activeSessionRunning.value) {
+    bufferedMessages.value = [...bufferedMessages.value, message];
+    bufferedForSessionId.value = currentSessionId.value;
+    if (fromInput) userInput.value = "";
+    return;
+  }
   userInput.value = "";
   const filesSnapshot = [...pastedFiles.value];
   pastedFiles.value = [];
@@ -1148,6 +1166,20 @@ async function sendMessage(text?: string) {
     unsubscribeSession(session.id);
   }
 }
+
+// Drain the queued messages back into the input once their session's run
+// finishes and that session is the one on screen. Guarding on both the
+// run state and the displayed id means switching to another session while
+// the run continues won't dump the queue into the wrong input — it waits
+// until we're back on the owning session and it has gone idle.
+watch([activeSessionRunning, currentSessionId], () => {
+  if (bufferedMessages.value.length === 0) return;
+  if (activeSessionRunning.value) return;
+  if (currentSessionId.value !== bufferedForSessionId.value) return;
+  userInput.value = mergeBufferedIntoDraft(bufferedMessages.value, userInput.value);
+  bufferedMessages.value = [];
+  focusChatInput();
+});
 
 // Stop the in-flight agent run for the displayed session. The server's
 // /api/agent/cancel aborts the AbortController, kills the Claude

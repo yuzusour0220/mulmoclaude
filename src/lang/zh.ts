@@ -40,6 +40,8 @@ const zhMessages = {
     placeholder: "向 Claude 发送消息…",
     send: "发送",
     stop: "停止",
+    runningPlaceholder: "运行中… 按 Enter 加入队列",
+    removeBuffered: "移除排队的消息",
     attachFile: "附加文件",
     fileTooLarge: "文件过大（{sizeMB} MB）。上限为 30 MB。",
     unsupportedFileType: "不支持的文件类型。支持:图像、PDF、DOCX、XLSX、PPTX、文本文件。",

@@ -57,6 +57,8 @@ const enMessages = {
     placeholder: "Message Claude…",
     send: "Send",
     stop: "Stop",
+    runningPlaceholder: "Running… press Enter to queue for later",
+    removeBuffered: "Remove queued message",
     attachFile: "Attach file",
     fileTooLarge: "File too large ({sizeMB} MB). Maximum is 30 MB.",
     unsupportedFileType: "File type not supported. Accepted: images, PDF, DOCX, XLSX, PPTX, text files.",

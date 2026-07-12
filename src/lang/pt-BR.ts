@@ -35,6 +35,8 @@ const ptBRMessages = {
     placeholder: "Mensagem para Claude…",
     send: "Enviar",
     stop: "Parar",
+    runningPlaceholder: "Em execução… pressione Enter para enfileirar",
+    removeBuffered: "Remover mensagem da fila",
     attachFile: "Anexar arquivo",
     fileTooLarge: "Arquivo muito grande ({sizeMB} MB). O limite é 30 MB.",
     unsupportedFileType: "Tipo de arquivo não suportado. Aceitos: imagens, PDF, DOCX, XLSX, PPTX e arquivos de texto.",
