@@ -89,7 +89,11 @@ jobs:
       # during the gap fails intermittently (#2069). Mirrors the pin
       # e2e-live/fixtures/isolated-dev-server.ts already applies for fresh-boot.
       - name: Pin auth token for the dev server
-        run: echo "MULMOCLAUDE_AUTH_TOKEN=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+        run: |
+          TOKEN="$(openssl rand -hex 32)"
+          # Mask before it can reach any later step's log output.
+          echo "::add-mask::$TOKEN"
+          echo "MULMOCLAUDE_AUTH_TOKEN=$TOKEN" >> "$GITHUB_ENV"
 
       - name: Start mulmoclaude dev server (background)
         env:
