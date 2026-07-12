@@ -10,6 +10,38 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 ---
 
+## [0.9.6] - 2026-07-12
+
+Resolves the `handlePermission not found` MCP-broker failure family end-to-end — one error symptom with three distinct root causes (#2052 / #2056 / #2057) — so the Docker sandbox and scheduled runs stop losing all their tools at once. Adds a mobile-PWA QR code to the remote-host popover. 95 non-merge commits since 0.9.5.
+
+### Highlights
+
+#### MCP broker `handlePermission not found` — full family fix (#2058)
+
+The sandbox MCP broker could fail to come up, dropping every `mcp__mulmoclaude__*` tool at once — so the CLI reported the missing permission-prompt tool instead of the real cause. Fixed across two layers, each with regression tests (mapped in `plans/mcp-broker-availability-matrix.md`):
+
+- **Windows junction fallback now covers every workspace scope (#2052)** — the `/app/pkg_modules` fallback previously covered only `@mulmoclaude/*`, so `@mulmobridge/*` dangled inside the Linux container and the broker died at load. Verified on real Windows CI (WSL2 + native `dockerd`, real NTFS junctions).
+- **npx nested `node_modules` mounted (#2056)** — when npm nests deps in the launcher's own `node_modules` instead of hoisting them, they are now bind-mounted into the container.
+- **Scheduler startup race (#2057)** — a spawned chat's broker can lose the startup race to the CLI's first tool call. Now same-minute firings are staggered (capped to half a tick), a lost race is auto-recovered by replaying the turn once (guarded against double-execution and aborts), and a spawned-but-failed run records its real error instead of a false `"success"`.
+
+#### Remote host: mobile PWA QR code (#2054)
+
+The remote-host popover now shows a QR code for the mobile PWA, so pairing a phone no longer requires typing the URL by hand.
+
+### Fixed
+
+- `isTestEnv` no longer misdetects any path containing "test" (which caused `yarn dev` 401s) — it exact-matches argv now (#2064).
+- npm `file:` specifiers emit POSIX separators, fixing Windows CI installs (#2048).
+- Whisper absorbs a late partial-file open error during model download instead of crashing the stream (#2046, #2047).
+
+### Changed
+
+- Large internal refactors to clear the `max-lines-per-function` lint ratchet across whisper, relay, and several composables (#2049, #2050, #2051, #2053, #2060, #2045, #2044, #2042, #2041, #2040, #2039).
+- README / MANIFEST now lead with the product "nurture" vision (#2061, #2062).
+- Dependency refresh (#2065).
+
+---
+
 ## [0.9.5] - 2026-07-08
 
 Windows Docker sandbox is now fully functional end-to-end (the ESM half of the resolver gap #1946 / #1982 landed alongside the CJS fix from 0.9.4), HEIC / HEIF attachments transparently convert to JPEG on upload with in-browser preview, and a **user-extensible sandbox CSP** lets the runtime whitelist third-party origins through `config/csp.json` instead of hard-coding them. Remote host gains offline queueing (mobile requests hold until the host comes back). The lint suite got a deep clean: `sonarjs/assertions-in-tests` is now `error`, so an assertion-less test can't slip in unnoticed. 23 non-merge commits since 0.9.4.
