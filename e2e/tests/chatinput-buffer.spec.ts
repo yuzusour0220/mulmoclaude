@@ -17,27 +17,28 @@ import { chatInput } from "../fixtures/chat";
 const HANDSHAKE = { sid: "mock-sid", upgrades: [], pingInterval: 25000, pingTimeout: 20000, maxPayload: 1_000_000 };
 
 test.describe("chat input buffer while running", () => {
-  let running: boolean;
+  // Set of session ids currently "running" — both sessions start running so
+  // the per-session buffer scoping (concurrent runs) can be exercised.
+  let running: Set<string>;
   let agentCalls: string[];
   let pushSessionsRefresh: (() => void) | null;
 
   test.beforeEach(async ({ page }) => {
-    running = true;
+    running = new Set([SESSION_A.id, SESSION_B.id]);
     agentCalls = [];
     pushSessionsRefresh = null;
 
     await mockAllApis(page);
 
     // Stateful `/api/sessions` — registered after mockAllApis so it wins
-    // (Playwright checks last-registered-first). SESSION_A's run state
-    // tracks the `running` flag the test toggles.
+    // (Playwright checks last-registered-first). Each session's run state
+    // tracks the `running` set the test toggles.
     await page.route(
       (url) => url.pathname === "/api/sessions",
       (route) => {
         if (route.request().method() !== "GET") return route.fallback();
-        return route.fulfill({
-          json: { sessions: [{ ...SESSION_A, isRunning: running }, SESSION_B], cursor: "v1:0", deletedIds: [] },
-        });
+        const sessions = [SESSION_A, SESSION_B].map((session) => ({ ...session, isRunning: running.has(session.id) }));
+        return route.fulfill({ json: { sessions, cursor: "v1:0", deletedIds: [] } });
       },
     );
 
@@ -78,10 +79,12 @@ test.describe("chat input buffer while running", () => {
     await expect(chatInput(page)).toBeVisible();
   });
 
-  async function finishRun(page: Page): Promise<void> {
-    running = false;
-    // The socket connects a beat after navigation; retry the push until
-    // the client has wired its `sessions` listener and re-fetches.
+  // Finish the run for `sessionId` (must be the displayed session so the
+  // stop-button assertion tracks it). The socket connects a beat after
+  // navigation; retry the push until the client has wired its `sessions`
+  // listener and re-fetches.
+  async function finishRun(page: Page, sessionId: string): Promise<void> {
+    running.delete(sessionId);
     await expect(async () => {
       pushSessionsRefresh?.();
       await expect(page.getByTestId("stop-btn")).toHaveCount(0, { timeout: 200 });
@@ -125,7 +128,7 @@ test.describe("chat input buffer while running", () => {
     await input.press("Enter");
     await expect(page.getByTestId("buffered-message")).toHaveCount(2);
 
-    await finishRun(page);
+    await finishRun(page, SESSION_A.id);
 
     // Chips cleared; both messages merged into the editable input,
     // oldest-first, newline separated.
@@ -133,6 +136,35 @@ test.describe("chat input buffer while running", () => {
     await expect(input).toHaveValue("one\ntwo");
     // Now idle: the send button is back for the final manual send.
     await expect(page.getByTestId("send-btn")).toBeVisible();
+  });
+
+  test("queues stay scoped to their own session across concurrent runs", async ({ page }) => {
+    const input = chatInput(page);
+
+    // Queue for session A (running).
+    await input.fill("alpha");
+    await input.press("Enter");
+    await expect(page.getByTestId("buffered-message")).toHaveCount(1);
+
+    // Client-side switch to session B (also running, no reload so the
+    // per-session buffers survive) — A's queue must NOT show here.
+    await page.getByTestId(`session-tab-${SESSION_B.id}`).click();
+    await expect(input).toHaveValue("");
+    await expect(page.getByTestId("buffered-message")).toHaveCount(0);
+
+    // Queue for B, then finish B: only B's message merges in (not
+    // "alpha\nbeta") — A's queue does not leak into B. This is the
+    // concurrent-run mixing bug the per-session keying fixes.
+    await input.fill("beta");
+    await input.press("Enter");
+    await expect(page.getByTestId("buffered-message")).toHaveCount(1);
+    await finishRun(page, SESSION_B.id);
+    await expect(input).toHaveValue("beta");
+
+    // Back to A (still running): its queued message survived intact.
+    await page.getByTestId(`session-tab-${SESSION_A.id}`).click();
+    await expect(page.getByTestId("buffered-message")).toHaveCount(1);
+    await expect(page.getByTestId("buffered-message").first()).toContainText("alpha");
   });
 
   test("Ctrl+Enter inserts a newline instead of queuing", async ({ page }) => {

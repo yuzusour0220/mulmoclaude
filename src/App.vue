@@ -150,7 +150,7 @@
           ref="chatInputRef"
           v-model="userInput"
           v-model:pasted-files="pastedFiles"
-          v-model:buffered-messages="bufferedMessages"
+          v-model:buffered-messages="currentBufferedMessages"
           :is-running="activeSessionRunning"
           :queries="sessionRoleQueries"
           :session-id="currentSessionId"
@@ -287,7 +287,7 @@
             ref="chatInputRef"
             v-model="userInput"
             v-model:pasted-files="pastedFiles"
-            v-model:buffered-messages="bufferedMessages"
+            v-model:buffered-messages="currentBufferedMessages"
             :is-running="activeSessionRunning"
             :queries="sessionRoleQueries"
             :session-id="currentSessionId"
@@ -497,11 +497,17 @@ const { shortcuts } = useShortcuts();
 const userInput = ref("");
 const pastedFiles = ref<PastedFile[]>([]);
 // Messages the user sends while a run is in flight queue here instead of
-// dispatching. `bufferedForSessionId` records which session they belong
-// to so switching away doesn't dump them into the wrong input; they merge
-// back into `userInput` when that session's run finishes (see watch below).
-const bufferedMessages = ref<string[]>([]);
-const bufferedForSessionId = ref("");
+// dispatching, keyed by the session they belong to so concurrent runs in
+// different sessions never mix. `currentBufferedMessages` is the displayed
+// session's queue; it merges back into `userInput` when that session's run
+// finishes (see watch below).
+const bufferedMessagesBySession = ref<Record<string, string[]>>({});
+const currentBufferedMessages = computed<string[]>({
+  get: () => bufferedMessagesBySession.value[currentSessionId.value] ?? [],
+  set: (messages) => {
+    bufferedMessagesBySession.value = { ...bufferedMessagesBySession.value, [currentSessionId.value]: messages };
+  },
+});
 const activePane = ref<"sidebar" | "main">("sidebar");
 
 const { sessions, historyError, fetchSessions, setBookmark, deleteSession: deleteSessionFromHistory } = useSessionHistory();
@@ -1128,8 +1134,7 @@ async function sendMessage(text?: string) {
   // Run in flight: queue instead of dispatching. The input isn't locked,
   // so the user keeps composing; queued lines come back on completion.
   if (activeSessionRunning.value) {
-    bufferedMessages.value = [...bufferedMessages.value, message];
-    bufferedForSessionId.value = currentSessionId.value;
+    currentBufferedMessages.value = [...currentBufferedMessages.value, message];
     if (fromInput) userInput.value = "";
     return;
   }
@@ -1167,17 +1172,16 @@ async function sendMessage(text?: string) {
   }
 }
 
-// Drain the queued messages back into the input once their session's run
-// finishes and that session is the one on screen. Guarding on both the
-// run state and the displayed id means switching to another session while
-// the run continues won't dump the queue into the wrong input — it waits
-// until we're back on the owning session and it has gone idle.
+// Drain the displayed session's queued messages back into the input once
+// its run finishes. Keyed by `currentSessionId`, so switching to another
+// session shows (and later drains) that session's own queue — a background
+// run in a different session never dumps its queue into the wrong input.
 watch([activeSessionRunning, currentSessionId], () => {
-  if (bufferedMessages.value.length === 0) return;
   if (activeSessionRunning.value) return;
-  if (currentSessionId.value !== bufferedForSessionId.value) return;
-  userInput.value = mergeBufferedIntoDraft(bufferedMessages.value, userInput.value);
-  bufferedMessages.value = [];
+  const queued = currentBufferedMessages.value;
+  if (queued.length === 0) return;
+  userInput.value = mergeBufferedIntoDraft(queued, userInput.value);
+  currentBufferedMessages.value = [];
   focusChatInput();
 });
 

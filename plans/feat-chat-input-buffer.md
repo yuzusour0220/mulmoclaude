@@ -54,21 +54,23 @@
 
 ### 3. `App.vue`
 
-- 新規 state: `bufferedMessages = ref<string[]>([])`、`bufferedForSessionId = ref("")`
+- 新規 state: `bufferedMessagesBySession = ref<Record<string, string[]>>({})`
+  （セッションIDごとにキュー）+ 書込み可能 computed
+  `currentBufferedMessages`（表示中セッションのキューを get/set）
 - `sendMessage(text?)`:
   - `if (!message) return;`
   - `if (activeSessionRunning.value)`:
-    - バッファーに push、`bufferedForSessionId = currentSessionId`
+    - `currentBufferedMessages.value = [...currentBufferedMessages.value, message]`
     - textarea 由来（`typeof text !== "string"`）なら `userInput = ""`
     - return
   - それ以外は従来の送信フロー
 - 完了 / 切替 watch `watch([activeSessionRunning, currentSessionId], ...)`:
-  - バッファー空 / 所有セッション ≠ 表示中 / まだ実行中 → 何もしない
-  - 所有セッションを表示中かつ非実行 →
-    `userInput = mergeBufferedIntoDraft(bufferedMessages, userInput)`、
-    バッファークリア、`focusChatInput()`
+  - まだ実行中 / 表示中セッションのキュー空 → 何もしない
+  - 非実行かつキューあり →
+    `userInput = mergeBufferedIntoDraft(currentBufferedMessages, userInput)`、
+    当該セッションのキュークリア、`focusChatInput()`
 - 両 ChatInput 呼び出し（単一 / stack レイアウト）に
-  `v-model:buffered-messages="bufferedMessages"` を追加
+  `v-model:buffered-messages="currentBufferedMessages"` を追加
 
 ### 4. i18n（全 8 ロケール）
 
@@ -77,13 +79,15 @@
 
 ### 5. テスト
 
-- ユニット: `test/utils/test_chat_buffer.ts`（merge の正常・空・trim・順序）
+- ユニット: `test/utils/chat/test_buffer.ts`（merge の正常・空・trim・順序）
 - e2e: `e2e/tests/chatinput-buffer.spec.ts`
   - 実行中に Enter でチップ増加 → × 削除 → 完了で textarea へ結合
+  - **複数セッション同時実行でキューが混線しない**（回帰テスト）
   - Ctrl+Enter で改行挿入
 
-## 既知の制限
+## セッションスコープ
 
-- バッファーはグローバル（`userInput` 同様）。`bufferedForSessionId` ガードで、
-  実行中セッションを離れている間は誤って dump しない。所有セッションに戻り
-  非実行になった時点で dump する。
+- バッファーは `bufferedMessagesBySession`（セッションIDごと）で保持。表示中
+  セッションのキューは、そのセッションが非実行になった時点でのみ入力欄へ結合。
+  別セッションで実行中のキューは各セッション固有に保たれ、混線しない。
+- `userInput`（下書き）は従来どおりグローバル。
