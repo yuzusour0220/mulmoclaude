@@ -1,6 +1,24 @@
 # MCP servers and the Docker sandbox
 
-MulmoClaude can run Claude inside a Docker sandbox to isolate it from your host system (`yarn dev` without `DISABLE_SANDBOX=1`, or `Settings → Docker sandbox`). When the sandbox is on, **stdio MCP servers are dropped by default**; HTTP MCP servers continue to work. There is one explicit opt-in — `hostExecInDocker` — that runs a stdio server on the host behind a gateway so it still works under Docker. This page explains why stdio is dropped by default, how to pass environment variables, and how the opt-in works.
+MulmoClaude can run Claude inside a Docker sandbox to isolate it from your host system (`yarn dev` without `DISABLE_SANDBOX=1`, or `Settings → Docker sandbox`). When the sandbox is on, **stdio MCP servers are dropped by default**; HTTP MCP servers continue to work. There is one explicit opt-in — `hostExecInDocker` — that runs a stdio server on the host behind a gateway so it still works under Docker. This page explains why stdio is dropped by default, how to pass environment variables, and how the opt-in works. **If you just want the answer, read [Short version](#short-version-can-i-run-a-stdio-mcp) — the rest of the page is the "why".**
+
+## Short version: can I run a stdio MCP?
+
+**Yes — including with the Docker sandbox on. No coding required.** What you do depends on one thing: is the Docker sandbox on or off? (Not sure? Open **Settings → Docker sandbox** and see whether it's enabled.)
+
+**Sandbox OFF** — nothing special. Add the MCP server (Settings → MCP Servers, or a catalog entry) and it just works, like on any normal computer.
+
+**Sandbox ON** — by itself the server **won't start**; you'll see *"⚠ Won't run while the Docker sandbox is enabled."* next to it. To make it work, do this once:
+
+1. Open **Settings → MCP Servers** and find your server.
+2. Tick the checkbox **"Run on the host anyway (advanced)."**
+3. Save. Done — the server runs and Claude can use it.
+
+(Prefer editing files? Add `"hostExecInDocker": true` to that server's entry in `~/mulmoclaude/config/mcp.json` instead — [example below](#running-a-stdio-mcp-under-docker-anyway-hostexecindocker).)
+
+**The one thing to understand before you tick it:** that checkbox runs **this one server directly on your computer**, outside the Docker "safety box." The box still protects everything else — only this server steps outside it. So tick it **only for servers you added on purpose and trust** (e.g. your own email/IMAP server). Not comfortable with that? Turn the Docker sandbox off entirely instead — then every stdio server runs normally, but Claude loses the extra isolation.
+
+In one line: **stdio works everywhere; if the Docker sandbox is on, tick "Run on the host anyway" for that server.**
 
 ## TL;DR
 
