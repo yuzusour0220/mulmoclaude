@@ -480,7 +480,9 @@ First, run `claude mcp` once in a terminal and complete the OAuth flow for each 
 Add external MCP servers without hand-editing JSON. Two types are supported:
 
 - **HTTP** — remote servers (e.g. `https://example.com/mcp`). Works in every mode; in Docker, `localhost` / `127.0.0.1` URLs are rewritten to `host.docker.internal` automatically.
-- **Stdio** — local subprocess, restricted to `npx` / `node` / `tsx` for safety. When Docker sandboxing is enabled, script paths must live under the workspace so they resolve inside the container.
+- **Stdio** — local subprocess (e.g. an `npx` MCP), restricted to `npx` / `node` / `tsx` for safety. Runs on the host when the Docker sandbox is **off**. When the sandbox is **on**, stdio entries are **dropped by default** (the minimal sandbox image can't host arbitrary runtimes) — set `"hostExecInDocker": true` to run one on the host behind a `stdio ↔ HTTP` gateway instead. See [docs/mcp-sandbox.md](docs/mcp-sandbox.md).
+
+Pass credentials to a stdio server with an **`env`** map (`"env": { "IMAP_PASS": "…" }`). Values are literal and stored in `mcp.json` (mode `0600`, but **plaintext** — file-permission protection, not a vault). Full details, including the `hostExecInDocker` opt-in and how `env` reaches the process, are in [docs/mcp-sandbox.md](docs/mcp-sandbox.md).
 
 Configuration lives under `<workspace>/config/`:
 
@@ -532,6 +534,25 @@ Constraints the server enforces when loading the file:
 - HTTP `url` must parse as `http:` or `https:`.
 - Stdio `command` is restricted to `npx`, `node`, or `tsx`.
 - Entries that fail validation are silently dropped on load (a warning is logged); the rest of the file still applies.
+
+**Example** — a credentialed stdio server that also runs under the Docker sandbox (e.g. an IMAP MCP):
+
+```json
+{
+  "mcpServers": {
+    "imap": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "some-imap-mcp"],
+      "env": { "IMAP_HOST": "imap.example.com", "IMAP_USER": "me", "IMAP_PASS": "secret" },
+      "hostExecInDocker": true,
+      "enabled": true
+    }
+  }
+}
+```
+
+`hostExecInDocker` deliberately runs this one server on the host (outside the sandbox) — only enable it for servers you trust. With the sandbox off it's ignored (the server already runs on the host).
 
 **Example `settings.json`**:
 
