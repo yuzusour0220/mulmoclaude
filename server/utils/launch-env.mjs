@@ -49,3 +49,21 @@ export function mergeLaunchEnv(baseEnv, parsed) {
   }
   return { env, loadedKeys, skippedKeys };
 }
+
+// Cap so a large `.env` can't produce an unwieldy single log line.
+const MAX_LAUNCH_ENV_KEYS_LOGGED = 20;
+
+// Build the launcher's one-line summary of what a launch-dir `.env`
+// contributed — key NAMES only, never values. Returns null when there
+// is nothing worth logging (no file, or a file whose every key was
+// already set in the shell and nothing to report). Pure + testable.
+export function describeLaunchEnvLoad({ path, exists, loadedKeys, skippedKeys }, maxKeysShown = MAX_LAUNCH_ENV_KEYS_LOGGED) {
+  if (!exists) return null;
+  if (loadedKeys.length === 0) {
+    if (skippedKeys.length === 0) return null;
+    return `Found ${path}, but all ${skippedKeys.length} var(s) were already set in the shell env`;
+  }
+  const shellKept = skippedKeys.length > 0 ? ` (${skippedKeys.length} kept from shell env)` : "";
+  const shown = loadedKeys.length > maxKeysShown ? `${loadedKeys.slice(0, maxKeysShown).join(", ")}, …` : loadedKeys.join(", ");
+  return `Loaded ${loadedKeys.length} var(s) from ${path}: ${shown}${shellKept}`;
+}

@@ -18,7 +18,7 @@ import { fileURLToPath } from "url";
 import { isPortFree, findAvailablePort, MAX_PORT_PROBES } from "../server/utils/port.mjs";
 import { parseDevPluginArgs } from "../server/utils/dev-plugin-args.mjs";
 import { cliFlagHelpLines, flagEnvOverrides } from "../server/utils/cli-flags.mjs";
-import { parseEnvFile, mergeLaunchEnv } from "../server/utils/launch-env.mjs";
+import { parseEnvFile, mergeLaunchEnv, describeLaunchEnvLoad } from "../server/utils/launch-env.mjs";
 
 const require = createRequire(import.meta.url);
 
@@ -224,11 +224,8 @@ try {
 const launchEnvPath = join(process.cwd(), ".env");
 const { exists: launchEnvExists, parsed: launchEnvParsed } = parseEnvFile(launchEnvPath);
 const { env: baseEnv, loadedKeys, skippedKeys } = mergeLaunchEnv(process.env, launchEnvParsed);
-if (launchEnvExists && loadedKeys.length > 0) {
-  // Log key NAMES only, never values.
-  const shellKept = skippedKeys.length > 0 ? ` (${skippedKeys.length} kept from shell env)` : "";
-  log(`Loaded ${loadedKeys.length} var(s) from ${launchEnvPath}: ${loadedKeys.join(", ")}${shellKept}`);
-}
+const launchEnvSummary = describeLaunchEnvLoad({ path: launchEnvPath, exists: launchEnvExists, loadedKeys, skippedKeys });
+if (launchEnvSummary) log(launchEnvSummary);
 
 const serverEnv = {
   ...baseEnv,

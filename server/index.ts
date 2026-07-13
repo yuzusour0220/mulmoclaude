@@ -65,6 +65,7 @@ import { createJournalRouter } from "./api/routes/journal.js";
 import { createTranslationRouter } from "./api/routes/translation.js";
 import { announcePluginMetaDiagnostics } from "./plugins/diagnostics.js";
 import { announceOptionalDeps } from "./system/announceOptionalDeps.js";
+import { announceGeminiKey } from "./system/announceGeminiKey.js";
 import { migrateLegacyBillingPresets } from "./workspace/billing-migration.js";
 import { APP_VERSION } from "./system/appVersion.js";
 import { createChatService } from "@mulmobridge/chat-service";
@@ -969,15 +970,7 @@ async function initBootDiagnostics(): Promise<void> {
   await announceOptionalDeps();
 
   // --- Gemini key presence (#2081) ---
-  // A missing key otherwise only surfaces as an opaque per-operation
-  // crash (movie beats) or a buried image-fill warning. Surface it once
-  // at boot, pointing at the launch-dir `.env` where it belongs.
-  if (!isGeminiAvailable()) {
-    log.warn(
-      "gemini",
-      "GEMINI_API_KEY not set — image / audio / video generation is unavailable. Set it in a .env file in the directory you launch MulmoClaude from, or export it before starting.",
-    );
-  }
+  announceGeminiKey();
 
   // --- Voice input sidecar warm-up ---
   // If local voice input is enabled and its model is already on disk,

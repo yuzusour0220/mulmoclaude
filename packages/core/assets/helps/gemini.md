@@ -38,7 +38,7 @@ The Gemini API has a **free tier that is sufficient for personal use**. Higher-v
 3. Copy the key — it starts with `AIza…`.
 4. Create (or open) a `.env` file **in the directory you launch MulmoClaude from** — i.e. the directory where you run `npx mulmoclaude` (in a cloned repo, that's the repo root). Add the line:
 
-   ```
+   ```dotenv
    GEMINI_API_KEY=AIza…your-key…
    ```
 

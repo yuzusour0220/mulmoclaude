@@ -20,3 +20,12 @@ export interface MergedLaunchEnv {
 }
 
 export function mergeLaunchEnv(baseEnv: Record<string, string | undefined>, parsed: Record<string, string>): MergedLaunchEnv;
+
+export interface LaunchEnvLoadSummary {
+  path: string;
+  exists: boolean;
+  loadedKeys: string[];
+  skippedKeys: string[];
+}
+
+export function describeLaunchEnvLoad(summary: LaunchEnvLoadSummary, maxKeysShown?: number): string | null;

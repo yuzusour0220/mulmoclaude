@@ -5,7 +5,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
-import { parseEnvFile, mergeLaunchEnv } from "../../server/utils/launch-env.mjs";
+import { parseEnvFile, mergeLaunchEnv, describeLaunchEnvLoad } from "../../server/utils/launch-env.mjs";
 
 describe("launch-env parseEnvFile", () => {
   it("returns exists:false for a missing file (never throws)", () => {
@@ -81,5 +81,36 @@ describe("launch-env mergeLaunchEnv", () => {
     const { loadedKeys, skippedKeys } = mergeLaunchEnv({ A: "shell" }, { A: "file", B: "file" });
     assert.deepEqual(loadedKeys, ["B"]);
     assert.deepEqual(skippedKeys, ["A"]);
+  });
+});
+
+describe("launch-env describeLaunchEnvLoad", () => {
+  it("returns null when the file does not exist", () => {
+    assert.equal(describeLaunchEnvLoad({ path: "/x/.env", exists: false, loadedKeys: [], skippedKeys: [] }), null);
+  });
+
+  it("returns null when the file exists but contributed nothing and shadowed nothing", () => {
+    assert.equal(describeLaunchEnvLoad({ path: "/x/.env", exists: true, loadedKeys: [], skippedKeys: [] }), null);
+  });
+
+  it("reports the loaded key names (values never appear)", () => {
+    const msg = describeLaunchEnvLoad({ path: "/x/.env", exists: true, loadedKeys: ["GEMINI_API_KEY"], skippedKeys: [] });
+    assert.equal(msg, "Loaded 1 var(s) from /x/.env: GEMINI_API_KEY");
+  });
+
+  it("notes how many keys the shell kept", () => {
+    const msg = describeLaunchEnvLoad({ path: "/x/.env", exists: true, loadedKeys: ["A"], skippedKeys: ["B", "C"] });
+    assert.equal(msg, "Loaded 1 var(s) from /x/.env: A (2 kept from shell env)");
+  });
+
+  it("explains a file whose every key was already set in the shell", () => {
+    const msg = describeLaunchEnvLoad({ path: "/x/.env", exists: true, loadedKeys: [], skippedKeys: ["A", "B"] });
+    assert.equal(msg, "Found /x/.env, but all 2 var(s) were already set in the shell env");
+  });
+
+  it("caps a long key list with an ellipsis", () => {
+    const loadedKeys = ["A", "B", "C", "D"];
+    const msg = describeLaunchEnvLoad({ path: "/x/.env", exists: true, loadedKeys, skippedKeys: [] }, 2);
+    assert.equal(msg, "Loaded 4 var(s) from /x/.env: A, B, …");
   });
 });
