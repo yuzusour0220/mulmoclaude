@@ -1997,15 +1997,6 @@
   resolved "https://registry.yarnpkg.com/@mulmochat-plugin/ui-image/-/ui-image-0.4.0.tgz#97f60be5541ea464077a54fe061b91e6dd27c97b"
   integrity sha512-mmUm/tJEeyyz0qDhMZL+GSdKXFwOi+pffEJVm6bBUHM+KPVrUiyKIBBi68eQ2S5PKmkJdp/1I/iYXhrU5zcr2Q==
 
-"@mulmoclaude/core@^0.12.0", "@mulmoclaude/core@^0.12.2":
-  version "0.12.2"
-  resolved "https://registry.yarnpkg.com/@mulmoclaude/core/-/core-0.12.2.tgz#881d8043d1e6a2598646f0b33d2fe4cd1dd53b3b"
-  integrity sha512-cFNBChF2ScXZGKFc5/xhezi/lgMpnrwEmqp7r2ho93cdAt6t+ypz00MfKToBunen1nkDKQhcebTM4e06KiaO/Q==
-  dependencies:
-    fast-xml-parser "^5.9.3"
-    js-yaml "^5.2.1"
-    zod "^4.4.3"
-
 "@napi-rs/wasm-runtime@^1.1.4", "@napi-rs/wasm-runtime@^1.1.6":
   version "1.1.6"
   resolved "https://registry.yarnpkg.com/@napi-rs/wasm-runtime/-/wasm-runtime-1.1.6.tgz#ed33806d0f9be98dc76d0c3d4fd872fda701b5d5"
@@ -5688,7 +5679,7 @@ fast-xml-builder@^1.2.0:
     path-expression-matcher "^1.5.0"
     xml-naming "^0.1.0"
 
-fast-xml-parser@^5.10.0, fast-xml-parser@^5.9.3:
+fast-xml-parser@^5.10.0:
   version "5.10.0"
   resolved "https://registry.yarnpkg.com/fast-xml-parser/-/fast-xml-parser-5.10.0.tgz#8d08abfe4d6c51e9c5b51f417b994858dbedb4d7"
   integrity sha512-SLhnTEqE5QpJHq/6zl9bsmImEP2adv+y6Wy+cJa7nVTRzQh1OZfCe9k29M5xN74LWnu0xa1zrUrq3KnOKl92Fg==
