@@ -968,6 +968,17 @@ async function initBootDiagnostics(): Promise<void> {
   // later opaque crash. Never throws.
   await announceOptionalDeps();
 
+  // --- Gemini key presence (#2081) ---
+  // A missing key otherwise only surfaces as an opaque per-operation
+  // crash (movie beats) or a buried image-fill warning. Surface it once
+  // at boot, pointing at the launch-dir `.env` where it belongs.
+  if (!isGeminiAvailable()) {
+    log.warn(
+      "gemini",
+      "GEMINI_API_KEY not set — image / audio / video generation is unavailable. Set it in a .env file in the directory you launch MulmoClaude from, or export it before starting.",
+    );
+  }
+
   // --- Voice input sidecar warm-up ---
   // If local voice input is enabled and its model is already on disk,
   // pre-spawn the whisper-server sidecar now (deps were just probed) so
