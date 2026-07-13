@@ -16,7 +16,7 @@
 import { Router, Request, Response } from "express";
 
 import { API_ROUTES } from "../../../src/config/apiRoutes.js";
-import { connect, disconnect, exportSession, reconnect, status, type RemoteHostStatus } from "../../remoteHost/index.js";
+import { connect, disconnect, exportSession, reconnect, RemoteHostSessionExpiredError, status, type RemoteHostStatus } from "../../remoteHost/index.js";
 import { errorMessage } from "../../utils/errors.js";
 import { badRequest, serverError, unauthorized } from "../../utils/httpError.js";
 import { log } from "../../system/logger/index.js";
@@ -58,10 +58,17 @@ router.post(API_ROUTES.remoteHost.reconnect, async (req: Request, res: Response<
   try {
     respond(res, await reconnect(session));
   } catch (err) {
-    // An expired/invalid blob is expected — signal 401 so the client drops it
-    // and falls back to a normal connect, without logging the blob.
-    log.info(PREFIX, "reconnect rejected (blob likely expired)", { error: errorMessage(err) });
-    unauthorized(res, "remote-host session could not be restored");
+    // Only a genuinely expired/invalid blob is 401 (client drops it and falls
+    // back to a normal connect). Transient failures (network, backend, Firebase
+    // init) are 5xx so the client KEEPS the blob and can retry later — a blip
+    // must not force a re-login. Never log the blob.
+    if (err instanceof RemoteHostSessionExpiredError) {
+      log.info(PREFIX, "reconnect rejected (blob expired)");
+      unauthorized(res, "remote-host session could not be restored");
+      return;
+    }
+    log.warn(PREFIX, "reconnect failed", { error: errorMessage(err) });
+    serverError(res, errorMessage(err, "remote-host reconnect failed"));
   }
 });
 

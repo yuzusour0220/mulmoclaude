@@ -17,21 +17,42 @@ import { firebaseConfig } from "../../src/config/firebaseConfig.js";
 const session = createRemoteHostSession(firebaseConfig);
 let handles: RemoteHostSessionHandles | null = null;
 
-// Fresh connect: open a clean session and sign in as the user with the
-// browser-minted Google OAuth ID token. Resolves to the authenticated uid.
-export const signIn = async (idToken: string): Promise<string> => {
-  handles = await session.open();
-  return createRemoteHostAuth(handles.auth).signInHost(idToken);
+// A parked blob that Firebase restored to no valid user (expired refresh token,
+// revoked session). Distinct from transient/init failures so the route can
+// answer 401 (client drops the blob) instead of 5xx (client keeps it).
+export class RemoteHostSessionExpiredError extends Error {
+  constructor() {
+    super("remote-host session could not be restored");
+    this.name = "RemoteHostSessionExpiredError";
+  }
+}
+
+const uidOf = (opened: RemoteHostSessionHandles): string => {
+  const uid = opened.auth.currentUser?.uid;
+  if (!uid) throw new Error("remote-host session opened without an authenticated user");
+  return uid;
 };
 
-// Popup-free reconnect: open the session seeded from the browser-parked blob and
-// resolve to the restored uid. Rejects when the blob yields no valid session, so
-// the lifecycle's reconnect stays non-destructive and the client falls back to a
-// normal connect.
+// Fresh connect: open a clean session and sign in with the browser-minted Google
+// OAuth ID token. The sign-in runs as the session's `validate` step, so a bad
+// token rolls the fresh app back and leaves any live session untouched. Resolves
+// to the authenticated uid.
+export const signIn = async (idToken: string): Promise<string> => {
+  const next = await session.open(undefined, async (opened) => {
+    await createRemoteHostAuth(opened.auth).signInHost(idToken);
+  });
+  handles = next;
+  return uidOf(next);
+};
+
+// Popup-free reconnect: open the session seeded from the browser-parked blob,
+// validating (before any teardown) that it restored a real user. A blob that
+// yields no user rejects with RemoteHostSessionExpiredError, keeping reconnect
+// non-destructive and telling the client to drop the stale blob.
 export const restore = async (blob: string): Promise<string> => {
-  handles = await session.open(blob);
-  if (!handles.uid) throw new Error("remote-host session could not be restored");
-  return handles.uid;
+  const next = await session.open(blob, (opened) => (opened.uid ? Promise.resolve() : Promise.reject(new RemoteHostSessionExpiredError())));
+  handles = next;
+  return uidOf(next);
 };
 
 export const signOut = async (): Promise<void> => {

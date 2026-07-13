@@ -109,6 +109,9 @@ const { t } = useI18n();
 // storage-disabled context (private mode) degrades to "no persistence" rather
 // than throwing.
 const SESSION_KEY = "remoteHost.session";
+// Reconnect status that means "this blob is expired/invalid" (vs a transient
+// failure), so only then do we drop the parked session.
+const UNAUTHORIZED = 401;
 const loadStoredSession = (): string | null => {
   try {
     return localStorage.getItem(SESSION_KEY);
@@ -151,8 +154,7 @@ const refreshStatus = async () => {
 };
 
 // On load, if the server is disconnected but we have a parked session, restore
-// it without a popup. A rejected blob (expired/invalid) is dropped silently so
-// the user just sees the normal Connect button.
+// it without a popup.
 const tryAutoReconnect = async () => {
   if (status.value.connected) return;
   const blob = loadStoredSession();
@@ -161,7 +163,10 @@ const tryAutoReconnect = async () => {
   if (res.ok) {
     status.value = res.data.status;
     persistSession(res.data.session);
-  } else {
+  } else if (res.status === UNAUTHORIZED) {
+    // 401 = the blob is genuinely expired/invalid: drop it so the user just sees
+    // the normal Connect button. Transient failures (network status 0, backend
+    // 5xx) KEEP the blob so a later retry / restart can still reconnect popup-free.
     persistSession(null);
   }
 };

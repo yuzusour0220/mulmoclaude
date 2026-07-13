@@ -48,8 +48,14 @@ export interface RemoteHostSessionHandles {
 // previous app — so a reconnect can restore a browser-parked session, and a
 // fresh connect starts clean. `exportSession`/`onSessionChange` expose the blob
 // the browser stores and the signal to re-sync it.
+// Runs on the freshly opened handles BEFORE the previous session is torn down.
+// Reject to keep the open non-destructive: the fresh app is rolled back and the
+// previous session is preserved (so a failed sign-in or an expired blob doesn't
+// replace a healthy live session).
+export type RemoteHostSessionValidate = (handles: RemoteHostSessionHandles) => Promise<void>;
+
 export interface RemoteHostSession {
-  open: (seedBlob?: string) => Promise<RemoteHostSessionHandles>;
+  open: (seedBlob?: string, validate?: RemoteHostSessionValidate) => Promise<RemoteHostSessionHandles>;
   close: () => Promise<void>;
   exportSession: () => string | null;
   onSessionChange: (cb: (blob: string | null) => void) => () => void;
@@ -106,11 +112,25 @@ export const createRemoteHostSession = (config: FirebaseOptions): RemoteHostSess
     if (previous) await deleteApp(previous);
   };
 
-  const openInner = async (seedBlob?: string): Promise<RemoteHostSessionHandles> => {
+  // Run the caller's check on the fresh handles; on rejection, delete the fresh
+  // app so only the caller-visible error escapes and the previous session (never
+  // touched here) stays live.
+  const validateOrRollback = async (nextApp: FirebaseApp, handles: RemoteHostSessionHandles, validate?: RemoteHostSessionValidate): Promise<void> => {
+    if (!validate) return;
+    try {
+      await validate(handles);
+    } catch (error) {
+      await deleteApp(nextApp).catch(() => undefined);
+      throw error;
+    }
+  };
+
+  const openInner = async (seedBlob?: string, validate?: RemoteHostSessionValidate): Promise<RemoteHostSessionHandles> => {
     // Non-destructive: keep the current session intact until the fresh app is
-    // proven to come up. A bad seed blob or a failed init must not tear down a
-    // healthy session — the reconnect contract (mulmoserver#50). So we tear the
-    // previous app down only AFTER success, and roll the store back on failure.
+    // proven to come up AND pass `validate` (sign-in / uid). A bad seed blob, a
+    // failed init, or a rejected validation must not tear down a healthy session
+    // — the reconnect contract (mulmoserver#50). So we tear the previous app
+    // down only AFTER success, and roll the store back on failure.
     const previousApp = app;
     const previousBlob = store.exportBlob();
     appSeq += 1;
@@ -118,6 +138,7 @@ export const createRemoteHostSession = (config: FirebaseOptions): RemoteHostSess
       store.clear();
       if (seedBlob) store.seed(seedBlob);
       const { app: nextApp, handles } = await openFreshApp(config, store, `remote-host-${appSeq}`);
+      await validateOrRollback(nextApp, handles, validate);
       app = nextApp;
       if (previousApp) await deleteApp(previousApp).catch(() => undefined);
       return handles;
@@ -129,7 +150,7 @@ export const createRemoteHostSession = (config: FirebaseOptions): RemoteHostSess
   };
 
   return {
-    open: (seedBlob?: string) => serialize(() => openInner(seedBlob)),
+    open: (seedBlob?: string, validate?: RemoteHostSessionValidate) => serialize(() => openInner(seedBlob, validate)),
     close: () => serialize(closeInner),
     exportSession: store.exportBlob,
     onSessionChange: store.onChange,

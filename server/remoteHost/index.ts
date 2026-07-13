@@ -19,7 +19,7 @@ import { handlers } from "./handlers/index.js";
 import { onExpire } from "./onExpire.js";
 
 export type { RemoteHostStatus } from "@mulmoclaude/core/remote-host/server";
-export { exportSession } from "./session.js";
+export { exportSession, RemoteHostSessionExpiredError } from "./session.js";
 
 const PREFIX = "remote-host";
 
