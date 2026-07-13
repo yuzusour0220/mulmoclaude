@@ -5,11 +5,16 @@
 // into persistence, round-tripped through JSON; we NEVER interpret its fields,
 // so we don't couple to the SDK's serialized-user format across versions.
 //
-// `type: "LOCAL"` makes the SDK treat this as durable and persist the user (as
-// it would with localStorage/IndexedDB). Seed BEFORE `initializeAuth` — the SDK
-// reads persistence once at init. `onChange` fires when the SDK writes or
-// removes a key (a token update that rotates the stored blob, or a sign-out),
-// which is the signal to re-sync the browser copy.
+// **Persistence is a CLASS, not an instance.** `initializeAuth(app, { persistence })`
+// hands the value to the SDK's `_getInstance(cls)`, which asserts `cls instanceof
+// Function` ("Expected a class definition") and then `new cls()`. Passing a plain
+// object throws — the SDK's own `inMemoryPersistence` is likewise a class. The
+// class is defined per factory call so its instances share this call's store;
+// `type: "LOCAL"` makes the SDK treat it as durable and persist the user.
+//
+// Seed BEFORE `initializeAuth` — the SDK reads persistence once at init. `onChange`
+// fires when the SDK writes/removes a key (a token update that rotates the stored
+// blob, or a sign-out) — the signal to re-sync the browser copy.
 import type { Persistence } from "firebase/auth";
 
 // The SDK stores values as JSON objects (a serialized user) or strings. We treat
@@ -18,10 +23,8 @@ type PersistenceValue = Record<string, unknown> | string;
 
 type StorageListener = (value: PersistenceValue | null) => void;
 
-// Structural match for the SDK's non-exported `PersistenceInternal`. Extends the
-// public `Persistence` so it's still accepted by `initializeAuth({ persistence })`,
-// while exposing the `_`-methods the SDK calls at runtime (and tests drive).
-export interface HostAuthPersistence extends Persistence {
+// The instance the SDK builds via `new` and then drives with these `_`-methods.
+export interface HostAuthPersistenceInstance extends Persistence {
   type: "LOCAL";
   _isAvailable: () => Promise<boolean>;
   _set: (key: string, value: PersistenceValue) => Promise<void>;
@@ -31,15 +34,24 @@ export interface HostAuthPersistence extends Persistence {
   _removeListener: (key: string, listener: StorageListener) => void;
 }
 
+// The class value passed to `initializeAuth`. The static `type` makes it
+// assignable to the SDK's `Persistence` (a class-valued-typed-as-instance, the
+// same trick the SDK uses for `inMemoryPersistence`); `new ()` lets the SDK — and
+// the tests — instantiate it.
+export interface HostAuthPersistenceClass extends Persistence {
+  type: "LOCAL";
+  new (): HostAuthPersistenceInstance;
+}
+
 export interface HostSessionPersistence {
-  /** Pass to `initializeAuth(app, { persistence })`. */
-  persistence: HostAuthPersistence;
+  /** Pass to `initializeAuth(app, { persistence })`. It's a class the SDK `new`s. */
+  persistence: HostAuthPersistenceClass;
   /** Load a previously exported blob. Call BEFORE `initializeAuth`. */
   seed: (blob: string) => void;
   /** Serialize the current contents, or `null` when empty (no session). */
   exportBlob: () => string | null;
   /** Notified with the fresh blob (or `null`) whenever the SDK writes/removes. */
-  onChange: (cb: (blob: string | null) => void) => () => void;
+  onChange: (listener: (blob: string | null) => void) => () => void;
   /** Drop all contents (used when tearing down the Firebase app). */
   clear: () => void;
 }
@@ -47,6 +59,44 @@ export interface HostSessionPersistence {
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 
 const isPersistenceValue = (value: unknown): value is PersistenceValue => typeof value === "string" || isRecord(value);
+
+// A class (constructor) so the SDK's `_getInstance` accepts it (it asserts
+// `cls instanceof Function`, then `new cls()`); instances hold the shared
+// `store`/`notify`, so a fresh `new` still sees the seeded/live data. `static
+// type` is for the `Persistence` type bridge; the instance `type` is what the
+// SDK reads after `new`.
+const makeHostPersistenceClass = (store: Map<string, PersistenceValue>, notify: () => void): HostAuthPersistenceClass => {
+  class HostAuthPersistence {
+    static readonly type = "LOCAL" as const;
+    readonly type = "LOCAL" as const;
+    private readonly store = store;
+    private readonly notify = notify;
+    private readonly external = new Set<StorageListener>();
+    _isAvailable(): Promise<boolean> {
+      return Promise.resolve(this.store instanceof Map);
+    }
+    async _set(key: string, value: PersistenceValue): Promise<void> {
+      this.store.set(key, value);
+      this.notify();
+    }
+    _get(key: string): Promise<PersistenceValue | null> {
+      return Promise.resolve(this.store.get(key) ?? null);
+    }
+    async _remove(key: string): Promise<void> {
+      this.store.delete(key);
+      this.notify();
+    }
+    // Node has no cross-tab storage events to deliver, so registered listeners
+    // never fire; we still track them so add/remove stay symmetric.
+    _addListener(_key: string, listener: StorageListener): void {
+      this.external.add(listener);
+    }
+    _removeListener(_key: string, listener: StorageListener): void {
+      this.external.delete(listener);
+    }
+  }
+  return HostAuthPersistence;
+};
 
 export const createHostSessionPersistence = (): HostSessionPersistence => {
   const store = new Map<string, PersistenceValue>();
@@ -59,23 +109,7 @@ export const createHostSessionPersistence = (): HostSessionPersistence => {
     listeners.forEach((listener) => listener(blob));
   };
 
-  const persistence: HostAuthPersistence = {
-    type: "LOCAL",
-    _isAvailable: () => Promise.resolve(true),
-    _set: async (key, value) => {
-      store.set(key, value);
-      notify();
-    },
-    _get: async (key) => store.get(key) ?? null,
-    _remove: async (key) => {
-      store.delete(key);
-      notify();
-    },
-    // Node has no cross-tab storage events, so there's nothing to observe; the
-    // SDK still calls these, so they must exist as no-ops.
-    _addListener: () => undefined,
-    _removeListener: () => undefined,
-  };
+  const persistence = makeHostPersistenceClass(store, notify);
 
   const seed = (blob: string): void => {
     const parsed: unknown = JSON.parse(blob);

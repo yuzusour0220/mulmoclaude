@@ -2,56 +2,89 @@
 // (createHostSessionPersistence) that lets a host's session be parked in the
 // browser and restored after a restart (mulmoserver#50, case A').
 //
-// We drive the same `_set`/`_get`/`_remove` the SDK calls, plus the seed/export
-// round-trip and the onChange signal — no Firebase needed.
+// The headline test is the regression guard: the persistence MUST be a class the
+// SDK can `new`, not a plain object — a plain object throws "Expected a class
+// definition" inside `initializeAuth` → `_getInstance`. That path is exercised by
+// real firebase here (offline: initializeApp + initializeAuth need no network).
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { deleteApp, initializeApp } from "firebase/app";
+import { initializeAuth } from "firebase/auth";
 
 import { createHostSessionPersistence } from "../../src/remote-host/server/sessionPersistence.js";
 
+const CONFIG = { apiKey: "test", projectId: "test", appId: "test" };
 const AUTH_KEY = "firebase:authUser:apiKey:remote-host-1";
 const userValue = { uid: "u1", stsTokenManager: { refreshToken: "rt" } };
 
+let appSeq = 0;
+const freshApp = () => {
+  appSeq += 1;
+  return initializeApp(CONFIG, `sp-test-${appSeq}`);
+};
+
 describe("createHostSessionPersistence", () => {
+  it("is accepted by initializeAuth — it's a class, not an object (regression)", async () => {
+    // Guards the bug where passing a plain object threw
+    // "INTERNAL ASSERTION FAILED: Expected a class definition" in _getInstance,
+    // breaking createRemoteHostSession.open() for real.
+    const app = freshApp();
+    try {
+      const { persistence } = createHostSessionPersistence();
+      assert.doesNotThrow(() => initializeAuth(app, { persistence }));
+    } finally {
+      await deleteApp(app);
+    }
+  });
+
   it("advertises itself as durable (LOCAL) and available so the SDK persists the user", async () => {
     const { persistence } = createHostSessionPersistence();
-    assert.equal(persistence.type, "LOCAL");
-    assert.equal(await persistence._isAvailable(), true);
+    assert.equal(persistence.type, "LOCAL"); // static — the Persistence type bridge
+    const instance = new persistence();
+    assert.equal(instance.type, "LOCAL"); // instance — what the SDK reads after `new`
+    assert.equal(await instance._isAvailable(), true);
   });
 
   it("_set / _get / _remove round-trip a value", async () => {
     const { persistence } = createHostSessionPersistence();
-    assert.equal(await persistence._get(AUTH_KEY), null);
-    await persistence._set(AUTH_KEY, userValue);
-    assert.deepEqual(await persistence._get(AUTH_KEY), userValue);
-    await persistence._remove(AUTH_KEY);
-    assert.equal(await persistence._get(AUTH_KEY), null);
+    const instance = new persistence();
+    assert.equal(await instance._get(AUTH_KEY), null);
+    await instance._set(AUTH_KEY, userValue);
+    assert.deepEqual(await instance._get(AUTH_KEY), userValue);
+    await instance._remove(AUTH_KEY);
+    assert.equal(await instance._get(AUTH_KEY), null);
+  });
+
+  it("instances share the factory's store (a fresh `new` still sees live data)", async () => {
+    const { persistence } = createHostSessionPersistence();
+    await new persistence()._set(AUTH_KEY, userValue);
+    assert.deepEqual(await new persistence()._get(AUTH_KEY), userValue);
   });
 
   it("exportBlob is null when empty and JSON of the store otherwise", async () => {
     const { persistence, exportBlob } = createHostSessionPersistence();
     assert.equal(exportBlob(), null);
-    await persistence._set(AUTH_KEY, userValue);
+    await new persistence()._set(AUTH_KEY, userValue);
     assert.deepEqual(JSON.parse(exportBlob() ?? "null"), { [AUTH_KEY]: userValue });
   });
 
   it("seed restores contents from a blob before init, and export round-trips it", async () => {
     const source = createHostSessionPersistence();
-    await source.persistence._set(AUTH_KEY, userValue);
+    await new source.persistence()._set(AUTH_KEY, userValue);
     const blob = source.exportBlob();
     assert.ok(blob);
 
     const restored = createHostSessionPersistence();
     restored.seed(blob);
-    assert.deepEqual(await restored.persistence._get(AUTH_KEY), userValue);
+    assert.deepEqual(await new restored.persistence()._get(AUTH_KEY), userValue);
     assert.equal(restored.exportBlob(), blob);
   });
 
   it("seed replaces any existing contents (last-write-wins)", async () => {
     const { persistence, seed, exportBlob } = createHostSessionPersistence();
-    await persistence._set("stale", "old");
+    await new persistence()._set("stale", "old");
     seed(JSON.stringify({ [AUTH_KEY]: userValue }));
-    assert.equal(await persistence._get("stale"), null);
+    assert.equal(await new persistence()._get("stale"), null);
     assert.deepEqual(JSON.parse(exportBlob() ?? "null"), { [AUTH_KEY]: userValue });
   });
 
@@ -64,17 +97,18 @@ describe("createHostSessionPersistence", () => {
 
   it("onChange fires with the fresh blob on set and remove, and stops after unsubscribe", async () => {
     const { persistence, onChange } = createHostSessionPersistence();
+    const instance = new persistence();
     const seen: (string | null)[] = [];
     const unsubscribe = onChange((blob) => seen.push(blob));
 
-    await persistence._set(AUTH_KEY, userValue);
-    await persistence._remove(AUTH_KEY);
+    await instance._set(AUTH_KEY, userValue);
+    await instance._remove(AUTH_KEY);
     assert.equal(seen.length, 2);
     assert.deepEqual(JSON.parse(seen[0] ?? "null"), { [AUTH_KEY]: userValue });
     assert.equal(seen[1], null); // removing the last key → empty → null (tells the browser to drop it)
 
     unsubscribe();
-    await persistence._set(AUTH_KEY, userValue);
+    await instance._set(AUTH_KEY, userValue);
     assert.equal(seen.length, 2); // no further notifications
   });
 
@@ -82,7 +116,7 @@ describe("createHostSessionPersistence", () => {
     const { persistence, onChange, clear, exportBlob } = createHostSessionPersistence();
     const seen: (string | null)[] = [];
     onChange((blob) => seen.push(blob));
-    await persistence._set(AUTH_KEY, userValue);
+    await new persistence()._set(AUTH_KEY, userValue);
     seen.length = 0;
 
     clear();
