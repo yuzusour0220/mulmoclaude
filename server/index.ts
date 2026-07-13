@@ -87,7 +87,7 @@ import { initWorkspace, workspacePath } from "./workspace/workspace.js";
 import { runMemoryMigrationOnce } from "./workspace/memory/run.js";
 import { runTopicMigrationOnce } from "./workspace/memory/topic-run.js";
 import { migrateCookingRecipesFromPlugin } from "./workspace/cooking-recipes/migrate.js";
-import { env, isGeminiAvailable } from "./system/env.js";
+import { env, isAblated, isGeminiAvailable } from "./system/env.js";
 import { buildSandboxStatus } from "./api/sandboxStatus.js";
 import { existsSync, readFileSync } from "fs";
 import { realpath as fsRealpath } from "fs/promises";
@@ -990,7 +990,7 @@ async function initBootDiagnostics(): Promise<void> {
   // first to catch up changes that landed while the server was down.
   // Errors are logged inside; fire-and-forget so a slow scan doesn't
   // hold up the rest of boot.
-  if (env.ablation.includes("reconciler")) {
+  if (isAblated("reconciler")) {
     log.warn("collections", "ABLATION ACTIVE: reconciler disabled — no watchers, bells, or spawn recurrence (evaluation only)");
   } else {
     startCollectionWatchers().catch((err: unknown) => {

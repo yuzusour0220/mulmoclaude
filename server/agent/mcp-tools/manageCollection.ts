@@ -53,7 +53,7 @@ import { dataSkillDir, mirrorSkillWrite } from "@mulmoclaude/core/skill-bridge";
 import { helpsAssetDir, isPresetSlug } from "@mulmoclaude/core/workspace-setup";
 import { writeFileAtomic } from "../../utils/files/atomic.js";
 import { WORKSPACE_DIRS, workspacePath } from "../../workspace/paths.js";
-import { env } from "../../system/env.js";
+import { isAblated } from "../../system/env.js";
 
 /** Refuse an unselective getItems beyond this many records — a silent
  *  truncation would read as "covered everything", and an unbounded dump
@@ -492,4 +492,4 @@ export function makeManageCollectionTool(deps: ManageCollectionDeps = {}) {
   };
 }
 
-export const manageCollection = makeManageCollectionTool({ ablateValidation: env.ablation.includes("validation") || undefined });
+export const manageCollection = makeManageCollectionTool({ ablateValidation: isAblated("validation") || undefined });

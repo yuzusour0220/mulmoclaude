@@ -171,3 +171,14 @@ export const env = Object.freeze({
 export function isGeminiAvailable(): boolean {
   return env.geminiApiKey !== undefined && env.geminiApiKey !== "";
 }
+
+/** The components MULMOCLAUDE_ABLATION may disable (evaluation-only —
+ *  see the `ablation` entry above). The union type is the single source
+ *  of truth for component names: call sites write `isAblated("...")`
+ *  and a typo is a compile error rather than a silently-inactive switch. */
+export type AblationComponent = "validation" | "reconciler";
+
+/** True iff the named component is disabled via MULMOCLAUDE_ABLATION. */
+export function isAblated(component: AblationComponent): boolean {
+  return env.ablation.includes(component);
+}
