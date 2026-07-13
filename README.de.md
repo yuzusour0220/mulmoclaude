@@ -500,7 +500,7 @@ Einschränkungen, die der Server beim Laden der Datei durchsetzt:
 }
 ```
 
-`hostExecInDocker` lässt diesen einen Server absichtlich auf dem Host (außerhalb der Sandbox) laufen — aktiviere es nur für Server, denen du vertraust. Ist die Sandbox aus, wird es ignoriert (der Server läuft ohnehin auf dem Host).
+`hostExecInDocker` führt diesen Server auf dem Host aus, außerhalb der Sandbox. Es ist ein Flag pro Server — aktiviere es für so viele Server, wie du brauchst, aber nur für vertrauenswürdige. Ist die Sandbox aus, wird es ignoriert (der Server läuft ohnehin auf dem Host).
 
 **Beispiel-`settings.json`**:
 

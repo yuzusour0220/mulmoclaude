@@ -502,7 +502,7 @@ Restrições que o servidor aplica ao carregar o arquivo:
 }
 ```
 
-`hostExecInDocker` roda deliberadamente este único servidor no host (fora do sandbox) — habilite apenas para servidores em que você confia. Com o sandbox desligado, ele é ignorado (o servidor já roda no host).
+`hostExecInDocker` roda esse servidor no host, fora do sandbox. É uma opção por servidor — habilite-a para quantos servidores precisar, mas apenas nos que você confia. Com o sandbox desligado, ela é ignorada (o servidor já roda no host).
 
 **Exemplo de `settings.json`**:
 

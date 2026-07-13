@@ -18,7 +18,7 @@ MulmoClaude can run Claude inside a Docker sandbox to isolate it from your host 
 
 (Prefer editing files? Add `"hostExecInDocker": true` to that server's entry in `~/mulmoclaude/config/mcp.json` instead — [example below](#running-a-stdio-mcp-under-docker-anyway-hostexecindocker).)
 
-**The one thing to understand before you tick it:** that checkbox runs **this one server directly on your computer**, outside the Docker "safety box." The box still protects everything else — only this server steps outside it. So tick it **only for servers you added on purpose and trust** (e.g. your own email/IMAP server). Not comfortable with that? Turn the Docker sandbox off entirely instead — then every stdio server runs normally, but Claude loses the extra isolation.
+**The one thing to understand before you tick it:** that checkbox runs **that server directly on your computer**, outside the Docker "safety box." The box still protects everything else — only the server you ticked steps outside it (it's per-server, so you decide for each one). So tick it **only for servers you added on purpose and trust** (e.g. your own email/IMAP server). Not comfortable with that? Turn the Docker sandbox off entirely instead — then every stdio server runs normally, but Claude loses the extra isolation.
 
 In one line: **stdio works everywhere; if the Docker sandbox is on, tick "Run on the host anyway" for that server.**
 
@@ -27,7 +27,7 @@ In one line: **stdio works everywhere; if the Docker sandbox is on, tick "Run on
 - **stdio MCP servers** run as **child processes of Claude**. When Claude is sandboxed, the child process lands inside the sandbox too. The sandbox image is intentionally minimal (`node:22-slim` + `claude` + `tsx`) — most stdio MCPs need a richer environment to start.
 - **HTTP MCP servers** run on the host (or remote) and Claude inside the sandbox talks to them over the network. The MCP server keeps its proper environment; the sandbox just opens a network path.
 - When the sandbox is on, MulmoClaude **drops stdio entries from the per-session MCP config**. Disabling sandbox (`DISABLE_SANDBOX=1`) loads them all.
-- **Opt-in escape hatch** (`"hostExecInDocker": true`): keep the sandbox on but run one specific stdio server on the **host** behind a `stdio ↔ HTTP` gateway, so the sandboxed agent reaches it over HTTP. Deliberately pokes one hole in the sandbox for that server — gated behind an explicit risk acknowledgment in the UI. See [Running a stdio MCP under Docker anyway](#running-a-stdio-mcp-under-docker-anyway-hostexecindocker).
+- **Opt-in escape hatch** (`"hostExecInDocker": true`): keep the sandbox on but run a stdio server on the **host** behind a `stdio ↔ HTTP` gateway, so the sandboxed agent reaches it over HTTP. It's a **per-server** flag — set it on as many servers as you need; each opted-in server gets its own gateway. Gated behind an explicit risk acknowledgment in the UI. See [Running a stdio MCP under Docker anyway](#running-a-stdio-mcp-under-docker-anyway-hostexecindocker).
 
 ## The full story
 
@@ -126,7 +126,7 @@ Neither pays off. MulmoClaude takes the simpler path: **stdio is dropped by defa
 
 ## Running a stdio MCP under Docker anyway (`hostExecInDocker`)
 
-Option B above (a per-MCP host-side gateway) is available as an explicit, per-server opt-in — this is the way to run an `npx`-based stdio MCP while keeping the sandbox on. Set `"hostExecInDocker": true` on the stdio entry (via the MCP Settings tab's risk-acknowledgment checkbox, or by hand in `mcp.json`):
+Option B above (a per-MCP host-side gateway) is available as an explicit, per-server opt-in — this is the way to run an `npx`-based stdio MCP while keeping the sandbox on. It's evaluated **per entry**, so you can opt in as many stdio servers as you like — each gets its own gateway. Set `"hostExecInDocker": true` on each stdio entry (via the MCP Settings tab's risk-acknowledgment checkbox, or by hand in `mcp.json`):
 
 ```json
 {
@@ -149,7 +149,7 @@ What happens then (`server/agent/config.ts` `prepareUserServers` → `server/age
 2. The per-session MCP config handed to Claude is rewritten to `type: "http"` pointing at that gateway (`localhost` → `host.docker.internal` for the container). The sandboxed agent reaches the server over HTTP, exactly like any HTTP MCP.
 3. The gateway is torn down when the agent turn ends.
 
-**This deliberately escapes the sandbox for that one server.** The whole point of the sandbox is isolation; a host-exec MCP runs with your host's authority. The Settings UI marks it with a red badge and requires an explicit acknowledgment. Only opt in for servers you trust. If the gateway fails to start, the entry falls back to the safe default (dropped + logged).
+**This deliberately escapes the sandbox for each server you opt in.** The whole point of the sandbox is isolation; a host-exec MCP runs with your host's authority. The Settings UI marks it with a red badge and requires an explicit acknowledgment. Only opt in for servers you trust. If the gateway fails to start, the entry falls back to the safe default (dropped + logged).
 
 ## Passing environment variables
 

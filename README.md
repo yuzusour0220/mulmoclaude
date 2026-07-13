@@ -552,7 +552,7 @@ Constraints the server enforces when loading the file:
 }
 ```
 
-`hostExecInDocker` deliberately runs this one server on the host (outside the sandbox) — only enable it for servers you trust. With the sandbox off it's ignored (the server already runs on the host).
+`hostExecInDocker` runs that server on the host, outside the sandbox. It's a per-server flag — enable it on as many servers as you need, but only ones you trust. With the sandbox off it's ignored (the server already runs on the host).
 
 **Example `settings.json`**:
 

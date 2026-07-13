@@ -499,7 +499,7 @@ Contraintes appliquées par le serveur lors du chargement du fichier :
 }
 ```
 
-`hostExecInDocker` exécute délibérément ce serveur sur l'hôte (hors de l'isolation) — ne l'activez que pour des serveurs de confiance. Sans l'isolation, il est ignoré (le serveur s'exécute déjà sur l'hôte).
+`hostExecInDocker` exécute ce serveur sur l'hôte, hors de l'isolation. C'est une option par serveur — activez-la pour autant de serveurs que nécessaire, mais uniquement ceux de confiance. Sans l'isolation, elle est ignorée (le serveur s'exécute déjà sur l'hôte).
 
 **Exemple `settings.json`** :
 
