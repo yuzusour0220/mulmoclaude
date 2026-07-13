@@ -34,6 +34,10 @@ export interface RemoteHostLogger {
 export interface RemoteHostDeps {
   hostId: string;
   signIn: (idToken: string) => Promise<string>;
+  // Restore a session from a browser-parked blob (case A', mulmoserver#50) and
+  // resolve to its uid — no popup. MUST reject when the blob yields no valid
+  // session so `reconnect` stays non-destructive. Absent ⇒ `reconnect` throws.
+  restore?: (sessionBlob: string) => Promise<string>;
   signOut: () => Promise<void>;
   currentUid: () => string | null;
   startRunner: (channel: Channel, handlers: CommandHandlers, options: HostRunnerOptions) => () => void;
@@ -49,6 +53,10 @@ export interface RemoteHostDeps {
 
 export interface RemoteHostLifecycle {
   connect: (idToken: string) => Promise<RemoteHostStatus>;
+  // Restore a browser-parked session and start the runner — popup-free re-attach
+  // after a host restart. Non-destructive like `connect`. Rejects if `deps.restore`
+  // isn't wired, or if restore fails (blob expired/invalid → caller falls back to connect).
+  reconnect: (sessionBlob: string) => Promise<RemoteHostStatus>;
   disconnect: () => Promise<RemoteHostStatus>;
   status: () => RemoteHostStatus;
 }
@@ -84,13 +92,16 @@ export const createRemoteHost = (deps: RemoteHostDeps): RemoteHostLifecycle => {
 
   const status = (): RemoteHostStatus => ({ connected: stopRunner !== null, uid: deps.currentUid() });
 
-  const startRunner = (uid: string) => {
+  // Swap the running runner for one bound to `uid`. Callers authenticate FIRST
+  // (before this teardown) so a failed connect/reconnect keeps a healthy session.
+  const attach = (uid: string, verb: string): RemoteHostStatus => {
+    stopIfRunning();
     const runner = deps.startRunner({ uid, hostId: deps.hostId }, deps.handlers, {
       onEvent: (event) => log.debug(`host event: ${event.phase} ${event.method}`),
       onExpire: deps.onExpire,
-      // The listener died fatally (heartbeat already stopped + offline written);
-      // clear the handle so status() stops reporting connected — but only if it
-      // still points at THIS runner (a later reconnect may have replaced it).
+      // Fatal listener death: drop the handle so status() stops reporting
+      // connected — but only if it still points at THIS runner (a later
+      // reconnect may have replaced it).
       onClosed: () => {
         if (stopRunner === runner) {
           stopRunner = null;
@@ -98,18 +109,18 @@ export const createRemoteHost = (deps: RemoteHostDeps): RemoteHostLifecycle => {
         }
       },
     });
-    return runner;
+    stopRunner = runner;
+    log.info(`${verb} as ${uid}, host runner started (hostId=${deps.hostId})`);
+    return status();
   };
 
-  const connect = (idToken: string): Promise<RemoteHostStatus> =>
+  const connect = (idToken: string): Promise<RemoteHostStatus> => serialize(async () => attach(await deps.signIn(idToken), "connected"));
+
+  const reconnect = (sessionBlob: string): Promise<RemoteHostStatus> =>
     serialize(async () => {
-      // Authenticate BEFORE any teardown, so a failed connect (expired/rejected
-      // token) leaves an existing healthy session untouched instead of dropping it.
-      const uid = await deps.signIn(idToken);
-      stopIfRunning();
-      stopRunner = startRunner(uid);
-      log.info(`connected as ${uid}, host runner started (hostId=${deps.hostId})`);
-      return status();
+      const { restore } = deps;
+      if (!restore) throw new Error("remote-host reconnect requires a `restore` dependency");
+      return attach(await restore(sessionBlob), "reconnected");
     });
 
   const disconnect = (): Promise<RemoteHostStatus> =>
@@ -120,5 +131,5 @@ export const createRemoteHost = (deps: RemoteHostDeps): RemoteHostLifecycle => {
       return status();
     });
 
-  return { connect, disconnect, status };
+  return { connect, reconnect, disconnect, status };
 };
