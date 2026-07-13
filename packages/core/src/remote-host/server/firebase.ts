@@ -55,6 +55,21 @@ export interface RemoteHostSession {
   onSessionChange: (cb: (blob: string | null) => void) => () => void;
 }
 
+const noop = (): void => undefined;
+
+// Run operations one-at-a-time in submission order. `open`/`close` mutate shared
+// store/app state, so overlapping calls must not interleave (they would leak an
+// app or leave `app` pointing at a torn-down instance). Mirrors the lifecycle's
+// serialization; a failed op doesn't block the next.
+const makeSerializer = () => {
+  let transition: Promise<unknown> = Promise.resolve();
+  return <T>(operation: () => Promise<T>): Promise<T> => {
+    const next = transition.then(operation, operation);
+    transition = next.then(noop, noop);
+    return next;
+  };
+};
+
 // Build a fresh app from the (already seeded) persistence and wait for the
 // restored auth state to settle. Persistence restore is async, so `uid`
 // reflects a seeded session only after `authStateReady()` (null when the blob
@@ -82,15 +97,16 @@ export const createRemoteHostSession = (config: FirebaseOptions): RemoteHostSess
   const store = createHostSessionPersistence();
   let app: FirebaseApp | null = null;
   let appSeq = 0;
+  const serialize = makeSerializer();
 
-  const close = async (): Promise<void> => {
+  const closeInner = async (): Promise<void> => {
     const previous = app;
     app = null;
     store.clear();
     if (previous) await deleteApp(previous);
   };
 
-  const open = async (seedBlob?: string): Promise<RemoteHostSessionHandles> => {
+  const openInner = async (seedBlob?: string): Promise<RemoteHostSessionHandles> => {
     // Non-destructive: keep the current session intact until the fresh app is
     // proven to come up. A bad seed blob or a failed init must not tear down a
     // healthy session — the reconnect contract (mulmoserver#50). So we tear the
@@ -112,5 +128,10 @@ export const createRemoteHostSession = (config: FirebaseOptions): RemoteHostSess
     }
   };
 
-  return { open, close, exportSession: store.exportBlob, onSessionChange: store.onChange };
+  return {
+    open: (seedBlob?: string) => serialize(() => openInner(seedBlob)),
+    close: () => serialize(closeInner),
+    exportSession: store.exportBlob,
+    onSessionChange: store.onChange,
+  };
 };
