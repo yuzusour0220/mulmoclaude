@@ -19,6 +19,7 @@ import {
 import { getRole } from "../../workspace/roles.js";
 import { runAgent } from "../../agent/index.js";
 import { prependJournalPointer } from "../../agent/prompt.js";
+import { notifyTaskFinished } from "../../agent/webPush.js";
 import { buildTranscriptPreamble, isStaleSessionError } from "../../agent/resumeFailover.js";
 import { isMcpBrokerNotReadyError } from "../../agent/mcpBrokerFailover.js";
 import { ONE_SECOND_MS } from "../../utils/time.js";
@@ -1219,6 +1220,10 @@ async function finalizeRun(chatSessionId: string, origin: SessionOrigin | undefi
   // against the turn's real result here (#2057). No-op when none is registered.
   await runCompletionHook(chatSessionId, { didError }).catch(logBackgroundError("completion-hook"));
   runPostTurnSideEffects(chatSessionId, requestStartedAt);
+  // Web Push (#2086): notify the user's registered devices that this visible
+  // turn finished. No-op unless enabled in Settings AND RemoteHost is connected.
+  // Fire-and-forget — never blocks or fails the turn teardown.
+  notifyTaskFinished(chatSessionId, didError).catch(logBackgroundError("web-push"));
 }
 
 // Fire-and-forget post-turn processing for a normal (user-facing) chat

@@ -102,6 +102,12 @@ export interface AppSettings {
   // `system:journal` scheduled task both honour this — off short-
   // circuits before the interval gate is even consulted.
   journal?: JournalMode;
+
+  // Web Push on task finish (#2086). Ships off. When true, each finished
+  // agent turn calls the mulmoserver `sendPush` Cloud Function so the user's
+  // registered devices are notified. Only sends while the RemoteHost channel
+  // is connected (that's what supplies the Firebase auth) — otherwise a no-op.
+  pushEnabled?: boolean;
 }
 
 const DEFAULT_SETTINGS: AppSettings = { extraAllowedTools: [] };
@@ -148,16 +154,24 @@ function isVoiceInputSettings(value: unknown): value is { enabled: boolean; mode
   return true;
 }
 
-export function isAppSettings(value: unknown): value is AppSettings {
-  if (!isRecord(value)) return false;
-  if (!isStringArray(value.extraAllowedTools)) return false;
+// Optional fields: each is either absent or must match its type. Split out of
+// isAppSettings so that function stays under the cognitive-complexity ceiling
+// as new optional settings land.
+function hasValidOptionalAppSettings(value: Record<string, unknown>): boolean {
   if (value.googleMapsApiKey !== undefined && typeof value.googleMapsApiKey !== "string") return false;
   if (value.photoExif !== undefined && !isPhotoExifSettings(value.photoExif)) return false;
   if (value.effortLevel !== undefined && !isEffortLevel(value.effortLevel)) return false;
   if (value.voiceInput !== undefined && !isVoiceInputSettings(value.voiceInput)) return false;
   if (value.chatIndex !== undefined && !isChatIndexMode(value.chatIndex)) return false;
   if (value.journal !== undefined && !isJournalMode(value.journal)) return false;
+  if (value.pushEnabled !== undefined && typeof value.pushEnabled !== "boolean") return false;
   return true;
+}
+
+export function isAppSettings(value: unknown): value is AppSettings {
+  if (!isRecord(value)) return false;
+  if (!isStringArray(value.extraAllowedTools)) return false;
+  return hasValidOptionalAppSettings(value);
 }
 
 // isAppSettingsPatch adds a null sentinel to `chatIndex` / `journal` (see below).
@@ -218,6 +232,7 @@ export function isAppSettingsPatch(value: unknown): value is AppSettingsPatch {
   if (value.voiceInput !== undefined && !isVoiceInputSettings(value.voiceInput)) return false;
   if (!isOptionalNullableChatIndexMode(value.chatIndex)) return false;
   if (!isOptionalNullableJournalMode(value.journal)) return false;
+  if (value.pushEnabled !== undefined && typeof value.pushEnabled !== "boolean") return false;
   return true;
 }
 
@@ -257,6 +272,9 @@ function cloneAppSettings(settings: AppSettings): AppSettings {
   if (settings.journal !== undefined) {
     copy.journal = settings.journal;
   }
+  if (settings.pushEnabled !== undefined) {
+    copy.pushEnabled = settings.pushEnabled;
+  }
   return copy;
 }
 
@@ -281,6 +299,13 @@ export function journalMode(settings: AppSettings): JournalMode {
  *  the post-save hook + future Settings UI stay aligned. */
 export function isPhotoExifAutoCaptureEnabled(settings: AppSettings): boolean {
   return settings.photoExif?.autoCapture ?? true;
+}
+
+/** Web-push-on-task-finish flag with the documented default of `false`.
+ *  Centralises the "missing ⇒ off" rule so the turn-end trigger and the
+ *  Settings UI stay aligned. */
+export function isPushEnabled(settings: AppSettings): boolean {
+  return settings.pushEnabled ?? false;
 }
 
 export function loadSettings(): AppSettings {
@@ -330,6 +355,9 @@ export function saveSettings(settings: AppSettings): void {
   }
   if (settings.journal !== undefined) {
     payload.journal = settings.journal;
+  }
+  if (settings.pushEnabled !== undefined) {
+    payload.pushEnabled = settings.pushEnabled;
   }
   const serialised = JSON.stringify(payload, null, 2);
   writeFileAtomicSync(settingsPath(), `${serialised}\n`, { mode: 0o600 });
