@@ -12,6 +12,30 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 - **Docs (#2081)**: the Gemini API-key help now tells users to put `GEMINI_API_KEY` in a `.env` file **in the directory they launch MulmoClaude from** (not the isolated `~/mulmoclaude` workspace), matching the launcher's new launch-dir `.env` loading. Ships via `assets/helps/gemini.md`.
 
+---
+
+## [0.9.7] - 2026-07-14
+
+Chat input no longer locks while the agent is running — messages you type are queued and flushed in order once the run finishes. RemoteHost (driving MulmoClaude from a phone) now persists its Firebase session in the browser and reconnects across server/browser restarts, without a re-login popup — bundled via `@mulmoclaude/core@0.13.0`. 25 non-merge commits since 0.9.6.
+
+### Highlights
+
+#### Chat input: queue sends while the agent runs (#2067)
+
+The composer no longer disables while a run is in progress — messages you type are buffered and sent in order once the agent is free, instead of the input locking. The buffer is scoped per session, and Ctrl/Cmd+Enter inserts a newline without triggering the slash menu.
+
+#### RemoteHost session persistence (#2073, #2075)
+
+A host's Firebase session is now parked in the browser and restored after a server or browser restart, so a phone paired to the host stays connected without a re-login popup. Reconnect is non-destructive: a transient network failure keeps the live session, while an expired or malformed session blob is dropped rather than retried forever. Shipped in `@mulmoclaude/core@0.13.0` (see the sub-note below for the API surface).
+
+### Fixed
+
+- e2e-live CI: pinned the auth token to stop an intermittent 401 flake caused by a token-regeneration race (#2069).
+
+### Documentation
+
+- Documented the MCP stdio-under-Docker opt-in (`hostExecInDocker`, a per-server toggle) and environment-variable passthrough, propagated across all README translations, with a plain-language "Short version" lead and a Japanese edition of the sandbox guide (#2071). The feature itself shipped earlier (#1421); this release documents it.
+
 ### `@mulmoclaude/core@0.13.0` - 2026-07-13
 
 RemoteHost session persistence (receptron/mulmoserver#50, case A'): a host's Firebase session is parked in the browser and restored after a server restart, without a re-login popup. First core release carrying this API (#2074) and the mulmoclaude-wiring hardening (#2076).
