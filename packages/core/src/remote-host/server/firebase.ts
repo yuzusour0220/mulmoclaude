@@ -64,10 +64,18 @@ const openFreshApp = async (
   store: HostSessionPersistence,
   name: string,
 ): Promise<{ app: FirebaseApp; handles: RemoteHostSessionHandles }> => {
+  // `initializeApp` registers the app in the SDK's global registry, so if init
+  // then throws we must delete it — otherwise repeated reconnect failures leak
+  // a registered app each time.
   const app = initializeApp(config, name);
-  const auth = initializeAuth(app, { persistence: store.persistence });
-  await auth.authStateReady();
-  return { app, handles: { auth, firestore: getFirestore(app), storage: getStorage(app), uid: auth.currentUser?.uid ?? null } };
+  try {
+    const auth = initializeAuth(app, { persistence: store.persistence });
+    await auth.authStateReady();
+    return { app, handles: { auth, firestore: getFirestore(app), storage: getStorage(app), uid: auth.currentUser?.uid ?? null } };
+  } catch (error) {
+    await deleteApp(app).catch(() => undefined);
+    throw error;
+  }
 };
 
 export const createRemoteHostSession = (config: FirebaseOptions): RemoteHostSession => {
@@ -83,12 +91,25 @@ export const createRemoteHostSession = (config: FirebaseOptions): RemoteHostSess
   };
 
   const open = async (seedBlob?: string): Promise<RemoteHostSessionHandles> => {
-    await close();
-    if (seedBlob) store.seed(seedBlob);
+    // Non-destructive: keep the current session intact until the fresh app is
+    // proven to come up. A bad seed blob or a failed init must not tear down a
+    // healthy session — the reconnect contract (mulmoserver#50). So we tear the
+    // previous app down only AFTER success, and roll the store back on failure.
+    const previousApp = app;
+    const previousBlob = store.exportBlob();
     appSeq += 1;
-    const { app: nextApp, handles } = await openFreshApp(config, store, `remote-host-${appSeq}`);
-    app = nextApp;
-    return handles;
+    try {
+      store.clear();
+      if (seedBlob) store.seed(seedBlob);
+      const { app: nextApp, handles } = await openFreshApp(config, store, `remote-host-${appSeq}`);
+      app = nextApp;
+      if (previousApp) await deleteApp(previousApp).catch(() => undefined);
+      return handles;
+    } catch (error) {
+      store.clear();
+      if (previousBlob) store.seed(previousBlob);
+      throw error;
+    }
   };
 
   return { open, close, exportSession: store.exportBlob, onSessionChange: store.onChange };
