@@ -990,9 +990,13 @@ async function initBootDiagnostics(): Promise<void> {
   // first to catch up changes that landed while the server was down.
   // Errors are logged inside; fire-and-forget so a slow scan doesn't
   // hold up the rest of boot.
-  startCollectionWatchers().catch((err: unknown) => {
-    log.warn("collections", "watcher boot failed", { error: String(err) });
-  });
+  if (env.ablation.includes("reconciler")) {
+    log.warn("collections", "ABLATION ACTIVE: reconciler disabled — no watchers, bells, or spawn recurrence (evaluation only)");
+  } else {
+    startCollectionWatchers().catch((err: unknown) => {
+      log.warn("collections", "watcher boot failed", { error: String(err) });
+    });
+  }
 }
 
 function attachTransports(httpServer: ReturnType<typeof app.listen>, pubsub: IPubSub): void {

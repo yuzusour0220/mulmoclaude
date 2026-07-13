@@ -113,6 +113,20 @@ export const env = Object.freeze({
   journalForceRunOnStartup: flagOf("JOURNAL_FORCE_RUN_ON_STARTUP"),
   chatIndexForceRunOnStartup: flagOf("CHAT_INDEX_FORCE_RUN_ON_STARTUP"),
 
+  // Evaluation-only ablation switches. Comma-separated component names
+  // that are DISABLED for baseline comparisons (systems-paper E2):
+  //   "validation" — manageCollection putItems skips pre-write record
+  //     validation, and the getItems / presentCollection best-effort
+  //     record scans stop reporting issues to the model.
+  //   "reconciler" — collection watchers (fs.watch + wall-clock tick)
+  //     are not started: no completion bells, no trigger reminders, no
+  //     spawn recurrence.
+  // Never set in normal operation; the server logs a warning at boot
+  // when any ablation is active. See also MULMOCLAUDE_FAKE_NOW
+  // (packages/core collection-watchers/clock.ts) for the companion
+  // deterministic-time switch.
+  ablation: asCsv(process.env.MULMOCLAUDE_ABLATION),
+
   // macOS Reminder notification sink (#789). Darwin-only; iCloud
   // Reminders sync mirrors the entry to the user's iPhone, which
   // delivers the system notification. **On by default** on macOS —
