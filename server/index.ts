@@ -65,6 +65,7 @@ import { createJournalRouter } from "./api/routes/journal.js";
 import { createTranslationRouter } from "./api/routes/translation.js";
 import { announcePluginMetaDiagnostics } from "./plugins/diagnostics.js";
 import { announceOptionalDeps } from "./system/announceOptionalDeps.js";
+import { announceGeminiKey } from "./system/announceGeminiKey.js";
 import { migrateLegacyBillingPresets } from "./workspace/billing-migration.js";
 import { APP_VERSION } from "./system/appVersion.js";
 import { createChatService } from "@mulmobridge/chat-service";
@@ -967,6 +968,9 @@ async function initBootDiagnostics(): Promise<void> {
   // missing one so a feature degrading is visible instead of a
   // later opaque crash. Never throws.
   await announceOptionalDeps();
+
+  // --- Gemini key presence (#2081) ---
+  announceGeminiKey();
 
   // --- Voice input sidecar warm-up ---
   // If local voice input is enabled and its model is already on disk,

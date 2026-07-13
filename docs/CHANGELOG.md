@@ -8,6 +8,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 ## [Unreleased]
 
+### `@mulmoclaude/core@0.13.1` - 2026-07-14
+
+- **Docs (#2081)**: the Gemini API-key help now tells users to put `GEMINI_API_KEY` in a `.env` file **in the directory they launch MulmoClaude from** (not the isolated `~/mulmoclaude` workspace), matching the launcher's new launch-dir `.env` loading. Ships via `assets/helps/gemini.md`.
+
 ---
 
 ## [0.9.7] - 2026-07-14
