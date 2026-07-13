@@ -97,9 +97,33 @@ interface RemoteHostStatus {
 }
 interface StatusResponse {
   status: RemoteHostStatus;
+  // The server's Firebase session blob (refresh token included). We park it in
+  // localStorage so a server restart can reconnect without a Google popup
+  // (case A', mulmoserver#50). Null when disconnected.
+  session: string | null;
 }
 
 const { t } = useI18n();
+
+// Same-machine (localhost) trust model — see mulmoserver#50. Wrapped so a
+// storage-disabled context (private mode) degrades to "no persistence" rather
+// than throwing.
+const SESSION_KEY = "remoteHost.session";
+const loadStoredSession = (): string | null => {
+  try {
+    return localStorage.getItem(SESSION_KEY);
+  } catch {
+    return null;
+  }
+};
+const persistSession = (blob: string | null): void => {
+  try {
+    if (blob) localStorage.setItem(SESSION_KEY, blob);
+    else localStorage.removeItem(SESSION_KEY);
+  } catch {
+    /* storage unavailable — reconnect just won't survive a restart */
+  }
+};
 
 // Mobile companion PWA. Shown in the popover as help text; not fetched from
 // this desktop app, so no runtime env override is needed.
@@ -117,9 +141,28 @@ const refreshStatus = async () => {
   const res = await apiGet<StatusResponse>(API_ROUTES.remoteHost.status);
   if (res.ok) {
     status.value = res.data.status;
+    // Keep the parked blob fresh (the refresh token can rotate) — but never
+    // clear it on a disconnected status, so an auto-reconnect still has it.
+    if (res.data.session) persistSession(res.data.session);
     error.value = null;
   } else {
     error.value = res.error || t("remoteHost.statusFailed");
+  }
+};
+
+// On load, if the server is disconnected but we have a parked session, restore
+// it without a popup. A rejected blob (expired/invalid) is dropped silently so
+// the user just sees the normal Connect button.
+const tryAutoReconnect = async () => {
+  if (status.value.connected) return;
+  const blob = loadStoredSession();
+  if (!blob) return;
+  const res = await apiPost<StatusResponse>(API_ROUTES.remoteHost.reconnect, { session: blob });
+  if (res.ok) {
+    status.value = res.data.status;
+    persistSession(res.data.session);
+  } else {
+    persistSession(null);
   }
 };
 
@@ -144,6 +187,7 @@ const onConnect = async () => {
       return;
     }
     status.value = res.data.status;
+    persistSession(res.data.session); // park the session for popup-free reconnect after a restart
     open.value = false; // close the popover after a successful login
   } catch (err) {
     error.value = errorMessage(err, t("remoteHost.signInFailed"));
@@ -162,6 +206,7 @@ const onDisconnect = async () => {
       return;
     }
     status.value = res.data.status;
+    persistSession(null); // forget the parked session on an explicit disconnect
     open.value = false; // close the popover after a successful logout
   } catch (err) {
     error.value = errorMessage(err, t("remoteHost.disconnectFailed"));
@@ -177,7 +222,9 @@ const onDocumentClick = (event: MouseEvent) => {
 };
 
 onMounted(() => {
-  void refreshStatus();
+  refreshStatus()
+    .then(tryAutoReconnect)
+    .catch(() => undefined);
   document.addEventListener("mousedown", onDocumentClick);
 });
 onBeforeUnmount(() => document.removeEventListener("mousedown", onDocumentClick));

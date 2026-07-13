@@ -20,7 +20,7 @@ import type { Command, JsonObject } from "@mulmoclaude/core/remote-host";
 
 import { errorMessage } from "../utils/errors.js";
 import { log } from "../system/logger/index.js";
-import { storage } from "./firebase.js";
+import { currentStorage } from "./session.js";
 
 const PREFIX = "remote-host";
 
@@ -42,7 +42,7 @@ const stagedStorageIds = (params: JsonObject): string[] => {
 export const onExpire = async (command: Command, uid: string): Promise<void> => {
   for (const storageId of stagedStorageIds(command.params)) {
     try {
-      await deleteObject(ref(storage, `users/${uid}/uploads/${storageId}`));
+      await deleteObject(ref(currentStorage(), `users/${uid}/uploads/${storageId}`));
     } catch (error) {
       log.warn(PREFIX, "failed to delete staged upload for expired command; leaving orphan for TTL sweep", { storageId, error: errorMessage(error) });
     }
