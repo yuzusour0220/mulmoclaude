@@ -178,7 +178,7 @@
     "@receptron/task-scheduler": "*",
     "@types/node": "^26.1.1",
     "gui-chat-protocol": "^0.4.0",
-    "tsx": "^4.23.0",
+    "tsx": "^4.23.1",
     "typescript": "^6.0.3",
     "vite": "^8.1.4",
     "vite-plugin-dts": "^5.0.3"
