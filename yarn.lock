@@ -798,12 +798,12 @@
     "@firebase/util" "1.15.1"
     tslib "^2.1.0"
 
-"@firebase/app-compat@0.5.14":
-  version "0.5.14"
-  resolved "https://registry.yarnpkg.com/@firebase/app-compat/-/app-compat-0.5.14.tgz#8645e416e74aa8c559cff4c699bd37c1280b539e"
-  integrity sha512-rgFmiofYsdS9ZG/Bht3OBxJtPD3zWE1cffShWubEm+4+qZeyzCbmtb1q6jOEjN9fB7uufe4rQmWOPXouR3758Q==
+"@firebase/app-compat@0.5.15":
+  version "0.5.15"
+  resolved "https://registry.yarnpkg.com/@firebase/app-compat/-/app-compat-0.5.15.tgz#6db6d3a5cc35dba7c4fbcc985c5a8bff4f2fab01"
+  integrity sha512-HaiSM9TwbGIR4b7F6+UncHWlqdH89eeY7VUskaOGOlI2PxHS5Z+6hHsYGvNLy0SHDE6zyXO+3QSA6a4aqQxsqA==
   dependencies:
-    "@firebase/app" "0.15.0"
+    "@firebase/app" "0.15.1"
     "@firebase/component" "0.7.3"
     "@firebase/logger" "0.5.1"
     "@firebase/util" "1.15.1"
@@ -816,10 +816,10 @@
   dependencies:
     "@firebase/logger" "0.5.1"
 
-"@firebase/app@0.15.0":
-  version "0.15.0"
-  resolved "https://registry.yarnpkg.com/@firebase/app/-/app-0.15.0.tgz#5fbb1ed3e0f9d29f678b06ac12e3c1d5baff119b"
-  integrity sha512-soIskolmGgbpi0K/MfrjtdpO1220qRCbXA4Z8Qx3lM+fVwA3q40m+OM+7zBHd2nuQCrLXb33L6Oc1aBH3Y26AQ==
+"@firebase/app@0.15.1":
+  version "0.15.1"
+  resolved "https://registry.yarnpkg.com/@firebase/app/-/app-0.15.1.tgz#2d5eb26abf388dc32aea5763eb26e0698d5401ca"
+  integrity sha512-iD9+Z5HcPo0Uop5f72/VYMeXwKucBhW7iFrISkJFvQ+lSZikTNgTz0FgAtaaTkAG0pEZSnCymA2Fu49n0rcufQ==
   dependencies:
     "@firebase/component" "0.7.3"
     "@firebase/logger" "0.5.1"
@@ -1057,14 +1057,14 @@
     tslib "^2.1.0"
     web-vitals "^4.2.4"
 
-"@firebase/remote-config-compat@0.2.26":
-  version "0.2.26"
-  resolved "https://registry.yarnpkg.com/@firebase/remote-config-compat/-/remote-config-compat-0.2.26.tgz#2c862af744f596ea4ae6e1abbbba2d9607572afb"
-  integrity sha512-uC57Tc7GYYOCnMgLkGIVf999XlaYaPDONoa54c93YTKDctlvCZI89z0zQ2RbhGR8Zf+QuCbQHs/99vqoE84a7g==
+"@firebase/remote-config-compat@0.2.27":
+  version "0.2.27"
+  resolved "https://registry.yarnpkg.com/@firebase/remote-config-compat/-/remote-config-compat-0.2.27.tgz#19d05eb72deaf6f7205021c896f290c9426c13f1"
+  integrity sha512-FYwYWwSbUdza/pRX4NpSBm/Pimntum3jEIBpnDn5Ey1jHNWgjxrE8Z5SB4mCHd5wGCoYd3koJzxARl/VWIEx0Q==
   dependencies:
     "@firebase/component" "0.7.3"
     "@firebase/logger" "0.5.1"
-    "@firebase/remote-config" "0.8.5"
+    "@firebase/remote-config" "0.9.0"
     "@firebase/remote-config-types" "0.5.1"
     "@firebase/util" "1.15.1"
     tslib "^2.1.0"
@@ -1074,10 +1074,10 @@
   resolved "https://registry.yarnpkg.com/@firebase/remote-config-types/-/remote-config-types-0.5.1.tgz#2bc52831f8b52aff2b1b434158b4f7803e05f86e"
   integrity sha512-cX/1LT6KQwkXzck2eSzeKnuvXZCyr8qaPpDcikoJs7jmI+oBOXixpDLeDtWj1U6GNMkIoXrEDNoyT2Ypcyp5/A==
 
-"@firebase/remote-config@0.8.5":
-  version "0.8.5"
-  resolved "https://registry.yarnpkg.com/@firebase/remote-config/-/remote-config-0.8.5.tgz#273ba61e07a365172abee03a6cf9c0e0ac676aa6"
-  integrity sha512-zb+7CDGFP2wYVF1LXQoYIFdoESIQM3p0+uiW1welw8+zvDxAL50K75PKTXXtunJADUrksTVpV7mD0pn54vzJRA==
+"@firebase/remote-config@0.9.0":
+  version "0.9.0"
+  resolved "https://registry.yarnpkg.com/@firebase/remote-config/-/remote-config-0.9.0.tgz#f3d2b1a86c56a6f9da17602e8f4f347b4edee297"
+  integrity sha512-aNn6/eJhsSC+gXSToiXiYPv3ypLP9lFtzl+/q9kSOBPB7D6rae0Rt2uENZZLXGYbEgHYKQblOhijJAXGbbJjtQ==
   dependencies:
     "@firebase/component" "0.7.3"
     "@firebase/installations" "0.6.22"
@@ -1996,6 +1996,15 @@
   version "0.4.0"
   resolved "https://registry.yarnpkg.com/@mulmochat-plugin/ui-image/-/ui-image-0.4.0.tgz#97f60be5541ea464077a54fe061b91e6dd27c97b"
   integrity sha512-mmUm/tJEeyyz0qDhMZL+GSdKXFwOi+pffEJVm6bBUHM+KPVrUiyKIBBi68eQ2S5PKmkJdp/1I/iYXhrU5zcr2Q==
+
+"@mulmoclaude/core@^0.12.0", "@mulmoclaude/core@^0.12.2":
+  version "0.12.2"
+  resolved "https://registry.yarnpkg.com/@mulmoclaude/core/-/core-0.12.2.tgz#881d8043d1e6a2598646f0b33d2fe4cd1dd53b3b"
+  integrity sha512-cFNBChF2ScXZGKFc5/xhezi/lgMpnrwEmqp7r2ho93cdAt6t+ypz00MfKToBunen1nkDKQhcebTM4e06KiaO/Q==
+  dependencies:
+    fast-xml-parser "^5.9.3"
+    js-yaml "^5.2.1"
+    zod "^4.4.3"
 
 "@napi-rs/wasm-runtime@^1.1.4", "@napi-rs/wasm-runtime@^1.1.6":
   version "1.1.6"
@@ -5679,7 +5688,7 @@ fast-xml-builder@^1.2.0:
     path-expression-matcher "^1.5.0"
     xml-naming "^0.1.0"
 
-fast-xml-parser@^5.10.0:
+fast-xml-parser@^5.10.0, fast-xml-parser@^5.9.3:
   version "5.10.0"
   resolved "https://registry.yarnpkg.com/fast-xml-parser/-/fast-xml-parser-5.10.0.tgz#8d08abfe4d6c51e9c5b51f417b994858dbedb4d7"
   integrity sha512-SLhnTEqE5QpJHq/6zl9bsmImEP2adv+y6Wy+cJa7nVTRzQh1OZfCe9k29M5xN74LWnu0xa1zrUrq3KnOKl92Fg==
@@ -5762,18 +5771,18 @@ find-up@^5.0.0:
     locate-path "^6.0.0"
     path-exists "^4.0.0"
 
-firebase@12.15.0:
-  version "12.15.0"
-  resolved "https://registry.yarnpkg.com/firebase/-/firebase-12.15.0.tgz#30efa309ebcac219f43adf0de462351185cb76e0"
-  integrity sha512-p0YTLcRSTiBXMx9sGr4ZNSfLjc/RVBEw4C/TXjVMtw65+6E1Pbm47UY3F4/AqRoDobEcNX3gsbPGy7jPjxbgSQ==
+firebase@12.16.0:
+  version "12.16.0"
+  resolved "https://registry.yarnpkg.com/firebase/-/firebase-12.16.0.tgz#d94f3827626314e310c434c55a50542495b6151f"
+  integrity sha512-CNw6hFBdONkzF8UGLDx/RDRY9gVa5VmJNHd7qi4gdmA3ZuLkuOrhmWefB2l+FN+OxFpN77Itq7aO6zlTi780ag==
   dependencies:
     "@firebase/ai" "2.13.1"
     "@firebase/analytics" "0.10.22"
     "@firebase/analytics-compat" "0.2.28"
-    "@firebase/app" "0.15.0"
+    "@firebase/app" "0.15.1"
     "@firebase/app-check" "0.12.0"
     "@firebase/app-check-compat" "0.4.5"
-    "@firebase/app-compat" "0.5.14"
+    "@firebase/app-compat" "0.5.15"
     "@firebase/app-types" "0.9.5"
     "@firebase/auth" "1.13.3"
     "@firebase/auth-compat" "0.6.8"
@@ -5790,8 +5799,8 @@ firebase@12.15.0:
     "@firebase/messaging-compat" "0.2.27"
     "@firebase/performance" "0.7.12"
     "@firebase/performance-compat" "0.2.25"
-    "@firebase/remote-config" "0.8.5"
-    "@firebase/remote-config-compat" "0.2.26"
+    "@firebase/remote-config" "0.9.0"
+    "@firebase/remote-config-compat" "0.2.27"
     "@firebase/storage" "0.14.3"
     "@firebase/storage-compat" "0.4.3"
     "@firebase/util" "1.15.1"
@@ -7619,10 +7628,10 @@ mulmocast-vision@^1.0.11:
     puppeteer "^25.2.1"
     yauzl "^3.4.0"
 
-mulmocast@^2.7.1:
-  version "2.7.1"
-  resolved "https://registry.yarnpkg.com/mulmocast/-/mulmocast-2.7.1.tgz#ead35ab8675f4771bf4fdd1e787291256fac655b"
-  integrity sha512-taclVGmvGsnG1Roi+c+6jybK4e34CXkEuUk4t5ah50VxcIa8ZhBSW7EC12JN+DkldeTjawDL/Cunsp3n0Eae/g==
+mulmocast@^2.7.2:
+  version "2.7.2"
+  resolved "https://registry.yarnpkg.com/mulmocast/-/mulmocast-2.7.2.tgz#dd96e182857df5d056fcfb63f91f7d21fd30b70f"
+  integrity sha512-sW+3MFFB81xqkPwnt6/8qJJFzGMzwFZwmKtK3JgPhXX/vOCPTJWtMG+yS+6VjqGms/f5Y4OHucneRFle3N3rgQ==
   dependencies:
     "@google-cloud/text-to-speech" "^6.4.1"
     "@google/genai" "^2.10.0"
@@ -9568,10 +9577,10 @@ tslib@^2.1.0, tslib@^2.2.0, tslib@^2.4.0, tslib@^2.6.2, tslib@^2.6.3, tslib@^2.8
   resolved "https://registry.yarnpkg.com/tslib/-/tslib-2.8.1.tgz#612efe4ed235d567e8aba5f2a5fab70280ade83f"
   integrity sha512-oJFu94HQb+KVduSUQL7wnpmqnfmLsOA/nAh6b6EH0wCEoK0/mPeXU6c3wKDV83MkOuHPRHtSXKKU99IBazS/2w==
 
-tsx@^4.23.0:
-  version "4.23.0"
-  resolved "https://registry.yarnpkg.com/tsx/-/tsx-4.23.0.tgz#5393ae8bfce5a9c34db9c00d1353e3d8c3fd3de6"
-  integrity sha512-eUdUIaCr963q2h5u3+QwvYp0+eqPvn+egeqZUm0hwERCqqx1E3kK5ehbGCvqSE5MQAULr67ww0cA3jKc3YkM1w==
+tsx@^4.23.1:
+  version "4.23.1"
+  resolved "https://registry.yarnpkg.com/tsx/-/tsx-4.23.1.tgz#1703da002ee4432b9a053917431f91462fca235b"
+  integrity sha512-GQHnkIfxyx1wYCOS/wonik5MVRZU9hi1TEZmzGZSCJB1y9YgoZ8H6itNE/u4suE+yLmOzuE4E5S4TZ/ZX2wcWQ==
   dependencies:
     esbuild "~0.28.0"
   optionalDependencies:
