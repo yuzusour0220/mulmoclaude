@@ -8,7 +8,7 @@
 // This module holds the current handles and exposes them as getters, so the
 // runner, onExpire, and attachment ingest always target the live session's
 // Firestore/Storage/uid rather than a stale module-level instance.
-import { createRemoteHostAuth, createRemoteHostSession, type RemoteHostSessionHandles } from "@mulmoclaude/core/remote-host/server";
+import { createRemoteHostAuth, createRemoteHostSession, isSeedableBlob, type RemoteHostSessionHandles } from "@mulmoclaude/core/remote-host/server";
 import type { Firestore } from "firebase/firestore";
 import type { FirebaseStorage } from "firebase/storage";
 
@@ -46,10 +46,13 @@ export const signIn = async (idToken: string): Promise<string> => {
 };
 
 // Popup-free reconnect: open the session seeded from the browser-parked blob,
-// validating (before any teardown) that it restored a real user. A blob that
-// yields no user rejects with RemoteHostSessionExpiredError, keeping reconnect
-// non-destructive and telling the client to drop the stale blob.
+// validating (before any teardown) that it restored a real user. Both a
+// malformed blob and one that yields no user reject with
+// RemoteHostSessionExpiredError — neither can ever restore a session, so the
+// client is told (401) to drop it; genuine transient failures propagate as-is
+// (5xx, blob kept). Reconnect stays non-destructive either way.
 export const restore = async (blob: string): Promise<string> => {
+  if (!isSeedableBlob(blob)) throw new RemoteHostSessionExpiredError();
   const next = await session.open(blob, (opened) => (opened.uid ? Promise.resolve() : Promise.reject(new RemoteHostSessionExpiredError())));
   handles = next;
   return uidOf(next);

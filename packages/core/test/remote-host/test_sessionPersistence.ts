@@ -11,7 +11,7 @@ import assert from "node:assert/strict";
 import { deleteApp, initializeApp } from "firebase/app";
 import { initializeAuth } from "firebase/auth";
 
-import { createHostSessionPersistence } from "../../src/remote-host/server/sessionPersistence.js";
+import { createHostSessionPersistence, isSeedableBlob } from "../../src/remote-host/server/sessionPersistence.js";
 
 const CONFIG = { apiKey: "test", projectId: "test", appId: "test" };
 const AUTH_KEY = "firebase:authUser:apiKey:remote-host-1";
@@ -110,6 +110,17 @@ describe("createHostSessionPersistence", () => {
     unsubscribe();
     await instance._set(AUTH_KEY, userValue);
     assert.equal(seen.length, 2); // no further notifications
+  });
+
+  it("isSeedableBlob accepts a JSON object and rejects malformed / non-object blobs", () => {
+    // Anything false here can never restore a session → the client should drop
+    // it (treated as expired), not retry it forever.
+    assert.equal(isSeedableBlob(JSON.stringify({ [AUTH_KEY]: userValue })), true);
+    assert.equal(isSeedableBlob("{}"), true);
+    assert.equal(isSeedableBlob("[1,2,3]"), false); // valid JSON, not an object
+    assert.equal(isSeedableBlob('"a string"'), false);
+    assert.equal(isSeedableBlob("not json"), false);
+    assert.equal(isSeedableBlob(""), false);
   });
 
   it("clear empties the store without firing onChange", async () => {

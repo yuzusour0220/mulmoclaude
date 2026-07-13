@@ -60,6 +60,18 @@ const isRecord = (value: unknown): value is Record<string, unknown> => typeof va
 
 const isPersistenceValue = (value: unknown): value is PersistenceValue => typeof value === "string" || isRecord(value);
 
+// True when `blob` is a JSON object `seed` can load. A blob that fails this can
+// never restore a session (corrupt localStorage, wrong shape), so callers treat
+// it as an expired/invalid session rather than a transient error — the client
+// then drops it instead of retrying the same doomed blob forever.
+export const isSeedableBlob = (blob: string): boolean => {
+  try {
+    return isRecord(JSON.parse(blob));
+  } catch {
+    return false;
+  }
+};
+
 // A class (constructor) so the SDK's `_getInstance` accepts it (it asserts
 // `cls instanceof Function`, then `new cls()`); instances hold the shared
 // `store`/`notify`, so a fresh `new` still sees the seeded/live data. `static

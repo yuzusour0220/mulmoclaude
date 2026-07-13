@@ -14,5 +14,5 @@ export { createRemoteHostAuth } from "./auth.js";
 export type { RemoteHostAuth } from "./auth.js";
 export { createRemoteHostFirebase, createRemoteHostSession } from "./firebase.js";
 export type { RemoteHostFirebase, RemoteHostSession, RemoteHostSessionHandles, RemoteHostSessionValidate } from "./firebase.js";
-export { createHostSessionPersistence } from "./sessionPersistence.js";
+export { createHostSessionPersistence, isSeedableBlob } from "./sessionPersistence.js";
 export type { HostSessionPersistence, HostAuthPersistenceClass, HostAuthPersistenceInstance } from "./sessionPersistence.js";
