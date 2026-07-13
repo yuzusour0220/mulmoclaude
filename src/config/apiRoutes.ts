@@ -168,6 +168,7 @@ const HOST_API_ROUTES = {
   // plans/feat-remote-host-firestore-list-collections.md.
   remoteHost: {
     connect: "/api/remote-host/connect",
+    reconnect: "/api/remote-host/reconnect",
     disconnect: "/api/remote-host/disconnect",
     status: "/api/remote-host/status",
   },
