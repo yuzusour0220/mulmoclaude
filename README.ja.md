@@ -445,9 +445,9 @@ mcp__claude_ai_Google_Calendar
 JSON を手で編集することなく外部 MCP サーバーを追加できます。2 つのタイプをサポートしています:
 
 - **HTTP** — リモートサーバー (例: `https://example.com/mcp`)。どのモードでも動作します。Docker では `localhost` / `127.0.0.1` URL は自動的に `host.docker.internal` に書き換えられます。
-- **Stdio** — ローカルサブプロセス (例: `npx` の MCP)。安全のため `npx` / `node` / `tsx` に制限されます。Docker サンドボックスが **オフ** のときはホスト上で動きます。**オン** のときは stdio エントリは **既定で破棄されます** (最小構成のサンドボックスイメージでは任意のランタイムを動かせないため) — 代わりに `"hostExecInDocker": true` を設定すると、そのサーバーをホスト上で `stdio ↔ HTTP` ゲートウェイ越しに動かせます。[docs/mcp-sandbox.md](docs/mcp-sandbox.md) を参照。
+- **Stdio** — ローカルサブプロセス (例: `npx` の MCP)。安全のため `npx` / `node` / `tsx` に制限されます。Docker サンドボックスが **オフ** のときはホスト上で動きます。**オン** のときは stdio エントリは **既定で破棄されます** (最小構成のサンドボックスイメージでは任意のランタイムを動かせないため) — 代わりに `"hostExecInDocker": true` を設定すると、そのサーバーをホスト上で `stdio ↔ HTTP` ゲートウェイ越しに動かせます。[docs/mcp-sandbox.ja.md](docs/mcp-sandbox.ja.md) を参照。
 
-stdio サーバーへの認証情報は **`env`** マップで渡します (`"env": { "IMAP_PASS": "…" }`)。値はリテラルで `mcp.json` に保存されます (mode `0600` ですが **平文** — vault ではなくファイル権限による保護)。`hostExecInDocker` の opt-in や `env` がプロセスに届く仕組みなど詳細は [docs/mcp-sandbox.md](docs/mcp-sandbox.md) にあります。
+stdio サーバーへの認証情報は **`env`** マップで渡します (`"env": { "IMAP_PASS": "…" }`)。値はリテラルで `mcp.json` に保存されます (mode `0600` ですが **平文** — vault ではなくファイル権限による保護)。`hostExecInDocker` の opt-in や `env` がプロセスに届く仕組みなど詳細は [docs/mcp-sandbox.ja.md](docs/mcp-sandbox.ja.md) にあります。
 
 設定は `<workspace>/config/` 配下にあります:
 

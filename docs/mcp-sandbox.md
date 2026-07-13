@@ -1,5 +1,7 @@
 # MCP servers and the Docker sandbox
 
+> 日本語: [mcp-sandbox.ja.md](mcp-sandbox.ja.md)
+
 MulmoClaude can run Claude inside a Docker sandbox to isolate it from your host system (`yarn dev` without `DISABLE_SANDBOX=1`, or `Settings → Docker sandbox`). When the sandbox is on, **stdio MCP servers are dropped by default**; HTTP MCP servers continue to work. There is one explicit opt-in — `hostExecInDocker` — that runs a stdio server on the host behind a gateway so it still works under Docker. This page explains why stdio is dropped by default, how to pass environment variables, and how the opt-in works. **If you just want the answer, read [Short version](#short-version-can-i-run-a-stdio-mcp) — the rest of the page is the "why".**
 
 ## Short version: can I run a stdio MCP?
