@@ -8,6 +8,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 ## [Unreleased]
 
+### `@mulmoclaude/core@0.13.0` - 2026-07-13
+
+RemoteHost session persistence (receptron/mulmoserver#50, case A'): a host's Firebase session is parked in the browser and restored after a server restart, without a re-login popup. First core release carrying this API (#2074) and the mulmoclaude-wiring hardening (#2076).
+
+- **New API**: `createHostSessionPersistence()` (seed/export-able Firebase Auth persistence) and `createRemoteHostSession(config)` — `open(seedBlob?, validate?)` / `close()` / `exportSession()` / `onSessionChange()`. New exports: `isSeedableBlob`, `RemoteHostSessionValidate`, `HostAuthPersistenceClass`, `HostAuthPersistenceInstance`.
+- **Fix (#2076)**: persistence is now a class as `initializeAuth` requires — fixes `INTERNAL ASSERTION FAILED: Expected a class definition` that broke `createRemoteHostSession.open()`. Non-destructive `(re)connect` via a pre-teardown `validate` hook (a failed sign-in / expired blob keeps the live session). Reconnect classifies expired/malformed blobs (drop) vs transient failures (keep), so a network blip no longer forces a re-login and a corrupt blob is not retried forever.
+
+📦 npm: [`@mulmoclaude/core@0.13.0`](https://www.npmjs.com/package/@mulmoclaude/core/v/0.13.0)
+
 ---
 
 ## [0.9.6] - 2026-07-12
