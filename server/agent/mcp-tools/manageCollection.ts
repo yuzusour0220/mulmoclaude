@@ -53,6 +53,7 @@ import { dataSkillDir, mirrorSkillWrite } from "@mulmoclaude/core/skill-bridge";
 import { helpsAssetDir, isPresetSlug } from "@mulmoclaude/core/workspace-setup";
 import { writeFileAtomic } from "../../utils/files/atomic.js";
 import { WORKSPACE_DIRS, workspacePath } from "../../workspace/paths.js";
+import { isAblated } from "../../system/env.js";
 
 /** Refuse an unselective getItems beyond this many records — a silent
  *  truncation would read as "covered everything", and an unbounded dump
@@ -72,7 +73,14 @@ export const MAX_SCHEMA_ISSUES = 20;
  *  after a `putSchema` write (default: the same refreshers
  *  `/api/config/refresh` wraps); tests inject a no-op so they never
  *  touch the real workspace. */
-export type ManageCollectionDeps = DiscoveryOptions & { refreshAfterWrite?: () => Promise<void> };
+export type ManageCollectionDeps = DiscoveryOptions & {
+  refreshAfterWrite?: () => Promise<void>;
+  /** Evaluation-only (MULMOCLAUDE_ABLATION=validation): skip pre-write
+   *  record validation in putItems and the getItems record-issue scan.
+   *  The production singleton binds this from `env.ablation`; leave
+   *  unset everywhere else. */
+  ablateValidation?: boolean;
+};
 
 /** Resolve the workspace root the same way every collections call does:
  *  the injected override (tests) or the live workspace path (prod). */
@@ -123,6 +131,7 @@ function projectFields(record: CollectionItem, fields: string[], primaryKey: str
  *  dispatch. The record VALUES in `items` ride verbatim, like a raw
  *  file Read — only host-composed report strings are defanged. */
 async function recordIssuesWarning(collection: LoadedCollection, deps: ManageCollectionDeps): Promise<string | undefined> {
+  if (deps.ablateValidation) return undefined;
   const issues = await validateCollectionRecords(collection, { workspaceRoot: deps.workspaceRoot });
   if (issues.length === 0) return undefined;
   const lines = issues.map((issue) => `- ${defangForPrompt(issue.file)}: ${defangForPrompt(issue.problem)}`).join("\n");
@@ -233,8 +242,10 @@ async function putOneItem(
     if (typeof merged === "string") return reject(itemId, merged);
     toWrite = merged;
   }
-  const invalid = validateRecordObject(toWrite, itemId, schema);
-  if (invalid) return reject(itemId, invalid);
+  if (!deps.ablateValidation) {
+    const invalid = validateRecordObject(toWrite, itemId, schema);
+    if (invalid) return reject(itemId, invalid);
+  }
   const result = await writeItem(collection.dataDir, itemId, toWrite, {
     refuseOverwrite: mode === "create",
     workspaceRoot: deps.workspaceRoot,
@@ -481,4 +492,4 @@ export function makeManageCollectionTool(deps: ManageCollectionDeps = {}) {
   };
 }
 
-export const manageCollection = makeManageCollectionTool();
+export const manageCollection = makeManageCollectionTool({ ablateValidation: isAblated("validation") || undefined });
