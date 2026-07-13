@@ -58,10 +58,16 @@ export const restore = async (blob: string): Promise<string> => {
   return uidOf(next);
 };
 
+// Tear the local session down even if the Firebase sign-out throws: otherwise
+// `handles`/`currentUid` would stay stale and the app would leak while the route
+// answered 500. The sign-out error still propagates after cleanup.
 export const signOut = async (): Promise<void> => {
-  if (handles) await createRemoteHostAuth(handles.auth).signOutHost();
-  await session.close();
-  handles = null;
+  try {
+    if (handles) await createRemoteHostAuth(handles.auth).signOutHost();
+  } finally {
+    handles = null;
+    await session.close();
+  }
 };
 
 const requireHandles = (): RemoteHostSessionHandles => {
