@@ -31,9 +31,11 @@ dead-token pruning are the separate `mulmoserver` `sendPush` Cloud Function's jo
 - **Auth** = the RemoteHost channel's Firebase sign-in (`server/remoteHost/session.ts`,
   project `mulmoserver`, same project as `sendPush`). `auth.currentUser.getIdToken()`.
   ⇒ **push only sends while RemoteHost is connected**; otherwise a silent no-op.
-- **Trigger** = every agent turn completion via `finalizeRun` in `server/api/routes/agent.ts`
-  (fires once per finished run). Skips hidden/system utility sessions (translation workers,
-  hidden background helpers) — those aren't real user tasks.
+- **Trigger** = a **human-initiated** turn completing via `finalizeRun` in
+  `server/api/routes/agent.ts`. The intent is "I asked a question, walked away, ping me
+  when the answer's ready", so only `origin === human` (or missing, which means human)
+  qualifies. Scheduler / skill / bridge / plugin / hidden-system turns are excluded —
+  those aren't the user waiting in the browser.
 - **Toggle** = new `pushEnabled?: boolean` on `AppSettings` (workspace `settings.json`),
   read live at the trigger so a settings change takes effect without a restart. Mirrors the
   existing `voiceInput.enabled` boolean-setting plumbing.

@@ -1220,10 +1220,14 @@ async function finalizeRun(chatSessionId: string, origin: SessionOrigin | undefi
   // against the turn's real result here (#2057). No-op when none is registered.
   await runCompletionHook(chatSessionId, { didError }).catch(logBackgroundError("completion-hook"));
   runPostTurnSideEffects(chatSessionId, requestStartedAt);
-  // Web Push (#2086): notify the user's registered devices that this visible
-  // turn finished. No-op unless enabled in Settings AND RemoteHost is connected.
-  // Fire-and-forget — never blocks or fails the turn teardown.
-  notifyTaskFinished(chatSessionId, didError).catch(logBackgroundError("web-push"));
+  // Web Push (#2086): ping the user's devices when a turn THEY started finishes —
+  // they asked a question, walked away, and want to know when the answer is ready.
+  // Only human-initiated turns qualify (scheduler / skill / bridge / plugin are
+  // excluded — those aren't the user waiting in the browser; missing origin means
+  // "human" by convention). No-op unless enabled AND RemoteHost is connected.
+  if (origin === undefined || origin === SESSION_ORIGINS.human) {
+    notifyTaskFinished(chatSessionId, didError).catch(logBackgroundError("web-push"));
+  }
 }
 
 // Fire-and-forget post-turn processing for a normal (user-facing) chat
