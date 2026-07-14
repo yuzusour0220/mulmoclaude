@@ -294,14 +294,16 @@ completion the host calls the separate `mulmoserver` `sendPush` Cloud Function, 
 delivers a push to your registered devices — so it works even with the browser tab
 closed, as long as the host machine is up.
 
-- **Sender only.** MulmoClaude just POSTs `{ title, body }` via the shared
-  [`@mulmobridge/web-push`](../packages/web-push) package (`server/agent/webPush.ts`).
+- **Sender only.** MulmoClaude hands `{ title, body }` to the shared
+  [`@mulmobridge/web-push`](../packages/web-push) package (`server/agent/webPush.ts`),
+  which POSTs it to `sendPush` in the onCall envelope `{ "data": { title, body } }`.
   Device registration, the PWA, VAPID keys, delivery, and dead-token pruning all live
   in `mulmoserver` (`docs/web-push-sending.md`, mulmoserver#46).
 - **Auth = this RemoteHost session.** `sendPush` needs the signed-in user's Firebase
   ID token (`session.ts` `currentIdToken()`). So push only fires **while RemoteHost is
-  connected** — with it disconnected, or with no device registered, the toggle is a
-  silent no-op.
+  connected**: with it disconnected there's no ID token, so the send is a silent no-op
+  (never hits the network). Connected but with no device registered, the send *does* run
+  and `sendPush` returns `targets: 0` — the call succeeds but no notification is delivered.
 - **Scope.** Only human-initiated turns (`origin === human`). Scheduler / skill / bridge /
   hidden-system turns don't push — the point is "notify me about the answer I'm waiting
   for", not background chores. Off by default (`AppSettings.pushEnabled`).

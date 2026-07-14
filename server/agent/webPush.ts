@@ -14,7 +14,11 @@ const PUSH_TITLE_MAX = 80;
 const PUSH_BODY_MAX = 160;
 const DONE_TITLE = "✅ MulmoClaude";
 const ERROR_TITLE = "⚠️ MulmoClaude";
-const DEFAULT_BODY = "タスクが完了しました";
+// Neutral English fallback (the app's fallback locale) for the rare turn with no
+// user message — a fixed Japanese string here would give non-JA users a
+// mixed-language push. Locale-aware bodies are a follow-up (needs the user's
+// locale plumbed server-side).
+const DEFAULT_BODY = "Task complete";
 
 export interface TaskFinishedPush {
   title: string;

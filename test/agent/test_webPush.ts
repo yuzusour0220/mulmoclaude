@@ -13,9 +13,9 @@ describe("buildTaskFinishedPush", () => {
   });
 
   it("falls back to a generic body when the message is missing or blank", () => {
-    assert.equal(buildTaskFinishedPush(undefined, false).body, "タスクが完了しました");
-    assert.equal(buildTaskFinishedPush("   ", false).body, "タスクが完了しました");
-    assert.equal(buildTaskFinishedPush("", false).body, "タスクが完了しました");
+    assert.equal(buildTaskFinishedPush(undefined, false).body, "Task complete");
+    assert.equal(buildTaskFinishedPush("   ", false).body, "Task complete");
+    assert.equal(buildTaskFinishedPush("", false).body, "Task complete");
   });
 
   it("caps the body length (ellipsis included in the budget)", () => {
