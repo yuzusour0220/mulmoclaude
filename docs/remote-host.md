@@ -286,6 +286,34 @@ today's exact behaviour):
 
 ---
 
+## Web Push on task finish (#2086)
+
+When you ask a question, step away, and want a ping the moment the answer is ready,
+enable **Settings → Notifications → Web Push**. On every **human-initiated** turn
+completion the host calls the separate `mulmoserver` `sendPush` Cloud Function, which
+delivers a push to your registered devices — so it works even with the browser tab
+closed, as long as the host machine is up.
+
+- **Sender only.** MulmoClaude hands `{ title, body }` to the shared
+  [`@mulmobridge/web-push`](../packages/web-push) package (`server/agent/webPush.ts`),
+  which POSTs it to `sendPush` in the onCall envelope `{ "data": { title, body } }`.
+  Device registration, the PWA, VAPID keys, delivery, and dead-token pruning all live
+  in `mulmoserver` (`docs/web-push-sending.md`, mulmoserver#46).
+- **Auth = this RemoteHost session.** `sendPush` needs the signed-in user's Firebase
+  ID token (`session.ts` `currentIdToken()`). So push only fires **while RemoteHost is
+  connected**: with it disconnected there's no ID token, so the send is a silent no-op
+  (never hits the network). Connected but with no device registered, the send *does* run
+  and `sendPush` returns `targets: 0` — the call succeeds but no notification is delivered.
+- **Scope.** Only human-initiated turns (`origin === human`). Scheduler / skill / bridge /
+  hidden-system turns don't push — the point is "notify me about the answer I'm waiting
+  for", not background chores. Off by default (`AppSettings.pushEnabled`).
+
+**One-time user setup** (mulmoserver side): generate the VAPID key pair in the Firebase
+Console, add the PWA to your phone's home screen, and grant notification permission. See
+mulmoserver `docs/web-push.md`.
+
+---
+
 ## API surface (`server/api/routes/remoteHost.ts`)
 
 Bearer-guarded loopback routes (paths under `API_ROUTES.remoteHost` in

@@ -79,5 +79,14 @@ export const currentUid = (): string | null => handles?.auth.currentUser?.uid ??
 export const currentFirestore = (): Firestore => requireHandles().firestore;
 export const currentStorage = (): FirebaseStorage => requireHandles().storage;
 
+// The signed-in user's Firebase ID token, or null when the RemoteHost session
+// isn't open / not authenticated. web-push uses this to authenticate `sendPush`;
+// a null result (RemoteHost disconnected) makes the push a silent no-op. The
+// caller (@mulmobridge/web-push) treats a thrown/rejected token the same as null.
+export const currentIdToken = (): Promise<string | null> => {
+  const user = handles?.auth.currentUser;
+  return user ? user.getIdToken() : Promise.resolve(null);
+};
+
 // The blob the browser parks (refresh token included). Null when disconnected.
 export const exportSession = (): string | null => session.exportSession();

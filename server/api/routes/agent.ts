@@ -19,6 +19,7 @@ import {
 import { getRole } from "../../workspace/roles.js";
 import { runAgent } from "../../agent/index.js";
 import { prependJournalPointer } from "../../agent/prompt.js";
+import { notifyTaskFinished } from "../../agent/webPush.js";
 import { buildTranscriptPreamble, isStaleSessionError } from "../../agent/resumeFailover.js";
 import { isMcpBrokerNotReadyError } from "../../agent/mcpBrokerFailover.js";
 import { ONE_SECOND_MS } from "../../utils/time.js";
@@ -1219,6 +1220,14 @@ async function finalizeRun(chatSessionId: string, origin: SessionOrigin | undefi
   // against the turn's real result here (#2057). No-op when none is registered.
   await runCompletionHook(chatSessionId, { didError }).catch(logBackgroundError("completion-hook"));
   runPostTurnSideEffects(chatSessionId, requestStartedAt);
+  // Web Push (#2086): ping the user's devices when a turn THEY started finishes —
+  // they asked a question, walked away, and want to know when the answer is ready.
+  // Only human-initiated turns qualify (scheduler / skill / bridge / plugin are
+  // excluded — those aren't the user waiting in the browser; missing origin means
+  // "human" by convention). No-op unless enabled AND RemoteHost is connected.
+  if (origin === undefined || origin === SESSION_ORIGINS.human) {
+    notifyTaskFinished(chatSessionId, didError).catch(logBackgroundError("web-push"));
+  }
 }
 
 // Fire-and-forget post-turn processing for a normal (user-facing) chat
