@@ -8,9 +8,31 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 ## [Unreleased]
 
+---
+
+## [1.0.0] - 2026-07-14
+
+MulmoClaude reaches **1.0** — the first stable release. Functionally it builds directly on 0.9.7, adding **Web Push on task finish** (get a push on your phone the moment the answer to a question you asked is ready) and a launcher fix that loads `.env` from the directory you launch from. 18 non-merge commits since 0.9.7.
+
+### Highlights
+
+#### Web Push on task finish (#2086)
+
+Enable **Settings → Notifications → Web Push** to get a push on your registered devices when a turn you started finishes — the "ask a question, step away, get pinged when the answer's ready" flow, working even with the browser tab closed as long as the host machine is up. Only **human-initiated** turns fire it (scheduler / skill / bridge / system turns are excluded), and only while the **RemoteHost** channel is connected (that's what supplies the Firebase sign-in) — otherwise it's a silent no-op. The send core is the new auth-agnostic **`@mulmobridge/web-push`** package, extracted so MulmoClaude and MulmoTerminal share one source of truth for the mulmoserver `sendPush` wire contract; device registration and delivery stay server-side (mulmoserver#46).
+
+### Fixed
+
+- **Launcher loads `<launch-dir>/.env`** (#2081) — `npx mulmoclaude` now reads a `.env` in the directory you launch from, so `GEMINI_API_KEY` (and other env vars) take effect without exporting them by hand. Previously only the isolated `~/mulmoclaude` workspace was consulted.
+
+### Changed
+
+- Dependency refresh (#2088).
+
 ### `@mulmoclaude/core@0.13.1` - 2026-07-14
 
 - **Docs (#2081)**: the Gemini API-key help now tells users to put `GEMINI_API_KEY` in a `.env` file **in the directory they launch MulmoClaude from** (not the isolated `~/mulmoclaude` workspace), matching the launcher's new launch-dir `.env` loading. Ships via `assets/helps/gemini.md`.
+
+📦 npm: [`mulmoclaude@1.0.0`](https://www.npmjs.com/package/mulmoclaude/v/1.0.0)
 
 ---
 
