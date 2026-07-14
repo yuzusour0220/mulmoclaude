@@ -298,10 +298,10 @@
   resolved "https://registry.yarnpkg.com/@cloudflare/workerd-windows-64/-/workerd-windows-64-1.20260708.1.tgz#c78bbada5f66261ca3722f518d0213fb910dc6be"
   integrity sha512-bC/aSAwLy16Vjo24i9XU3aWH+eRgz7NeR5xPKavGbembO18ZywYTQbXh14eXtY6fAqN3RzRG8psijTdhX4xydA==
 
-"@cloudflare/workers-types@^5.20260705.1":
-  version "5.20260705.1"
-  resolved "https://registry.yarnpkg.com/@cloudflare/workers-types/-/workers-types-5.20260705.1.tgz#f1a48ac5da7e404a10d459b9fb3d2c90f61b6618"
-  integrity sha512-My4wQdN7ZkM9PzPC92mdCRbdJivtcEiyCr5Qi5cgKxMk3hrULkmiIoI7ZrhGei+QHDlok+g5HSPMuDm62sdaMQ==
+"@cloudflare/workers-types@^5.20260714.1":
+  version "5.20260714.1"
+  resolved "https://registry.yarnpkg.com/@cloudflare/workers-types/-/workers-types-5.20260714.1.tgz#188a4c7927e5fb55119c6ebba9f52fa9fae8bf38"
+  integrity sha512-HGCTQVIQwzqAMLrZBCgLDrWKMgOdi6yn+S0Do1rF6z7t8tVvNprQfa53V6EDRRwsVO92uN5gviX2SxASDINZfA==
 
 "@codemirror/autocomplete@^6.0.0":
   version "6.20.2"
@@ -1797,6 +1797,13 @@
     wrap-ansi "^8.1.0"
     wrap-ansi-cjs "npm:wrap-ansi@^7.0.0"
 
+"@isaacs/fs-minipass@^4.0.0":
+  version "4.0.1"
+  resolved "https://registry.yarnpkg.com/@isaacs/fs-minipass/-/fs-minipass-4.0.1.tgz#2d59ae3ab4b38fb4270bfa23d30f8e2e86c7fe32"
+  integrity sha512-wgm9Ehl2jpeqP3zw/7mo3kRHFp5MEDhqAdwy1fTGkHAwnkGOVsgpvQhL8B5n1qlb01jV3n/bI0ZfZp5lWA1k4w==
+  dependencies:
+    minipass "^7.0.4"
+
 "@jridgewell/gen-mapping@^0.3.12", "@jridgewell/gen-mapping@^0.3.5":
   version "0.3.13"
   resolved "https://registry.yarnpkg.com/@jridgewell/gen-mapping/-/gen-mapping-0.3.13.tgz#6342a19f44347518c93e43b1ac69deb3c4656a1f"
@@ -2327,25 +2334,7 @@
   resolved "https://registry.yarnpkg.com/@slack/types/-/types-2.21.1.tgz#d49105b97f372640af050bec6e84b5b2f29a21e5"
   integrity sha512-I8vmSjNYWsaxuWPx6dz4yeh0h7vRBWbgAMK14LEmblbZ404BtrPbXs6jDPx4cYgGf8msDGF4A9opLZBu21FViQ==
 
-"@slack/web-api@^7.15.0":
-  version "7.18.0"
-  resolved "https://registry.yarnpkg.com/@slack/web-api/-/web-api-7.18.0.tgz#a196077248149572544a541b289c4bcd68ef447b"
-  integrity sha512-EWBsKUhOFFp87beQg/ToSC+asWB7BrGHuh7uPC1ZI9vr41GjS+3WmmyWIMqs+mF6U+mh4d6HhtFlv67TrJFsvw==
-  dependencies:
-    "@slack/logger" "^4.0.1"
-    "@slack/types" "^2.21.0"
-    "@types/node" ">=18"
-    "@types/retry" "0.12.0"
-    axios "^1.16.0"
-    eventemitter3 "^5.0.1"
-    form-data "^4.0.4"
-    is-electron "2.2.2"
-    is-stream "^2"
-    p-queue "^6"
-    p-retry "^4"
-    retry "^0.13.1"
-
-"@slack/web-api@^7.19.0":
+"@slack/web-api@^7.15.0", "@slack/web-api@^7.19.0":
   version "7.19.0"
   resolved "https://registry.yarnpkg.com/@slack/web-api/-/web-api-7.19.0.tgz#f09aaecf8c14e37e91ddd0a721eb2d26c53beca4"
   integrity sha512-ItjyjEZml+LDH8CjcCLRLJHh7VZtevPKExrRN3l5KWyBliyDnGAeoO4Y+K+fFBmRpKLYVPgqWMX4THldv2HVtA==
@@ -4113,6 +4102,11 @@ chokidar@^5.0.0:
   integrity sha512-TQMmc3w+5AxjpL8iIiwebF73dRDF4fBIieAqGn9RGCWaEVwQ6Fb2cGe31Yns0RRIzii5goJ1Y7xbMwo1TxMplw==
   dependencies:
     readdirp "^5.0.0"
+
+chownr@^3.0.0:
+  version "3.0.0"
+  resolved "https://registry.yarnpkg.com/chownr/-/chownr-3.0.0.tgz#9855e64ecd240a9cc4267ce8a4aa5d24a1da15e4"
+  integrity sha512-+IxzY9BZOQd/XuYPRmrvEVjF/nqj5kgT4kEq7VofrDoM1MxoRjEWkrCC3EtLi59TVawxTAn+orJwFQcrqEN1+g==
 
 chromium-bidi@16.0.1:
   version "16.0.1"
@@ -7411,26 +7405,7 @@ matrix-events-sdk@0.0.1:
   resolved "https://registry.yarnpkg.com/matrix-events-sdk/-/matrix-events-sdk-0.0.1.tgz#c8c38911e2cb29023b0bbac8d6f32e0de2c957dd"
   integrity sha512-1QEOsXO+bhyCroIe2/A5OwaxHvBm7EsSQ46DEDn8RBIfQwN5HWBpFvyWWR4QY0KHPPnnJdI99wgRiAl7Ad5qaA==
 
-matrix-js-sdk@*:
-  version "41.8.0"
-  resolved "https://registry.yarnpkg.com/matrix-js-sdk/-/matrix-js-sdk-41.8.0.tgz#fd345521c0574255d13e3caeab6bf7fbb2b39897"
-  integrity sha512-ojbSE7s9hbK49a43QYP/RGPnpXQdXzDvAr9HfG5boqyHcVFAwansxzXEYXbooiIaYxFZA2Xfzu6waxxB1yCVPg==
-  dependencies:
-    "@babel/runtime" "^7.12.5"
-    "@matrix-org/matrix-sdk-crypto-wasm" "^18.3.1"
-    another-json "^0.2.0"
-    bs58 "^6.0.0"
-    content-type "^2.0.0"
-    jwt-decode "^4.0.0"
-    loglevel "^1.9.2"
-    matrix-events-sdk "0.0.1"
-    matrix-widget-api "^1.16.1"
-    oidc-client-ts "^3.0.1"
-    p-retry "8"
-    sdp-transform "^3.0.0"
-    unhomoglyph "^1.0.6"
-
-matrix-js-sdk@^41.9.0:
+matrix-js-sdk@*, matrix-js-sdk@^41.9.0:
   version "41.9.0"
   resolved "https://registry.yarnpkg.com/matrix-js-sdk/-/matrix-js-sdk-41.9.0.tgz#3b3574833c10efcb8495624c1806a9b205156e12"
   integrity sha512-xRoaIxu8e7ECV8ctT+gxXvOA+KqPJdellihIeM7rZ5LPl9ZWMct+ltN/Z4f76PJtAazjIXd8A3edPu6OSKk9/g==
@@ -7591,10 +7566,17 @@ minimist@^1.2.0, minimist@^1.2.6:
   resolved "https://registry.yarnpkg.com/minimist/-/minimist-1.2.8.tgz#c1a464e7693302e082a075cee0c057741ac4772c"
   integrity sha512-2yyAR8qBkN3YuheJanUpWC5U3bb5osDywNB8RzDVlDwDHbocAJveqqj1u8+SVD7jkWT4yvsHCpWqqWqAxb0zCA==
 
-"minipass@^5.0.0 || ^6.0.2 || ^7.0.0", minipass@^7.1.2:
+"minipass@^5.0.0 || ^6.0.2 || ^7.0.0", minipass@^7.0.4, minipass@^7.1.2:
   version "7.1.3"
   resolved "https://registry.yarnpkg.com/minipass/-/minipass-7.1.3.tgz#79389b4eb1bb2d003a9bba87d492f2bd37bdc65b"
   integrity sha512-tEBHqDnIoM/1rXME1zgka9g6Q2lcoCkxHLuc7ODJ5BxbP5d4c2Z5cGgtXAku59200Cx7diuHTOYfSBD8n6mm8A==
+
+minizlib@^3.1.0:
+  version "3.1.0"
+  resolved "https://registry.yarnpkg.com/minizlib/-/minizlib-3.1.0.tgz#6ad76c3a8f10227c9b51d1c9ac8e30b27f5a251c"
+  integrity sha512-KZxYo1BUkWD2TVFLr0MQoM8vUUigWD3LlD83a/75BqC+4qE0Hb1Vo5v1FgcfaNXvfXzr+5EhQ6ing/CaBijTlw==
+  dependencies:
+    minipass "^7.1.2"
 
 mitt@^3.0.1:
   version "3.0.1"
@@ -9423,6 +9405,17 @@ tar-stream@^3.0.0:
     fast-fifo "^1.2.0"
     streamx "^2.15.0"
 
+tar@7.5.20:
+  version "7.5.20"
+  resolved "https://registry.yarnpkg.com/tar/-/tar-7.5.20.tgz#37a65aa911cbd69864002e14bf8a926a5551e240"
+  integrity sha512-9FcyK4PA6+WbzlTM9WhQm6vB5W7cP7dUiPsv1g7YDwEQnQ1CGpK3MGlKk/ITVWMk05kHZuBhmVhiv8LZoy/PFQ==
+  dependencies:
+    "@isaacs/fs-minipass" "^4.0.0"
+    chownr "^3.0.0"
+    minipass "^7.1.2"
+    minizlib "^3.1.0"
+    yallist "^5.0.0"
+
 teeny-request@^10.0.0:
   version "10.1.2"
   resolved "https://registry.yarnpkg.com/teeny-request/-/teeny-request-10.1.2.tgz#13aa65d98dce099a85bfc6ef77760b536e3cc040"
@@ -9720,12 +9713,7 @@ undici-types@~8.3.0:
   resolved "https://registry.yarnpkg.com/undici-types/-/undici-types-8.3.0.tgz#44e9fc9f3244648cdea35e4f9bb2d681e9410809"
   integrity sha512-j375ScV60dom+YkPFIfTLcOiPxkN/buHz5GobjLhixFuANaNs3C9l4GmrWqejgXWJ7BbJcFYpTEUkS1Ge8bpZQ==
 
-undici@6.24.1:
-  version "6.24.1"
-  resolved "https://registry.yarnpkg.com/undici/-/undici-6.24.1.tgz#9df1425cede20b836d95634347946f79578b7e71"
-  integrity sha512-sC+b0tB1whOCzbtlx20fx3WgCXwkW627p4EA9uM+/tNNPkSS+eSEld6pAs9nDv7WbY1UUljBMYPtu9BCOrCWKA==
-
-undici@7.28.0, undici@^7.25.0:
+undici@6.24.1, undici@7.28.0, undici@^7.25.0:
   version "7.28.0"
   resolved "https://registry.yarnpkg.com/undici/-/undici-7.28.0.tgz#97d64564198b285bc281f0e8e29597e3d11fe7ec"
   integrity sha512-cRZYrTDwWznlnRiPjggAGxZXanty6M8RV1ff8Wm4LWXBp7/IG8v5DnOm74DtUBp9OONpK75YlPnIjQqX0dBDtA==
@@ -9856,20 +9844,10 @@ utrie@^1.0.2:
   dependencies:
     base64-arraybuffer "^1.0.2"
 
-uuid@*, "uuid@^11.1.0 || ^12 || ^13 || ^14.0.0", uuid@^14.0.1:
+uuid@*, uuid@14.0.1, uuid@^10.0.0, "uuid@^11.1.0 || ^12 || ^13 || ^14.0.0", uuid@^14.0.1, uuid@^8.3.0:
   version "14.0.1"
   resolved "https://registry.yarnpkg.com/uuid/-/uuid-14.0.1.tgz#8a5975b3e038902bfd169a10b5202f5ec0cf3faf"
   integrity sha512-6ZxzVpzDXDa3bJWaHilVayA+BH/1zmxCJoVgvmqJnid/gPoKHxUrS/aC/T6LGQtNHT+XHG9fXPJB4d+IrU30Ew==
-
-uuid@^10.0.0:
-  version "10.0.0"
-  resolved "https://registry.yarnpkg.com/uuid/-/uuid-10.0.0.tgz#5a95aa454e6e002725c79055fd42aaba30ca6294"
-  integrity sha512-8XkAphELsDnEGrDxUOHB3RGvXz6TeuYSGEZBOjtTtPm2lwhGBjLgOzLHB63IUWfBpNucQjND6d3AOudO+H3RWQ==
-
-uuid@^8.3.0:
-  version "8.3.2"
-  resolved "https://registry.yarnpkg.com/uuid/-/uuid-8.3.2.tgz#80d5b5ced271bb9af6c445f21a1a04c606cefbe2"
-  integrity sha512-+NYs2QeMWy+GWFOEm9xnn6HCDp0l7QBD7ml8zLUmJ+93Q5NF0NocErnwkTkXVFNiX3/fpC6afS8Dhb/gz7R7eg==
 
 vary@^1, vary@^1.1.2:
   version "1.1.2"
@@ -10289,6 +10267,11 @@ y18n@^5.0.5:
   version "5.0.8"
   resolved "https://registry.yarnpkg.com/y18n/-/y18n-5.0.8.tgz#7f4934d0f7ca8c56f95314939ddcd2dd91ce1d55"
   integrity sha512-0pfFzegeDWJHJIAmTLRP2DwHjdF5s7jo9tuztdQxAhINCdvS+3nGINqPd00AphqJR/0LhANUS6/+7SCb98YOfA==
+
+yallist@^5.0.0:
+  version "5.0.0"
+  resolved "https://registry.yarnpkg.com/yallist/-/yallist-5.0.0.tgz#00e2de443639ed0d78fd87de0d27469fbcffb533"
+  integrity sha512-YgvUTfwqyc7UXVMrB+SImsVYSmTS8X/tSrtdNZMImM+n7+QTriRXyXim0mBrTXNeqzVF0KWGgHPeiyViFFrNDw==
 
 yaml-eslint-parser@^2.1.0:
   version "2.1.0"
