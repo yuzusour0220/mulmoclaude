@@ -46,8 +46,11 @@ describe("writeFileAtomic", () => {
     assert.equal(tmps.length, 0);
   });
 
-  it("applies file mode when specified", async () => {
-    if (process.platform === "win32") return; // chmod no-op on Windows
+  it("applies file mode when specified", async (ctx) => {
+    if (process.platform === "win32") {
+      ctx.skip("chmod is a no-op on Windows");
+      return;
+    }
     const file = path.join(tmpDir, "secret.txt");
     await writeFileAtomic(file, "secret", { mode: 0o600 });
     const stat = statSync(file);
@@ -129,8 +132,11 @@ describe("writeFileAtomic — binary content (#881 v1)", () => {
     assert.deepEqual([...read], [0x80, 0x81, 0xfe, 0xff]);
   });
 
-  it("applies file mode for Buffer content", async () => {
-    if (process.platform === "win32") return; // chmod no-op on Windows
+  it("applies file mode for Buffer content", async (ctx) => {
+    if (process.platform === "win32") {
+      ctx.skip("chmod is a no-op on Windows");
+      return;
+    }
     const file = path.join(tmpDir, "bin-mode.bin");
     await writeFileAtomic(file, Buffer.from([1, 2, 3]), { mode: 0o600 });
     const stat = statSync(file);
