@@ -16,6 +16,15 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { discoverCollections, loadCollection } from "@mulmoclaude/core/collection/server";
+import type { CollectionFieldSpec, CollectionSubFieldSpec } from "@mulmoclaude/core/collection";
+
+type AnyFieldSpec = CollectionFieldSpec | CollectionSubFieldSpec;
+
+/** Narrow a parsed field to one variant of the discriminated union so an
+ *  assertion can read its variant-specific keys (`formula`, `values`, …). */
+function fieldAs<T extends AnyFieldSpec["type"]>(field: AnyFieldSpec | undefined, type: T): Extract<AnyFieldSpec, { type: T }> | undefined {
+  return field?.type === type ? (field as Extract<AnyFieldSpec, { type: T }>) : undefined;
+}
 
 let workdir: string;
 let emptyUserDir: string;
@@ -187,8 +196,8 @@ describe("discoverCollections — field-type support", () => {
     });
     const collections = await listCollections();
     assert.equal(collections.length, 1);
-    assert.equal(collections[0]?.schema.fields.rateUsd?.currency, "USD");
-    assert.equal(collections[0]?.schema.fields.rateJpy?.currency, "JPY");
+    assert.equal(fieldAs(collections[0]?.schema.fields.rateUsd, "money")?.currency, "USD");
+    assert.equal(fieldAs(collections[0]?.schema.fields.rateJpy, "money")?.currency, "JPY");
   });
 
   it("rejects `money` with neither `currency` nor `currencyField`", async () => {
@@ -220,8 +229,8 @@ describe("discoverCollections — field-type support", () => {
     });
     const collections = await listCollections();
     assert.equal(collections.length, 1);
-    assert.equal(collections[0]?.schema.fields.rate?.currencyField, "currency");
-    assert.equal(collections[0]?.schema.fields.rate?.currency, undefined);
+    assert.equal(fieldAs(collections[0]?.schema.fields.rate, "money")?.currencyField, "currency");
+    assert.equal(fieldAs(collections[0]?.schema.fields.rate, "money")?.currency, undefined);
   });
 
   it("accepts `derived` displayed as money with a `currencyField`", async () => {
@@ -238,7 +247,7 @@ describe("discoverCollections — field-type support", () => {
     });
     const collections = await listCollections();
     assert.equal(collections.length, 1);
-    assert.equal(collections[0]?.schema.fields.total?.currencyField, "currency");
+    assert.equal(fieldAs(collections[0]?.schema.fields.total, "derived")?.currencyField, "currency");
   });
 
   it("rejects a `currencyField` that names a non-existent field", async () => {
@@ -301,7 +310,7 @@ describe("discoverCollections — field-type support", () => {
     });
     const collections = await listCollections();
     assert.equal(collections.length, 1);
-    assert.deepEqual(collections[0]?.schema.fields.status?.values, ["draft", "sent", "paid", "void"]);
+    assert.deepEqual(fieldAs(collections[0]?.schema.fields.status, "enum")?.values, ["draft", "sent", "paid", "void"]);
   });
 
   it("rejects `enum` with no values", async () => {
@@ -402,7 +411,7 @@ describe("discoverCollections — field-type support", () => {
     });
     const collections = await listCollections();
     assert.equal(collections.length, 1);
-    assert.equal(collections[0]?.schema.fields.lineItems?.of?.rate?.currencyField, "currency");
+    assert.equal(fieldAs(fieldAs(collections[0]?.schema.fields.lineItems, "table")?.of.rate, "money")?.currencyField, "currency");
   });
 
   it("rejects `table` with no `of`", async () => {
@@ -475,8 +484,8 @@ describe("discoverCollections — field-type support", () => {
     });
     const collections = await listCollections();
     assert.equal(collections.length, 1);
-    assert.equal(collections[0]?.schema.fields.subtotal?.formula, "sum(lineItems[].quantity * lineItems[].rate)");
-    assert.equal(collections[0]?.schema.fields.subtotal?.display, "money");
+    assert.equal(fieldAs(collections[0]?.schema.fields.subtotal, "derived")?.formula, "sum(lineItems[].quantity * lineItems[].rate)");
+    assert.equal(fieldAs(collections[0]?.schema.fields.subtotal, "derived")?.display, "money");
   });
 
   it("rejects `derived` with no formula", async () => {
@@ -522,7 +531,7 @@ describe("discoverCollections — field-type support", () => {
     });
     const collections = await listCollections();
     assert.equal(collections.length, 1, "a derived field not displayed as money needs no currency");
-    assert.equal(collections[0]?.schema.fields.count?.display, "number");
+    assert.equal(fieldAs(collections[0]?.schema.fields.count, "derived")?.display, "number");
   });
 
   // ─── embed (feat-collections-embed PR) ───
@@ -606,7 +615,7 @@ describe("discoverCollections — field-type support", () => {
     });
     const collections = await listCollections();
     assert.equal(collections.length, 1);
-    assert.equal(collections[0]?.schema.fields.issuer?.idField, "issuerId");
+    assert.equal(fieldAs(collections[0]?.schema.fields.issuer, "embed")?.idField, "issuerId");
   });
 
   it("rejects `embed` that declares both `id` and `idField`", async () => {

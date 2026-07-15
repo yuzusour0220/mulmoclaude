@@ -60,8 +60,11 @@ export function formatCell(value: unknown, type: FieldType): string {
 
 /** Resolve the ISO 4217 code for a money field: a per-record
  *  `currencyField` (when present and non-blank) wins over the field's
- *  literal `currency`. */
+ *  literal `currency`. Only `money` / `derived` variants carry currency
+ *  keys; any other field resolves to undefined (the formatter's USD
+ *  fallback), as before. */
 export function resolveCurrency(field: FieldSpec, record: CollectionItem | null | undefined): string | undefined {
+  if (field.type !== "money" && field.type !== "derived") return undefined;
   if (field.currencyField && record) {
     const code = record[field.currencyField];
     if (typeof code === "string" && code.trim().length > 0) return code;

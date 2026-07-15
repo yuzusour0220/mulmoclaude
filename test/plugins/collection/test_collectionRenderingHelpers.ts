@@ -35,7 +35,9 @@ import {
   uniqueRefTargets,
 } from "../../../packages/plugins/collection-plugin/src/vue/useCollectionRendering.helpers";
 
-const field = (type: FieldType, extra: Partial<FieldSpec> = {}): FieldSpec => ({ type, label: type, ...extra });
+// Fixture builder: assembles a spec dynamically (often deliberately partial),
+// so it casts rather than satisfying the discriminated union per-variant.
+const field = (type: FieldType, extra: Record<string, unknown> = {}): FieldSpec => ({ type, label: type, ...extra }) as FieldSpec;
 
 const makeSchema = (fields: Record<string, FieldSpec>, primaryKey = "id"): CollectionSchema => ({
   title: "Test",

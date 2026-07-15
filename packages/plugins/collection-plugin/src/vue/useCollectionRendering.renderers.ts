@@ -104,7 +104,7 @@ export function evaluateDerived(
   schema: CollectionSchema | null,
   refRecords: RefRecordCache,
 ): number | null {
-  if (!field.formula || !schema) return null;
+  if (field.type !== "derived" || !schema) return null;
   const enriched = deriveAll(schema, item, refRecords);
   const result = enriched[fieldKey];
   return typeof result === "number" && Number.isFinite(result) ? result : null;
@@ -112,6 +112,7 @@ export function evaluateDerived(
 
 export function renderDerived(field: FieldSpec, computedValue: unknown, record: CollectionItem | null, locale: string): string {
   if (computedValue === null || computedValue === undefined) return "—";
-  if (field.display === "money") return formatMoney(computedValue, resolveCurrency(field, record), locale);
-  return formatCell(computedValue, field.display ?? "number");
+  const display = field.type === "derived" ? field.display : undefined;
+  if (display === "money") return formatMoney(computedValue, resolveCurrency(field, record), locale);
+  return formatCell(computedValue, display ?? "number");
 }

@@ -1080,14 +1080,14 @@ function sortValueOf(field: FieldSpec, key: string, item: CollectionItem): SortV
 }
 
 /** Derived rows sort by their display type: money/number → numeric,
- *  date/datetime → epoch, anything else → the enriched value as a string. */
+ *  date → epoch, anything else → the enriched value as a string. */
 function derivedSortValue(field: FieldSpec, key: string, item: CollectionItem): SortValue {
-  const { display } = field;
+  const display = field.type === "derived" ? field.display : undefined;
   if (display === undefined || display === "number" || display === "money") {
     return numericSortValue(evaluateDerivedAgainstItem(field, key, item));
   }
   const enriched = collection.value ? render.deriveAll(collection.value.schema, item, render.refRecordCache.value) : item;
-  if (display === "date" || display === "datetime") return dateSortValue(enriched[key]);
+  if (display === "date") return dateSortValue(enriched[key]);
   return stringSortValue(enriched[key]);
 }
 
@@ -2020,19 +2020,18 @@ async function commitInlineEdit(item: CollectionItem, key: string, field: FieldS
 /** Whether a `toggle` field reads as checked: its projected enum field
  *  currently equals `onValue`. The toggle stores nothing itself. */
 function toggleChecked(item: CollectionItem, field: FieldSpec): boolean {
-  return field.field !== undefined && String(item[field.field] ?? "") === field.onValue;
+  return field.type === "toggle" && String(item[field.field] ?? "") === field.onValue;
 }
 
 /** Flip a `toggle`: write the projected enum field to `offValue` when
  *  currently checked, else `onValue`. Reuses the inline-edit PUT path
  *  (optimistic + rollback) — the toggle has no value of its own. */
 function commitToggle(item: CollectionItem, field: FieldSpec): void {
+  if (field.type !== "toggle" || !collection.value) return;
   const targetKey = field.field;
-  if (!targetKey || !collection.value) return;
   const enumField = collection.value.schema.fields[targetKey];
   if (!enumField) return;
   const next = toggleChecked(item, field) ? field.offValue : field.onValue;
-  if (next === undefined) return;
   void commitInlineEdit(item, targetKey, enumField, next);
 }
 
