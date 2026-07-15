@@ -28,11 +28,12 @@
 
 import { z } from "zod";
 import { parseIsoDate, parseIsoDateTime } from "./calendarGrid";
+import { COMPUTED_TYPES } from "./schema";
 import type { CollectionFieldSpec, CollectionItem, CollectionSchema, CollectionSubFieldSpec } from "./schema";
 
-/** derived/embed/toggle are host-computed or projected — never written to
- *  the record JSON, so required / value checks must not apply to them. */
-export const COMPUTED_TYPES: ReadonlySet<string> = new Set(["derived", "embed", "toggle"]);
+// COMPUTED_TYPES moved to `./schema` (zod-free, so `./draft` can share
+// it); re-exported here for the existing server-surface importers.
+export { COMPUTED_TYPES };
 
 export type RecordCheckTier = "enforced" | "strict";
 

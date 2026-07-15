@@ -191,7 +191,8 @@ function computedKeyProblem(record: CollectionItem, schema: CollectionSchema): s
     const spec = schema.fields[key];
     if (!spec || !COMPUTED_TYPES.has(spec.type)) continue;
     if (spec.type === "toggle" && spec.field) return `'${key}' is a toggle projection — write the enum field '${spec.field}' instead`;
-    return `'${key}' is ${spec.type === "derived" ? "derived" : "an embed"} — computed by the host, remove it from the record`;
+    const kind = spec.type === "derived" ? "derived" : spec.type === "backlinks" ? "a backlinks view" : "an embed";
+    return `'${key}' is ${kind} — computed by the host, remove it from the record`;
   }
   return null;
 }
@@ -223,7 +224,10 @@ async function mergeWithExisting(
 ): Promise<CollectionItem | string> {
   const existing = await readItem(collection.dataDir, itemId, { workspaceRoot: deps.workspaceRoot });
   if (!existing) return `'${itemId}' not found — mode "merge" updates an existing record; use "upsert" or "create" to add it`;
-  const stored = Object.entries(existing).filter(([key]) => !COMPUTED_TYPES.has(collection.schema.fields[key]?.type ?? ""));
+  const stored = Object.entries(existing).filter(([key]) => {
+    const spec = collection.schema.fields[key];
+    return !spec || !COMPUTED_TYPES.has(spec.type);
+  });
   return { ...Object.fromEntries(stored), ...record };
 }
 

@@ -5,8 +5,9 @@
 // can wire them with thin closures while they stay unit-testable in isolation.
 // NO vue / DOM / I/O / reactive state here — every function is pure.
 
-import { deriveAll, embedTargetId } from "@mulmoclaude/core/collection";
+import { backlinkRows, deriveAll, embedTargetId } from "@mulmoclaude/core/collection";
 import type {
+  BacklinksView,
   CollectionItem,
   CollectionSchema,
   CollectionFieldSpec as FieldSpec,
@@ -17,7 +18,15 @@ import type {
   RefOption,
   RefRecordCache,
 } from "@mulmoclaude/core/collection";
-import { buildEmbedOptions, detailText, formatCell, formatMoney, resolveCurrency, sortedRefOptions } from "./useCollectionRendering.helpers";
+import {
+  buildEmbedOptions,
+  derivedRecordsById,
+  detailText,
+  formatCell,
+  formatMoney,
+  resolveCurrency,
+  sortedRefOptions,
+} from "./useCollectionRendering.helpers";
 
 export function lookupRefDisplay(refCache: RefCache, targetSlug: string, itemSlug: string): string {
   const map = refCache[targetSlug];
@@ -82,6 +91,58 @@ export function buildEmbedViews(
       }
     }
     out[key] = { found: Boolean(item), rows, targetSlug: field.to ?? "", recordId: embedTargetId(field, record) };
+  }
+  return out;
+}
+
+/** One backlinks table CELL: money formatted with its currency, anything
+ *  else through the same `formatCell` list tables use — so a markdown
+ *  source column (a worklog `notes`) shows the one-line 80-char preview,
+ *  not the whole text. Unknown `display` key ⇒ plain text (fail-soft). */
+function formatBacklinkCell(sourceField: FieldSpec | undefined, value: unknown, row: CollectionItem, locale: string): string {
+  if (!sourceField) return detailText(value);
+  if (sourceField.type === "money") return formatMoney(value, resolveCurrency(sourceField, row), locale);
+  return formatCell(value, sourceField.type);
+}
+
+/** Build the read-only backlinks view-models for one record: for each
+ *  `backlinks` field, the rows of `from` whose `via` points at the open
+ *  record (matched via the SHARED `backlinkRows`, on source records
+ *  derived exactly like the server's enrichment — so a `display`/`filter`
+ *  on a derived column such as an invoice `total` agrees on both sides).
+ *  Source data comes out of `embedCache` (reverse sources ride the embed
+ *  fan-out — see `linkedTargets`). Fail-soft: an unloadable source or an
+ *  unknown `display` key degrades to `found: false` / a raw-key column,
+ *  never a throw. */
+export function buildBacklinksViews(
+  schema: CollectionSchema | null,
+  embedCache: EmbedCache,
+  record: CollectionItem | null,
+  locale: string,
+): Record<string, BacklinksView> {
+  const out: Record<string, BacklinksView> = {};
+  if (!schema) return out;
+  for (const [key, field] of Object.entries(schema.fields)) {
+    if (field.type !== "backlinks") continue;
+    const columns = field.display.map((col) => ({ key: col, label: col }));
+    const data = embedCache[field.from];
+    if (!data) {
+      out[key] = { found: false, columns, rows: [], fromSlug: field.from };
+      continue;
+    }
+    for (const column of columns) column.label = data.schema.fields[column.key]?.label ?? column.key;
+    const selfId = String(record?.[schema.primaryKey] ?? "");
+    // Index the derived source records EXACTLY like the server's
+    // `loadTarget` (shared `derivedRecordsById`): non-empty string ids,
+    // one record per id — so the client can never surface a row that
+    // `getItems` wouldn't (blank ids, duplicate-id files), and every
+    // rendered row is navigable with a unique Vue key.
+    const sourceById = derivedRecordsById(data.schema, data.items);
+    const rows = backlinkRows(field, selfId, Object.values(sourceById)).map((row) => ({
+      id: String(row[data.schema.primaryKey] ?? ""),
+      cells: columns.map((column) => formatBacklinkCell(data.schema.fields[column.key], row[column.key], row, locale)),
+    }));
+    out[key] = { found: true, columns, rows, fromSlug: field.from };
   }
   return out;
 }

@@ -199,6 +199,27 @@ const EmbedFieldZ = z
     path: ["id"],
   });
 
+/** Display-only REVERSE refs (plan step ② of plans/collection-ontology.md):
+ *  a read-only sub-table of the records in collection `from` whose `via`
+ *  ref field stores THIS record's primary key. Stores nothing (joins
+ *  `COMPUTED_TYPES`); resolution is shared server/client via
+ *  `core/backlinks.ts`. `display` names the `from` columns to show;
+ *  `filter` (the standard `when` shape, matched against each SOURCE
+ *  record) narrows the rows. Validation is shape-only, like `embed`:
+ *  `from` must be a safe slug, but whether it exists — and whether `via` /
+ *  `display` name real fields there — resolves fail-soft at render
+ *  (empty sub-table). Do NOT add cross-schema existence checks here. */
+const BacklinksFieldZ = z
+  .object({
+    type: z.literal("backlinks"),
+    ...fieldBase,
+    from: z.string().min(1),
+    via: z.string().trim().min(1),
+    display: z.array(z.string().trim().min(1)).min(1),
+    filter: WhenZ.optional(),
+  })
+  .refine((spec) => isSafeSlug(spec.from), slugMessage("from"));
+
 /** A checkbox that is a pure PROJECTION of an `enum` field — it stores
  *  nothing of its own. Checked when the enum named by `field` equals
  *  `onValue`; toggling writes `onValue` / `offValue` back to that enum
@@ -222,6 +243,7 @@ export const FieldSpecZ = z.discriminatedUnion("type", [
   TableFieldZ,
   DerivedFieldZ,
   EmbedFieldZ,
+  BacklinksFieldZ,
   ToggleFieldZ,
 ]);
 

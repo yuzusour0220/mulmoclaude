@@ -5,6 +5,7 @@
 // to a value, so the omission/validation semantics are unit-testable.
 
 import { fieldVisible } from "./actionVisible";
+import { COMPUTED_TYPES } from "./schema";
 import type { CollectionFieldSpec as FieldSpec, CollectionFieldType as FieldType, CollectionItem, CollectionSchema } from "./schema";
 import type { EditState, TableRowDraft } from "./uiTypes";
 
@@ -82,7 +83,7 @@ function rowDraftToRecord(rowDraft: TableRowDraft, subFields: Record<string, Fie
 export function draftToRecord(state: EditState, schema: CollectionSchema): CollectionItem {
   const record: CollectionItem = {};
   for (const [key, field] of Object.entries(schema.fields)) {
-    if (field.type === "derived" || field.type === "embed" || field.type === "toggle") continue; // never persisted (toggle projects an enum field)
+    if (field.type === "derived" || field.type === "embed" || field.type === "backlinks" || field.type === "toggle") continue; // never persisted (toggle projects an enum field)
     if (field.type === "boolean") {
       if (shouldEmitBoolean(state, key, field)) record[key] = state.bool[key] === true;
       continue;
@@ -136,6 +137,12 @@ function firstMissingTableSubField(field: FieldSpec, rows: TableRowDraft[] | und
   return null;
 }
 
+/** Field types the required check never flags: booleans always hold a
+ *  value, and the computed/projected kinds (COMPUTED_TYPES — the shared
+ *  set, so a future computed type can't drift past this check) have no
+ *  draft input at all. */
+const NEVER_MISSING_TYPES: ReadonlySet<FieldType> = new Set<FieldType>(["boolean", ...COMPUTED_TYPES]);
+
 function validateOneField(key: string, field: FieldSpec, draft: EditState, record: CollectionItem): string | null {
   // A `when`-hidden field has no input the user can fill — never missing.
   if (!fieldVisible(field, record)) return null;
@@ -146,7 +153,7 @@ function validateOneField(key: string, field: FieldSpec, draft: EditState, recor
   }
   if (!field.required) return null;
   if (draft.mode === "create" && field.primary === true) return null; // server auto-generates id
-  if (field.type === "boolean" || field.type === "derived" || field.type === "embed" || field.type === "toggle") return null;
+  if (NEVER_MISSING_TYPES.has(field.type)) return null;
   return isMissingDraftValue(draft.text[key]) ? field.label : null;
 }
 

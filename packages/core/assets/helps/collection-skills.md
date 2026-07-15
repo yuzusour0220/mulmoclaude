@@ -148,7 +148,7 @@ skipped, never crashes the host):
 
 `string` · `text` (multi-line) · `email` · `number` · `date` (`YYYY-MM-DD`) ·
 `datetime` (`YYYY-MM-DDTHH:MM`) · `boolean` · `markdown` · `money` · `enum` ·
-`ref` · `embed` · `table` · `derived` · `image` · `file` · `toggle`
+`ref` · `embed` · `backlinks` · `table` · `derived` · `image` · `file` · `toggle`
 
 Every field spec needs a `type` and a `label`. Extra keys by type:
 
@@ -179,9 +179,23 @@ Every field spec needs a `type` and a `label`. Extra keys by type:
   sibling as a dropdown picker in the editor and hides its own cell (the embed
   owns it). E.g. a multi-issuer invoice: a `ref` field `issuerId → profile`
   plus `{ "type": "embed", "to": "profile", "idField": "issuerId" }`.
+- **`backlinks`** — `from: "<source-slug>"`, `via: "<ref-field-in-source>"`,
+  `display: ["<source-col>", ...]`, optional `filter: { "field": ..., "in": [...] }`.
+  The **reverse** side of a `ref`: a read-only sub-table (detail view only) of
+  the records in `from` whose `via` ref points at this record — each row links
+  to that record. **Nothing is stored** on this record (like `derived`/`embed`);
+  you never write it, and the rows update whenever the source records change.
+  `display` names the source columns to show — a derived source column works
+  when its formula is self-contained (e.g. an invoice `total` summing its own
+  line items), but one that derefs yet another collection renders em-dash;
+  `filter` narrows rows by a source field's value, same shape as `when`. E.g. a
+  client's open invoices:
+  `{ "type": "backlinks", "label": "Invoices", "from": "invoice", "via": "clientId", "display": ["issueDate", "total", "status"], "filter": { "field": "status", "in": ["draft", "sent"] } }`.
+  Resolution is fail-soft: an unknown `from` / `via` / `display` column just
+  renders an empty sub-table — no error, so author the `ref` side first.
 - **`table`** — `of: { <col>: <sub-field-spec>, ... }`. An array of rows. Each
-  sub-field is a flat spec; sub-fields **cannot** be `table` or `derived`
-  (no nested tables, no computed columns).
+  sub-field is a flat spec; sub-fields **cannot** be `table`, `derived`, or
+  `backlinks` (no nested tables, no computed columns).
 - **`derived`** — `formula: "<expr>"`, optional `display` (`number` default, or
   `money` / `string` / `date`) and `currency`. **Read-only, host-computed** —
   you NEVER write derived values into the JSON; the host recomputes them on
@@ -796,8 +810,9 @@ records through **`manageCollection`**, not raw file I/O:
   enforces this on every targeted read/write, so an id that only _looks_ fine in
   a full `getItems` listing but violates the rule can't be updated or deleted by
   id — fix the id, don't work around it with raw file I/O.
-- **Never write `derived` fields**, and never write an `embed` field — both are
-  display-only / host-computed (`putItems` rejects rows that carry them).
+- **Never write `derived` fields**, and never write an `embed` or `backlinks`
+  field — all are display-only / host-computed (`putItems` rejects rows that
+  carry them).
 - Leave optional fields out of the row entirely rather than writing empty
   strings.
 - For a `ref` field, write the raw target slug, and make sure that record

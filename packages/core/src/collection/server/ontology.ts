@@ -16,15 +16,17 @@ import { getWorkspaceRoot } from "./host";
 import type { LoadedCollection } from "./discoveredCollection";
 import type { CollectionSchema } from "../core/schema";
 
-/** One outbound relationship a schema declares: a `ref` (the record
- *  stores the target's primaryKey slug) or `embed` (display-only pull)
- *  pointing at collection `to`. A `ref` column inside a `table` field is
- *  reported with a dotted path (`lines.clientId`). Whether `to` exists is
- *  NOT checked — resolution is fail-soft at render, and the caller holds
- *  the full slug list to compare against anyway. */
+/** One relationship a schema declares: a `ref` (the record stores the
+ *  target's primaryKey slug) or `embed` (display-only pull) pointing at
+ *  collection `to`, or `backlinks` (display-only REVERSE refs — `to` is
+ *  the backlink's source collection, i.e. its `from`). A `ref` column
+ *  inside a `table` field is reported with a dotted path
+ *  (`lines.clientId`). Whether `to` exists is NOT checked — resolution
+ *  is fail-soft at render, and the caller holds the full slug list to
+ *  compare against anyway. */
 export interface OntologyRelation {
   field: string;
-  kind: "ref" | "embed";
+  kind: "ref" | "embed" | "backlinks";
   to: string;
 }
 
@@ -40,14 +42,15 @@ export interface CollectionOntologyEntry {
   relations: OntologyRelation[];
 }
 
-/** Extract the outbound relations a schema declares, in field
- *  declaration order: top-level `ref` / `embed` fields plus `ref`
- *  sub-fields inside `table` columns. Pure — exported so the phase-2
- *  graph panel can reuse it on already-loaded schemas. */
+/** Extract the relations a schema declares, in field declaration order:
+ *  top-level `ref` / `embed` / `backlinks` fields plus `ref` sub-fields
+ *  inside `table` columns. Pure — exported so the phase-2 graph panel
+ *  can reuse it on already-loaded schemas. */
 export function schemaRelations(schema: CollectionSchema): OntologyRelation[] {
   const relations: OntologyRelation[] = [];
   for (const [key, spec] of Object.entries(schema.fields)) {
     if (spec.type === "ref" || spec.type === "embed") relations.push({ field: key, kind: spec.type, to: spec.to });
+    if (spec.type === "backlinks") relations.push({ field: key, kind: "backlinks", to: spec.from });
     if (spec.type !== "table") continue;
     for (const [subKey, subSpec] of Object.entries(spec.of)) {
       if (subSpec.type === "ref") relations.push({ field: `${key}.${subKey}`, kind: "ref", to: subSpec.to });

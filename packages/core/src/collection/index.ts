@@ -12,6 +12,7 @@ export * from "./core/presentCollection";
 export * from "./core/enumColors";
 export * from "./core/draft";
 export * from "./core/actionVisible";
+export * from "./core/backlinks";
 export * from "./core/where";
 export * from "./core/dynamicIcon";
 export * from "./core/derivedFormula";

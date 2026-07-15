@@ -46,6 +46,7 @@ const EXPECTED_MEMBERS = [
   "refOptions",
   "embedOptions",
   "embedViewsFor",
+  "backlinksViewsFor",
   "resolveCurrency",
   "currencySymbol",
   "formatMoney",

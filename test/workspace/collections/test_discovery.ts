@@ -584,6 +584,71 @@ describe("discoverCollections — field-type support", () => {
     assert.equal(collections.length, 0, "embed without `id` must be skipped");
   });
 
+  it("accepts `backlinks` with a valid `from`/`via`/`display` (+ optional filter)", async () => {
+    writeSkill("test-backlinks", {
+      title: "Clients-like",
+      icon: "people",
+      dataPath: "data/backlinks/items",
+      primaryKey: "id",
+      fields: {
+        id: { type: "string", label: "ID", primary: true, required: true },
+        openInvoices: {
+          type: "backlinks",
+          label: "Invoices",
+          from: "invoice",
+          via: "clientId",
+          display: ["issueDate", "total"],
+          filter: { field: "status", in: ["draft", "sent"] },
+        },
+      },
+    });
+    const collections = await listCollections();
+    assert.equal(collections.length, 1);
+    const field = collections[0]?.schema.fields.openInvoices;
+    assert.equal(field?.type, "backlinks");
+    assert.equal(field?.type === "backlinks" && field.from, "invoice");
+  });
+
+  it("rejects `backlinks` whose `from` contains path traversal", async () => {
+    writeSkill("test-backlinks-traversal", {
+      title: "Traversal Backlinks",
+      icon: "warning",
+      dataPath: "data/backlinkstrav/items",
+      primaryKey: "id",
+      fields: {
+        id: { type: "string", label: "ID", primary: true, required: true },
+        rows: { type: "backlinks", label: "Rows", from: "../escape", via: "clientId", display: ["a"] },
+      },
+    });
+    const collections = await listCollections();
+    assert.equal(collections.length, 0, "backlinks with a traversal `from` must be skipped");
+  });
+
+  it("rejects `backlinks` with an empty `display` and `backlinks` inside a table's `of`", async () => {
+    writeSkill("test-backlinks-nodisplay", {
+      title: "Bad Backlinks",
+      icon: "warning",
+      dataPath: "data/backlinksnod/items",
+      primaryKey: "id",
+      fields: {
+        id: { type: "string", label: "ID", primary: true, required: true },
+        rows: { type: "backlinks", label: "Rows", from: "invoice", via: "clientId", display: [] },
+      },
+    });
+    writeSkill("test-backlinks-in-table", {
+      title: "Nested Backlinks",
+      icon: "warning",
+      dataPath: "data/backlinkstab/items",
+      primaryKey: "id",
+      fields: {
+        id: { type: "string", label: "ID", primary: true, required: true },
+        lines: { type: "table", label: "Lines", of: { rows: { type: "backlinks", label: "Rows", from: "invoice", via: "clientId", display: ["a"] } } },
+      },
+    });
+    const collections = await listCollections();
+    assert.equal(collections.length, 0, "both malformed backlinks schemas must be skipped");
+  });
+
   it("rejects `embed` whose `to` contains path traversal", async () => {
     writeSkill("test-embed-traversal", {
       title: "Traversal Embed",
