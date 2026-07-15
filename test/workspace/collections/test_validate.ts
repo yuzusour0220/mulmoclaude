@@ -178,7 +178,7 @@ describe("strict tier — typed checks reported by the scan, not enforced on wri
   const gate = (record: Record<string, unknown>, itemId: string) => validateRecordObject(record, itemId, typedSchema);
 
   it("passes well-typed values, including empty optionals", async () => {
-    write("ok.json", JSON.stringify({ id: "ok", hours: 3.5, rate: 120, active: false, due: "2026-07-15", seen: "2026-07-15T09:00:00Z" }));
+    write("ok.json", JSON.stringify({ id: "ok", hours: 3.5, rate: 120, active: false, due: "2026-07-15", seen: "2026-07-15T09:00:00" }));
     write("sparse.json", JSON.stringify({ id: "sparse" })); // every optional absent
     assert.deepEqual(await scan(), []);
   });
@@ -190,14 +190,20 @@ describe("strict tier — typed checks reported by the scan, not enforced on wri
 
   it("reports non-numeric, non-boolean, and unparseable date/datetime values", async () => {
     write("num.json", JSON.stringify({ id: "num", hours: "three" }));
+    write("arr.json", JSON.stringify({ id: "arr", hours: [42] })); // [42] stringifies to "42" — must still be flagged
     write("bool.json", JSON.stringify({ id: "bool", active: "true" }));
     write("date.json", JSON.stringify({ id: "date", due: "July 15" }));
+    write("feb30.json", JSON.stringify({ id: "feb30", due: "2026-02-30" })); // shape-valid, calendar-impossible
     write("dt.json", JSON.stringify({ id: "dt", seen: "yesterday" }));
+    write("dtz.json", JSON.stringify({ id: "dtz", seen: "2026-07-15T09:00:00Z" })); // Z suffix — the day view can't place it
     const byFile = Object.fromEntries((await scan()).map((i) => [i.file, i.problem]));
     assert.match(byFile["num.json"] ?? "", /'hours' = 'three' is not numeric/);
+    assert.match(byFile["arr.json"] ?? "", /'hours' = '42' is not numeric/);
     assert.match(byFile["bool.json"] ?? "", /'active' = 'true' is not a boolean/);
-    assert.match(byFile["date.json"] ?? "", /'due' = 'July 15' is not a YYYY-MM-DD date/);
-    assert.match(byFile["dt.json"] ?? "", /'seen' = 'yesterday' is not a parseable datetime/);
+    assert.match(byFile["date.json"] ?? "", /'due' = 'July 15' is not a real YYYY-MM-DD date/);
+    assert.match(byFile["feb30.json"] ?? "", /'due' = '2026-02-30' is not a real YYYY-MM-DD date/);
+    assert.match(byFile["dt.json"] ?? "", /'seen' = 'yesterday' is not a YYYY-MM-DDTHH:MM datetime/);
+    assert.match(byFile["dtz.json"] ?? "", /'seen' = '2026-07-15T09:00:00Z' is not a YYYY-MM-DDTHH:MM datetime/);
   });
 
   it("reports malformed table values and row-level sub-field problems", async () => {

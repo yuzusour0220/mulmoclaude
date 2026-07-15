@@ -27,6 +27,7 @@
 // re-exports it via `../server/validate`.
 
 import { z } from "zod";
+import { parseIsoDate, parseIsoDateTime } from "./calendarGrid";
 import type { CollectionFieldSpec, CollectionItem, CollectionSchema, CollectionSubFieldSpec } from "./schema";
 
 /** derived/embed/toggle are host-computed or projected — never written to
@@ -52,30 +53,36 @@ function enforcedProblem(key: string, spec: AnyFieldSpec, value: unknown): strin
   return null;
 }
 
-// Day-granularity date fields parse as `YYYY-MM-DD` everywhere (calendar,
-// trigger gate), so that exact shape is what strict mode expects.
-const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+/** Numeric coercion for the strict `number`/`money` check: a plain number,
+ *  or a non-blank numeric string (renderers coerce those via `Number(...)`,
+ *  so they display fine). Anything else — arrays (`[]` stringifies to `""`
+ *  = 0, `[42]` to `"42"`), booleans, objects — is NaN and gets flagged. */
+function coerceNumeric(value: unknown): number {
+  if (typeof value === "number") return value;
+  if (typeof value === "string" && value.trim() !== "") return Number(value);
+  return NaN;
+}
 
-/** Report-only per-type checks on a PRESENT value. Deliberately
- *  conservative: numeric strings pass a `number`/`money` check (renderers
- *  coerce via `Number(...)`, so they display fine) — only values that can't
- *  render as the declared type are flagged. `string`-backed types accept
- *  anything stringifiable, `ref` existence is out of scope. */
+/** Report-only per-type checks on a PRESENT value. Date / datetime reuse the
+ *  calendar's STRICT civil parsers (`parseIsoDate` / `parseIsoDateTime`), so
+ *  the lint flags exactly the values the calendar / trigger / spawn code
+ *  would silently drop — impossible days like `2026-02-30`, and datetimes
+ *  outside the canonical `YYYY-MM-DDTHH:MM[:SS]` shape (e.g. a `Z` suffix,
+ *  which the day view can't place). `string`-backed types accept anything
+ *  stringifiable; `ref` existence is out of scope. */
 function strictTypeProblem(key: string, spec: AnyFieldSpec, value: unknown): string | null {
   switch (spec.type) {
     case "number":
-    case "money": {
-      const numeric = typeof value === "number" ? value : Number(String(value));
-      return Number.isFinite(numeric) ? null : `'${key}' = '${String(value)}' is not numeric (a '${spec.type}' field stores a plain number)`;
-    }
+    case "money":
+      return Number.isFinite(coerceNumeric(value)) ? null : `'${key}' = '${String(value)}' is not numeric (a '${spec.type}' field stores a plain number)`;
     case "boolean":
       return value === true || value === false ? null : `'${key}' = '${String(value)}' is not a boolean (store true or false, unquoted)`;
     case "date":
-      return typeof value === "string" && DATE_ONLY.test(value) ? null : `'${key}' = '${String(value)}' is not a YYYY-MM-DD date`;
+      return parseIsoDate(value) !== null ? null : `'${key}' = '${String(value)}' is not a real YYYY-MM-DD date`;
     case "datetime":
-      return typeof value === "string" && !Number.isNaN(Date.parse(value))
+      return parseIsoDateTime(value) !== null
         ? null
-        : `'${key}' = '${String(value)}' is not a parseable datetime (ISO 8601, e.g. 2026-07-15T09:00)`;
+        : `'${key}' = '${String(value)}' is not a YYYY-MM-DDTHH:MM datetime (seconds optional, no timezone suffix — the shape the calendar parses)`;
     default:
       return null;
   }
