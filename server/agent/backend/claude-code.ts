@@ -210,14 +210,16 @@ export function cliArgsForInput(input: AgentInput, systemPromptPath: string): Cl
 // `--system-prompt-file`, returning the path to put on the command line
 // (container path under Docker). Atomic so a concurrent spawn on the
 // same session never reads a half-written prompt; one file per session,
-// overwritten each turn (mirroring the MCP config lifecycle).
-async function writeSystemPromptFile(input: AgentInput): Promise<string> {
+// overwritten each turn (mirroring the MCP config lifecycle). Mode 0600
+// because the prompt carries the role / memory / plugin instructions —
+// no reason for it to be world-readable in the OS tmpdir or workspace.
+export async function writeSystemPromptFile(input: AgentInput): Promise<string> {
   const paths = resolveSystemPromptPaths({
     workspacePath: input.workspacePath,
     sessionId: input.sessionId,
     useDocker: input.useDocker,
   });
-  await writeFileAtomic(paths.hostPath, input.systemPrompt);
+  await writeFileAtomic(paths.hostPath, input.systemPrompt, { mode: 0o600 });
   return paths.argPath;
 }
 

@@ -1,7 +1,8 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { cliArgsForInput } from "../../server/agent/backend/claude-code.js";
+import { readFileSync, statSync, unlinkSync } from "node:fs";
+import { cliArgsForInput, writeSystemPromptFile } from "../../server/agent/backend/claude-code.js";
 import type { AgentInput } from "../../server/agent/backend/types.js";
 import { ROLES, type Role } from "../../src/config/roles.js";
 
@@ -70,5 +71,32 @@ describe("cliArgsForInput", () => {
     assert.ok(!("message" in params));
     assert.ok(!("workspacePath" in params));
     assert.ok(!("port" in params));
+  });
+});
+
+describe("writeSystemPromptFile", () => {
+  it("writes the prompt (native path)", async () => {
+    const input = makeInput({ systemPrompt: "role + memory + plugin instructions" });
+    const promptPath = await writeSystemPromptFile(input);
+    try {
+      assert.equal(readFileSync(promptPath, "utf-8"), "role + memory + plugin instructions");
+    } finally {
+      unlinkSync(promptPath);
+    }
+  });
+
+  it("writes with mode 0600 so the prompt is not world-readable (Codex review)", async (ctx) => {
+    // The file carries role / memory / plugin instructions; on umask 022 a
+    // default write is 0644 (world-readable). chmod is a no-op on Windows.
+    if (process.platform === "win32") {
+      ctx.skip("chmod is a no-op on Windows");
+      return;
+    }
+    const promptPath = await writeSystemPromptFile(makeInput({ systemPrompt: "secret prompt" }));
+    try {
+      assert.equal(statSync(promptPath).mode & 0o777, 0o600);
+    } finally {
+      unlinkSync(promptPath);
+    }
   });
 });
