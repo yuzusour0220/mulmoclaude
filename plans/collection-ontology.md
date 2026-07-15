@@ -52,6 +52,8 @@ A `manageCollection getOntology` verb (or equivalent): iterate `discoverCollecti
 
 New computed field type (joins `COMPUTED_TYPES`): stores nothing; detail view renders a read-only sub-table of records in `from` whose `via` ref points at this record.
 
+**✅ DONE 2026-07-15** (`BacklinksFieldZ` in `core/schemaZ.ts`; shared pure resolution in `core/backlinks.ts` — `backlinkRows` + `projectBacklinkRow` — used by BOTH the server enrichment (`server/derive.ts`, value = rows projected to primaryKey + `display`) and the client view-model (`buildBacklinksViews`); reverse sources ride the existing embed cache fan-out (`linkedTargets`); detail-view sub-table `CollectionBacklinksView.vue` with per-row links; `schemaRelations` reports `kind: "backlinks"`).
+
 ```jsonc
 // clients/schema.json
 "openInvoices": {
@@ -137,7 +139,7 @@ The reserved kind from `schema.ts:174-178`, exactly Foundry's Action shape minus
 ```text
 ⓪ zod single-source refactor  — Phase A blocks everything; Phase B blocks ④ (mutate params)
 ① getOntology (LLM summary)   — ✅ DONE 2026-07-15 (graph panel still pending as its phase 2)
-② backlinks                   — render-only, establishes from/via vocabulary + reverse loading
+② backlinks                   — ✅ DONE 2026-07-15 (from/via vocabulary + reverse loading established)
 ③ kind:"agent" actions        — infra exists end-to-end; completes the 2×2
 ④ kind:"mutate"               — fills the reserved slot; guards as paved path
 ⑤ rollup                      — rides on ②'s machinery

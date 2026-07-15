@@ -94,6 +94,34 @@ export interface EmbedView {
   recordId: string;
 }
 
+// ── backlinks view-model (the records in another collection whose `via`
+//    ref points at the open record, rendered as a read-only sub-table) ──
+
+/** One column of the backlinks sub-table: a `display` key, labelled from
+ *  the SOURCE schema (raw key when the source doesn't declare it). */
+export interface BacklinksColumn {
+  key: string;
+  label: string;
+}
+
+/** One matching source record: its id (the row links to
+ *  `/collections/<from>?selected=<id>`) + a pre-formatted cell per column. */
+export interface BacklinksRow {
+  id: string;
+  /** Cell display strings, aligned with the view's `columns`. */
+  cells: string[];
+}
+
+export interface BacklinksView {
+  /** False when the source collection couldn't be loaded — the renderer
+   *  fails soft to the same empty-state as "no matching rows". */
+  found: boolean;
+  columns: BacklinksColumn[];
+  rows: BacklinksRow[];
+  /** Source collection slug (the field's `from`), for the row links. */
+  fromSlug: string;
+}
+
 /** Active-notification severity for a record, used to accent flagged cards
  *  (kanban left-stripe, etc.). The host computes these from its notifier and
  *  passes them in; this is the structural type the view layer accepts. The host's

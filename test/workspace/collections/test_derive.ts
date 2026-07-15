@@ -179,6 +179,79 @@ describe("enrichItems — derived across refs", () => {
     assert.deepEqual(input, { id: "h1", ticker: "aapl", shares: 10 });
   });
 
+  it("resolves backlinks to the source rows pointing at the record, projected to primaryKey + display", async () => {
+    writeSkill("stock-quotes", {
+      ...quotesSchema,
+      fields: {
+        ...quotesSchema.fields,
+        holders: { type: "backlinks", label: "Holders", from: "portfolio", via: "ticker", display: ["shares", "value"] },
+      },
+    });
+    // A SELF-CONTAINED derived source column (no cross-collection deref)
+    // evaluates in the backlink rows — the same rule as ref-target
+    // derivation, which also derives each record against itself alone.
+    writeSkill("portfolio", {
+      ...portfolioSchema,
+      fields: { ...portfolioSchema.fields, value: { type: "derived", label: "Value", formula: "shares * 2" } },
+    });
+    writeRecord("data/portfolio/items", "h1", { id: "h1", ticker: "aapl", shares: 10, status: "open" });
+    writeRecord("data/portfolio/items", "h2", { id: "h2", ticker: "aapl", shares: 5, status: "closed" });
+    writeRecord("data/portfolio/items", "h3", { id: "h3", ticker: "msft", shares: 3, status: "open" });
+    const collection = await loadCollection("stock-quotes", opts());
+    assert.ok(collection);
+    const [enriched] = await enrichItems(collection, [{ symbol: "aapl", price: 200 }], opts());
+    // h3 points elsewhere; rows carry the source primaryKey + display
+    // columns only, with the derived source column computed.
+    assert.deepEqual(enriched?.holders, [
+      { id: "h1", shares: 10, value: 20 },
+      { id: "h2", shares: 5, value: 10 },
+    ]);
+  });
+
+  it("a backlink display column that derefs ANOTHER collection stays absent (ref-target derivation rule)", async () => {
+    writeSkill("stock-quotes", {
+      ...quotesSchema,
+      fields: {
+        ...quotesSchema.fields,
+        holders: { type: "backlinks", label: "Holders", from: "portfolio", via: "ticker", display: ["shares", "value"] },
+      },
+    });
+    // portfolioSchema's `value` is `shares * ticker.price` — a cross-
+    // collection deref. Source records derive against themselves alone
+    // (like ref targets / the client's buildRefRecordMap), so it can't
+    // evaluate here and the key is simply absent (em-dash in the UI).
+    writeRecord("data/portfolio/items", "h1", { id: "h1", ticker: "aapl", shares: 10, status: "open" });
+    const collection = await loadCollection("stock-quotes", opts());
+    assert.ok(collection);
+    const [enriched] = await enrichItems(collection, [{ symbol: "aapl", price: 200 }], opts());
+    assert.deepEqual(enriched?.holders, [{ id: "h1", shares: 10 }]);
+  });
+
+  it("backlinks filter narrows rows; a missing source collection fails soft to []", async () => {
+    writeSkill("stock-quotes", {
+      ...quotesSchema,
+      fields: {
+        ...quotesSchema.fields,
+        openHolders: {
+          type: "backlinks",
+          label: "Open holders",
+          from: "portfolio",
+          via: "ticker",
+          display: ["shares"],
+          filter: { field: "status", in: ["open"] },
+        },
+        ghosts: { type: "backlinks", label: "Ghosts", from: "no-such-collection", via: "ticker", display: ["x"] },
+      },
+    });
+    writeRecord("data/portfolio/items", "h1", { id: "h1", ticker: "aapl", shares: 10, status: "open" });
+    writeRecord("data/portfolio/items", "h2", { id: "h2", ticker: "aapl", shares: 5, status: "closed" });
+    const collection = await loadCollection("stock-quotes", opts());
+    assert.ok(collection);
+    const [enriched] = await enrichItems(collection, [{ symbol: "aapl", price: 200 }], opts());
+    assert.deepEqual(enriched?.openHolders, [{ id: "h1", shares: 10 }]);
+    assert.deepEqual(enriched?.ghosts, []);
+  });
+
   it("matches the client rendering path exactly (determinism cross-check)", async () => {
     const collection = await loadCollection("portfolio", opts());
     assert.ok(collection);
@@ -197,5 +270,42 @@ describe("enrichItems — derived across refs", () => {
     assert.equal(clientValue, server?.value);
     // Stronger than value equality: both sides hold the SAME function.
     assert.equal(rendering.deriveAll, deriveAll);
+  });
+
+  it("backlinks: the client view-model agrees with the server rows (determinism cross-check)", async () => {
+    const holdersField = { type: "backlinks", label: "Holders", from: "portfolio", via: "ticker", display: ["shares", "value"] };
+    writeSkill("stock-quotes", { ...quotesSchema, fields: { ...quotesSchema.fields, holders: holdersField } });
+    writeSkill("portfolio", {
+      ...portfolioSchema,
+      fields: { ...portfolioSchema.fields, value: { type: "derived", label: "Value", formula: "shares * 2" } },
+    });
+    writeRecord("data/portfolio/items", "h1", { id: "h1", ticker: "aapl", shares: 10, status: "open" });
+    const collection = await loadCollection("stock-quotes", opts());
+    assert.ok(collection);
+    const [server] = await enrichItems(collection, [{ symbol: "aapl", price: 200 }], opts());
+
+    // Client path: embedCache primed the way `loadLinkedCollections` would
+    // prime it from the portfolio detail endpoint (raw stored items).
+    const portfolio = await loadCollection("portfolio", opts());
+    assert.ok(portfolio);
+    const detail = toDetail(collection) as unknown as CollectionDetail;
+    const rendering = useCollectionRendering(ref<CollectionDetail | null>(detail), ref("en"));
+    rendering.embedCache.value = {
+      portfolio: {
+        schema: portfolio.schema as unknown as CollectionDetail["schema"],
+        items: [{ id: "h1", ticker: "aapl", shares: 10, status: "open" }],
+      },
+    };
+    const views = rendering.backlinksViewsFor({ symbol: "aapl", price: 200 });
+    assert.equal(views.holders?.found, true);
+    assert.deepEqual(
+      views.holders?.columns.map((column) => column.label),
+      ["Shares", "Value"],
+    );
+    // Same row set, same values — the derived `value` column agrees with
+    // the server projection (both sides derive the SOURCE records the
+    // same way: against themselves alone).
+    assert.deepEqual(views.holders?.rows, [{ id: "h1", cells: ["10", "20"] }]);
+    assert.deepEqual(server?.holders, [{ id: "h1", shares: 10, value: 20 }]);
   });
 });

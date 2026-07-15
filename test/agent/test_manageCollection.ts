@@ -244,6 +244,18 @@ describe("manageCollection — putItems", () => {
     assert.deepEqual(result.written, []);
     const embed = await runJson({ action: "putItems", slug: "portfolio", items: [record("c", { owner: { id: "me" } })] });
     assert.match((embed.rejected as { problem: string }[])[0]?.problem ?? "", /'owner' is an embed/);
+    writeSkill("quotes-linked", {
+      title: "Quotes Linked",
+      icon: "trending_up",
+      dataPath: "data/quotes-linked/items",
+      primaryKey: "symbol",
+      fields: {
+        symbol: { type: "string", label: "Symbol", primary: true, required: true },
+        holders: { type: "backlinks", label: "Holders", from: "portfolio", via: "ticker", display: ["shares"] },
+      },
+    });
+    const backlinks = await runJson({ action: "putItems", slug: "quotes-linked", items: [{ symbol: "x", holders: [] }] });
+    assert.match((backlinks.rejected as { problem: string }[])[0]?.problem ?? "", /'holders' is a backlinks view/);
   });
 
   it("rejects path-shaped ids before any write", async () => {
@@ -363,7 +375,7 @@ describe("manageCollection — getOntology", () => {
     assert.deepEqual(entryFor(await getOntology(), "stock-quotes").relations, []);
   });
 
-  it("reports table sub-refs with a dotted field path", async () => {
+  it("reports table sub-refs with a dotted field path, and backlinks with their source", async () => {
     writeSkill("invoice", {
       title: "Invoices",
       icon: "receipt",
@@ -371,11 +383,15 @@ describe("manageCollection — getOntology", () => {
       primaryKey: "id",
       fields: {
         id: { type: "string", label: "ID", primary: true, required: true },
+        payments: { type: "backlinks", label: "Payments", from: "portfolio", via: "invoiceId", display: ["shares"] },
         lines: { type: "table", label: "Lines", of: { clientId: { type: "ref", label: "Client", to: "portfolio" } } },
       },
     });
     const invoice = entryFor(await getOntology(), "invoice");
-    assert.deepEqual(invoice.relations, [{ field: "lines.clientId", kind: "ref", to: "portfolio" }]);
+    assert.deepEqual(invoice.relations, [
+      { field: "payments", kind: "backlinks", to: "portfolio" },
+      { field: "lines.clientId", kind: "ref", to: "portfolio" },
+    ]);
   });
 
   it("counts record files without parsing them, and falls back displayField to the primaryKey", async () => {

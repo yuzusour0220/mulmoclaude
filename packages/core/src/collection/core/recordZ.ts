@@ -30,9 +30,10 @@ import { z } from "zod";
 import { parseIsoDate, parseIsoDateTime } from "./calendarGrid";
 import type { CollectionFieldSpec, CollectionItem, CollectionSchema, CollectionSubFieldSpec } from "./schema";
 
-/** derived/embed/toggle are host-computed or projected — never written to
- *  the record JSON, so required / value checks must not apply to them. */
-export const COMPUTED_TYPES: ReadonlySet<string> = new Set(["derived", "embed", "toggle"]);
+/** derived/embed/backlinks/toggle are host-computed or projected — never
+ *  written to the record JSON, so required / value checks must not apply
+ *  to them. */
+export const COMPUTED_TYPES: ReadonlySet<string> = new Set(["derived", "embed", "backlinks", "toggle"]);
 
 export type RecordCheckTier = "enforced" | "strict";
 

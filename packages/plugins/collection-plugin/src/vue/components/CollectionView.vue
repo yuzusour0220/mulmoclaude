@@ -1461,15 +1461,17 @@ function maybeAutoRefreshFeed(slug: string): void {
  *  and it'd be identical in every row). The detail modal and the edit
  *  form iterate the full `schema.fields` so embeds render there too. */
 // Fields shown as columns in the list table. Excludes `embed`
-// (display-only fixed record, no per-record value), `image` — a
-// per-row <img> fetches one file each, too expensive for a collection
-// with many records, and the image is shown in the detail view anyway —
-// and the primary key (an id is plumbing, not data: it identifies the
-// row via data-testid / ref links but doesn't earn a column).
+// (display-only fixed record, no per-record value), `backlinks` (a
+// whole reverse-ref sub-table can't live in a cell — detail view only),
+// `image` — a per-row <img> fetches one file each, too expensive for a
+// collection with many records, and the image is shown in the detail
+// view anyway — and the primary key (an id is plumbing, not data: it
+// identifies the row via data-testid / ref links but doesn't earn a
+// column).
 const listColumnFields = computed<[string, FieldSpec][]>(() =>
   collection.value
     ? Object.entries(collection.value.schema.fields).filter(
-        ([key, field]) => field.type !== "embed" && field.type !== "image" && key !== collection.value?.schema.primaryKey,
+        ([key, field]) => field.type !== "embed" && field.type !== "backlinks" && field.type !== "image" && key !== collection.value?.schema.primaryKey,
       )
     : [],
 );
@@ -1748,11 +1750,12 @@ function openCreate(): void {
       boolTouched[key] = false;
     } else if (field.type === "table") {
       table[key] = [];
-    } else if (field.type !== "derived" && field.type !== "embed" && field.type !== "toggle") {
+    } else if (field.type !== "derived" && field.type !== "embed" && field.type !== "backlinks" && field.type !== "toggle") {
       text[key] = "";
     }
-    // derived (computed), embed (display-only, foreign record), and toggle
-    // (projection of an enum field) have no draft slot.
+    // derived (computed), embed (display-only, foreign record), backlinks
+    // (reverse refs owned by other records), and toggle (projection of an
+    // enum field) have no draft slot.
   }
   // Singleton collections fix the primary key to the schema-declared
   // value (e.g. "me") so the first Add can't pick an arbitrary id.
@@ -1796,7 +1799,7 @@ function openEdit(item: CollectionItem): void {
       table[key] = rows
         .filter((row): row is Record<string, unknown> => Boolean(row) && typeof row === "object" && !Array.isArray(row))
         .map((row) => rowFromItem(row, sub));
-    } else if (field.type !== "derived" && field.type !== "embed" && field.type !== "toggle") {
+    } else if (field.type !== "derived" && field.type !== "embed" && field.type !== "backlinks" && field.type !== "toggle") {
       text[key] = raw === undefined || raw === null ? "" : String(raw);
     }
   }

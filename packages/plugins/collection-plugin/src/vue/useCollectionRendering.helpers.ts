@@ -135,6 +135,17 @@ export function uniqueEmbedTargets(schema: CollectionSchema): string[] {
   return [...targets];
 }
 
+/** Slugs of every SOURCE collection a `backlinks` field reverses over.
+ *  Top-level only, like `embed` (the schema rejects `backlinks` inside a
+ *  table's `of`). Mirrors the server's `uniqueBacklinkSources`. */
+export function uniqueBacklinkSources(schema: CollectionSchema): string[] {
+  const sources = new Set<string>();
+  for (const field of Object.values(schema.fields)) {
+    if (field.type === "backlinks" && field.from.length > 0) sources.add(field.from);
+  }
+  return [...sources];
+}
+
 export function buildRefDisplayMap(detail: CollectionDetailResponse): RefDisplayMap {
   const { fields, primaryKey } = detail.collection.schema;
   const displayField = displayFieldFor(fields, primaryKey);

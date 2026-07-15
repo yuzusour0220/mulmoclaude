@@ -191,7 +191,8 @@ function computedKeyProblem(record: CollectionItem, schema: CollectionSchema): s
     const spec = schema.fields[key];
     if (!spec || !COMPUTED_TYPES.has(spec.type)) continue;
     if (spec.type === "toggle" && spec.field) return `'${key}' is a toggle projection — write the enum field '${spec.field}' instead`;
-    return `'${key}' is ${spec.type === "derived" ? "derived" : "an embed"} — computed by the host, remove it from the record`;
+    const kind = spec.type === "derived" ? "derived" : spec.type === "backlinks" ? "a backlinks view" : "an embed";
+    return `'${key}' is ${kind} — computed by the host, remove it from the record`;
   }
   return null;
 }
