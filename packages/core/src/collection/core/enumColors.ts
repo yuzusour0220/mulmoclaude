@@ -126,5 +126,6 @@ export function resolveEnumColor(schema: CollectionSchema, fieldKey: string, val
     if (rank < 0) return ENUM_NEUTRAL;
     return rank === 0 ? ENUM_ALERT : ENUM_NUDGE;
   }
-  return enumColorClasses(enumValueIndex(schema.fields[fieldKey]?.values, value));
+  const spec = schema.fields[fieldKey];
+  return enumColorClasses(enumValueIndex(spec?.type === "enum" ? spec.values : undefined, value));
 }

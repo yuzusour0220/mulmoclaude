@@ -661,7 +661,8 @@ function isFieldRequiredInUi(field: FieldSpec): boolean {
 /** Required flag for an embed's per-record picker — read off the storage
  *  field it writes (`idField`), since the embed itself stores nothing. */
 function embedPickerRequired(field: FieldSpec): boolean {
-  const target = field.idField ? props.collection.schema.fields[field.idField] : undefined;
+  const idField = field.type === "embed" ? field.idField : undefined;
+  const target = idField ? props.collection.schema.fields[idField] : undefined;
   return target ? isFieldRequiredInUi(target) : false;
 }
 

@@ -109,7 +109,13 @@ interface KanbanColumn {
   label: string;
 }
 
-const groupSpec = computed(() => props.schema.fields[props.groupField]);
+// The board only ever anchors to an `enum` field (`kanbanField` validation
+// plus the view toggle's auto-derive both guarantee it); narrowing here gives
+// typed access to `values` below.
+const groupSpec = computed(() => {
+  const spec = props.schema.fields[props.groupField];
+  return spec?.type === "enum" ? spec : undefined;
+});
 
 /** Declared enum values become columns in order, with a trailing
  *  Uncategorized column for empty/unknown values (also a drop target that
@@ -167,7 +173,10 @@ function columnOf(item: CollectionItem): string {
 // Records to place on the board. A record whose group field is hidden by a
 // `when` predicate is dropped entirely (its column membership is undefined
 // while hidden), per the Kanban spec.
-const visibleItems = computed<CollectionItem[]>(() => (groupSpec.value ? props.items.filter((item) => fieldVisible(groupSpec.value, item)) : []));
+const visibleItems = computed<CollectionItem[]>(() => {
+  const spec = groupSpec.value;
+  return spec ? props.items.filter((item) => fieldVisible(spec, item)) : [];
+});
 
 const itemsByColumnMap = computed<Map<string, CollectionItem[]>>(() => {
   const map = new Map<string, CollectionItem[]>();

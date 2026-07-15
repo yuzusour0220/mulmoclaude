@@ -1,0 +1,914 @@
+// The zod SINGLE SOURCE OF TRUTH for the collection schema contract.
+//
+// Every TypeScript type in `./schema` is derived from these definitions via
+// `z.infer` (type-only imports, erased at emit) — there is no hand-written
+// mirror to drift. Field specs are a DISCRIMINATED UNION on `type` (and
+// `ingest` on `kind`): each variant declares exactly the keys it owns, so an
+// unknown key is stripped per-variant, a new field type is a new union
+// member (not another optional key + refine on a flat bag), and error
+// messages name the variant that failed.
+//
+// This module is ISOMORPHIC — zod plus the pure predicates in `./ids` /
+// `./templatePath`, no node built-ins — but it is deliberately NOT exported
+// through the browser barrel (`../index`): browser code imports the derived
+// TYPES from `./schema` (type-only ⇒ no zod in the bundle) and the server
+// imports the validators through `../server` (discovery re-exports
+// `CollectionSchemaZ`). Runtime imports here point only at `./schema`'s
+// consts, so the module graph stays acyclic: schemaZ → schema.
+
+import { z } from "zod";
+import { isSafeSlug, isSafeRecordId } from "./ids";
+import { isSafeActionTemplatePath, isSafeCustomViewI18nPath, isSafeCustomViewPath } from "./templatePath";
+import { INGEST_KINDS, AGENT_INGEST_KIND, FEED_SCHEDULES } from "./schema";
+
+// ---------------------------------------------------------------------------
+// Shared predicate shapes
+// ---------------------------------------------------------------------------
+
+/** Optional visibility predicate shared by actions and fields: the target
+ *  shows only when the open record's `field` (stringified) is one of `in`.
+ *  Domain-free — `field` is any non-empty key, `in` a non-empty array of
+ *  non-empty values; the host never interprets the meaning.
+ *
+ *  `trim().min(1)` rather than bare `min(1)` so a whitespace-only string
+ *  ("   ") fails validation — otherwise the cell formatter / dropdown would
+ *  render visual blanks that look like missing data. Applied consistently to
+ *  every "non-empty string" slot in this file (CodeRabbit PR #1497). */
+export const WhenZ = z.object({
+  field: z.string().trim().min(1),
+  in: z.array(z.string().trim().min(1)).min(1),
+});
+
+// ---------------------------------------------------------------------------
+// Field specs — a discriminated union on `type`
+// ---------------------------------------------------------------------------
+
+// Keys every field variant carries. `when` gates visibility (list cell,
+// edit form, detail view — purely presentational, a hidden field's stored
+// value is never cleared; only honoured on top-level fields). `primary`
+// marks the field whose value is the record's filename (exactly one per
+// schema — enforced by `acceptParsedSchema`, not here). The referenced
+// `when.field` is validated to be a real top-level field by a schema-level
+// refine below (a field can't see its siblings here).
+const fieldBase = {
+  label: z.string().min(1),
+  primary: z.boolean().optional(),
+  required: z.boolean().optional(),
+  when: WhenZ.optional(),
+};
+
+// A field that renders as money must declare where its currency comes from —
+// otherwise the formatter silently falls back to USD and mislabels non-USD
+// amounts. Two ways to satisfy it: a literal `currency` (an ISO 4217 code,
+// fixed for every record) or a `currencyField` naming a sibling record field
+// that holds the code (per-record, e.g. an invoice's `currency` enum; resolved
+// against the TOP-LEVEL record even for money sub-fields inside a table). At
+// least one is required. The stored value is always a plain decimal number;
+// currency is presentation only.
+const currencyKeys = {
+  currency: z.string().trim().min(1).optional(),
+  currencyField: z.string().trim().min(1).optional(),
+};
+const hasCurrencySource = (spec: { currency?: string; currencyField?: string }): boolean => spec.currency !== undefined || spec.currencyField !== undefined;
+const currencyMessage = {
+  message:
+    "fields that render as money (type 'money', or 'derived' with display 'money') must declare either a literal `currency` (ISO 4217 code, e.g. 'USD', 'JPY') or a `currencyField` naming the record field that holds the code",
+  path: ["currency"],
+};
+
+const slugMessage = (key: string) => ({
+  message: `\`${key}\` must be a valid collection slug (alphanumeric / hyphen / underscore, no path separators)`,
+  path: [key],
+});
+
+/** The plain scalar field types. Stored and edited as primitive values; no
+ *  variant-specific keys.
+ *  - `image`: a workspace-relative image path (e.g. a `data/attachments/...`
+ *    upload); rendered as an <img> in the detail view (not the list table —
+ *    a per-row fetch is too expensive at scale). Stored as a plain string.
+ *  - `file`: a workspace-relative file path as a plain string (e.g. an
+ *    `artifacts/html/<name>.html` app). Rendered as a clickable link in both
+ *    the list table and the detail view: HTML / SVG artifacts open their
+ *    rendered form in a new tab; any other path opens in the File Explorer. */
+const ScalarFieldZ = z.object({
+  type: z.enum(["string", "text", "email", "number", "date", "datetime", "boolean", "markdown", "image", "file"]),
+  ...fieldBase,
+});
+
+/** A link to another collection: the record stores the target item's
+ *  primary-key slug and the host renders a clickable link + dropdown picker.
+ *  `to` must be a real slug (not `../foo`, not `mc-clients/extra` — see
+ *  Codex P2 on PR #1495); whether the target collection exists resolves
+ *  fail-soft at render time, never here. */
+const RefFieldZ = z
+  .object({
+    type: z.literal("ref"),
+    ...fieldBase,
+    to: z.string().min(1),
+  })
+  .refine((spec) => isSafeSlug(spec.to), slugMessage("to"));
+
+/** A money amount. See `currencyKeys` for the currency-source contract. */
+const MoneyFieldZ = z
+  .object({
+    type: z.literal("money"),
+    ...fieldBase,
+    ...currencyKeys,
+  })
+  .refine(hasCurrencySource, currencyMessage);
+
+/** A closed set of allowed string values. The form renders a `<select>`
+ *  populated from `values`; storage is a plain string. */
+const EnumFieldZ = z.object({
+  type: z.literal("enum"),
+  ...fieldBase,
+  values: z.array(z.string().trim().min(1)).min(1),
+});
+
+// Sub-fields inside a `table.of` map: the regular field types minus `table`
+// (no nested tables) and `derived` (no computed columns inside a table —
+// would need the evaluator to walk the row context, defer until a real need
+// surfaces). Also no `when` / `primary` — rows have neither visibility
+// gating nor filenames.
+const subFieldBase = {
+  label: z.string().min(1),
+  required: z.boolean().optional(),
+};
+const SubScalarFieldZ = z.object({
+  type: z.enum(["string", "text", "email", "number", "date", "datetime", "boolean", "markdown"]),
+  ...subFieldBase,
+});
+const SubRefFieldZ = z.object({ type: z.literal("ref"), ...subFieldBase, to: z.string().min(1) }).refine((spec) => isSafeSlug(spec.to), slugMessage("to"));
+const SubMoneyFieldZ = z.object({ type: z.literal("money"), ...subFieldBase, ...currencyKeys }).refine(hasCurrencySource, currencyMessage);
+const SubEnumFieldZ = z.object({ type: z.literal("enum"), ...subFieldBase, values: z.array(z.string().trim().min(1)).min(1) });
+
+export const SubFieldSpecZ = z.discriminatedUnion("type", [SubScalarFieldZ, SubRefFieldZ, SubMoneyFieldZ, SubEnumFieldZ]);
+
+/** A flat sub-table: each row is a record of `of`'s sub-schema (insertion
+ *  order = column order). v0 disallows nested tables and derived columns to
+ *  keep the editor + evaluator simple. */
+const TableFieldZ = z
+  .object({
+    type: z.literal("table"),
+    ...fieldBase,
+    of: z.record(z.string(), SubFieldSpecZ),
+  })
+  .refine((spec) => Object.keys(spec.of).length > 0, {
+    message: "fields with type 'table' must declare a non-empty `of` (sub-schema for each row)",
+    path: ["of"],
+  });
+
+/** A computed scalar: `formula` is a tiny expression evaluated against the
+ *  record — `+ - * /`, parens, identifier refs to top-level fields,
+ *  `sum(tableField[].col)`, and `sum(tableField[].col * tableField[].col)`
+ *  (see `./derivedFormula`). `display` picks the inner type the value renders
+ *  as (default `"number"`) — restricted to the non-composite display targets,
+ *  since a derived value is a scalar. Never stored; computed by `deriveAll`
+ *  on both server and client. */
+const DerivedFieldZ = z
+  .object({
+    type: z.literal("derived"),
+    ...fieldBase,
+    formula: z.string().trim().min(1),
+    display: z.enum(["string", "number", "money", "date"]).optional(),
+    ...currencyKeys,
+  })
+  .refine((spec) => spec.display !== "money" || hasCurrencySource(spec), currencyMessage);
+
+/** Pulls a record from another collection into the read-only detail view.
+ *  Display-only — nothing is stored on this record, so it never appears in
+ *  the list table or the edit form. Must declare a valid `to` slug (same
+ *  path-traversal guard as `ref`) AND exactly one of `id` (a fixed target
+ *  record, e.g. `me` for the singleton profile — same for every record) or
+ *  `idField` (a sibling top-level field naming the per-record target, e.g.
+ *  an invoice's `issuerId` selecting which profile to embed as the bill-from
+ *  block; an absent/empty value resolves fail-soft to "no record"). The
+ *  `idField` target is validated to be a real `ref`/`string` field by a
+ *  schema-level refine below. */
+const EmbedFieldZ = z
+  .object({
+    type: z.literal("embed"),
+    ...fieldBase,
+    to: z.string().min(1),
+    id: z.string().trim().min(1).optional(),
+    idField: z.string().trim().min(1).optional(),
+  })
+  .refine((spec) => isSafeSlug(spec.to) && (spec.id !== undefined) !== (spec.idField !== undefined), {
+    message:
+      "fields with type 'embed' must declare a `to` (valid collection slug) and exactly one of `id` (a fixed record's primary key) or `idField` (a sibling field naming the per-record target)",
+    path: ["id"],
+  });
+
+/** A checkbox that is a pure PROJECTION of an `enum` field — it stores
+ *  nothing of its own. Checked when the enum named by `field` equals
+ *  `onValue`; toggling writes `onValue` / `offValue` back to that enum
+ *  field. Lets a "done" checkbox front a kanban `status` field with the enum
+ *  as the single source of truth (no separate stored boolean to keep in
+ *  sync). `field` / `onValue` / `offValue` are validated against the target
+ *  enum's `values` by a schema-level refine below. */
+const ToggleFieldZ = z.object({
+  type: z.literal("toggle"),
+  ...fieldBase,
+  field: z.string().trim().min(1),
+  onValue: z.string().trim().min(1),
+  offValue: z.string().trim().min(1),
+});
+
+export const FieldSpecZ = z.discriminatedUnion("type", [
+  ScalarFieldZ,
+  RefFieldZ,
+  MoneyFieldZ,
+  EnumFieldZ,
+  TableFieldZ,
+  DerivedFieldZ,
+  EmbedFieldZ,
+  ToggleFieldZ,
+]);
+
+// ---------------------------------------------------------------------------
+// Actions & custom views
+// ---------------------------------------------------------------------------
+
+/** A schema-declared record action, rendered as a button in the read-only
+ *  detail view. Domain-free: the host validates the shape; the meaning
+ *  (which role, which template) is data. v1 ships only `kind: "chat"` —
+ *  start a new chat in `role` with a templated seed prompt; the enum
+ *  reserves room for a future `"mutate"` (status transitions) without
+ *  another schema-shape change. */
+export const ActionSpecZ = z.object({
+  id: z.string().trim().min(1),
+  label: z.string().trim().min(1),
+  icon: z.string().trim().min(1).optional(),
+  kind: z.enum(["chat"]),
+  role: z.string().trim().min(1),
+  template: z
+    .string()
+    .trim()
+    .min(1)
+    .refine(isSafeActionTemplatePath, "must be a safe path under `templates/` (e.g. `templates/invoice.md`; no `..`, no leading `/`, no backslash)"),
+  when: WhenZ.optional(),
+});
+
+/** A custom (LLM-authored) HTML view registration. Domain-free: the host
+ *  validates the shape; the view's behaviour lives in the HTML file. `file`
+ *  is constrained to `views/*.html` (path-safe) so the view-file reader can
+ *  never reach the data folder or the schema/template files. `id` is
+ *  validated to be a real slug + unique by schema-level refines below. */
+export const CustomViewZ = z.object({
+  id: z.string().trim().min(1),
+  label: z.string().trim().min(1),
+  icon: z.string().trim().min(1).optional(),
+  // Where the view runs. Absent ⇒ "desktop" (the sandboxed iframe over the
+  // token/dataUrl contract), so every pre-existing view keeps its behavior.
+  // "mobile" ⇒ served to the phone remote via getRemoteView (postMessage
+  // contract, @mulmoclaude/core/remote-view) and phone-frame-previewed on
+  // desktop. See plans/feat-remote-custom-view.md.
+  target: z.enum(["desktop", "mobile"]).optional(),
+  file: z
+    .string()
+    .trim()
+    .min(1)
+    .refine(isSafeCustomViewPath, "must be a safe path under `views/` ending in `.html` (e.g. `views/year.html`; no `..`, no leading `/`, no backslash)"),
+  // A JSON translation dictionary co-located with the view (shape mirrors
+  // vue-i18n locale messages; the host injects only the active locale's flat
+  // string map into the iframe — see `CollectionCustomView.i18n`'s docs in
+  // ./schema's source history / docs/developer.md).
+  i18n: z
+    .string()
+    .trim()
+    .min(1)
+    .refine(
+      isSafeCustomViewI18nPath,
+      "must be a safe path under `views/` ending in `.i18n.json` (e.g. `views/year.i18n.json`; no `..`, no leading `/`, no backslash)",
+    )
+    .optional(),
+  // What the view may do with the data endpoint. Defaults to ["read"] (least
+  // privilege); the mint endpoint clamps any requested caps to this. There is
+  // deliberately no "delete" — a view can never do more than the agent's own
+  // manageCollection tool.
+  capabilities: z.array(z.enum(["read", "write"])).optional(),
+  // Mobile-only write policy (plans/feat-remote-writable-view.md). Default-deny:
+  // a `target: "mobile"` view may patch ONLY these fields via
+  // `__MC_VIEW.updateItem`, and may delete only when `allowDelete` is true. The
+  // host re-derives + enforces both on every mutate — never trusting the client.
+  // Ignored for desktop views (they use the token-scoped `capabilities` above).
+  editableFields: z.array(z.string().trim().min(1)).optional(),
+  allowDelete: z.boolean().optional(),
+  // Mobile-only image inlining (plans/feat-remote-view-images.md). A
+  // `target: "mobile"` view can't reach the host's localhost, so an `image`-type
+  // field's workspace path is unrenderable on the phone; listing it here makes
+  // the host inline it as a downscaled `data:` URL thumbnail in getItems pages.
+  // Opt-in (absent ⇒ none), projection- and budget-bounded host-side. Ignored
+  // for desktop views (they resolve via /api/files/raw).
+  imageFields: z.array(z.string().trim().min(1)).optional(),
+  imageMaxEdge: z.number().int().min(1).optional(),
+});
+
+// ---------------------------------------------------------------------------
+// Spawn (host-driven recurrence)
+// ---------------------------------------------------------------------------
+
+/** Recurrence advance for `spawn.every`. `interval` is a positive integer
+ *  count of `unit`s (`interval: 3` + `unit: "month"` = quarterly);
+ *  `dayOfMonth` (month/year only) is the CANONICAL day-of-month anchor
+ *  (1-31, read from the rule and clamped per-month at compute time so "31st
+ *  of every month" never drifts) or the `"last"` sentinel for end-of-month.
+ *  `.strict()` so the union below cleanly rejects an object carrying BOTH
+ *  `unit` and `fromField` (it fails this arm on the unknown `fromField`). */
+export const EveryLiteralZ = z
+  .object({
+    unit: z.enum(["day", "week", "month", "year"]),
+    interval: z.number().int().min(1),
+    dayOfMonth: z.union([z.number().int().min(1).max(31), z.literal("last")]).optional(),
+  })
+  .strict();
+
+/** Field-driven recurrence: pick the interval per-record by an `enum`
+ *  field's value — one collection can mix daily / weekly / monthly
+ *  obligations in a single list. `map` keys are validated to exactly cover
+ *  that field's `values` by a `CollectionSchemaZ` refine (which can see the
+ *  sibling `fields`); here each map value just has to be a well-formed
+ *  literal `every`. `.strict()` mirrors the literal arm so a both-keys
+ *  object fails this arm too. */
+export const EveryFieldDrivenZ = z
+  .object({
+    fromField: z.string().trim().min(1),
+    map: z.record(z.string(), EveryLiteralZ),
+  })
+  .strict();
+
+/** Either a single literal interval (applied to every record) or the
+ *  field-driven map. Two `.strict()` arms mean "both keys" and "neither
+ *  key" both fail validation, with no extra refine. */
+export const EveryZ = z.union([EveryLiteralZ, EveryFieldDrivenZ]);
+
+/** Host-driven recurrence: when a record satisfies `when` (default:
+ *  "`completionField` value ∈ `completionDoneValues`"), the host creates the
+ *  next record with a forward-advanced `triggerField` date. `carry` copies
+ *  record fields verbatim onto the successor; `set` forces fixed values
+ *  (typically resetting the status field to its pending value). The
+ *  successor's id and contents are a pure function of (source record, this
+ *  rule); creation is create-if-absent, so the mechanism stays convergent. */
+export const SpawnZ = z.object({
+  when: WhenZ.optional(),
+  every: EveryZ,
+  carry: z.array(z.string().trim().min(1)).optional(),
+  set: z.record(z.string(), z.unknown()).optional(),
+});
+
+// ---------------------------------------------------------------------------
+// Ingest (scheduled retrieval)
+// ---------------------------------------------------------------------------
+
+/** Declarative retrieval config for a Feed (a collection that refills itself
+ *  from the internet). `http-json` needs `itemsAt` (a path to the items
+ *  array) only when the response body isn't itself the array; rss/atom yield
+ *  items natively and ignore it — so no kind-specific requirement here. */
+export const DeclarativeIngestZ = z.object({
+  kind: z.enum(INGEST_KINDS),
+  url: z.string().url(),
+  schedule: z.enum(FEED_SCHEDULES),
+  // Optional UTC hour (0–23) to anchor a `daily` schedule; ignored otherwise.
+  atHour: z.number().int().min(0).max(23).optional(),
+  itemsAt: z.string().trim().min(1).optional(),
+  map: z.record(z.string().trim().min(1), z.string().trim().min(1)),
+  idFrom: z.string().trim().min(1).optional(),
+  maxItems: z.number().int().min(0).optional(),
+});
+
+/** Agent-performed retrieval. Valid on any collection (the primary consumer
+ *  is skill-backed collections — feeds keep their declarative kinds). No
+ *  `url`/`map`: the worker owns retrieval and record shape, seeded by
+ *  `template` + a summary of every record, run in `role`. `template` is
+ *  validated the SAME way an action's template is (safe path under
+ *  `templates/`), so the skill-bridge mirrors it identically. */
+export const AgentIngestZ = z.object({
+  kind: z.literal(AGENT_INGEST_KIND),
+  schedule: z.enum(FEED_SCHEDULES),
+  // Optional UTC hour (0–23) to anchor a `daily` schedule; ignored otherwise.
+  atHour: z.number().int().min(0).max(23).optional(),
+  role: z.string().trim().min(1),
+  template: z
+    .string()
+    .trim()
+    .min(1)
+    .refine(isSafeActionTemplatePath, "must be a safe path under `templates/` (e.g. `templates/refresh.md`; no `..`, no leading `/`, no backslash)"),
+});
+
+/** `ingest` is a discriminated union on `kind`: the three declarative
+ *  retrievers fetch-and-map; `agent` dispatches a hidden worker. Optional on
+ *  every schema — skill-backed collections usually omit it; only feeds
+ *  discovered from `<workspace>/feeds/` are REQUIRED to carry it (gated by
+ *  `acceptParsedSchema`). */
+export const IngestZ = z.discriminatedUnion("kind", [DeclarativeIngestZ, AgentIngestZ]);
+
+// ---------------------------------------------------------------------------
+// dynamicIcon (data-driven launcher icon) and its `where` predicate
+// ---------------------------------------------------------------------------
+
+// Data-driven launcher-icon override (see `CollectionSchema.dynamicIcon`).
+// `source.collection` may name ANY collection (self or cross-collection),
+// so — unlike `ref`/`embed`/`when.field` elsewhere in this file — its
+// shape is validated here without a cross-field refine against a specific
+// target schema (that collection may not even be loaded yet); a bad
+// `source.collection`/`orderBy`/condition `field` fails soft at compute
+// time instead (`computeCollectionIcon`), matching this feature's locked
+// design (see plans/feat-dynamic-collection-icons.md "Open questions").
+//
+// `where` is a richer AND-of-conditions predicate than the single-field
+// `WhenZ` used elsewhere (fields/actions) — see `./where`.
+//
+// A condition's comparison value is either a literal `value` or a
+// `valueFrom` reference to another record's field (e.g. a `_config`
+// singleton's `defaultCity`, resolved at compute time against the source
+// collection's own records — see the server's `dynamicIcon.ts`
+// `recordsById`). Exactly one of the two is required: neither (nothing to
+// compare against) and both (ambiguous which wins) are equally meaningless.
+// `record` omitted → the SAME record being matched (field-to-field compare,
+// e.g. `spent > budget`); set → another record by primaryKey (e.g. `_config`).
+export const ValueRefZ = z.object({
+  record: z.string().trim().min(1).optional(),
+  field: z.string().trim().min(1),
+});
+export const WhereCondZ = z
+  .object({
+    field: z.string().trim().min(1),
+    op: z.enum(["eq", "ne", "in", "gt", "gte", "lt", "lte", "contains"]),
+    value: z.union([z.string(), z.array(z.string())]).optional(),
+    valueFrom: ValueRefZ.optional(),
+  })
+  .refine((cond) => (cond.value !== undefined) !== (cond.valueFrom !== undefined), {
+    message: "a where condition must declare exactly one of `value` (a literal) or `valueFrom` (a reference to another record's field), never both or neither",
+    path: ["value"],
+  })
+  .refine((cond) => cond.value === undefined || (cond.op === "in") === Array.isArray(cond.value), {
+    message: "`in` requires an array `value` (the allowed set); every other op requires a single string `value`",
+    path: ["value"],
+  });
+export const WhereZ = z.array(WhereCondZ);
+export const DynamicIconSourceZ = z.object({
+  collection: z.string().trim().min(1),
+  from: z.enum(["latest", "first", "when"]).optional(),
+  orderBy: z.string().trim().min(1).optional(),
+  where: WhereZ.optional(),
+});
+export const DynamicIconRuleZ = z.object({
+  where: WhereZ,
+  icon: z.string().trim().min(1),
+});
+export const DynamicIconSpecZ = z.object({
+  source: DynamicIconSourceZ,
+  rules: z.array(DynamicIconRuleZ),
+  fallback: z.string().trim().min(1).optional(),
+});
+
+// ---------------------------------------------------------------------------
+// Schema-level cross-field refine helpers
+// ---------------------------------------------------------------------------
+
+// The calendar anchor/end fields accept either a date-only or a datetime
+// field (the latter carries the clock for the day view).
+const isDateLike = (type: string | undefined): boolean => type === "date" || type === "datetime";
+
+// `calendarTimeField` parses a free-form time string, so it must name a
+// string-backed field — a number/enum/date column has no time-range text.
+const isTimeStringField = (type: string | undefined): boolean => type === "string" || type === "text";
+
+// Field types that can hold a currency code string. A `currencyField`
+// pointer must resolve to one of these — pointing at a number / boolean
+// / table would never yield a usable ISO code.
+const CODE_FIELD_TYPES = new Set(["string", "text", "enum"]);
+
+interface FieldLike {
+  type: string;
+  currencyField?: string;
+  of?: Record<string, { type: string; currencyField?: string }>;
+}
+
+// Every `currencyField` declared anywhere in the schema — top-level
+// fields and a table's `of` sub-fields. Sub-field money cells resolve
+// currency against the TOP-LEVEL record (rows carry no currency), so
+// their pointers are validated against the top-level field set too.
+function collectCurrencyFieldRefs(fields: Record<string, FieldLike>): string[] {
+  const refs: string[] = [];
+  for (const field of Object.values(fields)) {
+    if (typeof field.currencyField === "string" && field.currencyField.length > 0) refs.push(field.currencyField);
+    if (field.of) {
+      for (const sub of Object.values(field.of)) {
+        if (typeof sub.currencyField === "string" && sub.currencyField.length > 0) refs.push(sub.currencyField);
+      }
+    }
+  }
+  return refs;
+}
+
+// True iff every `toggle` field is a valid projection: its `field` names a
+// top-level `enum`, and both `onValue` and `offValue` are members of that
+// enum's closed `values` set.
+function everyToggleProjectsValidEnum(
+  fields: Record<string, { type: string; field?: string; onValue?: string; offValue?: string; values?: readonly string[] }>,
+): boolean {
+  for (const spec of Object.values(fields)) {
+    if (spec.type !== "toggle") continue;
+    const target = spec.field === undefined ? undefined : fields[spec.field];
+    if (!target || target.type !== "enum" || target.values === undefined) return false;
+    const allowed = new Set(target.values);
+    if (spec.onValue === undefined || !allowed.has(spec.onValue)) return false;
+    if (spec.offValue === undefined || !allowed.has(spec.offValue)) return false;
+  }
+  return true;
+}
+
+// True iff a `spawn`'s successor will NOT be born already matching its own
+// predicate (and would therefore re-spawn forever). The effective predicate
+// is `spawn.when` when present, else the completion-done pair. The successor's
+// value for the predicate field is `set[field]` if set, else the carried
+// source value (which matched when the spawn fired) if carried, else absent.
+function spawnSuccessorStartsInert(schema: {
+  spawn?: { when?: { field: string; in: readonly string[] }; carry?: readonly string[]; set?: Record<string, unknown> };
+  completionField?: string;
+  completionDoneValues?: readonly string[];
+}): boolean {
+  const { spawn } = schema;
+  if (!spawn) return true;
+  const field = spawn.when?.field ?? schema.completionField;
+  const values = spawn.when?.in ?? schema.completionDoneValues;
+  if (!field || !values) return true; // predicate not evaluable — other refines cover this
+  if (spawn.set && Object.prototype.hasOwnProperty.call(spawn.set, field)) {
+    return !values.includes(String(spawn.set[field])); // `set` wins over `carry`
+  }
+  return !(spawn.carry ?? []).includes(field); // carried ⇒ inherits the matching value
+}
+
+// The slice of a parsed schema the field-driven `spawn.every` refines read.
+interface FieldDrivenSchemaView {
+  fields: Record<string, { type: string; values?: readonly string[] }>;
+  spawn?: {
+    every?: z.infer<typeof EveryZ>;
+    carry?: readonly string[];
+    set?: Record<string, unknown>;
+  };
+}
+
+// Resolve the field-driven arm of `spawn.every`, or null when spawn is absent
+// or its `every` is the literal arm. Lets each refine below short-circuit
+// (return valid) without re-checking the discriminant. The `"fromField" in`
+// check mirrors `./schema`'s `isFieldDrivenEvery` guard (kept inline here so
+// this module's runtime imports stay limited to `./schema`'s consts).
+function fieldDrivenSpawnEvery(schema: FieldDrivenSchemaView): z.infer<typeof EveryFieldDrivenZ> | null {
+  const every = schema.spawn?.every;
+  if (!every || !("fromField" in every)) return null;
+  return every;
+}
+
+// §4.1 — `fromField` must name a real top-level `enum` field. The `map` keys
+// are only meaningful against a closed value set, and the field renders as a
+// form `<select>`; a non-enum target has no finite values to validate against.
+function fieldDrivenFromFieldIsEnum(schema: FieldDrivenSchemaView): boolean {
+  const driven = fieldDrivenSpawnEvery(schema);
+  if (!driven) return true;
+  return schema.fields[driven.fromField]?.type === "enum";
+}
+
+// §4.2 — `map` keys must EXACTLY cover the enum's `values` (no missing keys —
+// a record could pick an unmapped frequency and silently stall; no extra keys
+// — a stale map outliving an enum edit). Mirrors `everyToggleProjectsValidEnum`'s
+// "author values ⊆ enum's closed set" shape, tightened to set equality.
+function fieldDrivenMapCoversValues(schema: FieldDrivenSchemaView): boolean {
+  const driven = fieldDrivenSpawnEvery(schema);
+  if (!driven) return true;
+  const target = schema.fields[driven.fromField];
+  if (!target || target.type !== "enum" || target.values === undefined) return true; // §4.1 reports the type error
+  const values = new Set(target.values);
+  const keys = Object.keys(driven.map);
+  return keys.length === values.size && keys.every((key) => values.has(key));
+}
+
+// §4.5 — `fromField` must reach the successor (via `carry` or `set`); otherwise
+// the successor loses its frequency and the NEXT spawn along the chain can't
+// resolve an interval, silently halting the recurrence. Hard error, not a warn
+// (see plan §6) — authoring a field-driven spawn without propagating its driver
+// is almost always a mistake.
+//
+// `set` writes a FIXED value, so it must itself be a key of `map` (else the
+// successor is born with an unresolvable driver and `resolveEvery` skips it —
+// the exact silent-halt §4.5 exists to prevent). `carry` copies the source's
+// own value, which — for a record that matched the spawn — is one of the
+// enum's values, all of which `map` covers by §4.2; so a carried driver is
+// always resolvable and needs no value check here.
+function fieldDrivenFromFieldCarried(schema: FieldDrivenSchemaView): boolean {
+  const driven = fieldDrivenSpawnEvery(schema);
+  if (!driven) return true;
+  const { carry, set } = schema.spawn ?? {};
+  if (set && Object.prototype.hasOwnProperty.call(set, driven.fromField)) {
+    const raw = set[driven.fromField];
+    if (raw === undefined || raw === null || raw === "") return false;
+    return Object.prototype.hasOwnProperty.call(driven.map, String(raw));
+  }
+  return (carry ?? []).includes(driven.fromField);
+}
+
+// ---------------------------------------------------------------------------
+// The whole schema
+// ---------------------------------------------------------------------------
+
+export const CollectionSchemaZ = z
+  .object({
+    title: z.string().min(1),
+    icon: z.string().min(1),
+    dataPath: z.string().min(1),
+    primaryKey: z.string().min(1),
+    // When set, the collection holds at most one record whose primary
+    // key is this exact value (e.g. `me` for the business profile).
+    // The host fixes the create form's primary key to it and hides the
+    // Add button once the record exists.
+    singleton: z.string().trim().min(1).optional(),
+    fields: z.record(z.string(), FieldSpecZ),
+    actions: z.array(ActionSpecZ).optional(),
+    // Collection-level actions (header buttons). Same shape as `actions`;
+    // the `when` predicate is ignored (no record context). The seed
+    // prompt injects a progress summary of all records instead.
+    collectionActions: z.array(ActionSpecZ).optional(),
+    // Completion-tracking pair: when both are set, item-create fires a
+    // notification that clears once `completionField` transitions into
+    // `completionDoneValues`. The two are bound together — declaring
+    // one without the other is a misconfiguration the cross-field
+    // refine below rejects.
+    completionField: z.string().trim().min(1).optional(),
+    completionDoneValues: z.array(z.string().trim().min(1)).min(1).optional(),
+    // Optional human-readable label for the completion notification's
+    // title — names the field whose value reads better than the opaque
+    // primaryKey (e.g. a `name` field). Falls back to the primaryKey
+    // value at render time when unset or empty.
+    displayField: z.string().trim().min(1).optional(),
+    // Time gate: names a `date` field that delays the completion bell
+    // until the clock reaches it. Requires the completion pair (the bell
+    // still clears via the done value). Validated to name a real `date`
+    // field by refines below.
+    triggerField: z.string().trim().min(1).optional(),
+    // Lead time in whole days — fire the bell this many days before
+    // `triggerField`. Non-negative; requires `triggerField` (refine below).
+    triggerLeadDays: z.number().int().min(0).optional(),
+    // Host-driven recurrence; requires `triggerField`. See SpawnZ.
+    spawn: SpawnZ.optional(),
+    // Calendar view anchor: names a `date` field whose value places each
+    // record on a month grid. Validated to name a real `date` field by a
+    // refine below. Optional — the toggle auto-derives from any `date`
+    // field when this is unset.
+    calendarField: z.string().trim().min(1).optional(),
+    // Multi-day span end: a second `date` field the calendar record spans
+    // to. Requires `calendarField`; validated to name a real `date` field.
+    calendarEndField: z.string().trim().min(1).optional(),
+    // Day (time-allocation) view time source: names a string field holding a
+    // free-form time or time-range (e.g. "14:00-17:00", "17:00-", "16:30").
+    // Consulted only when the date fields are date-only. Requires
+    // `calendarField`; validated to name a real field by a refine below.
+    calendarTimeField: z.string().trim().min(1).optional(),
+    // Kanban board group: names an `enum` field whose value buckets each
+    // record into a column. Validated to name a real `enum` field by a
+    // refine below. Optional — the toggle auto-derives from any `enum`
+    // field when this is unset.
+    kanbanField: z.string().trim().min(1).optional(),
+    // Custom (LLM-authored) HTML views. Each renders in a sandboxed iframe
+    // over the records. Optional, so every existing schema validates
+    // unchanged. Ids validated to be valid + unique slugs by refines below.
+    views: z.array(CustomViewZ).optional(),
+    // Completion-bell gate: only notify for records matching this predicate
+    // (e.g. high-priority todos). Reuses the `when` shape; requires
+    // `completionField`; field validated to exist by refines below.
+    notifyWhen: WhenZ.optional(),
+    // Declarative retrieval config. Present only on Feeds (collections in
+    // the `<workspace>/feeds/` registry). Optional, so every existing
+    // skill schema validates unchanged.
+    ingest: IngestZ.optional(),
+    // Data-driven launcher-icon override. Optional, so every existing
+    // schema validates unchanged; `source` is required within it.
+    dynamicIcon: DynamicIconSpecZ.optional(),
+  })
+  // The singleton value becomes a record id (and thus a `<id>.json`
+  // filename), so it must satisfy the SAME record-id rule the write path
+  // enforces — otherwise the create form would lock the primary key to a
+  // value the POST route then rejects as an invalid item id, making the
+  // collection impossible to initialize (Codex P1).
+  .refine((schema) => schema.singleton === undefined || isSafeRecordId(schema.singleton), {
+    message: "schema `singleton` must be a valid item id (alphanumeric / hyphen / underscore / interior dot, no `..` or path separators)",
+    path: ["singleton"],
+  })
+  // Action ids must be unique so the dispatch route resolves
+  // unambiguously.
+  .refine((schema) => schema.actions === undefined || new Set(schema.actions.map((action) => action.id)).size === schema.actions.length, {
+    message: "schema `actions` must have unique `id`s",
+    path: ["actions"],
+  })
+  // Collection-level action ids must likewise be unique.
+  .refine(
+    (schema) => schema.collectionActions === undefined || new Set(schema.collectionActions.map((action) => action.id)).size === schema.collectionActions.length,
+    {
+      message: "schema `collectionActions` must have unique `id`s",
+      path: ["collectionActions"],
+    },
+  )
+  // A `currencyField` pointer must name a real top-level field that
+  // holds a code string — a typo (`curreny`) would otherwise pass the
+  // per-field check, then silently fall back to the literal / USD at
+  // render and mislabel amounts. Checked at the schema level because a
+  // field can't see its siblings.
+  .refine((schema) => collectCurrencyFieldRefs(schema.fields).every((name) => CODE_FIELD_TYPES.has(schema.fields[name]?.type ?? "")), {
+    message: "a money field's `currencyField` must name a top-level `string`, `text`, or `enum` field that holds the currency code",
+    path: ["fields"],
+  })
+  // Completion-tracking pair must be declared together: declaring
+  // `completionField` without `completionDoneValues` (or vice-versa)
+  // is meaningless — the host would either never fire (no done values
+  // to compare against) or never clear (no field to read). Bound
+  // together so the misconfiguration fails loudly at load time.
+  .refine((schema) => (schema.completionField === undefined) === (schema.completionDoneValues === undefined), {
+    message: "schema `completionField` and `completionDoneValues` must be declared together (both set, or both omitted)",
+    path: ["completionField"],
+  })
+  // `completionField` must name a real top-level field — a typo would
+  // silently disable the notification mechanism otherwise.
+  .refine((schema) => schema.completionField === undefined || schema.fields[schema.completionField] !== undefined, {
+    message: "schema `completionField` must name a top-level field declared in `fields`",
+    path: ["completionField"],
+  })
+  // `displayField`, like `completionField`, must name a real top-level
+  // field — a typo would silently fall back to the primaryKey forever.
+  .refine((schema) => schema.displayField === undefined || schema.fields[schema.displayField] !== undefined, {
+    message: "schema `displayField` must name a top-level field declared in `fields`",
+    path: ["displayField"],
+  })
+  // A field's `when.field` gates its visibility against a sibling's
+  // value, so it must name a real top-level field — a typo would
+  // silently keep the field hidden forever (the gate never matches).
+  // Checked at the schema level because a field can't see its siblings.
+  .refine((schema) => Object.values(schema.fields).every((field) => field.when === undefined || schema.fields[field.when.field] !== undefined), {
+    message: "a field's `when.field` must name a top-level field declared in `fields`",
+    path: ["fields"],
+  })
+  // An `embed`'s `idField` resolves the target record id from a sibling's
+  // value, so it must name a real top-level field — and one whose stored
+  // value is a plain id string. Only `ref` / `string` qualify: the editor
+  // writes the picked id into that field, so a non-persisted or composite
+  // type (`embed` / `derived` / `toggle` / `table` / `number` / …) would
+  // either not round-trip on save or hold no usable id. Restricting it
+  // makes the misconfiguration fail at schema load, not silently at
+  // render. `idField` is ignored on non-`embed` fields, so only check
+  // there. Schema-level because a field can't see its siblings.
+  .refine(
+    (schema) =>
+      Object.values(schema.fields).every((field) => {
+        if (field.type !== "embed" || field.idField === undefined) return true;
+        const target = schema.fields[field.idField];
+        return target !== undefined && (target.type === "ref" || target.type === "string");
+      }),
+    {
+      message: "an embed field's `idField` must name a top-level `ref` or `string` field declared in `fields`",
+      path: ["fields"],
+    },
+  )
+  // `triggerField` requires the completion pair: the time gate only
+  // suppresses the *completion* bell until the date, and the bell still
+  // clears via `completionDoneValues`. Without completion there is no
+  // bell to gate (or clear), so the declaration is meaningless.
+  .refine((schema) => schema.triggerField === undefined || schema.completionField !== undefined, {
+    message: "schema `triggerField` requires `completionField` / `completionDoneValues` (the gated bell still clears via the done value)",
+    path: ["triggerField"],
+  })
+  // `triggerField` must name a real `date` field — the gate parses its
+  // value as `YYYY-MM-DD`; any other type can't be compared to the clock.
+  .refine((schema) => schema.triggerField === undefined || schema.fields[schema.triggerField]?.type === "date", {
+    message: "schema `triggerField` must name a top-level `date` field declared in `fields`",
+    path: ["triggerField"],
+  })
+  // `triggerLeadDays` only means something relative to a trigger date.
+  .refine((schema) => schema.triggerLeadDays === undefined || schema.triggerField !== undefined, {
+    message: "schema `triggerLeadDays` requires `triggerField` (it shifts when that field's bell fires)",
+    path: ["triggerLeadDays"],
+  })
+  // `spawn` advances `triggerField` to compute the successor's trigger
+  // date, so the schema must declare one.
+  .refine((schema) => schema.spawn === undefined || schema.triggerField !== undefined, {
+    message: "schema `spawn` requires `triggerField` (the successor's trigger date is `triggerField` advanced by `spawn.every`)",
+    path: ["spawn"],
+  })
+  // `spawn.when.field` and every `spawn.carry` entry must name real
+  // top-level fields — a typo would silently never match / never copy.
+  .refine((schema) => schema.spawn?.when === undefined || schema.fields[schema.spawn.when.field] !== undefined, {
+    message: "schema `spawn.when.field` must name a top-level field declared in `fields`",
+    path: ["spawn"],
+  })
+  .refine((schema) => (schema.spawn?.carry ?? []).every((name) => schema.fields[name] !== undefined), {
+    message: "every `spawn.carry` entry must name a top-level field declared in `fields`",
+    path: ["spawn"],
+  })
+  // A successor must NOT be born already matching its own spawn predicate
+  // — it would re-spawn on its first reconcile, fanning out into an
+  // unbounded chain of records. The predicate field/values are `spawn.when`
+  // when given, else the completion-done pair (the default predicate). The
+  // successor's value for that field is `set[field]` if set, else the
+  // carried source value (which matched, by definition, when the spawn
+  // fired) if carried, else absent (safe). Reject the first two when they
+  // land on a matching value.
+  .refine((schema) => spawnSuccessorStartsInert(schema), {
+    message:
+      "`spawn` must leave the successor in a non-matching state (e.g. `set` the status to a pending value); seeding the predicate field to a matching value via `set`/`carry` would respawn forever",
+    path: ["spawn"],
+  })
+  // Field-driven `spawn.every` (§4.1): `fromField` must name a top-level
+  // `enum` — the only field type with a closed, finite value set to drive
+  // the `map` and the form `<select>`.
+  .refine((schema) => fieldDrivenFromFieldIsEnum(schema), {
+    message: "`spawn.every.fromField` must name a top-level `enum` field declared in `fields`",
+    path: ["spawn"],
+  })
+  // Field-driven `spawn.every` (§4.2): the `map` keys must exactly cover the
+  // enum's `values` — a missing key would stall a record at that frequency;
+  // an extra key signals a map left stale after an enum edit.
+  .refine((schema) => fieldDrivenMapCoversValues(schema), {
+    message: "`spawn.every.map` keys must exactly cover the `values` of the `enum` named by `fromField` (no missing or extra keys)",
+    path: ["spawn"],
+  })
+  // Field-driven `spawn.every` (§4.5): `fromField` must be carried (or `set`)
+  // onto the successor, or the next spawn in the chain can't resolve an
+  // interval and the recurrence silently halts.
+  .refine((schema) => fieldDrivenFromFieldCarried(schema), {
+    message:
+      "`spawn.every.fromField` must appear in `spawn.carry`, or be written by `spawn.set` to a value present in `spawn.every.map`, so the successor keeps a resolvable recurrence interval",
+    path: ["spawn"],
+  })
+  // `calendarField` must name a real `date`/`datetime` field — the calendar
+  // view parses its value to place records on the month grid (a `datetime`
+  // anchor also carries the clock for the day view); any other type can't be
+  // put on a calendar.
+  .refine((schema) => schema.calendarField === undefined || isDateLike(schema.fields[schema.calendarField]?.type), {
+    message: "schema `calendarField` must name a top-level `date` or `datetime` field declared in `fields`",
+    path: ["calendarField"],
+  })
+  // `calendarEndField` marks the end of a multi-day span, so it only means
+  // something alongside a start anchor.
+  .refine((schema) => schema.calendarEndField === undefined || schema.calendarField !== undefined, {
+    message: "schema `calendarEndField` requires `calendarField` (it marks the end of the span that starts at `calendarField`)",
+    path: ["calendarEndField"],
+  })
+  // `calendarEndField` must also name a real `date`/`datetime` field — same parse.
+  .refine((schema) => schema.calendarEndField === undefined || isDateLike(schema.fields[schema.calendarEndField]?.type), {
+    message: "schema `calendarEndField` must name a top-level `date` or `datetime` field declared in `fields`",
+    path: ["calendarEndField"],
+  })
+  // `calendarTimeField` places records on the day view, so it only means
+  // something alongside a start anchor.
+  .refine((schema) => schema.calendarTimeField === undefined || schema.calendarField !== undefined, {
+    message: "schema `calendarTimeField` requires `calendarField` (it supplies the time-of-day for the calendar's day view)",
+    path: ["calendarTimeField"],
+  })
+  // `calendarTimeField` must name a real top-level field (a free-form time
+  // string the day view parses).
+  .refine((schema) => schema.calendarTimeField === undefined || schema.fields[schema.calendarTimeField] !== undefined, {
+    message: "schema `calendarTimeField` must name a top-level field declared in `fields`",
+    path: ["calendarTimeField"],
+  })
+  // …and that field must be string-backed — the day view parses its value as a
+  // time string, so a number/enum/date column can't drive it.
+  .refine((schema) => schema.calendarTimeField === undefined || isTimeStringField(schema.fields[schema.calendarTimeField]?.type), {
+    message: "schema `calendarTimeField` must name a top-level `string` or `text` field declared in `fields`",
+    path: ["calendarTimeField"],
+  })
+  // `kanbanField` must name a real `enum` field — the board groups records
+  // into one column per declared enum value; any other type has no closed
+  // set of columns to group by.
+  .refine((schema) => schema.kanbanField === undefined || schema.fields[schema.kanbanField]?.type === "enum", {
+    message: "schema `kanbanField` must name a top-level `enum` field declared in `fields`",
+    path: ["kanbanField"],
+  })
+  // A `toggle` field projects an `enum` field: its `field` must name a real
+  // top-level enum, and `onValue` / `offValue` must be members of that
+  // enum's `values` — otherwise toggling would write a value outside the
+  // closed set (and never appear "checked").
+  .refine((schema) => everyToggleProjectsValidEnum(schema.fields), {
+    message: "a `toggle` field's `field` must name a top-level `enum` field, and its `onValue`/`offValue` must be values of that enum",
+    path: ["fields"],
+  })
+  // `notifyWhen` narrows the completion bell, so it only means something with
+  // completion tracking, and its `field` must name a real top-level field.
+  .refine((schema) => schema.notifyWhen === undefined || schema.completionField !== undefined, {
+    message: "schema `notifyWhen` requires `completionField` (it narrows that bell)",
+    path: ["notifyWhen"],
+  })
+  .refine((schema) => schema.notifyWhen === undefined || schema.fields[schema.notifyWhen.field] !== undefined, {
+    message: "schema `notifyWhen.field` must name a top-level field declared in `fields`",
+    path: ["notifyWhen"],
+  })
+  // Every custom view `id` must be a valid slug — it doubles as the
+  // view-mode selector key (`custom:<id>`) and the capability-token clamp
+  // key, both of which expect a path-safe token.
+  .refine((schema) => schema.views === undefined || schema.views.every((view) => isSafeSlug(view.id)), {
+    message: "every `views[].id` must be a valid slug (alphanumeric / hyphen / underscore, no path separators)",
+    path: ["views"],
+  })
+  // Custom view ids must be unique so the selector + token clamp resolve
+  // unambiguously.
+  .refine((schema) => schema.views === undefined || new Set(schema.views.map((view) => view.id)).size === schema.views.length, {
+    message: "schema `views` must have unique `id`s",
+    path: ["views"],
+  });
