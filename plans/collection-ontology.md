@@ -11,17 +11,17 @@ Corollary (**lint, not lock**): files are the source of truth and the agent/user
 
 ## Current-state map (implementation footholds)
 
-- **Field types**: `CollectionFieldType` — `packages/core/src/collection/core/schema.ts:65-96`; zod mirror `server/discovery.ts:129-147`. Computed/display-only types (`derived`, `embed`, `toggle`) in `COMPUTED_TYPES` — `server/validate.ts:27` — never persisted.
+- **Field types**: discriminated union `FieldSpecZ` — `packages/core/src/collection/core/schemaZ.ts` (the zod single source of truth since step ⓪ Phase A; `core/schema.ts`'s `CollectionFieldType`/`CollectionFieldSpec` are `z.infer`-derived from it). Computed/display-only types (`derived`, `embed`, `toggle`) in `COMPUTED_TYPES` — `server/validate.ts:27` — store nothing in the record themselves (a `toggle` renders as an inline checkbox, but checking it writes `onValue`/`offValue` to the `enum` field it projects; the toggle key is never persisted).
 - **`ref`**: one-directional, stores the target's primaryKey slug (string, not numeric) — `schema.ts:350-357`. No reverse/backlink concept exists.
 - **Deref loading**: server `loadLinkedTargets` loads every ref/embed target collection once per enrich — `server/derive.ts:64-72`; client fan-out `useLinkedCollectionCaches.ts:94-108`. Unknown target ⇒ null ⇒ em-dash (fail-soft).
 - **Formula evaluator**: pure eval-free recursive-descent interpreter, `+ - * /` + parens + single `sum()` over same-table columns; **deliberately no string literals / conditionals / nested calls** — `core/derivedFormula.ts:6-33`. Saturation in `core/deriveAll.ts` runs **identically on server and client** so numbers never diverge.
-- **Discovery-time validation**: cross-collection targets are validated for slug *safety* only, never existence (target may not be loaded yet); resolution fails soft at render — `discovery.ts:479-486`. Schema-level refines that check sibling fields: `discovery.ts:651-820`.
-- **Actions**: `CollectionActionKind = "chat"` only; **`"mutate"` is already reserved by comment** — `schema.ts:174-178`. Record-level `actions` + collection-level `collectionActions` (`schema.ts:461`) both exist. Action `when` is **already re-checked server-side** — `server/api/routes/collections.ts:368-375` via `actionVisible` (`core/actionVisible.ts:23-40`).
+- **Discovery-time validation**: cross-collection targets are validated for slug *safety* only, never existence (target may not be loaded yet); resolution fails soft at render — see the `dynamicIcon` note and the schema-level sibling-field refines on `CollectionSchemaZ`, both in `core/schemaZ.ts`.
+- **Actions**: `CollectionActionKind = "chat"` only; **`"mutate"` is already reserved by comment** — `ActionSpecZ` in `core/schemaZ.ts`. Record-level `actions` + collection-level `collectionActions` both exist (`CollectionSchemaZ`). Action `when` is **already re-checked server-side** — `server/api/routes/collections.ts:368-375` via `actionVisible` (`core/actionVisible.ts:23-40`).
 - **Seed builders**: per-record `buildActionSeedPrompt` (security boundary + full sanitized record JSON + template) — `server/io.ts:463-473`; collection-level `buildCollectionActionSeedPrompt` (progress summary) — `io.ts:496-511`.
 - **Hidden workers**: agent-ingest `refreshViaAgent` — `packages/core/src/feeds/server/agentIngest.ts:44-94`. `FeedsHost.spawnWorker` DI seam; `hidden: true` ⇒ `origin: system`; manual Refresh runs visible. Dispatch-time `lastFetchedAt` stamp prevents double-dispatch (`agentIngest.ts:88-89`). Deduped failure bell + clear-on-success — `agentIngest.ts:107-139`.
 - **Write path**: `putItems` → `validateRecordObject` (primaryKey/filename match, required, enum membership — nothing else) — `server/validate.ts:102-117`. No business rules, no record-provenance flag anywhere.
-- **`spawn`**: host-native successor creation, already shares `when`/`set`/`carry` vocabulary — `schema.ts:157-172`, `server/spawn.ts`.
-- **Graph precedent**: wiki link graph — `packages/core/src/wiki/graph.ts`. No collection-level runtime graph exists; `discoverCollections` (`discovery.ts:980-996`) is the enumeration entry point.
+- **`spawn`**: host-native successor creation, already shares `when`/`set`/`carry` vocabulary — `SpawnZ` in `core/schemaZ.ts`, `server/spawn.ts`.
+- **Graph precedent**: wiki link graph — `packages/core/src/wiki/graph.ts`. No collection-level runtime graph exists; `discoverCollections` (`server/discovery.ts`) is the enumeration entry point.
 
 ## Adopted features, in build order
 
@@ -34,7 +34,7 @@ Schema validation is already zod (`CollectionSchemaZ`, `discovery.ts:535`; zod 4
 - Convert `FieldSpecSchema` (flat bag of ~12 optional keys + 7 chained refines) to `z.discriminatedUnion("type", […])` — one variant per field type declaring only its own keys. Ditto `ActionSpecSchema` on `kind`. Each ontology feature then lands as a clean new union member instead of more refine soup, with precise error messages for schema authors (including the agent via `putSchema`). Schema-level cross-field refines (when.field names a real field, etc.) stay as-is.
 - Zero behavior change intended; golden-test that existing `schema.json` fixtures parse identically. Doc comments migrate onto the zod defs — they're load-bearing.
 
-**Phase B — compiled zod record validators (can overlap with 1–2; must land before `mutate`):**
+**Phase B — compiled zod record validators (can overlap with 1–2; must land before `mutate`):** ✅ DONE 2026-07-15 (`core/recordZ.ts`: `compileRecordZ(schema, tier)` with `"enforced"` = the historical field checks (required/enum; the primaryKey↔filename identity check stays in `validateRecordObject`, which wraps the compiler) and `"strict"` = report-only per-type lint; `validateRecordObject` keeps its loose default while `validateCollectionRecords` scans strict).
 - Generate a per-collection zod validator from `CollectionSchema` (fields → `z.object`) and use it in `validateRecordObject` — initially reproducing *exactly* today's three checks (primaryKey/filename match, required non-empty, enum membership; `validate.ts:102-117`). No tightening on day one.
 - Per-type tightening (numbers are numbers, dates parse, table rows conform — a string in a `number` field passes today) goes **report-only first** via `validateCollectionRecords`: existing records were written under loose rules, and flipping strictness on `putItems` immediately would spray rejections at the agent. Promote checks to enforcing once the lint runs clean — lint-not-lock applied to our own migration.
 - `mutate`'s `params` form validation (step 4) is a mini record-validation and must come from this same compiler, not a third mechanism.
@@ -101,7 +101,7 @@ The reserved kind from `schema.ts:174-178`, exactly Foundry's Action shape minus
 - No LLM invocation — deterministic one-click writes shouldn't burn tokens.
 - `set` values: literals or `$params.<name>`; merge semantics (only named fields change). Half-states are unconstructible **through this path**; the file path stays open by design (lint, not lock).
 - Rejected governed writes return a `problem` row — that's agent feedback, not just an error.
-- `toggle` stays a field type (inline checkbox UX) — NOT rewritten as mutation sugar. `spawn` stays separate (creates rather than mutates) but already shares the vocabulary.
+- `toggle` stays a field type (inline checkbox UX; it persists nothing itself — checking writes `onValue`/`offValue` to the projected `enum` field) — NOT rewritten as mutation sugar. `spawn` stays separate (creates rather than mutates) but already shares the vocabulary.
 
 ### 5. `rollup` — cross-collection aggregate over a backlink relation
 
@@ -132,7 +132,7 @@ The reserved kind from `schema.ts:174-178`, exactly Foundry's Action shape minus
 
 ## Sequencing
 
-```
+```text
 ⓪ zod single-source refactor  — Phase A blocks everything; Phase B blocks ④ (mutate params)
 ① getOntology (LLM summary)   — trivial, helps everything downstream
 ② backlinks                   — render-only, establishes from/via vocabulary + reverse loading

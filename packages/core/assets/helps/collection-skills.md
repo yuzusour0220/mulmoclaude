@@ -31,7 +31,7 @@ data/skills/<slug>/            ← YOU write here (Write / Edit)
   SKILL.md  ·  schema.json  ·  templates/*.md
 
 data/<name>/items/             ← the records (separate from the skill dir)
-  <id>.json         ← one record per file (you write; host reads + renders)
+  <id>.json         ← one record per file (write via manageCollection putItems)
 ```
 
 - **Author under `data/skills/<slug>/`, NEVER `.claude/skills/<slug>/`
@@ -761,10 +761,25 @@ single source of truth and the "done" checkbox is a `toggle` field projecting it
 
 ## Records — one JSON object per file
 
-- Write each record to `<dataPath>/<id>.json` via the **Write** tool; the `id`
-  field's value is the filename (no extension).
+Each record is a plain file at `<dataPath>/<id>.json` (the `id` field's value is
+the filename, no extension) — that is the storage model. But you read and write
+records through **`manageCollection`**, not raw file I/O:
+
+- **Create / update — `putItems`.** Every row is validated against the schema
+  BEFORE the write (required fields, enum membership, primaryKey = record id)
+  and the result reports `{ written, rejected }` — fix each rejected row from
+  its `problem` text and retry just those rows. Use `mode: "create"` when
+  adding, so an id collision is rejected instead of silently overwritten, and
+  `mode: "merge"` with a partial row (`{ id, <changed fields> }`) when
+  updating — the default upsert replaces the WHOLE record and would erase
+  every optional field the row omits.
+- **Read / list — `getItems`.** The only way to see host-computed `derived` /
+  `toggle` / `embed` values (the stored JSON never contains them). Pass `ids`
+  / `fields` on large collections to keep the result small — e.g.
+  `fields: ["id"]` to check for an id collision before an add.
+- **Delete** — remove the record file (`manageCollection` has no delete).
 - **Id charset** (enforced by `safeRecordId` in
-  `packages/plugins/collection-plugin/src/server/paths.ts` — the single source of
+  `packages/core/src/collection/server/paths.ts` — the single source of
   truth; `manageCollection` rejects ids that fail it): start and end with a
   letter or digit; inside, also `-`, `_`, and `.` are allowed (so natural keys
   like a Slack ts `1718900000.123456` or a SemVer `1.2.3` work). **No** path
@@ -774,6 +789,24 @@ single source of truth and the "done" checkbox is a `toggle` field projecting it
   enforces this on every targeted read/write, so an id that only _looks_ fine in
   a full `getItems` listing but violates the rule can't be updated or deleted by
   id — fix the id, don't work around it with raw file I/O.
+- **Never write `derived` fields**, and never write an `embed` field — both are
+  display-only / host-computed (`putItems` rejects rows that carry them).
+- Leave optional fields out of the row entirely rather than writing empty
+  strings.
+- For a `ref` field, write the raw target slug, and make sure that record
+  actually exists in the target collection — an invalid slug renders as a broken
+  link. The host enforces structure and safety; **you own semantic correctness**
+  (valid refs, sane values).
+
+### Raw file I/O on records — the escape hatch
+
+Read / Write / Edit on the record files stays available (files are the source
+of truth), but it skips `putItems`' pre-write validation — a mistake lands on
+disk instead of coming back as a `rejected` row. Reach for it only when the
+tool can't do the job: bulk file surgery, or repairing a file so malformed
+that `manageCollection` can't address it. If you do write record files
+directly:
+
 - **The file MUST be valid JSON.** A malformed record is **silently skipped** at
   read time (logged server-side, but invisible in the UI) — so one bad file out
   of fifteen looks like "fourteen records vanished." The #1 cause is an
@@ -782,22 +815,12 @@ single source of truth and the "done" checkbox is a `toggle` field projecting it
   (`text`, `markdown`, a long `objective`), either escape every inner ASCII quote
   as `\"`, or — better — use the language's own quotation marks (`「」`/`『』` for
   Japanese, `‘ ’`/`“ ”` or `'…'` for English) so no escaping is needed.
-  `presentCollection` re-validates the records and reports any unreadable /
+- `presentCollection` re-validates the records and reports any unreadable /
   malformed / schema-violating files back to you (a `⚠️` in its result) — so
-  always follow a batch of writes with a `presentCollection` call and **act on
-  any ⚠️ it returns** (Read → fix → Write), rather than assuming every record
-  landed.
-- **List the directory first** and pick a fresh id rather than silently
-  overwriting. Update = Read, merge, Write back (preserve fields you weren't
-  asked to change). Delete = remove the file.
-- **Never write `derived` fields**, and never write an `embed` field — both are
-  display-only / host-computed.
-- Leave optional fields out of the JSON entirely rather than writing empty
-  strings.
-- For a `ref` field, write the raw target slug, and make sure that record
-  actually exists in the target collection — an invalid slug renders as a broken
-  link. The host enforces structure and safety; **you own semantic correctness**
-  (valid refs, sane values).
+  always follow a batch of direct writes with a `presentCollection` call and
+  **act on any ⚠️ it returns**, rather than assuming every record landed.
+  (This safety net applies after `putItems` batches too, but direct writes are
+  where it earns its keep.)
 
 ## End-to-end: creating a new collection skill
 

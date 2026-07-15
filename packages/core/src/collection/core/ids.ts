@@ -5,9 +5,9 @@
 // sanitiser. Both layers MUST gate on the same patterns; importing them from
 // here is what keeps them in sync.
 
-// Same regex as `server/workspace/skills/catalog.ts#SAFE_SLUG_PATTERN`
-// — keep them in sync. Bounded character classes, no nested
-// quantifiers; ReDoS-safe.
+// The ONE slug pattern — `server/workspace/skills/catalog.ts` imports it
+// for its own sanitiser, so there is no second copy to keep in sync.
+// Bounded character classes, no nested quantifiers; ReDoS-safe.
 // eslint-disable-next-line security/detect-unsafe-regex -- non-overlapping character classes, no catastrophic backtracking
 export const SAFE_SLUG_PATTERN = /^[a-zA-Z0-9](?:[a-zA-Z0-9_-]*[a-zA-Z0-9])?$/;
 
