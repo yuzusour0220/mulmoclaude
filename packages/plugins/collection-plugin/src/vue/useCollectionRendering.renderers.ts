@@ -18,7 +18,15 @@ import type {
   RefOption,
   RefRecordCache,
 } from "@mulmoclaude/core/collection";
-import { buildEmbedOptions, detailText, formatCell, formatMoney, resolveCurrency, sortedRefOptions } from "./useCollectionRendering.helpers";
+import {
+  buildEmbedOptions,
+  derivedRecordsById,
+  detailText,
+  formatCell,
+  formatMoney,
+  resolveCurrency,
+  sortedRefOptions,
+} from "./useCollectionRendering.helpers";
 
 export function lookupRefDisplay(refCache: RefCache, targetSlug: string, itemSlug: string): string {
   const map = refCache[targetSlug];
@@ -124,17 +132,16 @@ export function buildBacklinksViews(
     }
     for (const column of columns) column.label = data.schema.fields[column.key]?.label ?? column.key;
     const selfId = String(record?.[schema.primaryKey] ?? "");
-    const derivedItems = data.items.map((item) => deriveAll(data.schema, item, {}));
-    // Drop rows with an empty source primaryKey: the server side never
-    // surfaces them (`loadTarget` indexes only non-empty ids), and a
-    // blank id would render a non-navigable link + duplicate Vue keys.
-    const rows = backlinkRows(field, selfId, derivedItems)
-      .map((row) => ({ id: String(row[data.schema.primaryKey] ?? ""), row }))
-      .filter(({ id }) => id.length > 0)
-      .map(({ id, row }) => ({
-        id,
-        cells: columns.map((column) => formatBacklinkCell(data.schema.fields[column.key], row[column.key], row, locale)),
-      }));
+    // Index the derived source records EXACTLY like the server's
+    // `loadTarget` (shared `derivedRecordsById`): non-empty string ids,
+    // one record per id — so the client can never surface a row that
+    // `getItems` wouldn't (blank ids, duplicate-id files), and every
+    // rendered row is navigable with a unique Vue key.
+    const sourceById = derivedRecordsById(data.schema, data.items);
+    const rows = backlinkRows(field, selfId, Object.values(sourceById)).map((row) => ({
+      id: String(row[data.schema.primaryKey] ?? ""),
+      cells: columns.map((column) => formatBacklinkCell(data.schema.fields[column.key], row[column.key], row, locale)),
+    }));
     out[key] = { found: true, columns, rows, fromSlug: field.from };
   }
   return out;

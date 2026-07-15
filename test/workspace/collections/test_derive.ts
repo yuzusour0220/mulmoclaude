@@ -285,6 +285,10 @@ describe("enrichItems — derived across refs", () => {
     // must drop it too — else the UI shows a non-navigable "" row the
     // getItems output doesn't have (Codex review on PR #2103).
     writeRecord("data/portfolio/items", "noid", { ticker: "aapl", shares: 99, status: "open" });
+    // A DUPLICATE id (malformed file whose stored id ≠ filename): the
+    // server's byId index keeps one record per id, so the client must
+    // too — else duplicate rows with duplicate Vue keys (Codex, round 2).
+    writeRecord("data/portfolio/items", "h1-dup", { id: "h1", ticker: "aapl", shares: 10, status: "open" });
     const collection = await loadCollection("stock-quotes", opts());
     assert.ok(collection);
     const [server] = await enrichItems(collection, [{ symbol: "aapl", price: 200 }], opts());
@@ -301,6 +305,7 @@ describe("enrichItems — derived across refs", () => {
         items: [
           { id: "h1", ticker: "aapl", shares: 10, status: "open" },
           { ticker: "aapl", shares: 99, status: "open" }, // no primary key → dropped on both sides
+          { id: "h1", ticker: "aapl", shares: 10, status: "open" }, // duplicate id → one row per id on both sides
         ],
       },
     };

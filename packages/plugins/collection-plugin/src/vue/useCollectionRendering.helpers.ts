@@ -159,14 +159,23 @@ export function buildRefDisplayMap(detail: CollectionDetailResponse): RefDisplay
   return map;
 }
 
-export function buildRefRecordMap(detail: CollectionDetailResponse): RefRecordMap {
-  const { schema } = detail.collection;
+/** Index DERIVED records by primary key — the client mirror of the
+ *  server's `loadTarget` indexing: string non-empty ids only, one record
+ *  per id (a duplicate keeps the LAST record in its FIRST position —
+ *  plain-object key semantics). Shared by the ref-record cache and the
+ *  backlinks view so every client consumer agrees with server enrichment
+ *  on which source records exist. */
+export function derivedRecordsById(schema: CollectionSchema, items: CollectionItem[]): RefRecordMap {
   const map: RefRecordMap = {};
-  for (const item of detail.items) {
+  for (const item of items) {
     const slugRaw = item[schema.primaryKey];
     if (typeof slugRaw === "string" && slugRaw.length > 0) map[slugRaw] = deriveAll(schema, item, {});
   }
   return map;
+}
+
+export function buildRefRecordMap(detail: CollectionDetailResponse): RefRecordMap {
+  return derivedRecordsById(detail.collection.schema, detail.items);
 }
 
 export function sortedRefOptions(map: RefDisplayMap): RefOption[] {
