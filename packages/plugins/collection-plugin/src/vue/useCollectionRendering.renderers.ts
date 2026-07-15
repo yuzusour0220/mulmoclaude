@@ -87,6 +87,16 @@ export function buildEmbedViews(
   return out;
 }
 
+/** One backlinks table CELL: money formatted with its currency, anything
+ *  else through the same `formatCell` list tables use — so a markdown
+ *  source column (a worklog `notes`) shows the one-line 80-char preview,
+ *  not the whole text. Unknown `display` key ⇒ plain text (fail-soft). */
+function formatBacklinkCell(sourceField: FieldSpec | undefined, value: unknown, row: CollectionItem, locale: string): string {
+  if (!sourceField) return detailText(value);
+  if (sourceField.type === "money") return formatMoney(value, resolveCurrency(sourceField, row), locale);
+  return formatCell(value, sourceField.type);
+}
+
 /** Build the read-only backlinks view-models for one record: for each
  *  `backlinks` field, the rows of `from` whose `via` points at the open
  *  record (matched via the SHARED `backlinkRows`, on source records
@@ -117,10 +127,7 @@ export function buildBacklinksViews(
     const derivedItems = data.items.map((item) => deriveAll(data.schema, item, {}));
     const rows = backlinkRows(field, selfId, derivedItems).map((row) => ({
       id: String(row[data.schema.primaryKey] ?? ""),
-      cells: columns.map((column) => {
-        const sourceField = data.schema.fields[column.key];
-        return sourceField ? formatEmbedValue(sourceField, row[column.key], row, locale) : detailText(row[column.key]);
-      }),
+      cells: columns.map((column) => formatBacklinkCell(data.schema.fields[column.key], row[column.key], row, locale)),
     }));
     out[key] = { found: true, columns, rows, fromSlug: field.from };
   }
