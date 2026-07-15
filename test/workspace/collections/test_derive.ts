@@ -280,6 +280,11 @@ describe("enrichItems — derived across refs", () => {
       fields: { ...portfolioSchema.fields, value: { type: "derived", label: "Value", formula: "shares * 2" } },
     });
     writeRecord("data/portfolio/items", "h1", { id: "h1", ticker: "aapl", shares: 10, status: "open" });
+    // A matching source record MISSING its primary key: the server never
+    // surfaces it (loadTarget indexes only non-empty ids), so the client
+    // must drop it too — else the UI shows a non-navigable "" row the
+    // getItems output doesn't have (Codex review on PR #2103).
+    writeRecord("data/portfolio/items", "noid", { ticker: "aapl", shares: 99, status: "open" });
     const collection = await loadCollection("stock-quotes", opts());
     assert.ok(collection);
     const [server] = await enrichItems(collection, [{ symbol: "aapl", price: 200 }], opts());
@@ -293,7 +298,10 @@ describe("enrichItems — derived across refs", () => {
     rendering.embedCache.value = {
       portfolio: {
         schema: portfolio.schema as unknown as CollectionDetail["schema"],
-        items: [{ id: "h1", ticker: "aapl", shares: 10, status: "open" }],
+        items: [
+          { id: "h1", ticker: "aapl", shares: 10, status: "open" },
+          { ticker: "aapl", shares: 99, status: "open" }, // no primary key → dropped on both sides
+        ],
       },
     };
     const views = rendering.backlinksViewsFor({ symbol: "aapl", price: 200 });

@@ -125,10 +125,16 @@ export function buildBacklinksViews(
     for (const column of columns) column.label = data.schema.fields[column.key]?.label ?? column.key;
     const selfId = String(record?.[schema.primaryKey] ?? "");
     const derivedItems = data.items.map((item) => deriveAll(data.schema, item, {}));
-    const rows = backlinkRows(field, selfId, derivedItems).map((row) => ({
-      id: String(row[data.schema.primaryKey] ?? ""),
-      cells: columns.map((column) => formatBacklinkCell(data.schema.fields[column.key], row[column.key], row, locale)),
-    }));
+    // Drop rows with an empty source primaryKey: the server side never
+    // surfaces them (`loadTarget` indexes only non-empty ids), and a
+    // blank id would render a non-navigable link + duplicate Vue keys.
+    const rows = backlinkRows(field, selfId, derivedItems)
+      .map((row) => ({ id: String(row[data.schema.primaryKey] ?? ""), row }))
+      .filter(({ id }) => id.length > 0)
+      .map(({ id, row }) => ({
+        id,
+        cells: columns.map((column) => formatBacklinkCell(data.schema.fields[column.key], row[column.key], row, locale)),
+      }));
     out[key] = { found: true, columns, rows, fromSlug: field.from };
   }
   return out;
