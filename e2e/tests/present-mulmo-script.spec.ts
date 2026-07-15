@@ -10,8 +10,6 @@ import {
   waitForRenderedBeatImage,
 } from "../fixtures/present-mulmo-script";
 
-import { ONE_SECOND_MS } from "../../server/utils/time.ts";
-
 const SCRIPT_TITLE = "Test Mulmo Script";
 const SCRIPT_DESCRIPTION = "A short test script used by the smoke test.";
 const SESSION_PATH = "/chat/mulmo-session";
@@ -150,8 +148,8 @@ test.describe("presentMulmoScript plugin", () => {
     page.on("pageerror", (err) => errors.push(err.message));
 
     await openMulmoSessionAndSelectScript(page, SESSION_PATH);
-    // Give the View a beat to mount and kick off its fetches.
-    await page.waitForTimeout(ONE_SECOND_MS / 2);
+    // assertScriptHeader waits for the View to mount and render its header,
+    // by which point any mount-time page error would have been captured.
     await assertScriptHeader(page, SCRIPT_TITLE);
     expect(errors).toEqual([]);
   });
