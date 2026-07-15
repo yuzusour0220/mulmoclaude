@@ -9,7 +9,7 @@ import "../../server/workspace/collections/configure.js"; // configure @mulmocla
 
 import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -380,9 +380,12 @@ describe("manageCollection — getOntology", () => {
 
   it("counts record files without parsing them, and falls back displayField to the primaryKey", async () => {
     writeFileSync(path.join(workdir, "data/stock-quotes/items", "broken.json"), "not json {");
+    // A symlinked record is unreadable through the collection APIs
+    // (listItems' lstat defense skips it), so it must not count either.
+    symlinkSync(path.join(workdir, "data/profile/items/me.json"), path.join(workdir, "data/stock-quotes/items", "linked.json"));
     const entries = await getOntology();
     const quotes = entryFor(entries, "stock-quotes");
-    assert.equal(quotes.recordCount, 2); // aapl + the malformed file — a summary counts files, not parses
+    assert.equal(quotes.recordCount, 2); // aapl + the malformed file — a summary counts files, not parses; symlink excluded
     assert.equal(quotes.displayField, "symbol");
     assert.equal(entryFor(entries, "portfolio").recordCount, 0);
   });

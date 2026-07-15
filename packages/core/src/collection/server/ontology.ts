@@ -56,13 +56,16 @@ export function schemaRelations(schema: CollectionSchema): OntologyRelation[] {
 
 /** Count the record files in a collection's data dir — the same
  *  `<id>.json` entries `listItems` considers, WITHOUT parsing them (the
- *  ontology is a summary; a malformed record is still a record). Fail-soft:
- *  a missing dir or a dataDir escaping the workspace via symlink counts 0. */
+ *  ontology is a summary; a malformed record is still a record). Dirent
+ *  `isFile()` mirrors `listItems`' lstat file-disclosure defense: a
+ *  symlinked record is skipped there, so it must not count here either
+ *  (Codex review on PR #2099). Fail-soft: a missing dir or a dataDir
+ *  escaping the workspace via symlink counts 0. */
 async function countRecordFiles(dataDir: string, workspaceRoot: string): Promise<number> {
   if (!isContainedInRoot(dataDir, workspaceRoot)) return 0;
   try {
-    const entries = await readdir(dataDir);
-    return entries.filter((name) => name.endsWith(".json") && !name.startsWith(".")).length;
+    const entries = await readdir(dataDir, { withFileTypes: true });
+    return entries.filter((entry) => entry.isFile() && entry.name.endsWith(".json") && !entry.name.startsWith(".")).length;
   } catch {
     return 0;
   }
