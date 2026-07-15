@@ -6,6 +6,7 @@
 // the Vue surfaces live in @mulmoclaude/collection-plugin/vue.
 
 export * from "./core/schema";
+export * from "./core/ids";
 export * from "./core/uiTypes";
 export * from "./core/presentCollection";
 export * from "./core/enumColors";
