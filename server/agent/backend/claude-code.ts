@@ -127,6 +127,25 @@ export function brokerNotReadyErrorEvent(stderrOutput: string): { type: typeof E
   return isMcpBrokerNotReadyError(stderrOutput) ? { type: EVENT_TYPES.error, message: stderrOutput } : null;
 }
 
+// Not every claude CLI stderr line is an error. The sandbox workspace-trust
+// notice (#2055) is the common benign case: the container's workspace path
+// (`/home/node/mulmoclaude`) isn't among the host `~/.claude.json`'s trusted
+// projects, so claude ignores the workspace `permissions.allow` entries. That's
+// harmless here — tool permissions come from `--allowedTools` + the mulmoclaude
+// MCP permission handler, not the workspace `.claude/settings.json` — but
+// logging it at ERROR on every spawn made it look like a failure and buried
+// real errors. Recognise it so the stderr router can log it at debug instead.
+export function isBenignClaudeStderr(line: string): boolean {
+  return line.includes("has not been trusted");
+}
+
+// Route a claude CLI stderr line to the right log level: benign notices at
+// debug, genuine errors at error (so they stop burying each other).
+function logAgentStderr(line: string): void {
+  if (isBenignClaudeStderr(line)) log.debug("agent-stderr", line);
+  else log.error("agent-stderr", line);
+}
+
 async function* readAgentEvents(proc: ClaudeProc, abortSignal?: AbortSignal): AsyncGenerator<AgentEvent> {
   let stderrOutput = "";
   let stderrBuffer = "";
@@ -137,7 +156,7 @@ async function* readAgentEvents(proc: ClaudeProc, abortSignal?: AbortSignal): As
     const lines = stderrBuffer.split("\n");
     stderrBuffer = lines.pop() ?? "";
     for (const line of lines) {
-      if (line.trim()) log.error("agent-stderr", line);
+      if (line.trim()) logAgentStderr(line);
     }
   });
 
@@ -182,7 +201,7 @@ async function* readAgentEvents(proc: ClaudeProc, abortSignal?: AbortSignal): As
 
   const { code: exitCode, signal } = await closed;
 
-  if (stderrBuffer.trim()) log.error("agent-stderr", stderrBuffer);
+  if (stderrBuffer.trim()) logAgentStderr(stderrBuffer);
   log.info("agent", "claude exited", { exitCode, signal });
   mcpTracker.logIfSuspicious();
 
