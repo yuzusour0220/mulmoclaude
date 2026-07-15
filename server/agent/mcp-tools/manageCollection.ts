@@ -13,6 +13,10 @@
 //     keys), written atomically, with per-row accept/reject results the
 //     model can fix and retry — instead of writing a broken file and
 //     meeting it later in the presentCollection repair loop.
+//   - getOntology: the machine-readable workspace ontology — every
+//     collection with its record count and outbound ref/embed relations,
+//     so a cross-collection question starts from the map instead of
+//     re-reading every schema.
 //
 // It is also the paved road for a collection's STRUCTURE — so an edit
 // gets the same authoring reference + validation a create does:
@@ -34,6 +38,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import {
+  buildWorkspaceOntology,
   COMPUTED_TYPES,
   CollectionSchemaZ,
   resolveDataDir,
@@ -279,6 +284,16 @@ function parsePutItems(args: Record<string, unknown>, slug: string): PutItemsArg
   return { slug, items: items as CollectionItem[], mode: (mode as PutItemsArgs["mode"] | undefined) ?? "upsert" };
 }
 
+/** The machine-readable workspace ontology: every collection with its
+ *  identity, record count, and outbound `ref`/`embed` relations (plan
+ *  step ① of plans/collection-ontology.md). Slugs are discovery-sanitized;
+ *  titles/labels are workspace-authored schema text and ride verbatim —
+ *  the same trust class as the record values getItems returns. */
+async function handleGetOntology(deps: ManageCollectionDeps): Promise<string> {
+  const collections = await buildWorkspaceOntology(deps);
+  return JSON.stringify({ count: collections.length, collections });
+}
+
 /** Return the collection-authoring reference (`collection-skills.md`).
  *  Workspace copy first (reflects user edits), bundled asset as the
  *  always-present fallback. Both reads guarded; if neither resolves the
@@ -408,8 +423,18 @@ const MANAGE_COLLECTION_PROMPT =
   "Use `manageCollection` instead of raw Read/Write/Edit when working with a collection's records OR its schema (raw file I/O stays available as the escape hatch). " +
   "Before authoring or changing a collection's `schema.json`, call `schemaDocs` to load the field/DSL reference, then read with `getSchema` and write with `putSchema` — `putSchema` validates the whole schema before writing and returns actionable errors instead of silently failing discovery's validation. " +
   "`getItems` is the only way to see computed values — `derived` fields (e.g. a portfolio's value), `toggle` projections, and `embed` records are host-computed and never present in the stored JSON files. On large collections pass `ids` and/or `fields` to keep the result small. " +
+  'For a question that spans collections ("which clients have unpaid invoices?"), start with `getOntology`: it lists every collection with its primaryKey, record count, and outbound `ref`/`embed` relations, so you know which collections to join before reading any records. ' +
   "`putItems` validates every row against the schema before writing (required fields, enum values, primaryKey = record id) and returns `{ written, rejected }`; fix each rejected row using its `problem` text and retry just those rows. Never include computed fields in a row you write. " +
   'To update a few fields of an existing record, use `mode: "merge"` with a partial row ({ id, <changed fields> }) — the default upsert replaces the WHOLE record, so a partial upsert would silently erase every optional field it omits.';
+
+/** Validate getItems' optional `ids`/`fields` args, then delegate. */
+async function dispatchGetItems(collection: LoadedCollection, args: Record<string, unknown>, deps: ManageCollectionDeps): Promise<string> {
+  const ids = optionalStringArray(args.ids, "ids");
+  if (!ids.ok) return ids.error;
+  const fields = optionalStringArray(args.fields, "fields");
+  if (!fields.ok) return fields.error;
+  return handleGetItems(collection, { slug: collection.slug, ids: ids.value, fields: fields.value }, deps);
+}
 
 // The tool's action dispatch. Extracted from the factory's returned object so
 // `makeManageCollectionTool` stays under the max-lines threshold; each branch
@@ -418,22 +443,17 @@ const MANAGE_COLLECTION_PROMPT =
 async function manageCollectionHandler(deps: ManageCollectionDeps, args: Record<string, unknown>): Promise<string> {
   const action = typeof args.action === "string" ? args.action : "";
   if (action === "schemaDocs") return handleSchemaDocs(deps);
+  if (action === "getOntology") return handleGetOntology(deps);
   const slug = typeof args.slug === "string" ? args.slug.trim() : "";
   if (!slug) return "manageCollection: `slug` is required (the collection's slug).";
   if (action === "getSchema") return handleGetSchema(slug, deps);
   if (action === "putSchema") return handlePutSchema(slug, args.schema, deps);
   if (action !== "getItems" && action !== "putItems") {
-    return 'manageCollection: `action` must be "getItems", "putItems", "schemaDocs", "getSchema", or "putSchema".';
+    return 'manageCollection: `action` must be "getItems", "putItems", "getOntology", "schemaDocs", "getSchema", or "putSchema".';
   }
   const collection = await loadCollection(slug, deps);
   if (!collection) return unknownCollection(slug);
-  if (action === "getItems") {
-    const ids = optionalStringArray(args.ids, "ids");
-    if (!ids.ok) return ids.error;
-    const fields = optionalStringArray(args.fields, "fields");
-    if (!fields.ok) return fields.error;
-    return handleGetItems(collection, { slug, ids: ids.value, fields: fields.value }, deps);
-  }
+  if (action === "getItems") return dispatchGetItems(collection, args, deps);
   const parsed = parsePutItems(args, slug);
   if (typeof parsed === "string") return parsed;
   return handlePutItems(collection, parsed, deps);
@@ -444,12 +464,15 @@ export function makeManageCollectionTool(deps: ManageCollectionDeps = {}) {
     definition: {
       name: "manageCollection",
       description:
-        "Read and write a schema-driven collection through the host — both its records and its structure. getItems returns records WITH computed values (derived formulas, toggles, embeds) the stored JSON files don't contain; putItems validates each row against the schema before writing. schemaDocs returns the collection-authoring reference; getSchema/putSchema read and validate-then-write the collection's schema.json. Prefer it over raw file I/O on collections.",
+        "Read and write a schema-driven collection through the host — both its records and its structure. getItems returns records WITH computed values (derived formulas, toggles, embeds) the stored JSON files don't contain; putItems validates each row against the schema before writing. getOntology maps the whole workspace: every collection with its record count and outbound ref/embed relations — call it first for cross-collection questions. schemaDocs returns the collection-authoring reference; getSchema/putSchema read and validate-then-write the collection's schema.json. Prefer it over raw file I/O on collections.",
       inputSchema: {
         type: "object",
         properties: {
-          action: { type: "string", enum: ["getItems", "putItems", "schemaDocs", "getSchema", "putSchema"], description: "What to do." },
-          slug: { type: "string", description: "The collection's slug (its directory name, e.g. `stock-quotes`). Required for everything except schemaDocs." },
+          action: { type: "string", enum: ["getItems", "putItems", "getOntology", "schemaDocs", "getSchema", "putSchema"], description: "What to do." },
+          slug: {
+            type: "string",
+            description: "The collection's slug (its directory name, e.g. `stock-quotes`). Required for everything except schemaDocs and getOntology.",
+          },
           ids: {
             type: "array",
             items: { type: "string" },
