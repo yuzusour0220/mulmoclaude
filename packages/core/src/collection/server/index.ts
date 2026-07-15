@@ -22,6 +22,7 @@ export * from "./templatePath";
 export * from "./io";
 export * from "./validate";
 export * from "./discovery";
+export * from "./ontology";
 export * from "./derive";
 export * from "./dynamicIcon";
 export * from "./spawn";

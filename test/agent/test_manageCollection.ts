@@ -334,6 +334,60 @@ describe("manageCollection — dotted record ids", () => {
   });
 });
 
+describe("manageCollection — getOntology", () => {
+  interface OntologyEntry {
+    slug: string;
+    primaryKey: string;
+    displayField: string;
+    recordCount: number;
+    relations: Record<string, unknown>[];
+  }
+  const getOntology = async () => (await runJson({ action: "getOntology" })).collections as OntologyEntry[];
+  const entryFor = (entries: OntologyEntry[], slug: string) => entries.find((entry) => entry.slug === slug) as OntologyEntry;
+
+  it("needs no slug and lists every discovered collection", async () => {
+    const result = await runJson({ action: "getOntology" });
+    assert.equal(result.count, 3);
+    assert.deepEqual(
+      (result.collections as OntologyEntry[]).map((entry) => entry.slug),
+      ["portfolio", "profile", "stock-quotes"],
+    );
+  });
+
+  it("reports outbound ref/embed relations in field declaration order, skipping non-relation fields", async () => {
+    const portfolio = entryFor(await getOntology(), "portfolio");
+    assert.deepEqual(portfolio.relations, [
+      { field: "ticker", kind: "ref", to: "stock-quotes" },
+      { field: "owner", kind: "embed", to: "profile" },
+    ]);
+    assert.deepEqual(entryFor(await getOntology(), "stock-quotes").relations, []);
+  });
+
+  it("reports table sub-refs with a dotted field path", async () => {
+    writeSkill("invoice", {
+      title: "Invoices",
+      icon: "receipt",
+      dataPath: "data/invoice/items",
+      primaryKey: "id",
+      fields: {
+        id: { type: "string", label: "ID", primary: true, required: true },
+        lines: { type: "table", label: "Lines", of: { clientId: { type: "ref", label: "Client", to: "portfolio" } } },
+      },
+    });
+    const invoice = entryFor(await getOntology(), "invoice");
+    assert.deepEqual(invoice.relations, [{ field: "lines.clientId", kind: "ref", to: "portfolio" }]);
+  });
+
+  it("counts record files without parsing them, and falls back displayField to the primaryKey", async () => {
+    writeFileSync(path.join(workdir, "data/stock-quotes/items", "broken.json"), "not json {");
+    const entries = await getOntology();
+    const quotes = entryFor(entries, "stock-quotes");
+    assert.equal(quotes.recordCount, 2); // aapl + the malformed file — a summary counts files, not parses
+    assert.equal(quotes.displayField, "symbol");
+    assert.equal(entryFor(entries, "portfolio").recordCount, 0);
+  });
+});
+
 describe("manageCollection — schemaDocs", () => {
   it("returns the bundled authoring reference when the workspace has none", async () => {
     const docs = await run({ action: "schemaDocs" });

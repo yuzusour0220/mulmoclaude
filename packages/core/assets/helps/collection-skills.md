@@ -778,6 +778,13 @@ records through **`manageCollection`**, not raw file I/O:
   / `fields` on large collections to keep the result small — e.g.
   `fields: ["id"]` to check for an id collision before an add.
 - **Delete** — remove the record file (`manageCollection` has no delete).
+- **Cross-collection questions — `getOntology`.** Returns every collection in
+  the workspace with its `primaryKey`, effective `displayField`, record count,
+  and outbound `ref` / `embed` relations (field → target slug, including refs
+  inside `table` columns as `lines.clientId`). When a question spans
+  collections ("which clients have unpaid invoices AND unlogged hours?"),
+  call it first to see which collections exist and how they join, then
+  `getItems` only the ones involved — instead of reading every schema.json.
 - **Id charset** (enforced by `safeRecordId` in
   `packages/core/src/collection/server/paths.ts` — the single source of
   truth; `manageCollection` rejects ids that fail it): start and end with a

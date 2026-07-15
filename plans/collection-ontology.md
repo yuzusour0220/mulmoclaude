@@ -43,6 +43,8 @@ Schema validation is already zod (`CollectionSchemaZ`, `discovery.ts:535`; zod 4
 
 A `manageCollection getOntology` verb (or equivalent): iterate `discoverCollections()`, emit per collection `{ slug, title, icon, primaryKey, displayField, recordCount, relations[] }` where relations are outbound `ref` / `embed` (and later `backlinks` / `rollup`) declarations with field names. Derived on demand — no authoring, no storage, always in sync.
 
+**LLM summary: ✅ DONE 2026-07-15** (`core/collection/server/ontology.ts`: `buildWorkspaceOntology` + pure `schemaRelations`, surfaced as `manageCollection getOntology`; table sub-refs report dotted field paths like `lines.clientId`, `displayField` falls back to the primaryKey, recordCount is a readdir file count). The `/collections` graph panel (phase 2) remains; when ② / ⑤ land, extend `schemaRelations` with their `backlinks` / `rollup` kinds instead of a second walker.
+
 - LLM summary ships **first** (it lets the assistant answer cross-silo questions without re-reading every schema — the self-improving-agent payoff). The user-facing `/collections` graph panel (Mermaid or wiki-graph-style; borrow from `wiki/graph.ts`) is phase 2.
 - Deliberately NOT a unified enterprise schema: collections stay bounded contexts; the LLM does semantic joining at read time.
 
@@ -134,7 +136,7 @@ The reserved kind from `schema.ts:174-178`, exactly Foundry's Action shape minus
 
 ```text
 ⓪ zod single-source refactor  — Phase A blocks everything; Phase B blocks ④ (mutate params)
-① getOntology (LLM summary)   — trivial, helps everything downstream
+① getOntology (LLM summary)   — ✅ DONE 2026-07-15 (graph panel still pending as its phase 2)
 ② backlinks                   — render-only, establishes from/via vocabulary + reverse loading
 ③ kind:"agent" actions        — infra exists end-to-end; completes the 2×2
 ④ kind:"mutate"               — fills the reserved slot; guards as paved path
