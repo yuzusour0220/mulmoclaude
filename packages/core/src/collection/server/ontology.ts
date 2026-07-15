@@ -8,7 +8,9 @@
 // semantic joining happens at read time in the caller.
 
 import { readdir } from "node:fs/promises";
+import path from "node:path";
 import { discoverCollections, type DiscoveryOptions } from "./discovery";
+import { isRegularFile } from "./io";
 import { isContainedInRoot } from "./paths";
 import { getWorkspaceRoot } from "./host";
 import type { LoadedCollection } from "./discoveredCollection";
@@ -56,16 +58,19 @@ export function schemaRelations(schema: CollectionSchema): OntologyRelation[] {
 
 /** Count the record files in a collection's data dir — the same
  *  `<id>.json` entries `listItems` considers, WITHOUT parsing them (the
- *  ontology is a summary; a malformed record is still a record). Dirent
- *  `isFile()` mirrors `listItems`' lstat file-disclosure defense: a
- *  symlinked record is skipped there, so it must not count here either
- *  (Codex review on PR #2099). Fail-soft: a missing dir or a dataDir
- *  escaping the workspace via symlink counts 0. */
+ *  ontology is a summary; a malformed record is still a record). Each
+ *  candidate is classified by the SHARED `isRegularFile` lstat helper —
+ *  the exact file-disclosure defense `listItems` applies — so a
+ *  symlinked record never counts and the count can't diverge from the
+ *  readable set on any filesystem (Codex review on PR #2099, twice).
+ *  Fail-soft: a missing dir or a dataDir escaping the workspace via
+ *  symlink counts 0. */
 async function countRecordFiles(dataDir: string, workspaceRoot: string): Promise<number> {
   if (!isContainedInRoot(dataDir, workspaceRoot)) return 0;
   try {
-    const entries = await readdir(dataDir, { withFileTypes: true });
-    return entries.filter((entry) => entry.isFile() && entry.name.endsWith(".json") && !entry.name.startsWith(".")).length;
+    const names = (await readdir(dataDir)).filter((name) => name.endsWith(".json") && !name.startsWith("."));
+    const checks = await Promise.all(names.map((name) => isRegularFile(path.join(dataDir, name))));
+    return checks.filter(Boolean).length;
   } catch {
     return 0;
   }

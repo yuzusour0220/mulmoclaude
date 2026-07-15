@@ -32,8 +32,10 @@ export interface IoOptions {
  *  inside an otherwise-contained data dir — without this, a record
  *  file could symlink to /etc/passwd and the detail endpoint would
  *  happily serve it. Returns false on ENOENT and on any other lstat
- *  failure so the caller's "missing" branch covers those cases too. */
-async function isRegularFile(filePath: string): Promise<boolean> {
+ *  failure so the caller's "missing" branch covers those cases too.
+ *  Exported so `ontology.ts`'s record COUNT classifies entries with the
+ *  SAME lstat logic — the two must agree on what a record file is. */
+export async function isRegularFile(filePath: string): Promise<boolean> {
   try {
     const info = await lstat(filePath);
     return info.isFile();
