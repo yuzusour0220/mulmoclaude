@@ -394,7 +394,14 @@ export function userServerAllowedToolNames(userServers: Record<string, McpServer
 }
 
 export interface CliArgsParams {
-  systemPrompt: string;
+  /** Path handed to `--system-prompt-file` (the container-side path
+   *  under Docker — see `resolveSystemPromptPaths`). The prompt travels
+   *  as a file, never as an inline `--system-prompt` argument: on
+   *  Windows the argv collapses to a single CreateProcess command line
+   *  capped at ~32k chars, so a rich role + plugins + memory pushes the
+   *  prompt past the cap and the spawn fails with ENAMETOOLONG before
+   *  the CLI even starts (#2078). */
+  systemPromptPath: string;
   activePlugins: string[];
   claudeSessionId?: string;
   mcpConfigPath?: string;
@@ -407,7 +414,7 @@ export interface CliArgsParams {
 }
 
 export function buildCliArgs(params: CliArgsParams): string[] {
-  const { systemPrompt, activePlugins, claudeSessionId, mcpConfigPath, extraAllowedTools = [], effortLevel } = params;
+  const { systemPromptPath, activePlugins, claudeSessionId, mcpConfigPath, extraAllowedTools = [], effortLevel } = params;
 
   const mcpToolNames = activePlugins.map((pluginName) => `mcp__mulmoclaude__${pluginName}`);
   // DEBUG: also pass the wildcard form `mcp__mulmoclaude` so Claude
@@ -432,8 +439,8 @@ export function buildCliArgs(params: CliArgsParams): string[] {
     "stream-json",
     "--include-partial-messages",
     "--verbose",
-    "--system-prompt",
-    systemPrompt,
+    "--system-prompt-file",
+    systemPromptPath,
     "--allowedTools",
     allowedTools.join(","),
     "-p",
@@ -554,11 +561,12 @@ function buildNativeBlock(att: Attachment): Record<string, unknown> {
   };
 }
 
-export interface McpConfigPaths {
+export interface SessionFilePaths {
   // Where the file is actually written on the host filesystem.
   hostPath: string;
-  // What gets passed to claude --mcp-config (container path under
-  // docker, identical to hostPath when running natively).
+  // The path handed to the claude CLI (e.g. via --mcp-config or
+  // --system-prompt-file): the container path under docker, read
+  // through the workspace bind mount, identical to hostPath natively.
   argPath: string;
 }
 
@@ -570,7 +578,7 @@ function safeSessionSegment(sessionId: string): string {
   return basename(sessionId).replace(/[^A-Za-z0-9_-]/g, "_");
 }
 
-export function resolveMcpConfigPaths(opts: { workspacePath: string; sessionId: string; useDocker: boolean }): McpConfigPaths {
+export function resolveMcpConfigPaths(opts: { workspacePath: string; sessionId: string; useDocker: boolean }): SessionFilePaths {
   const sid = safeSessionSegment(opts.sessionId);
   if (opts.useDocker) {
     const hostPath = join(opts.workspacePath, ".mulmoclaude", `mcp-${sid}.json`);
@@ -578,6 +586,22 @@ export function resolveMcpConfigPaths(opts: { workspacePath: string; sessionId: 
     return { hostPath, argPath };
   }
   const hostPath = join(tmpdir(), `mulmoclaude-mcp-${sid}.json`);
+  return { hostPath, argPath: hostPath };
+}
+
+// Where the per-session system-prompt file lives — same host/container
+// split as resolveMcpConfigPaths. Under Docker the file must sit inside
+// the workspace bind mount so the container-side CLI can read it via
+// --system-prompt-file; natively the OS tmpdir is fine. One file per
+// chat session — successive turns overwrite it.
+export function resolveSystemPromptPaths(opts: { workspacePath: string; sessionId: string; useDocker: boolean }): SessionFilePaths {
+  const sid = safeSessionSegment(opts.sessionId);
+  if (opts.useDocker) {
+    const hostPath = join(opts.workspacePath, ".mulmoclaude", `system-prompt-${sid}.md`);
+    const argPath = `${CONTAINER_WORKSPACE_PATH}/.mulmoclaude/system-prompt-${sid}.md`;
+    return { hostPath, argPath };
+  }
+  const hostPath = join(tmpdir(), `mulmoclaude-system-prompt-${sid}.md`);
   return { hostPath, argPath: hostPath };
 }
 
