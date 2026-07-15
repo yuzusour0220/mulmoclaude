@@ -19,7 +19,7 @@
         <tr
           v-for="row in view.rows"
           :key="row.id"
-          class="hover:bg-indigo-50/30 cursor-pointer transition-colors"
+          class="group hover:bg-indigo-50/30 cursor-pointer transition-colors"
           role="link"
           tabindex="0"
           :data-testid="`collections-backlinks-${fieldKey}-${row.id}`"

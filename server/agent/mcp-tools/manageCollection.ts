@@ -224,7 +224,10 @@ async function mergeWithExisting(
 ): Promise<CollectionItem | string> {
   const existing = await readItem(collection.dataDir, itemId, { workspaceRoot: deps.workspaceRoot });
   if (!existing) return `'${itemId}' not found — mode "merge" updates an existing record; use "upsert" or "create" to add it`;
-  const stored = Object.entries(existing).filter(([key]) => !COMPUTED_TYPES.has(collection.schema.fields[key]?.type ?? ""));
+  const stored = Object.entries(existing).filter(([key]) => {
+    const spec = collection.schema.fields[key];
+    return !spec || !COMPUTED_TYPES.has(spec.type);
+  });
   return { ...Object.fromEntries(stored), ...record };
 }
 

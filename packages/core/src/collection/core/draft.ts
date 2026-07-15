@@ -5,6 +5,7 @@
 // to a value, so the omission/validation semantics are unit-testable.
 
 import { fieldVisible } from "./actionVisible";
+import { COMPUTED_TYPES } from "./schema";
 import type { CollectionFieldSpec as FieldSpec, CollectionFieldType as FieldType, CollectionItem, CollectionSchema } from "./schema";
 import type { EditState, TableRowDraft } from "./uiTypes";
 
@@ -137,8 +138,10 @@ function firstMissingTableSubField(field: FieldSpec, rows: TableRowDraft[] | und
 }
 
 /** Field types the required check never flags: booleans always hold a
- *  value, and the computed/projected kinds have no draft input at all. */
-const NEVER_MISSING_TYPES: ReadonlySet<string> = new Set(["boolean", "derived", "embed", "backlinks", "toggle"]);
+ *  value, and the computed/projected kinds (COMPUTED_TYPES — the shared
+ *  set, so a future computed type can't drift past this check) have no
+ *  draft input at all. */
+const NEVER_MISSING_TYPES: ReadonlySet<FieldType> = new Set<FieldType>(["boolean", ...COMPUTED_TYPES]);
 
 function validateOneField(key: string, field: FieldSpec, draft: EditState, record: CollectionItem): string | null {
   // A `when`-hidden field has no input the user can fill — never missing.
