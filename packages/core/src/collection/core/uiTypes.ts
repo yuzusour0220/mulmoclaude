@@ -19,6 +19,10 @@ export interface CollectionDetailResponse {
   items: CollectionItem[];
   /** Record files that failed validation; drives the in-view Repair prompt. */
   issues?: CollectionRecordIssue[];
+  /** In-flight `kind: "agent"` action run keys (`collection/<actionId>` /
+   *  `item/<itemId>/<actionId>`) — drives the button spinners. Absent when
+   *  nothing is running (same absent-when-clean contract as `issues`). */
+  runningActions?: string[];
 }
 
 export interface ItemMutationResponse {

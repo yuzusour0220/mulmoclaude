@@ -39,6 +39,16 @@ export function actionVisible(action: ActionWithWhen, record: Record<string, unk
   return whenMatches(action.when, record);
 }
 
+/** The run key naming one in-flight `kind: "agent"` action button —
+ *  written by the server's dispatch guard, read back by the client from
+ *  the detail response's `runningActions` to drive the spinner. ONE
+ *  builder (isomorphic) so the two sides can't drift. Collection-level
+ *  and per-record actions live in distinct namespaces so an id collision
+ *  between `actions` and `collectionActions` can't alias. */
+export function agentActionRunKey(actionId: string, itemId?: string): string {
+  return itemId === undefined ? `collection/${actionId}` : `item/${itemId}/${actionId}`;
+}
+
 /** Minimal shape this helper needs from a field spec — just its
  *  optional `when` predicate. Accepts the full FieldSpec too. */
 export interface FieldWithWhen {

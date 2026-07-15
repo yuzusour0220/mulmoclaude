@@ -870,6 +870,22 @@ describe("discoverCollections — actions", () => {
     assert.equal(collections[0]?.schema.actions?.[0]?.template, "templates/invoice.md");
   });
 
+  it("accepts a schema with a valid agent action (record + collection level)", async () => {
+    writeSkill("test-agent-actions", {
+      title: "Quotes-like",
+      icon: "trending_up",
+      dataPath: "data/agentactions/items",
+      primaryKey: "id",
+      fields,
+      actions: [{ id: "reprice", label: "Refresh price", icon: "sync", kind: "agent", role: "finance", template: "templates/reprice.md" }],
+      collectionActions: [{ id: "sync", label: "Sync all", kind: "agent", role: "finance", template: "templates/sync.md" }],
+    });
+    const collections = await listCollections();
+    assert.equal(collections.length, 1);
+    assert.equal(collections[0]?.schema.actions?.[0]?.kind, "agent");
+    assert.equal(collections[0]?.schema.collectionActions?.[0]?.kind, "agent");
+  });
+
   it("rejects an action missing required fields (role)", async () => {
     writeSkill("test-actions-no-role", {
       title: "X",
