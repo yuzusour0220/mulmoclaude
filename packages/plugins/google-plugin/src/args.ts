@@ -16,7 +16,7 @@ export const isIsoDateTimeWithOffset = (value: string): boolean =>
   ISO_DATE_TIME_WITH_OFFSET_RE.test(value.replace(FRACTIONAL_SECONDS_RE, "")) && !Number.isNaN(new Date(value).getTime());
 
 const IsoDateTimeWithOffset = z.string().refine(isIsoDateTimeWithOffset, {
-  message: "must be an ISO 8601 date-time with a timezone offset (e.g. 2026-07-17T09:00:00+09:00)",
+  error: "must be an ISO 8601 date-time with a timezone offset (e.g. 2026-07-17T09:00:00+09:00)",
 });
 
 export const GoogleArgs = z.discriminatedUnion("kind", [
