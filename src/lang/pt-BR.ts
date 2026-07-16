@@ -241,6 +241,7 @@ const ptBRMessages = {
       refs: "Diretórios de referência",
       map: "Mapa",
       photos: "Fotos",
+      google: "Google",
       model: "Modelo",
       voice: "Voz",
       chatIndex: "Índice de chat",
@@ -258,6 +259,21 @@ const ptBRMessages = {
       management: "Gerenciamento",
     },
     navAriaLabel: "Seções de configurações",
+    googleTab: {
+      description:
+        "Vincule sua conta do Google para que esta máquina possa chamar as APIs do Google (Calendar primeiro). O token de atualização fica salvo apenas nesta máquina e nunca é enviado a nenhum servidor além do Google.",
+      statusLinked: "Vinculada",
+      statusNotLinked: "Não vinculada",
+      statusPending: "Aguardando a conclusão do consentimento no navegador…",
+      connect: "Vincular conta do Google",
+      unlink: "Desvincular",
+      unlinkConfirm: "Desvincular a conta do Google? O token salvo será revogado e excluído desta máquina.",
+      clientSecretMissing:
+        "Nenhuma credencial de cliente OAuth encontrada. Baixe o JSON do cliente de app desktop no Google Cloud Console e coloque-o em ~/.secrets/ (client_secret_*.json).",
+      loadError: "Falha ao carregar o estado da vinculação com o Google.",
+      connectError: "Falha ao iniciar o fluxo de autorização do Google.",
+      unlinkError: "Falha ao desvincular a conta do Google.",
+    },
     mapTab: {
       description: "Define a chave da API do Google Maps usada pelo plugin de mapa. A chave fica salva localmente e só é enviada para o Google Maps.",
       apiKeyLabel: "Chave API do Google Maps",

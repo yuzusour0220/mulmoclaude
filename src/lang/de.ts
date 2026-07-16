@@ -243,6 +243,7 @@ const deMessages = {
       refs: "Referenzverzeichnisse",
       map: "Karte",
       photos: "Fotos",
+      google: "Google",
       model: "Modell",
       voice: "Sprache",
       chatIndex: "Chat-Index",
@@ -260,6 +261,21 @@ const deMessages = {
       management: "Verwaltung",
     },
     navAriaLabel: "Einstellungsbereiche",
+    googleTab: {
+      description:
+        "Verknüpfe dein Google-Konto, damit dieser Rechner Google-APIs direkt aufrufen kann (zuerst Kalender). Das Refresh-Token wird nur auf diesem Rechner gespeichert und außer an Google an keinen Server gesendet.",
+      statusLinked: "Verknüpft",
+      statusNotLinked: "Nicht verknüpft",
+      statusPending: "Warte auf Abschluss der Einwilligung im Browser…",
+      connect: "Google-Konto verknüpfen",
+      unlink: "Verknüpfung aufheben",
+      unlinkConfirm: "Google-Konto-Verknüpfung aufheben? Das gespeicherte Token wird widerrufen und von diesem Rechner gelöscht.",
+      clientSecretMissing:
+        "Keine OAuth-Client-Anmeldedaten gefunden. Lade das Desktop-App-Client-JSON aus der Google Cloud Console herunter und lege es in ~/.secrets/ ab (client_secret_*.json).",
+      loadError: "Der Google-Verknüpfungsstatus konnte nicht geladen werden.",
+      connectError: "Der Google-Autorisierungsablauf konnte nicht gestartet werden.",
+      unlinkError: "Die Google-Verknüpfung konnte nicht aufgehoben werden.",
+    },
     mapTab: {
       description:
         "Legt den Google-Maps-API-Schlüssel fest, den das Karten-Plugin verwendet. Der Schlüssel wird lokal gespeichert und nur an Google Maps gesendet.",

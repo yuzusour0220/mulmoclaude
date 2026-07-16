@@ -241,6 +241,7 @@ const frMessages = {
       refs: "Répertoires de référence",
       map: "Carte",
       photos: "Photos",
+      google: "Google",
       model: "Modèle",
       voice: "Voix",
       chatIndex: "Index du chat",
@@ -258,6 +259,21 @@ const frMessages = {
       management: "Gestion",
     },
     navAriaLabel: "Sections des paramètres",
+    googleTab: {
+      description:
+        "Associez votre compte Google pour que cette machine puisse appeler les API Google (Calendar en premier). Le jeton d'actualisation est stocké uniquement sur cette machine et n'est jamais envoyé à un autre serveur que Google.",
+      statusLinked: "Associé",
+      statusNotLinked: "Non associé",
+      statusPending: "En attente de la fin du consentement dans le navigateur…",
+      connect: "Associer le compte Google",
+      unlink: "Dissocier",
+      unlinkConfirm: "Dissocier le compte Google ? Le jeton enregistré sera révoqué et supprimé de cette machine.",
+      clientSecretMissing:
+        "Aucun identifiant client OAuth trouvé. Téléchargez le JSON du client d'application de bureau depuis la Google Cloud Console et placez-le dans ~/.secrets/ (client_secret_*.json).",
+      loadError: "Échec du chargement de l'état de l'association Google.",
+      connectError: "Échec du démarrage du flux d'autorisation Google.",
+      unlinkError: "Échec de la dissociation du compte Google.",
+    },
     mapTab: {
       description: "Définit la clé API Google Maps utilisée par le plugin de carte. La clé est stockée localement et n'est envoyée qu'à Google Maps.",
       apiKeyLabel: "Clé API Google Maps",

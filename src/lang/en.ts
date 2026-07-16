@@ -260,6 +260,7 @@ const enMessages = {
       refs: "Reference Dirs",
       map: "Map",
       photos: "Photos",
+      google: "Google",
       model: "Model",
       voice: "Voice",
       chatIndex: "Chat index",
@@ -277,6 +278,21 @@ const enMessages = {
       management: "Management",
     },
     navAriaLabel: "Settings sections",
+    googleTab: {
+      description:
+        "Link your Google account so this machine can call Google APIs (Calendar first). The refresh token is stored only on this machine and is never sent to any server other than Google.",
+      statusLinked: "Linked",
+      statusNotLinked: "Not linked",
+      statusPending: "Waiting for the browser consent to finish…",
+      connect: "Link Google account",
+      unlink: "Unlink",
+      unlinkConfirm: "Unlink the Google account? The saved token is revoked and deleted from this machine.",
+      clientSecretMissing:
+        "No OAuth client credentials found. Download the desktop-app client JSON from the Google Cloud Console and place it in ~/.secrets/ (client_secret_*.json).",
+      loadError: "Failed to load the Google link status.",
+      connectError: "Failed to start the Google authorization flow.",
+      unlinkError: "Failed to unlink the Google account.",
+    },
     mapTab: {
       description: "Set the Google Maps API key used by the map plugin. The key is stored locally and never transmitted anywhere except to Google Maps.",
       apiKeyLabel: "Google Maps API key",

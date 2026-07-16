@@ -341,3 +341,67 @@ test.describe("Settings MCP tab — catalog config (Phase 2)", () => {
     await page.locator('[data-testid="settings-close-btn"]').click();
   });
 });
+
+test.describe("Google account tab", () => {
+  interface GoogleStatus {
+    linked: boolean;
+    pending: boolean;
+    clientSecretFound: boolean;
+    lastError: string | null;
+  }
+
+  async function mockGoogleStatus(page: Page, status: GoogleStatus): Promise<void> {
+    await page.route(
+      (url) => url.pathname === "/api/google/status",
+      (route) => route.fulfill({ json: status }),
+    );
+  }
+
+  async function openGoogleTab(page: Page): Promise<void> {
+    await page.goto("/chat");
+    await openSettingsModal(page);
+    await page.locator('[data-testid="settings-tab-google"]').click();
+  }
+
+  test("shows not-linked status and starts the authorize flow", async ({ page }) => {
+    await mockConfigApi(page);
+    await mockGoogleStatus(page, { linked: false, pending: false, clientSecretFound: true, lastError: null });
+    let authorizeCalls = 0;
+    await page.route(
+      (url) => url.pathname === "/api/google/authorize",
+      (route) => {
+        authorizeCalls += 1;
+        return route.fulfill({ json: { authUrl: "https://accounts.google.com/o/oauth2/v2/auth?mock=1" } });
+      },
+    );
+
+    await openGoogleTab(page);
+    await expect(page.locator('[data-testid="settings-google-status"]')).toHaveText("Not linked");
+
+    // The consent URL must open in a new tab, never navigate the app.
+    await page.evaluate(() => {
+      window.open = () => null;
+    });
+    await page.locator('[data-testid="settings-google-connect-btn"]').click();
+    await expect.poll(() => authorizeCalls).toBe(1);
+  });
+
+  test("shows linked status with an unlink button", async ({ page }) => {
+    await mockConfigApi(page);
+    await mockGoogleStatus(page, { linked: true, pending: false, clientSecretFound: true, lastError: null });
+
+    await openGoogleTab(page);
+    await expect(page.locator('[data-testid="settings-google-status"]')).toHaveText("Linked");
+    await expect(page.locator('[data-testid="settings-google-unlink-btn"]')).toBeVisible();
+    await expect(page.locator('[data-testid="settings-google-connect-btn"]')).not.toBeVisible();
+  });
+
+  test("guides the user when no client secret is installed", async ({ page }) => {
+    await mockConfigApi(page);
+    await mockGoogleStatus(page, { linked: false, pending: false, clientSecretFound: false, lastError: null });
+
+    await openGoogleTab(page);
+    await expect(page.locator('[data-testid="settings-google-secret-missing"]')).toBeVisible();
+    await expect(page.locator('[data-testid="settings-google-connect-btn"]')).toBeDisabled();
+  });
+});

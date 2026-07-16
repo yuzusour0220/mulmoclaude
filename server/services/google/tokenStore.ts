@@ -2,6 +2,7 @@
 // `~/.config/mulmoclaude/google-token.json`, mode 600. Google omits
 // `refresh_token` from refresh responses, so merges must preserve the one we
 // already hold — losing it forces the user through the browser consent again.
+import { rm } from "node:fs/promises";
 import type { Credentials } from "google-auth-library";
 import { readJsonOrNull, writeJsonAtomic } from "../../utils/files/json.js";
 import { googleTokenPath } from "./paths.js";
@@ -22,4 +23,8 @@ export async function saveGoogleTokens(incoming: Credentials, home?: string): Pr
   const merged = mergeGoogleTokens(await loadGoogleTokens(home), incoming);
   await writeJsonAtomic(googleTokenPath(home), merged, { mode: TOKEN_FILE_MODE });
   return merged;
+}
+
+export async function deleteGoogleTokens(home?: string): Promise<void> {
+  await rm(googleTokenPath(home), { force: true });
 }

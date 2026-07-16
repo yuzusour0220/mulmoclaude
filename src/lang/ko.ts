@@ -245,6 +245,7 @@ const koMessages = {
       refs: "참조 디렉터리",
       map: "지도",
       photos: "사진",
+      google: "Google",
       model: "모델",
       voice: "음성",
       chatIndex: "채팅 인덱스",
@@ -262,6 +263,21 @@ const koMessages = {
       management: "관리",
     },
     navAriaLabel: "설정 섹션",
+    googleTab: {
+      description:
+        "Google 계정을 연결하면 이 컴퓨터에서 Google API(우선 캘린더)를 직접 호출할 수 있습니다. 리프레시 토큰은 이 컴퓨터에만 저장되며 Google 이외에는 전송되지 않습니다.",
+      statusLinked: "연결됨",
+      statusNotLinked: "연결되지 않음",
+      statusPending: "브라우저에서 동의가 완료되기를 기다리는 중…",
+      connect: "Google 계정 연결",
+      unlink: "연결 해제",
+      unlinkConfirm: "Google 계정 연결을 해제할까요? 저장된 토큰은 취소되고 이 컴퓨터에서 삭제됩니다.",
+      clientSecretMissing:
+        "OAuth 클라이언트 자격 증명을 찾을 수 없습니다. Google Cloud Console에서 데스크톱 앱용 클라이언트 JSON을 다운로드하여 ~/.secrets/에 두세요(client_secret_*.json).",
+      loadError: "Google 연결 상태를 불러오지 못했습니다.",
+      connectError: "Google 인증 절차를 시작하지 못했습니다.",
+      unlinkError: "Google 연결 해제에 실패했습니다.",
+    },
     mapTab: {
       description: "지도 플러그인에서 사용하는 Google Maps API 키를 설정합니다. 키는 로컬에 저장되며 Google Maps 외부로는 전송되지 않습니다.",
       apiKeyLabel: "Google Maps API 키",

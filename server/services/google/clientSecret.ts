@@ -36,6 +36,13 @@ export async function findClientSecretPath(home?: string): Promise<string> {
   return join(dir, first);
 }
 
+export async function hasClientSecret(home?: string): Promise<boolean> {
+  return await findClientSecretPath(home).then(
+    () => true,
+    () => false,
+  );
+}
+
 export async function loadClientSecret(home?: string): Promise<InstalledClientSecret> {
   const filePath = await findClientSecretPath(home);
   const raw = await readFile(filePath, "utf-8");
