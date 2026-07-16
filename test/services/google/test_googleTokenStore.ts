@@ -6,8 +6,7 @@ import { mkdir, mkdtemp, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { loadGoogleTokens, mergeGoogleTokens, saveGoogleTokens } from "../../../server/services/google/tokenStore.js";
-import { googleTokenPath } from "../../../server/services/google/paths.js";
+import { googleTokenPath, loadGoogleTokens, mergeGoogleTokens, saveGoogleTokens } from "@mulmoclaude/core/google";
 
 const makeFakeHome = async (): Promise<string> => await mkdtemp(path.join(tmpdir(), "google-token-test-"));
 

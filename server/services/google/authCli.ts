@@ -4,9 +4,8 @@
 // the server logger's structured output would mangle the URL the user must
 // open when the browser doesn't launch.
 import { spawn } from "node:child_process";
+import { authorizeGoogle, googleTokenPath } from "@mulmoclaude/core/google";
 import { errorMessage } from "../../utils/errors.js";
-import { authorizeGoogle } from "./auth.js";
-import { googleTokenPath } from "./paths.js";
 
 const printLine = (line: string): void => {
   process.stdout.write(`${line}\n`);

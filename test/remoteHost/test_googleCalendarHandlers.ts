@@ -5,8 +5,7 @@ import assert from "node:assert/strict";
 
 import type { JsonObject } from "../../server/remoteHost/commandChannel.js";
 import { createGoogleCalendarCreateEvent, createGoogleCalendarListEvents, type GoogleCalendarDeps } from "../../server/remoteHost/handlers/googleCalendar.js";
-import type { CalendarEventInput, CalendarEventSummary, ListEventsInput } from "../../server/services/google/calendar.js";
-import { DEFAULT_LIST_MAX_RESULTS, MAX_LIST_RESULTS } from "../../server/services/google/calendar.js";
+import { DEFAULT_LIST_MAX_RESULTS, MAX_LIST_RESULTS, type CalendarEventInput, type CalendarEventSummary, type ListEventsInput } from "@mulmoclaude/core/google";
 
 const sampleEvent: CalendarEventSummary = {
   id: "ev1",
@@ -76,7 +75,10 @@ describe("createGoogleCalendarCreateEvent", () => {
     { given: "not-a-date", label: "rejects a non-date start" },
     { given: "2026-07-17", label: "rejects a date-only start (Google would 400 on dateTime)" },
     { given: "2026-07-17T09:00:00", label: "rejects a start without a timezone offset" },
-    { given: "2026-13-01T09:00:00Z", label: "rejects a well-shaped but impossible date" },
+    { given: "2026-13-01T09:00:00Z", label: "rejects a well-shaped but impossible month" },
+    { given: "2026-02-31T09:00:00Z", label: "rejects an overflowed day that Date would silently normalize" },
+    { given: "2026-07-17T24:00:00Z", label: "rejects an out-of-range hour" },
+    { given: "2026-07-17T09:00:00+99:99", label: "rejects an out-of-range timezone offset" },
   ];
   for (const { given, label } of badDateTimes) {
     it(label, async () => {

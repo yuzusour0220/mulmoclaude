@@ -11,10 +11,7 @@
 import { Router, Request, Response } from "express";
 
 import { API_ROUTES } from "../../../src/config/apiRoutes.js";
-import { unlinkGoogle } from "../../services/google/auth.js";
-import { googleAuthFlow } from "../../services/google/authFlow.js";
-import { clientSecretPresence, type ClientSecretPresence } from "../../services/google/clientSecret.js";
-import { loadGoogleTokens } from "../../services/google/tokenStore.js";
+import { clientSecretPresence, googleAuthFlow, loadGoogleTokens, unlinkGoogle, type ClientSecretPresence } from "@mulmoclaude/core/google";
 import { errorMessage } from "../../utils/errors.js";
 import { serverError } from "../../utils/httpError.js";
 import { log } from "../../system/logger/index.js";

@@ -4,7 +4,7 @@
 // already hold — losing it forces the user through the browser consent again.
 import { rm } from "node:fs/promises";
 import type { Credentials } from "google-auth-library";
-import { readJsonOrNull, writeJsonAtomic } from "../../utils/files/json.js";
+import { readJsonOrNull, writeJsonAtomicWithMode } from "./fsJson.js";
 import { googleTokenPath } from "./paths.js";
 
 const TOKEN_FILE_MODE = 0o600;
@@ -21,7 +21,7 @@ export async function loadGoogleTokens(home?: string): Promise<Credentials | nul
 
 export async function saveGoogleTokens(incoming: Credentials, home?: string): Promise<Credentials> {
   const merged = mergeGoogleTokens(await loadGoogleTokens(home), incoming);
-  await writeJsonAtomic(googleTokenPath(home), merged, { mode: TOKEN_FILE_MODE });
+  await writeJsonAtomicWithMode(googleTokenPath(home), merged, TOKEN_FILE_MODE);
   return merged;
 }
 

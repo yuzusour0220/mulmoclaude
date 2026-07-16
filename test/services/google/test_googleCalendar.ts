@@ -3,7 +3,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
-import { calendarApiError, toEventSummary } from "../../../server/services/google/calendar.js";
+import { calendarApiError, toEventSummary } from "@mulmoclaude/core/google";
 
 describe("toEventSummary", () => {
   it("maps a timed event (dateTime)", () => {

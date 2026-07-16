@@ -5,8 +5,8 @@
 // is the in-flight start promise itself (set synchronously before any
 // await), so concurrent authorize requests share one flow instead of
 // spawning parallel loopback listeners.
-import { log } from "../../system/logger/index.js";
-import { errorMessage } from "../../utils/errors.js";
+import { log } from "./host.js";
+import { errorMessage } from "./util.js";
 import { authorizeGoogle } from "./auth.js";
 
 export interface GoogleAuthFlowStatus {

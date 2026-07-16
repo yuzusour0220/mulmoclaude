@@ -48,12 +48,14 @@ export default defineConfig({
         // connect lifecycle + Firebase init/auth. `firebase` is a peer (below).
         "remote-host/index": "src/remote-host/index.ts",
         "remote-host/server/index": "src/remote-host/server/index.ts",
+        // Server-only Google engine (local OAuth + token store + Calendar REST).
+        "google/index": "src/google/index.ts",
       },
       formats: ["es", "cjs"],
       fileName: (format, entryName) => `${entryName}.${format === "es" ? "js" : "cjs"}`,
     },
     rollupOptions: {
-      external: [/^node:/, /^@receptron\//, /^firebase/, "zod", "gui-chat-protocol", "fast-xml-parser", "js-yaml"],
+      external: [/^node:/, /^@receptron\//, /^firebase/, "zod", "gui-chat-protocol", "fast-xml-parser", "js-yaml", "google-auth-library"],
       output: { exports: "named" },
     },
     minify: false,

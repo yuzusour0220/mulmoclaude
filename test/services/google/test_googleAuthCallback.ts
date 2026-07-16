@@ -6,7 +6,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 
-import { waitForAuthCode } from "../../../server/services/google/auth.js";
+import { waitForAuthCode } from "@mulmoclaude/core/google";
 
 const TEST_TIMEOUT_MS = 5_000;
 
