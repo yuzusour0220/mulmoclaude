@@ -173,6 +173,18 @@ calling the collection engine directly. Added incrementally across phases:
 | `mutateRemoteViewItem` | Applies an update/delete from a mobile view; policy enforced **host-side** | 4 |
 | `startChat` | Starts a visible chat from the phone (message + optional role + attachments) | — |
 | `ingestAttachments` | Pulls staged files from Firebase Storage into the workspace | — |
+| `google.calendar.createEvent` | Creates a Google Calendar event (`{ event }`); params `summary`, `start`, `end` (ISO 8601), optional `description` | — |
+| `google.calendar.listEvents` | Upcoming primary-calendar events (`{ events }`); optional `timeMin`, `maxResults` (≤ 50) | — |
+
+The `google.calendar.*` handlers run against the **host's own Google OAuth
+grant** (independent of Firebase Auth): the user links the account once with
+`yarn google:auth` (loopback + PKCE consent in the browser), and the refresh
+token stays in `~/.config/mulmoclaude/google-token.json` (mode 600) — no Google
+credential ever reaches the cloud. Until the account is linked, the handlers
+return a `handler_error` telling the remote to run the auth flow on the host.
+The remote can tell whether a host build supports Calendar by looking for the
+`google.calendar.*` method names in the presence `capabilities` (auto-derived,
+like every other method).
 
 ---
 
