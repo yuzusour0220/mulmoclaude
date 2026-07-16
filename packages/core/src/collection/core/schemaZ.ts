@@ -200,7 +200,7 @@ const EmbedFieldZ = z
     path: ["id"],
   });
 
-/** Display-only REVERSE refs (plan step ② of plans/collection-ontology.md):
+/** Display-only REVERSE refs (plan step ② of plans/done/collection-ontology.md):
  *  a read-only sub-table of the records in collection `from` whose `via`
  *  ref field stores THIS record's primary key. Stores nothing (joins
  *  `COMPUTED_TYPES`); resolution is shared server/client via
@@ -220,6 +220,34 @@ const BacklinksFieldZ = z
     filter: WhenZ.optional(),
   })
   .refine((spec) => isSafeSlug(spec.from), slugMessage("from"));
+
+/** A cross-collection AGGREGATE over a backlink relation (plan step ⑤ of
+ *  plans/done/collection-ontology.md): a computed number — never stored — that
+ *  sums a source column (or counts rows) over the records in `from` whose
+ *  `via` ref points at this record. Same `from`/`via`/`filter` vocabulary
+ *  and reverse-loading machinery as `backlinks`; resolution shared
+ *  server/client via `core/backlinks.ts`'s `rollupValue`. Deliberately a
+ *  STRUCTURED field, not `sumOver(...)` formula syntax — the derived
+ *  evaluator's no-string-literals boundary stays untouched — and
+ *  deliberately just `sum` | `count`. Rollups resolve BEFORE the formula
+ *  pass, so a sibling `derived` formula may read them as identifiers
+ *  (`played = homePlayed + awayPlayed`). Fail-soft: an unresolvable
+ *  `from` renders em-dash; an empty match set is a real 0. */
+const RollupFieldZ = z
+  .object({
+    type: z.literal("rollup"),
+    ...fieldBase,
+    from: z.string().min(1),
+    via: z.string().trim().min(1),
+    op: z.enum(["sum", "count"]),
+    column: z.string().trim().min(1).optional(),
+    filter: WhenZ.optional(),
+  })
+  .refine((spec) => isSafeSlug(spec.from), slugMessage("from"))
+  .refine((spec) => (spec.op === "sum") === (spec.column !== undefined), {
+    message: 'a rollup\'s `column` names the source column to aggregate: required for op "sum", meaningless for op "count"',
+    path: ["column"],
+  });
 
 /** A checkbox that is a pure PROJECTION of an `enum` field — it stores
  *  nothing of its own. Checked when the enum named by `field` equals
@@ -245,6 +273,7 @@ export const FieldSpecZ = z.discriminatedUnion("type", [
   DerivedFieldZ,
   EmbedFieldZ,
   BacklinksFieldZ,
+  RollupFieldZ,
   ToggleFieldZ,
 ]);
 
@@ -280,7 +309,7 @@ const SeededActionZ = z.object({
 });
 
 /** `kind: "mutate"` — a declarative, HOST-executed write; no LLM, no
- *  tokens (plan step ④ of plans/collection-ontology.md). Clicking the
+ *  tokens (plan step ④ of plans/done/collection-ontology.md). Clicking the
  *  button (after an optional `params` mini-form) merges `set` into the
  *  record: values are literals or `$params.<name>` references. `require`
  *  is the state gate — the standard `when` shape, both the visibility

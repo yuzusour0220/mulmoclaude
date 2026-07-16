@@ -5,7 +5,7 @@
 // can wire them with thin closures while they stay unit-testable in isolation.
 // NO vue / DOM / I/O / reactive state here — every function is pure.
 
-import { backlinkRows, deriveAll, embedTargetId } from "@mulmoclaude/core/collection";
+import { backlinkRows, deriveAll, embedTargetId, rollupValue } from "@mulmoclaude/core/collection";
 import type {
   BacklinksView,
   CollectionItem,
@@ -133,16 +133,79 @@ export function buildBacklinksViews(
     for (const column of columns) column.label = data.schema.fields[column.key]?.label ?? column.key;
     const selfId = String(record?.[schema.primaryKey] ?? "");
     // Index the derived source records EXACTLY like the server's
-    // `loadTarget` (shared `derivedRecordsById`): non-empty string ids,
-    // one record per id — so the client can never surface a row that
-    // `getItems` wouldn't (blank ids, duplicate-id files), and every
-    // rendered row is navigable with a unique Vue key.
-    const sourceById = derivedRecordsById(data.schema, data.items);
-    const rows = backlinkRows(field, selfId, Object.values(sourceById)).map((row) => ({
+    // `loadTarget` (shared memo over `derivedRecordsById`): non-empty
+    // string ids, one record per id — so the client can never surface a
+    // row that `getItems` wouldn't (blank ids, duplicate-id files), and
+    // every rendered row is navigable with a unique Vue key.
+    const sourceItems = derivedSourceItems(embedCache, field.from) ?? [];
+    const rows = backlinkRows(field, selfId, sourceItems).map((row) => ({
       id: String(row[data.schema.primaryKey] ?? ""),
       cells: columns.map((column) => formatBacklinkCell(data.schema.fields[column.key], row[column.key], row, locale)),
     }));
     out[key] = { found: true, columns, rows, fromSlug: field.from };
+  }
+  return out;
+}
+
+// Derived source records per (embedCache object, source slug) — the same
+// index-then-derive the server's loadTarget runs, memoized because rollup
+// renders per LIST CELL (every row × every rollup column); re-deriving the
+// whole source collection per cell would be quadratic. Keyed by the cache
+// OBJECT: `loadLinkedCollections` replaces it wholesale, invalidating this
+// memo naturally.
+const derivedSourceMemo = new WeakMap<object, Map<string, CollectionItem[]>>();
+
+function derivedSourceItems(embedCache: EmbedCache, from: string): CollectionItem[] | null {
+  const data = embedCache[from];
+  if (!data) return null;
+  let bySlug = derivedSourceMemo.get(embedCache);
+  if (!bySlug) {
+    bySlug = new Map();
+    derivedSourceMemo.set(embedCache, bySlug);
+  }
+  let items = bySlug.get(from);
+  if (!items) {
+    items = Object.values(derivedRecordsById(data.schema, data.items));
+    bySlug.set(from, items);
+  }
+  return items;
+}
+
+/** The rollup scalar for one record, from the reverse sources riding the
+ *  embed cache — the SAME index (non-empty ids, one record per id, derived
+ *  against themselves) and the SAME `rollupValue` the server enrichment
+ *  uses, so the cell and getItems can't disagree. Null (em-dash) when the
+ *  source collection isn't loadable; a real 0 for an empty match set. */
+export function rollupValueFor(field: FieldSpec, record: CollectionItem | null, schema: CollectionSchema | null, embedCache: EmbedCache): number | null {
+  if (field.type !== "rollup" || !schema || !record) return null;
+  const items = derivedSourceItems(embedCache, field.from);
+  if (items === null) return null;
+  // No empty-id guard here: an empty primaryKey matches nothing inside
+  // `backlinkRows` and yields a real 0 — exactly what the server's
+  // `projectRollups` returns for the same record (Codex on PR #2116).
+  return rollupValue(field, String(record[schema.primaryKey] ?? ""), items);
+}
+
+/** Display string for a rollup cell: the aggregate as a plain number,
+ *  em-dash when the source collection couldn't be resolved. */
+export function renderRollup(field: FieldSpec, record: CollectionItem | null, schema: CollectionSchema | null, embedCache: EmbedCache): string {
+  const value = rollupValueFor(field, record, schema, embedCache);
+  return value === null ? "—" : formatCell(value, "number");
+}
+
+/** Copy of `item` with every rollup field resolved from the reverse
+ *  sources — injected BEFORE the formula pass so a `derived` formula can
+ *  read rollup values as plain identifiers (`played = homePlayed +
+ *  awayPlayed`), in the same rollups-then-formulas order the server
+ *  enrichment runs. Returns `item` unchanged when the schema declares no
+ *  rollups (the overwhelmingly common case — no copy). */
+export function withRollupValues(schema: CollectionSchema | null, item: CollectionItem, embedCache: EmbedCache): CollectionItem {
+  if (!schema) return item;
+  let out = item;
+  for (const [key, field] of Object.entries(schema.fields)) {
+    if (field.type !== "rollup") continue;
+    if (out === item) out = { ...item };
+    out[key] = rollupValueFor(field, item, schema, embedCache);
   }
   return out;
 }
@@ -164,9 +227,12 @@ export function evaluateDerived(
   item: CollectionItem,
   schema: CollectionSchema | null,
   refRecords: RefRecordCache,
+  embedCache: EmbedCache = {},
 ): number | null {
   if (field.type !== "derived" || !schema) return null;
-  const enriched = deriveAll(schema, item, refRecords);
+  // Rollups resolve FIRST so formulas can reference them — mirroring the
+  // server's enrichment order exactly.
+  const enriched = deriveAll(schema, withRollupValues(schema, item, embedCache), refRecords);
   const result = enriched[fieldKey];
   return typeof result === "number" && Number.isFinite(result) ? result : null;
 }

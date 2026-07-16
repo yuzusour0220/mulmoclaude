@@ -148,7 +148,7 @@ skipped, never crashes the host):
 
 `string` · `text` (multi-line) · `email` · `number` · `date` (`YYYY-MM-DD`) ·
 `datetime` (`YYYY-MM-DDTHH:MM`) · `boolean` · `markdown` · `money` · `enum` ·
-`ref` · `embed` · `backlinks` · `table` · `derived` · `image` · `file` · `toggle`
+`ref` · `embed` · `backlinks` · `rollup` · `table` · `derived` · `image` · `file` · `toggle`
 
 Every field spec needs a `type` and a `label`. Extra keys by type:
 
@@ -193,9 +193,27 @@ Every field spec needs a `type` and a `label`. Extra keys by type:
   `{ "type": "backlinks", "label": "Invoices", "from": "invoice", "via": "clientId", "display": ["issueDate", "total", "status"], "filter": { "field": "status", "in": ["draft", "sent"] } }`.
   Resolution is fail-soft: an unknown `from` / `via` / `display` column just
   renders an empty sub-table — no error, so author the `ref` side first.
+- **`rollup`** — `from: "<source-slug>"`, `via: "<ref-field-in-source>"`,
+  `op: "sum" | "count"`, `column: "<source-col>"` (required for `sum`, omitted
+  for `count`), optional `filter` (same shape as `when`, against the source).
+  A **cross-collection aggregate**: a computed number — never stored — summed
+  (or counted) over the records in `from` whose `via` ref points at this
+  record. Backlinks show the rows; rollup collapses them to a scalar that
+  renders everywhere a number does (list column included). E.g. a client's
+  unbilled hours:
+  `{ "type": "rollup", "label": "Unbilled hours", "from": "worklog", "via": "clientId", "op": "sum", "column": "hours", "filter": { "field": "billed", "in": ["false"] } }`.
+  Fail-soft: an unresolvable `from` renders em-dash; an empty match set is a
+  real 0. Summing a source `derived` column works when its formula is
+  self-contained; non-numeric values are skipped. A `derived` formula ON THE
+  SAME schema may reference rollup fields as plain identifiers — rollups
+  resolve before the formula pass — e.g. two one-sided counts combined:
+  `"played": { "type": "derived", "formula": "homePlayed + awayPlayed" }`.
+  (Caveat: that works on the collection's own rows; a `<refField>.<col>`
+  deref FROM another collection reads the target without its rollups, so a
+  rollup-fed derived column is em-dash when viewed through a ref.)
 - **`table`** — `of: { <col>: <sub-field-spec>, ... }`. An array of rows. Each
-  sub-field is a flat spec; sub-fields **cannot** be `table`, `derived`, or
-  `backlinks` (no nested tables, no computed columns).
+  sub-field is a flat spec; sub-fields **cannot** be `table`, `derived`,
+  `backlinks`, or `rollup` (no nested tables, no computed columns).
 - **`derived`** — `formula: "<expr>"`, optional `display` (`number` default, or
   `money` / `string` / `date`) and `currency`. **Read-only, host-computed** —
   you NEVER write derived values into the JSON; the host recomputes them on
@@ -405,7 +423,9 @@ text / markdown / html / file fields are left out, so the prompt stays small).
 - Same `id` uniqueness rule (within `collectionActions`); same path-safe
   `template`; same `role` + kind behavior (`"chat"` seeds a visible chat,
   `"agent"` dispatches a silent worker over the whole collection — e.g. a
-  "Sync" button that pushes records to an external system via MCP).
+  "Sync" button that pushes records to an external system via MCP; the
+  known-good sync recipe, including the snapshot-diff state file and the
+  `externalId` write-back, is **`config/helps/egress-sync.md`**).
 - `when` is **ignored** here — there is no record to gate on. Always shown.
 
 ### Completion tracking (bell notifications)
@@ -835,7 +855,7 @@ records through **`manageCollection`**, not raw file I/O:
 - **Delete** — remove the record file (`manageCollection` has no delete).
 - **Cross-collection questions — `getOntology`.** Returns every collection in
   the workspace with its `primaryKey`, effective `displayField`, record count,
-  and outbound `ref` / `embed` relations (field → target slug, including refs
+  and its `ref` / `embed` / `backlinks` / `rollup` relations (field → related slug, including refs
   inside `table` columns as `lines.clientId`). When a question spans
   collections ("which clients have unpaid invoices AND unlogged hours?"),
   call it first to see which collections exist and how they join, then
@@ -851,9 +871,9 @@ records through **`manageCollection`**, not raw file I/O:
   enforces this on every targeted read/write, so an id that only _looks_ fine in
   a full `getItems` listing but violates the rule can't be updated or deleted by
   id — fix the id, don't work around it with raw file I/O.
-- **Never write `derived` fields**, and never write an `embed` or `backlinks`
-  field — all are display-only / host-computed (`putItems` rejects rows that
-  carry them).
+- **Never write `derived` fields**, and never write an `embed`, `backlinks`,
+  or `rollup` field — all are display-only / host-computed (`putItems`
+  rejects rows that carry them).
 - Leave optional fields out of the row entirely rather than writing empty
   strings.
 - For a `ref` field, write the raw target slug, and make sure that record

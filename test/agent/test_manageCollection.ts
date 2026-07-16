@@ -252,10 +252,13 @@ describe("manageCollection — putItems", () => {
       fields: {
         symbol: { type: "string", label: "Symbol", primary: true, required: true },
         holders: { type: "backlinks", label: "Holders", from: "portfolio", via: "ticker", display: ["shares"] },
+        totalShares: { type: "rollup", label: "Total shares", from: "portfolio", via: "ticker", op: "sum", column: "shares" },
       },
     });
     const backlinks = await runJson({ action: "putItems", slug: "quotes-linked", items: [{ symbol: "x", holders: [] }] });
     assert.match((backlinks.rejected as { problem: string }[])[0]?.problem ?? "", /'holders' is a backlinks view/);
+    const rollup = await runJson({ action: "putItems", slug: "quotes-linked", items: [{ symbol: "y", totalShares: 15 }] });
+    assert.match((rollup.rejected as { problem: string }[])[0]?.problem ?? "", /'totalShares' is a rollup/);
   });
 
   it("rejects path-shaped ids before any write", async () => {
@@ -318,6 +321,27 @@ describe("manageCollection — putItems", () => {
     assert.equal(stored("h1").status, "open"); // untouched
     const computed = await runJson({ action: "putItems", slug: "portfolio", items: [{ id: "h1", value: 1 }], mode: "merge" });
     assert.match((computed.rejected as { problem: string }[])[0]?.problem ?? "", /'value' is derived/);
+  });
+
+  it('mode "merge" rejects a malformed stored file per-row instead of aborting the batch', async () => {
+    // readItem throws on non-ENOENT (broken JSON); merge must downgrade that
+    // to a row rejection so the healthy rows in the same batch still write.
+    writeRecord("data/portfolio/items", "h1", record("h1", { notes: "keep me" }));
+    writeFileSync(path.join(workdir, "data/portfolio/items/bad.json"), '{ "id": "bad", broken');
+    const result = await runJson({
+      action: "putItems",
+      slug: "portfolio",
+      items: [
+        { id: "bad", status: "closed" },
+        { id: "h1", status: "closed" },
+      ],
+      mode: "merge",
+    });
+    assert.deepEqual(result.written, ["h1"]);
+    const [rejectedRow] = result.rejected as { id: string; problem: string }[];
+    assert.equal(rejectedRow?.id, "bad");
+    assert.match(rejectedRow?.problem ?? "", /malformed stored file/);
+    assert.equal(stored("h1").status, "closed"); // the healthy row landed
   });
 });
 
@@ -384,12 +408,14 @@ describe("manageCollection — getOntology", () => {
       fields: {
         id: { type: "string", label: "ID", primary: true, required: true },
         payments: { type: "backlinks", label: "Payments", from: "portfolio", via: "invoiceId", display: ["shares"] },
+        paidTotal: { type: "rollup", label: "Paid", from: "portfolio", via: "invoiceId", op: "sum", column: "shares" },
         lines: { type: "table", label: "Lines", of: { clientId: { type: "ref", label: "Client", to: "portfolio" } } },
       },
     });
     const invoice = entryFor(await getOntology(), "invoice");
     assert.deepEqual(invoice.relations, [
       { field: "payments", kind: "backlinks", to: "portfolio" },
+      { field: "paidTotal", kind: "rollup", to: "portfolio" },
       { field: "lines.clientId", kind: "ref", to: "portfolio" },
     ]);
   });

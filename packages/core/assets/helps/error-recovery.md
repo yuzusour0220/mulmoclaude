@@ -118,6 +118,35 @@ The filename (sans `.css`) is the theme slug; only `[A-Za-z0-9_-]` is
 allowed. Reload the browser tab after adding a theme — preview caches
 per session.
 
+## MulmoScript render — "generate error" from image / movie / audio generation
+
+### Symptoms
+
+- A beat render, character image, movie, or PDF generation fails with a
+  message like `generateReferenceImage: generate error: key=<name>` or
+  `Image was not generated`.
+- `autoGenerateMovie` leaves a `<script>.json.error.txt` sidecar next to
+  the story file with a similar message.
+
+### Cause
+
+Generation providers are chosen **per script**: `imageParams.provider`,
+`movieParams.provider`, and `speechParams.speakers.<name>.provider`. The
+underlying failure is usually a missing/invalid API key for whichever
+provider the script names (`openai` → `OPENAI_API_KEY`, `google` /
+`gemini` → `GEMINI_API_KEY`, `replicate` → `REPLICATE_API_TOKEN`), or a
+quota / moderation rejection from that provider.
+
+### Fix
+
+The server appends the provider's own error to the message (e.g.
+`… — 401 Incorrect API key provided`) and logs it under the
+`mulmocast` prefix — read that detail first. Then either add the
+missing key to `.env` (restart the server) or rewrite the script's
+`imageParams` / `movieParams` / speaker providers to ones that have
+keys configured. Don't retry the render unchanged — the same provider
+will fail the same way.
+
 ## Build / yarn workspace ordering
 
 ### Symptoms

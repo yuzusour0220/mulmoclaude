@@ -83,7 +83,7 @@ function rowDraftToRecord(rowDraft: TableRowDraft, subFields: Record<string, Fie
 export function draftToRecord(state: EditState, schema: CollectionSchema): CollectionItem {
   const record: CollectionItem = {};
   for (const [key, field] of Object.entries(schema.fields)) {
-    if (field.type === "derived" || field.type === "embed" || field.type === "backlinks" || field.type === "toggle") continue; // never persisted (toggle projects an enum field)
+    if (COMPUTED_TYPES.has(field.type)) continue; // never persisted (toggle projects an enum field)
     if (field.type === "boolean") {
       if (shouldEmitBoolean(state, key, field)) record[key] = state.bool[key] === true;
       continue;

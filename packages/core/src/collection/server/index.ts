@@ -29,3 +29,4 @@ export * from "./dynamicIcon";
 export * from "./spawn";
 export * from "./delete";
 export * from "./views";
+export * from "./manageTool";

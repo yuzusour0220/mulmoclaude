@@ -1,5 +1,5 @@
 // The machine-readable workspace ontology (plan step ① of
-// plans/collection-ontology.md): one entry per discovered collection with
+// plans/done/collection-ontology.md): one entry per discovered collection with
 // the identity + relationship facts an agent needs to reason ACROSS
 // collections — which slugs exist, how they point at each other, how big
 // they are — without re-reading every schema.json. Derived on demand from
@@ -26,7 +26,7 @@ import type { CollectionSchema } from "../core/schema";
  *  compare against anyway. */
 export interface OntologyRelation {
   field: string;
-  kind: "ref" | "embed" | "backlinks";
+  kind: "ref" | "embed" | "backlinks" | "rollup";
   to: string;
 }
 
@@ -50,7 +50,7 @@ export function schemaRelations(schema: CollectionSchema): OntologyRelation[] {
   const relations: OntologyRelation[] = [];
   for (const [key, spec] of Object.entries(schema.fields)) {
     if (spec.type === "ref" || spec.type === "embed") relations.push({ field: key, kind: spec.type, to: spec.to });
-    if (spec.type === "backlinks") relations.push({ field: key, kind: "backlinks", to: spec.from });
+    if (spec.type === "backlinks" || spec.type === "rollup") relations.push({ field: key, kind: spec.type, to: spec.from });
     if (spec.type !== "table") continue;
     for (const [subKey, subSpec] of Object.entries(spec.of)) {
       if (subSpec.type === "ref") relations.push({ field: `${key}.${subKey}`, kind: "ref", to: subSpec.to });

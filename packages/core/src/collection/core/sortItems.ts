@@ -36,7 +36,7 @@ export interface SortValue {
 const EMPTY: SortValue = { empty: true };
 
 /** Field types that render no value text in the table, so offer no sort. */
-const NON_SORTABLE: ReadonlySet<CollectionFieldType> = new Set<CollectionFieldType>(["markdown", "table", "image", "file", "embed", "backlinks"]);
+const NON_SORTABLE: ReadonlySet<CollectionFieldType> = new Set<CollectionFieldType>(["markdown", "table", "image", "file", "embed", "backlinks", "rollup"]);
 
 export function isSortableField(field: CollectionFieldSpec): boolean {
   return !NON_SORTABLE.has(field.type);

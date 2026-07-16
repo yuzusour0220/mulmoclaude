@@ -1,5 +1,5 @@
 // Pure helpers for `kind: "mutate"` actions (plan step ④ of
-// plans/collection-ontology.md): the `$params.<name>` reference syntax
+// plans/done/collection-ontology.md): the `$params.<name>` reference syntax
 // used in a mutate action's `set` map. ONE parser shared by the schema
 // refines (`schemaZ.ts` validates that every reference names a declared
 // param) and the server executor (`server/mutate.ts` resolves them

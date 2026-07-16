@@ -376,6 +376,14 @@
               >{{ render.derivedDisplay(field, render.evaluateDerivedAgainstItem(field, String(key), detailRecord), detailRecord) }}</span
             >
 
+            <!-- Rollup aggregate badge (cross-collection) -->
+            <span
+              v-else-if="field.type === 'rollup'"
+              class="inline-block truncate tabular-nums font-bold text-indigo-900 bg-indigo-50/50 px-2 py-0.5 rounded border border-indigo-100/50"
+              :data-testid="`collections-detail-rollup-${key}`"
+              >{{ render.rollupDisplay(field, detailRecord) }}</span
+            >
+
             <!-- Sub table -->
             <div
               v-else-if="field.type === 'table' && field.of && render.hasTableRows(detailRecord[key])"
@@ -511,7 +519,7 @@ import { computed, ref, watch } from "vue";
 import { useCollectionI18n } from "../lang";
 import CollectionBacklinksView from "./CollectionBacklinksView.vue";
 import CollectionEmbedView from "./CollectionEmbedView.vue";
-import { fieldVisible, resolveEnumColor, emptyRow } from "@mulmoclaude/core/collection";
+import { COMPUTED_TYPES, fieldVisible, resolveEnumColor, emptyRow } from "@mulmoclaude/core/collection";
 import { collectionUi } from "../uiContext";
 import { activateRefLink, activatePathLink } from "../refLink";
 import type { CollectionRendering } from "../useCollectionRendering";
@@ -632,13 +640,12 @@ const rootTestid = computed<string>(() => {
   return editing.value.mode === "create" ? "collections-create" : "collections-edit";
 });
 
-/** Whether a field gets an editable control in edit mode. Toggle (a
- *  projection of an enum that has its own input), derived (computed),
- *  embed (a foreign record), and backlinks (reverse refs owned by OTHER
- *  records) stay read-only in both modes, so the cell geometry never
+/** Whether a field gets an editable control in edit mode. The computed /
+ *  projected kinds (COMPUTED_TYPES: derived, embed, backlinks, rollup,
+ *  toggle) stay read-only in both modes, so the cell geometry never
  *  changes on the view↔edit toggle. */
 function isEditableType(type: FieldSpec["type"]): boolean {
-  return type !== "toggle" && type !== "derived" && type !== "embed" && type !== "backlinks";
+  return !COMPUTED_TYPES.has(type);
 }
 
 /** Wide field types span the full grid width in BOTH modes — keeping
