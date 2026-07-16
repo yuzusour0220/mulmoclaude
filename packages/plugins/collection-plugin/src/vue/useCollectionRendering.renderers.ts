@@ -180,9 +180,10 @@ export function rollupValueFor(field: FieldSpec, record: CollectionItem | null, 
   if (field.type !== "rollup" || !schema || !record) return null;
   const items = derivedSourceItems(embedCache, field.from);
   if (items === null) return null;
-  const selfId = String(record[schema.primaryKey] ?? "");
-  if (!selfId) return null;
-  return rollupValue(field, selfId, items);
+  // No empty-id guard here: an empty primaryKey matches nothing inside
+  // `backlinkRows` and yields a real 0 — exactly what the server's
+  // `projectRollups` returns for the same record (Codex on PR #2116).
+  return rollupValue(field, String(record[schema.primaryKey] ?? ""), items);
 }
 
 /** Display string for a rollup cell: the aggregate as a plain number,

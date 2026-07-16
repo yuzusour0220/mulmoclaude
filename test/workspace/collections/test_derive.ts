@@ -395,6 +395,11 @@ describe("enrichItems — derived across refs", () => {
     const field = detail.schema.fields.totalShares as FieldSpec;
     assert.equal(server?.totalShares, 15);
     assert.equal(rendering.rollupDisplay(field, { symbol: "aapl", price: 200 }), "15");
+    // A record with an EMPTY primary key matches nothing → a real 0 on
+    // BOTH sides, not a client-only em-dash (Codex parity review).
+    const [emptyIdServer] = await enrichItems(collection, [{ price: 1 }], opts());
+    assert.equal(emptyIdServer?.totalShares, 0);
+    assert.equal(rendering.rollupDisplay(field, { price: 1 }), "0");
     // Unresolvable source on the client renders the em-dash, like every deref.
     rendering.embedCache.value = {};
     assert.equal(rendering.rollupDisplay(field, { symbol: "aapl", price: 200 }), "—");
