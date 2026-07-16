@@ -229,8 +229,10 @@ const BacklinksFieldZ = z
  *  server/client via `core/backlinks.ts`'s `rollupValue`. Deliberately a
  *  STRUCTURED field, not `sumOver(...)` formula syntax — the derived
  *  evaluator's no-string-literals boundary stays untouched — and
- *  deliberately just `sum` | `count`. Fail-soft: an unresolvable `from`
- *  renders em-dash; an empty match set is a real 0. */
+ *  deliberately just `sum` | `count`. Rollups resolve BEFORE the formula
+ *  pass, so a sibling `derived` formula may read them as identifiers
+ *  (`played = homePlayed + awayPlayed`). Fail-soft: an unresolvable
+ *  `from` renders em-dash; an empty match set is a real 0. */
 const RollupFieldZ = z
   .object({
     type: z.literal("rollup"),

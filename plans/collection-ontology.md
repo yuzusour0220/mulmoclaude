@@ -130,7 +130,7 @@ The reserved kind from `schema.ts:174-178`, exactly Foundry's Action shape minus
 
 - Evaluator untouched. Fail-soft to em-dash like all derefs. `count` needs no `column`.
 - **Server/client parity**: `deriveAll` runs on both sides with identical inputs; the client must load the same reverse-source collections with the same snapshot, or values diverge. Sequenced after backlinks precisely because it inherits that loading work.
-- No rollups inside arithmetic formulas until a real schema demands it.
+- ~~No rollups inside arithmetic formulas until a real schema demands it.~~ A real schema demanded it immediately (W杯2026 teams: `played = homePlayed + awayPlayed` over two one-sided counts — a match points at a team via `homeTeam` OR `awayTeam`). Implemented as plain identifier references: rollups resolve BEFORE the formula pass on both sides, the evaluator itself stays untouched. Caveat: rollup-fed derived columns resolve on the collection's own rows only — a `<refField>.<col>` deref reads the target without its rollups (em-dash). Comparative row predicates (won/drawn/lost need `homeScore > awayScore` per row) remain out of scope — that's the agent-refresh's job.
 
 ## Rejected / deferred — and why (don't re-propose without new evidence)
 

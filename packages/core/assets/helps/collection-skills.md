@@ -204,8 +204,13 @@ Every field spec needs a `type` and a `label`. Extra keys by type:
   `{ "type": "rollup", "label": "Unbilled hours", "from": "worklog", "via": "clientId", "op": "sum", "column": "hours", "filter": { "field": "billed", "in": ["false"] } }`.
   Fail-soft: an unresolvable `from` renders em-dash; an empty match set is a
   real 0. Summing a source `derived` column works when its formula is
-  self-contained; non-numeric values are skipped. Not usable inside `derived`
-  formulas.
+  self-contained; non-numeric values are skipped. A `derived` formula ON THE
+  SAME schema may reference rollup fields as plain identifiers — rollups
+  resolve before the formula pass — e.g. two one-sided counts combined:
+  `"played": { "type": "derived", "formula": "homePlayed + awayPlayed" }`.
+  (Caveat: that works on the collection's own rows; a `<refField>.<col>`
+  deref FROM another collection reads the target without its rollups, so a
+  rollup-fed derived column is em-dash when viewed through a ref.)
 - **`table`** — `of: { <col>: <sub-field-spec>, ... }`. An array of rows. Each
   sub-field is a flat spec; sub-fields **cannot** be `table`, `derived`,
   `backlinks`, or `rollup` (no nested tables, no computed columns).

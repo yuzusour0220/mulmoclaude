@@ -52,6 +52,7 @@ import {
   renderDerived,
   renderRollup,
   renderSubCell,
+  withRollupValues,
 } from "./useCollectionRendering.renderers";
 
 export interface CollectionRendering {
@@ -84,6 +85,12 @@ export interface CollectionRendering {
   stepFor: (type: FieldType) => string | undefined;
   deriveAll: (schema: CollectionSchema, base: CollectionItem, refRecords: RefRecordCache) => CollectionItem;
   evaluateDerivedAgainstItem: (field: FieldSpec, fieldKey: string, item: CollectionItem) => number | null;
+  /** Full enrichment for ONE record in the client's compute order —
+   *  rollups first, then the formula pass — so a `derived` formula that
+   *  references a rollup resolves exactly like server enrichment. Use
+   *  this (not raw `deriveAll`) wherever a whole record's computed
+   *  values are needed (live edit preview, sort). */
+  deriveRecord: (item: CollectionItem) => CollectionItem;
   derivedDisplay: (field: FieldSpec, computedValue: unknown, record: CollectionItem | null) => string;
 }
 
@@ -123,7 +130,13 @@ export function useCollectionRendering(collection: Ref<CollectionDetail | null>,
     // values that aren't a directly-served artifact.
     fileRoutePath: (value) => collectionUi().fileRoutePath(value),
     formatSubCell: (subField, value, record) => renderSubCell(subField, value, record, refCache.value, locale.value),
-    evaluateDerivedAgainstItem: (field, fieldKey, item) => evaluateDerived(field, fieldKey, item, collection.value?.schema ?? null, refRecordCache.value),
+    evaluateDerivedAgainstItem: (field, fieldKey, item) =>
+      evaluateDerived(field, fieldKey, item, collection.value?.schema ?? null, refRecordCache.value, embedCache.value),
+    deriveRecord: (item) => {
+      const schema = collection.value?.schema ?? null;
+      if (!schema) return item;
+      return deriveAll(schema, withRollupValues(schema, item, embedCache.value), refRecordCache.value);
+    },
     derivedDisplay: (field, computedValue, record) => renderDerived(field, computedValue, record, locale.value),
   };
 }

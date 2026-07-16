@@ -1027,18 +1027,7 @@ const chatInputEl = ref<HTMLTextAreaElement | null>(null);
 // helpers the list table renders with; pass the whole object to the
 // panel as its `render` prop.
 const render = useCollectionRendering(collection, locale);
-const {
-  refRecordCache,
-  refDisplay,
-  formatMoney,
-  resolveCurrency,
-  derivedDisplay,
-  evaluateDerivedAgainstItem,
-  formatCell,
-  isExternalUrl,
-  artifactUrl,
-  fileRoutePath,
-} = render;
+const { refDisplay, formatMoney, resolveCurrency, derivedDisplay, evaluateDerivedAgainstItem, formatCell, isExternalUrl, artifactUrl, fileRoutePath } = render;
 
 const searchQuery = ref("");
 
@@ -1142,7 +1131,7 @@ function derivedSortValue(field: FieldSpec, key: string, item: CollectionItem): 
   if (display === undefined || display === "number" || display === "money") {
     return numericSortValue(evaluateDerivedAgainstItem(field, key, item));
   }
-  const enriched = collection.value ? render.deriveAll(collection.value.schema, item, render.refRecordCache.value) : item;
+  const enriched = render.deriveRecord(item);
   if (display === "date") return dateSortValue(enriched[key]);
   return stringSortValue(enriched[key]);
 }
@@ -2091,7 +2080,7 @@ const liveRecord = computed<CollectionItem | null>(() => {
  *  rendering composable; this binds it to the current draft. */
 const liveDerived = computed<CollectionItem | null>(() => {
   if (!collection.value || !liveRecord.value) return null;
-  return render.deriveAll(collection.value.schema, liveRecord.value, refRecordCache.value);
+  return render.deriveRecord(liveRecord.value);
 });
 
 /** Short summary for a `table`-typed cell in the main collection

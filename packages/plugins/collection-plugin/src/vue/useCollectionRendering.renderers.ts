@@ -192,6 +192,23 @@ export function renderRollup(field: FieldSpec, record: CollectionItem | null, sc
   return value === null ? "—" : formatCell(value, "number");
 }
 
+/** Copy of `item` with every rollup field resolved from the reverse
+ *  sources — injected BEFORE the formula pass so a `derived` formula can
+ *  read rollup values as plain identifiers (`played = homePlayed +
+ *  awayPlayed`), in the same rollups-then-formulas order the server
+ *  enrichment runs. Returns `item` unchanged when the schema declares no
+ *  rollups (the overwhelmingly common case — no copy). */
+export function withRollupValues(schema: CollectionSchema | null, item: CollectionItem, embedCache: EmbedCache): CollectionItem {
+  if (!schema) return item;
+  let out = item;
+  for (const [key, field] of Object.entries(schema.fields)) {
+    if (field.type !== "rollup") continue;
+    if (out === item) out = { ...item };
+    out[key] = rollupValueFor(field, item, schema, embedCache);
+  }
+  return out;
+}
+
 export function renderSubCell(subField: FieldSpec, value: unknown, record: CollectionItem | null, refCache: RefCache, locale: string): string {
   if (subField.type === "money") return formatMoney(value, resolveCurrency(subField, record), locale);
   if (subField.type === "ref" && subField.to && typeof value === "string" && value.length > 0) return lookupRefDisplay(refCache, subField.to, value);
@@ -209,9 +226,12 @@ export function evaluateDerived(
   item: CollectionItem,
   schema: CollectionSchema | null,
   refRecords: RefRecordCache,
+  embedCache: EmbedCache = {},
 ): number | null {
   if (field.type !== "derived" || !schema) return null;
-  const enriched = deriveAll(schema, item, refRecords);
+  // Rollups resolve FIRST so formulas can reference them — mirroring the
+  // server's enrichment order exactly.
+  const enriched = deriveAll(schema, withRollupValues(schema, item, embedCache), refRecords);
   const result = enriched[fieldKey];
   return typeof result === "number" && Number.isFinite(result) ? result : null;
 }

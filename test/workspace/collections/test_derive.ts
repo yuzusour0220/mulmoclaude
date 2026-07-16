@@ -302,6 +302,69 @@ describe("enrichItems — derived across refs", () => {
     assert.equal(enriched[1]?.totalShares, 0); // resolvable source, no matches → a real 0
   });
 
+  it("a derived formula can read rollup fields (rollups resolve first) — the W杯 played = home + away shape", async () => {
+    // A match points at a team via EITHER homeTeam or awayTeam, so the
+    // combined count is two one-sided rollups added by a formula.
+    writeSkill("teams", {
+      title: "Teams",
+      icon: "sports_soccer",
+      dataPath: "data/teams/items",
+      primaryKey: "id",
+      fields: {
+        id: { type: "string", label: "ID", primary: true, required: true },
+        homePlayed: { type: "rollup", label: "Home", from: "matches", via: "homeTeam", op: "count" },
+        awayPlayed: { type: "rollup", label: "Away", from: "matches", via: "awayTeam", op: "count" },
+        played: { type: "derived", label: "Played", formula: "homePlayed + awayPlayed" },
+      },
+    });
+    writeSkill("matches", {
+      title: "Matches",
+      icon: "stadium",
+      dataPath: "data/matches/items",
+      primaryKey: "id",
+      fields: {
+        id: { type: "string", label: "ID", primary: true, required: true },
+        homeTeam: { type: "ref", label: "Home", to: "teams" },
+        awayTeam: { type: "ref", label: "Away", to: "teams" },
+      },
+    });
+    const writeMatch = (matchId: string, home: string, away: string) => {
+      const dir = path.join(workdir, "data/matches/items");
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(path.join(dir, `${matchId}.json`), JSON.stringify({ id: matchId, homeTeam: home, awayTeam: away }));
+    };
+    writeMatch("m1", "japan", "sweden");
+    writeMatch("m2", "brazil", "japan");
+    writeMatch("m3", "japan", "brazil");
+    const collection = await loadCollection("teams", opts());
+    assert.ok(collection);
+    const enriched = await enrichItems(collection, [{ id: "japan" }, { id: "sweden" }], opts());
+    assert.equal(enriched[0]?.homePlayed, 2);
+    assert.equal(enriched[0]?.awayPlayed, 1);
+    assert.equal(enriched[0]?.played, 3);
+    assert.equal(enriched[1]?.played, 1);
+
+    // Client parity: evaluateDerivedAgainstItem runs the same rollups-
+    // then-formula order off the primed reverse-source cache.
+    const detail = toDetail(collection) as unknown as CollectionDetail;
+    const rendering = useCollectionRendering(ref<CollectionDetail | null>(detail), ref("en"));
+    const matches = await loadCollection("matches", opts());
+    assert.ok(matches);
+    rendering.embedCache.value = {
+      matches: {
+        schema: matches.schema as unknown as CollectionDetail["schema"],
+        items: [
+          { id: "m1", homeTeam: "japan", awayTeam: "sweden" },
+          { id: "m2", homeTeam: "brazil", awayTeam: "japan" },
+          { id: "m3", homeTeam: "japan", awayTeam: "brazil" },
+        ],
+      },
+    };
+    const playedField = detail.schema.fields.played as FieldSpec;
+    assert.equal(rendering.evaluateDerivedAgainstItem(playedField, "played", { id: "japan" }), 3);
+    assert.deepEqual(rendering.deriveRecord({ id: "japan" }).played, 3);
+  });
+
   it("rollup: the client cell agrees with the server value (determinism cross-check)", async () => {
     writeSkill("stock-quotes", {
       ...quotesSchema,

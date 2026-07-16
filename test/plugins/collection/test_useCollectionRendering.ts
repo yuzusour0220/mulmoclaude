@@ -48,6 +48,7 @@ const EXPECTED_MEMBERS = [
   "embedViewsFor",
   "backlinksViewsFor",
   "rollupDisplay",
+  "deriveRecord",
   "resolveCurrency",
   "currencySymbol",
   "formatMoney",

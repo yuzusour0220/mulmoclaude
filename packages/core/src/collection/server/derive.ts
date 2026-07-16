@@ -122,26 +122,27 @@ function projectComputed(schema: CollectionSchema, enriched: CollectionItem, lin
     if (field.type === "backlinks") {
       enriched[key] = projectBacklinks(field, schema, enriched, linked);
     }
-    if (field.type === "rollup") {
-      enriched[key] = projectRollup(field, schema, enriched, linked);
-    }
   }
   return enriched;
 }
 
-/** The rollup scalar for one record — same reverse machinery as
- *  backlinks, collapsed to a number. An unresolvable source is null
- *  (em-dash); an empty match set is a real 0. */
-function projectRollup(
-  field: Extract<CollectionFieldSpec, { type: "rollup" }>,
-  schema: CollectionSchema,
-  enriched: CollectionItem,
-  linked: Record<string, LinkedTarget>,
-): number | null {
-  const source = linked[field.from];
-  if (!source) return null;
-  const selfId = String(enriched[schema.primaryKey] ?? "");
-  return rollupValue(field, selfId, Object.values(source.byId));
+/** Resolve every rollup field onto a COPY of the record, BEFORE the
+ *  formula pass — a `derived` formula may reference rollup values as
+ *  plain identifiers (`played = homePlayed + awayPlayed`). Same reverse
+ *  machinery as backlinks, collapsed to a number: an unresolvable source
+ *  is null (a formula reading it fails soft to em-dash); an empty match
+ *  set is a real 0. Returns `record` unchanged when the schema declares
+ *  no rollups. */
+function projectRollups(schema: CollectionSchema, record: CollectionItem, linked: Record<string, LinkedTarget>): CollectionItem {
+  let out = record;
+  for (const [key, field] of Object.entries(schema.fields)) {
+    if (field.type !== "rollup") continue;
+    if (out === record) out = { ...record };
+    const source = linked[field.from];
+    const selfId = String(record[schema.primaryKey] ?? "");
+    out[key] = source ? rollupValue(field, selfId, Object.values(source.byId)) : null;
+  }
+  return out;
 }
 
 /** Enrich records with every host-computed field: derived formulas
@@ -152,5 +153,8 @@ export async function enrichItems(collection: LoadedCollection, items: Collectio
   const { schema } = collection;
   const linked = await loadLinkedTargets(schema, opts);
   const refRecords = toRefRecords(linked);
-  return items.map((item) => projectComputed(schema, deriveAll(schema, item, refRecords), linked));
+  // Rollups FIRST (formulas may read them), then the formula pass, then
+  // the remaining projections — the client mirrors this order exactly
+  // (`deriveRecord` / `evaluateDerived` in collection-plugin).
+  return items.map((item) => projectComputed(schema, deriveAll(schema, projectRollups(schema, item, linked), refRecords), linked));
 }
