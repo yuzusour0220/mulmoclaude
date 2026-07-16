@@ -20,13 +20,20 @@ const isInstalledClientSecret = (value: unknown): value is { installed: Installe
 export async function findClientSecretPath(home?: string): Promise<string> {
   const dir = googleSecretsDir(home);
   const entries = await readdir(dir).catch((): string[] => []);
-  const file = entries.find((name) => name.startsWith("client_secret_") && name.endsWith(".json"));
-  if (!file) {
+  const matches = entries.filter((name) => name.startsWith("client_secret_") && name.endsWith(".json")).sort();
+  const [first, ...rest] = matches;
+  if (!first) {
     throw new Error(
       `no client_secret_*.json found in ${dir} — download the OAuth desktop-app credentials JSON from the Google Cloud Console and place it there (mode 600)`,
     );
   }
-  return join(dir, file);
+  if (rest.length > 0) {
+    // The stored refresh token is bound to one client_id; silently picking one
+    // of several files could pair the token with the wrong client
+    // (invalid_grant), so ambiguity is an error the user must resolve.
+    throw new Error(`multiple client_secret_*.json files found in ${dir} (${matches.join(", ")}) — keep exactly one`);
+  }
+  return join(dir, first);
 }
 
 export async function loadClientSecret(home?: string): Promise<InstalledClientSecret> {

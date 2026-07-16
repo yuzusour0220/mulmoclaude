@@ -32,6 +32,14 @@ describe("findClientSecretPath", () => {
     await assert.rejects(findClientSecretPath(home), /no client_secret_\*\.json found/);
   });
 
+  it("fails on ambiguity when multiple client_secret files exist", async () => {
+    const home = await makeFakeHome({ "client_secret_b.json": validSecret, "client_secret_a.json": validSecret });
+    await assert.rejects(
+      findClientSecretPath(home),
+      /multiple client_secret_\*\.json files found .*client_secret_a\.json, client_secret_b\.json.* keep exactly one/,
+    );
+  });
+
   it("fails with guidance when ~/.secrets does not exist", async () => {
     const home = await mkdtemp(path.join(tmpdir(), "google-secret-test-"));
     await assert.rejects(findClientSecretPath(home), /download the OAuth desktop-app credentials/);
