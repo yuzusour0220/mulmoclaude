@@ -372,7 +372,7 @@ import { parseCollectionSlashSeed, makeSyntheticCollectionResult, hasRealCollect
 import { mergeBufferedIntoDraft } from "./utils/chat/buffer";
 import { roleName, roleIcon } from "./utils/role/icon";
 import { createEmptySession } from "./utils/session/sessionFactory";
-import { buildLoadedSession, parseSessionEntries } from "./utils/session/sessionEntries";
+import { buildLoadedSession, parseSessionEntries, shouldAdoptServerTranscript } from "./utils/session/sessionEntries";
 import { usePendingCalls } from "./composables/usePendingCalls";
 import { loadCspExtra } from "./composables/useCspExtra";
 import { cspViolations, dismissCspViolations, installCspViolationListener } from "./composables/useCspViolations";
@@ -991,10 +991,12 @@ async function refreshSessionTranscript(sessionId: string): Promise<void> {
   if (!response.ok) return;
   const summary = sessions.value.find((entry) => entry.id === sessionId);
   const serverResults = parseSessionEntries(response.data, summary?.origin);
-  // Only patch if the server knows more than we do — avoids
-  // replacing a richer in-flight state with a stale snapshot when
-  // session_finished races with the last few events.
-  if (serverResults.length > session.toolResults.length) {
+  // Only patch if the server knows more than we do — avoids replacing a
+  // richer in-flight state with a stale snapshot when session_finished
+  // races with the last few events. Compares total text, not just card
+  // count, so a text card truncated by a dropped socket.io frame (same
+  // count, shorter body) is still caught up (#2096).
+  if (shouldAdoptServerTranscript(serverResults, session.toolResults)) {
     session.toolResults = serverResults;
   }
 }

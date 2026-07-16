@@ -87,6 +87,32 @@ export function resolveSelectedUuid(toolResults: readonly ToolResultComplete[]):
   return toolResults[toolResults.length - 1].uuid;
 }
 
+// Total character length of every card body. A streamed assistant text
+// card carries its running text in `message`, so this grows as text
+// arrives — the signal we use to spot a card that was truncated when a
+// socket.io frame dropped (#2096).
+function totalMessageLength(results: readonly ToolResultComplete[]): number {
+  return results.reduce((sum, result) => sum + (result.message?.length ?? 0), 0);
+}
+
+/** Decide whether a reconnect / finished catch-up should replace the
+ *  client's in-memory transcript with the server's copy.
+ *
+ *  - Server has MORE cards → adopt (the client missed whole events).
+ *  - Same card count but MORE total text on the server → adopt: a dropped
+ *    socket.io frame truncated a streamed text card, so the counts match
+ *    yet the last card's body is cut off (#2096). Card-count alone missed
+ *    this, leaving "…理由によ" on screen until a reload.
+ *  - Otherwise keep the client copy — never overwrite a richer or equal
+ *    in-flight state with an equal-or-staler snapshot (the #1915 guard
+ *    that stops a `session_finished` race from clobbering live events). */
+export function shouldAdoptServerTranscript(serverResults: readonly ToolResultComplete[], clientResults: readonly ToolResultComplete[]): boolean {
+  if (serverResults.length !== clientResults.length) {
+    return serverResults.length > clientResults.length;
+  }
+  return totalMessageLength(serverResults) > totalMessageLength(clientResults);
+}
+
 // Decide the `startedAt` / `updatedAt` to seed the in-memory
 // ActiveSession with. We prefer the server summary's timestamps
 // so the restored session keeps its existing sidebar ordering;
