@@ -224,14 +224,23 @@ interface RejectedRow {
  *  merge: the caller's own row was already computed-key-rejected, but a
  *  raw-written / legacy record can carry a stale `derived`/`embed`/
  *  `toggle` value, and re-writing it would perpetuate a forged
- *  host-computed value. A merge heals the record instead. */
+ *  host-computed value. A merge heals the record instead.
+ *
+ *  readItem THROWS on a malformed stored file (only ENOENT is null) —
+ *  downgraded to a per-row rejection here, like loadRequestedItems'
+ *  `missing`, so one broken file can't abort the whole putItems batch. */
 async function mergeWithExisting(
   collection: LoadedCollection,
   record: CollectionItem,
   itemId: string,
   deps: ManageCollectionDeps,
 ): Promise<CollectionItem | string> {
-  const existing = await readItem(collection.dataDir, itemId, { workspaceRoot: deps.workspaceRoot });
+  let existing: CollectionItem | null;
+  try {
+    existing = await readItem(collection.dataDir, itemId, { workspaceRoot: deps.workspaceRoot });
+  } catch {
+    return `'${itemId}' has a malformed stored file — mode "merge" needs to read it; fix the file (Read → correct → Write) or replace it whole with "upsert"`;
+  }
   if (!existing) return `'${itemId}' not found — mode "merge" updates an existing record; use "upsert" or "create" to add it`;
   const stored = Object.entries(existing).filter(([key]) => {
     const spec = collection.schema.fields[key];

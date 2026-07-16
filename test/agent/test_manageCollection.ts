@@ -322,6 +322,27 @@ describe("manageCollection — putItems", () => {
     const computed = await runJson({ action: "putItems", slug: "portfolio", items: [{ id: "h1", value: 1 }], mode: "merge" });
     assert.match((computed.rejected as { problem: string }[])[0]?.problem ?? "", /'value' is derived/);
   });
+
+  it('mode "merge" rejects a malformed stored file per-row instead of aborting the batch', async () => {
+    // readItem throws on non-ENOENT (broken JSON); merge must downgrade that
+    // to a row rejection so the healthy rows in the same batch still write.
+    writeRecord("data/portfolio/items", "h1", record("h1", { notes: "keep me" }));
+    writeFileSync(path.join(workdir, "data/portfolio/items/bad.json"), '{ "id": "bad", broken');
+    const result = await runJson({
+      action: "putItems",
+      slug: "portfolio",
+      items: [
+        { id: "bad", status: "closed" },
+        { id: "h1", status: "closed" },
+      ],
+      mode: "merge",
+    });
+    assert.deepEqual(result.written, ["h1"]);
+    const [rejectedRow] = result.rejected as { id: string; problem: string }[];
+    assert.equal(rejectedRow?.id, "bad");
+    assert.match(rejectedRow?.problem ?? "", /malformed stored file/);
+    assert.equal(stored("h1").status, "closed"); // the healthy row landed
+  });
 });
 
 describe("manageCollection — dotted record ids", () => {
