@@ -3,7 +3,9 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
-import { GoogleArgs, isIsoDateTimeWithOffset } from "../src/args";
+import { isIsoDateTimeWithOffset } from "@mulmoclaude/core/google";
+
+import { GoogleArgs } from "../src/args";
 
 describe("isIsoDateTimeWithOffset", () => {
   const accepted = ["2026-07-17T09:00:00+09:00", "2026-07-17T09:00:00Z", "2026-07-17T09:00:00.000Z", "2026-07-17T23:59:59.5-05:00"];
@@ -13,7 +15,16 @@ describe("isIsoDateTimeWithOffset", () => {
     });
   }
 
-  const rejected = ["2026-07-17", "2026-07-17T09:00:00", "not-a-date", "2026-13-01T09:00:00Z", "2026-07-17T09:00Z", ""];
+  const rejected = [
+    "2026-07-17",
+    "2026-07-17T09:00:00",
+    "not-a-date",
+    "2026-13-01T09:00:00Z",
+    "2026-02-31T09:00:00Z",
+    "2026-07-17T24:00:00Z",
+    "2026-07-17T09:00Z",
+    "",
+  ];
   for (const value of rejected) {
     it(`rejects ${JSON.stringify(value)}`, () => {
       assert.equal(isIsoDateTimeWithOffset(value), false);

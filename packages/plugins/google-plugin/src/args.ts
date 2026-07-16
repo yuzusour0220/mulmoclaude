@@ -2,19 +2,11 @@
 // dispatch (index.ts) and the tests can share them without pulling in
 // the definePlugin factory body.
 import { z } from "zod";
-import { MAX_LIST_RESULTS } from "@mulmoclaude/core/google";
+import { isIsoDateTimeWithOffset, MAX_LIST_RESULTS } from "@mulmoclaude/core/google";
 
-// Calendar rejects date-only / offset-less values on `dateTime` with an
-// opaque 400, so the offset is enforced here where the LLM gets an
-// actionable message. Fractional seconds are normalized away first — an
-// optional `(\.\d+)?` group inside the main pattern trips
-// security/detect-unsafe-regex.
-const ISO_DATE_TIME_WITH_OFFSET_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(Z|[+-]\d{2}:\d{2})$/;
-const FRACTIONAL_SECONDS_RE = /\.\d+(?=Z|[+-])/;
-
-export const isIsoDateTimeWithOffset = (value: string): boolean =>
-  ISO_DATE_TIME_WITH_OFFSET_RE.test(value.replace(FRACTIONAL_SECONDS_RE, "")) && !Number.isNaN(new Date(value).getTime());
-
+// Calendar rejects date-only / offset-less / impossible values on `dateTime`
+// with an opaque 400, so the strict shared validator runs here where the LLM
+// gets an actionable message.
 const IsoDateTimeWithOffset = z.string().refine(isIsoDateTimeWithOffset, {
   error: "must be an ISO 8601 date-time with a timezone offset (e.g. 2026-07-17T09:00:00+09:00)",
 });

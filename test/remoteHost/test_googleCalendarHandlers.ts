@@ -75,7 +75,9 @@ describe("createGoogleCalendarCreateEvent", () => {
     { given: "not-a-date", label: "rejects a non-date start" },
     { given: "2026-07-17", label: "rejects a date-only start (Google would 400 on dateTime)" },
     { given: "2026-07-17T09:00:00", label: "rejects a start without a timezone offset" },
-    { given: "2026-13-01T09:00:00Z", label: "rejects a well-shaped but impossible date" },
+    { given: "2026-13-01T09:00:00Z", label: "rejects a well-shaped but impossible month" },
+    { given: "2026-02-31T09:00:00Z", label: "rejects an overflowed day that Date would silently normalize" },
+    { given: "2026-07-17T24:00:00Z", label: "rejects an out-of-range hour" },
   ];
   for (const { given, label } of badDateTimes) {
     it(label, async () => {

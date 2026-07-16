@@ -4,6 +4,7 @@
 // `yarn google:auth` CLI) and the google-calendar plugin — the token file has
 // a single owner, so every surface sees the same link state.
 export { configureGoogleHost, type GoogleLogger } from "./host.js";
+export { isIsoDateTimeWithOffset } from "./datetime.js";
 export { googleConfigDir, googleSecretsDir, googleTokenPath } from "./paths.js";
 export { clientSecretPresence, findClientSecretPath, loadClientSecret, type ClientSecretPresence, type InstalledClientSecret } from "./clientSecret.js";
 export { deleteGoogleTokens, loadGoogleTokens, mergeGoogleTokens, saveGoogleTokens } from "./tokenStore.js";
