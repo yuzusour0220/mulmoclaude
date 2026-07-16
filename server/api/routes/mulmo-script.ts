@@ -12,6 +12,8 @@ import {
   getBeatPngImagePath,
   generateBeatAudio,
   getBeatAudioPathOrUrl,
+  getBeatAnimatedVideoPath,
+  getBeatMoviePaths,
   generateReferenceImage,
   getReferenceImagePath,
   images,
@@ -33,6 +35,7 @@ import { badRequest, notFound, sendError, serverError } from "../../utils/httpEr
 import { depStatus } from "../../system/optionalDeps.js";
 import { getOptionalStringQuery, getSessionQuery } from "../../utils/request.js";
 import { log } from "../../system/logger/index.js";
+import { enableGraphAIErrorCapture, withMulmoErrorCapture } from "../../utils/mulmoErrorCapture.js";
 import { validateUpdateBeatBody, validateUpdateScriptBody } from "./mulmoScriptValidate.js";
 import { API_ROUTES } from "../../../src/config/apiRoutes.js";
 import { bindRoute } from "../../utils/router.js";
@@ -424,7 +427,12 @@ function resolveStoryPath(filePath: string, res: Response): string | null {
 
 // Helper: build mulmo context for a story file
 async function buildContext(absoluteFilePath: string, force = false) {
+  // setGraphAILogger(false) silences GraphAI's chatty info/debug output
+  // but also its error level — re-enable error capture so a failed
+  // generation surfaces the real provider error, not just mulmocast's
+  // generic "generate error" wrapper.
   setGraphAILogger(false);
+  enableGraphAIErrorCapture();
   const files = getFileObject({
     file: absoluteFilePath,
     basedir: path.dirname(absoluteFilePath),
@@ -489,7 +497,10 @@ export async function withStoryContext(
       }
       return;
     }
-    await handler({ absoluteFilePath, context });
+    // withMulmoErrorCapture appends the underlying provider error
+    // (missing API key, quota, …) to any mulmocast failure, which
+    // otherwise reaches the client as a generic "generate error".
+    await withMulmoErrorCapture(() => handler({ absoluteFilePath, context }));
   } catch (err) {
     // Log every handler failure at warn so operators get a breadcrumb
     // even when the migrated handler doesn't wrap its own try/catch.
@@ -540,6 +551,30 @@ bindRoute(router, API_ROUTES.mulmoScript.beatAudio, async (req: Request<object, 
       res.json({ audio: fileToDataUri(audioPath, "audio/mpeg") });
     },
   );
+});
+
+type BeatMovieResponse = { moviePath: string | null } | ErrorResponse;
+
+// Probe for a beat's generated video clip. Preference order mirrors the
+// movie-assembly pipeline's "most processed wins": lip-synced > with
+// sound effect > raw movie clip > animated html_tailwind render. The
+// response is the "stories/…" wire path so the client can stream it
+// through the existing bearer-authenticated downloadMovie route.
+bindRoute(router, API_ROUTES.mulmoScript.beatMovie, async (req: Request<object, BeatMovieResponse, object, BeatQuery>, res: Response<BeatMovieResponse>) => {
+  const { filePath, beatIndex: beatIndexStr } = req.query;
+  const beatIndex = beatIndexStr !== undefined ? parseInt(beatIndexStr, 10) : undefined;
+
+  if (!filePath || beatIndex === undefined || isNaN(beatIndex)) {
+    badRequest(res, "filePath and beatIndex are required");
+    return;
+  }
+
+  await withStoryContext(res, filePath, { operation: "beat-movie" }, async ({ context }) => {
+    const { movieFile, soundEffectFile, lipSyncFile } = getBeatMoviePaths(context, beatIndex);
+    const candidates = [lipSyncFile, soundEffectFile, movieFile, getBeatAnimatedVideoPath(context, beatIndex)];
+    const existing = candidates.find((candidate) => existsSync(candidate));
+    res.json({ moviePath: existing ? toStoryRef(existing) : null });
+  });
 });
 
 interface GenerateBeatAudioBody {
@@ -672,6 +707,10 @@ export function buildBeatIdIndex(beats: MulmoBeat[]): Map<string, number> {
 // unexpected pipeline errors; returns a structured failure when the
 // pipeline runs to completion but the output file is missing.
 async function runMovieGeneration(absoluteFilePath: string, onProgressEvent: (event: MovieProgressEvent) => void): Promise<MovieGenerationResult> {
+  return withMulmoErrorCapture(() => runMoviePipeline(absoluteFilePath, onProgressEvent));
+}
+
+async function runMoviePipeline(absoluteFilePath: string, onProgressEvent: (event: MovieProgressEvent) => void): Promise<MovieGenerationResult> {
   const context = await buildContext(absoluteFilePath);
   if (!context) return { ok: false, error: "Failed to initialize mulmo context" };
 
@@ -1042,6 +1081,10 @@ type PdfGenerationResult = { ok: true; outputPath: string } | { ok: false; error
 // image events are forwarded. Returns a structured failure when the
 // pipeline completes but the output file is missing.
 async function runPdfGeneration(context: StoryContext, onImageBeatDone: (beatIndex: number) => void): Promise<PdfGenerationResult> {
+  return withMulmoErrorCapture(() => runPdfPipeline(context, onImageBeatDone));
+}
+
+async function runPdfPipeline(context: StoryContext, onImageBeatDone: (beatIndex: number) => void): Promise<PdfGenerationResult> {
   const idToIndex = buildBeatIdIndex(context.studio.script.beats as MulmoBeat[]);
   const onProgress = (event: { kind: string; sessionType: string; id?: string; inSession: boolean }) => {
     if (event.kind !== "beat" || event.inSession || event.id === undefined) return;

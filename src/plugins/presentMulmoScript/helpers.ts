@@ -175,6 +175,18 @@ export async function streamMovieEvents(body: ReadableStream<Uint8Array>, handle
   }
 }
 
+/**
+ * True when a beat can have a generated video clip on disk — used to
+ * decide whether to probe the beat-movie endpoint. `moviePrompt`
+ * beats produce a per-beat movie file; `html_tailwind` beats with
+ * `animation` set (either `true` or an options object) produce an
+ * `_animated.mp4` render.
+ */
+export function beatMayHaveMovie(beat: { moviePrompt?: string; image?: { type?: string; animation?: unknown } }): boolean {
+  if (beat.moviePrompt) return true;
+  return beat.image?.type === "html_tailwind" && Boolean(beat.image.animation);
+}
+
 /** Pure check: is every beat in the script a `slide`-typed beat?
  *  When true, the View mounts `@mulmocast/deck-web`'s
  *  `MulmoScriptDeckEditor` instead of the per-beat list UI (#1575).

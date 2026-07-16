@@ -262,39 +262,73 @@
             @dragleave="onBeatDragLeave(index)"
             @drop="onBeatDrop($event, index)"
           >
-            <img
-              v-if="renderedImages[index]"
-              :src="renderedImages[index]"
-              class="w-full object-contain cursor-zoom-in"
-              :alt="`Beat ${index + 1}`"
-              @click="openLightbox(index)"
-            />
-            <button
-              v-if="renderedImages[index] && renderState[index] !== 'rendering'"
-              class="absolute top-1.5 right-1.5 flex items-center gap-1 px-2 py-0.5 text-xs rounded border border-gray-400 text-gray-600 bg-white hover:bg-gray-50 disabled:opacity-60 disabled:cursor-not-allowed"
-              :disabled="movieGenerating"
-              @click.stop="regenerateBeat(index)"
-            >
-              ↺
-            </button>
-            <div v-else-if="!renderedImages[index]" class="w-full aspect-video flex flex-col items-center justify-center gap-1 p-2">
-              <template v-if="renderState[index] === 'rendering' || (movieGenerating && !renderedImages[index] && effectiveBeat(index).imagePrompt)">
-                <svg class="animate-spin w-4 h-4 text-green-400" viewBox="0 0 24 24" fill="none">
+            <!-- Inline player for the beat's generated video clip.
+                 Replaces the thumbnail while open; the close button
+                 returns to the still image. -->
+            <template v-if="beatMovieOpen[index] && beatMovieUrls[index]">
+              <video :src="beatMovieUrls[index]" class="w-full object-contain" controls autoplay :data-testid="`mulmo-script-beat-movie-player-${index}`" />
+              <button
+                class="absolute top-1.5 right-1.5 flex items-center justify-center w-6 h-6 rounded border border-gray-400 text-gray-600 bg-white hover:bg-gray-50"
+                :title="t('common.close')"
+                :aria-label="t('common.close')"
+                :data-testid="`mulmo-script-beat-movie-close-${index}`"
+                @click.stop="closeBeatMovie(index)"
+              >
+                <span class="material-icons text-sm">close</span>
+              </button>
+            </template>
+            <template v-else>
+              <img
+                v-if="renderedImages[index]"
+                :src="renderedImages[index]"
+                class="w-full object-contain cursor-zoom-in"
+                :alt="`Beat ${index + 1}`"
+                @click="openLightbox(index)"
+              />
+              <!-- Play overlay: shown when the beat-movie probe found a
+                   generated clip for this beat. Blob is fetched lazily
+                   on first click (bearer-auth), hence the spinner. -->
+              <button
+                v-if="renderedImages[index] && beatMovies[index]"
+                class="absolute inset-0 m-auto w-12 h-12 flex items-center justify-center rounded-full bg-black/50 text-white hover:bg-black/70"
+                :title="t('pluginMulmoScript.play')"
+                :aria-label="t('pluginMulmoScript.play')"
+                :data-testid="`mulmo-script-beat-movie-play-${index}`"
+                @click.stop="playBeatMovie(index)"
+              >
+                <svg v-if="beatMovieLoading[index]" class="animate-spin w-5 h-5" viewBox="0 0 24 24" fill="none">
                   <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
                   <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
                 </svg>
-                <span class="text-xs text-green-500">{{ t("pluginMulmoScript.rendering") }}</span>
-              </template>
-              <template v-else-if="renderState[index] === 'error'">
-                <span class="text-xs text-red-400 text-center">{{ renderErrors[index] }}</span>
-              </template>
-              <template v-else>
-                <span v-if="effectiveBeat(index).imagePrompt" class="text-xs text-gray-400 text-center italic leading-relaxed px-1">{{
-                  effectiveBeat(index).imagePrompt
-                }}</span>
-                <span v-else class="text-xs text-gray-300">{{ beat.image?.type ?? "—" }}</span>
-              </template>
-            </div>
+                <span v-else class="material-icons text-3xl">play_arrow</span>
+              </button>
+              <button
+                v-if="renderedImages[index] && renderState[index] !== 'rendering'"
+                class="absolute top-1.5 right-1.5 flex items-center gap-1 px-2 py-0.5 text-xs rounded border border-gray-400 text-gray-600 bg-white hover:bg-gray-50 disabled:opacity-60 disabled:cursor-not-allowed"
+                :disabled="movieGenerating"
+                @click.stop="regenerateBeat(index)"
+              >
+                ↺
+              </button>
+              <div v-else-if="!renderedImages[index]" class="w-full aspect-video flex flex-col items-center justify-center gap-1 p-2">
+                <template v-if="renderState[index] === 'rendering' || (movieGenerating && !renderedImages[index] && effectiveBeat(index).imagePrompt)">
+                  <svg class="animate-spin w-4 h-4 text-green-400" viewBox="0 0 24 24" fill="none">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                  </svg>
+                  <span class="text-xs text-green-500">{{ t("pluginMulmoScript.rendering") }}</span>
+                </template>
+                <template v-else-if="renderState[index] === 'error'">
+                  <span class="text-xs text-red-400 text-center">{{ renderErrors[index] }}</span>
+                </template>
+                <template v-else>
+                  <span v-if="effectiveBeat(index).imagePrompt" class="text-xs text-gray-400 text-center italic leading-relaxed px-1">{{
+                    effectiveBeat(index).imagePrompt
+                  }}</span>
+                  <span v-else class="text-xs text-gray-300">{{ beat.image?.type ?? "—" }}</span>
+                </template>
+              </div>
+            </template>
             <!-- Beat drop hint / overlay -->
             <div v-if="beatDragOver[index]" class="absolute inset-0 flex items-center justify-center bg-blue-50/80 pointer-events-none">
               <span class="text-xs text-blue-500 font-medium">{{ t("pluginMulmoScript.drop") }}</span>
@@ -305,9 +339,14 @@
             >
               {{ t("pluginMulmoScript.orDropImage") }}
             </div>
-            <!-- Generate button for imagePrompt beats -->
+            <!-- Generate button for any beat without a rendered image.
+                 renderBeat works for every beat type: imagePrompt /
+                 typed image beats render directly, moviePrompt beats
+                 get a frame extracted from the generated clip, and
+                 text-only beats fall back to a prompt derived from
+                 the narration text (mulmocast prompt.js). -->
             <button
-              v-if="effectiveBeat(index).imagePrompt && !renderedImages[index] && renderState[index] !== 'rendering' && !movieGenerating"
+              v-if="!renderedImages[index] && renderState[index] !== 'rendering' && !movieGenerating"
               class="absolute top-1.5 right-1.5 flex items-center gap-1 px-2 py-0.5 text-xs rounded border border-blue-400 text-blue-600 bg-white hover:bg-blue-50"
               @click="renderBeat(index)"
             >
@@ -521,6 +560,7 @@ import {
   getMissingCharacterKeys,
   isAllSlideDeck,
   isSameScript,
+  beatMayHaveMovie,
   shouldAutoRenderBeat,
   streamMovieEvents,
   validateBeatJSON,
@@ -549,6 +589,7 @@ interface Beat {
   text?: string;
   id?: string;
   imagePrompt?: string;
+  moviePrompt?: string;
   image?: { type: string; [key: string]: unknown };
   /** Beat duration in seconds. The mulmocast schema notes this is
    *  "Used only when the text is empty" — when there's no TTS audio
@@ -619,6 +660,15 @@ const pdfPath = ref<string | null>(null);
 const beatAudios = reactive<Record<number, string>>({});
 const audioState = reactive<Record<number, "generating" | "done" | "error">>({});
 const audioErrors = reactive<Record<number, string>>({});
+// Per-beat generated video clip (moviePrompt / animated beats).
+// `beatMovies` holds the "stories/…" wire path from the beat-movie
+// probe; the blob object URL is fetched lazily on first play through
+// the bearer-authenticated downloadMovie route — a plain <video src>
+// can't attach the Authorization header.
+const beatMovies = reactive<Record<number, string>>({});
+const beatMovieUrls = reactive<Record<number, string>>({});
+const beatMovieOpen = reactive<Record<number, boolean>>({});
+const beatMovieLoading = reactive<Record<number, boolean>>({});
 const playingAudio = ref<{ index: number; audio: HTMLAudioElement } | null>(null);
 // Tracks the auto-advance timer running on a silent beat
 // (`beat.text === ""`). Beats without text generate no audio, so the
@@ -958,6 +1008,9 @@ onBeforeUnmount(() => {
     // component is gone, we just want the bytes to land.
     void flushDeckSave();
   }
+  // Release beat-clip blob object URLs — they outlive the component
+  // otherwise (document-scoped, not GC'd with it).
+  resetBeatMovies();
 });
 const loadedSource = ref("");
 const sourceChanged = computed(() => editableSource.value !== loadedSource.value);
@@ -1100,10 +1153,12 @@ async function renderBeat(index: number) {
   renderedImages[index] = response.data.image ?? "";
   renderState[index] = "done";
   refreshMissingCharacterImages();
+  if (beatMayHaveMovie(effectiveBeat(index))) void loadExistingBeatMovie(index);
 }
 
 async function regenerateBeat(index: number) {
   Reflect.deleteProperty(renderedImages, index);
+  invalidateBeatMovie(index);
   renderState[index] = "rendering";
   const response = await apiPost<{ image?: string; error?: string }>(endpoints.renderBeat.url, {
     filePath: filePath.value,
@@ -1123,6 +1178,7 @@ async function regenerateBeat(index: number) {
   }
   renderedImages[index] = response.data.image ?? "";
   renderState[index] = "done";
+  if (beatMayHaveMovie(effectiveBeat(index))) void loadExistingBeatMovie(index);
 }
 
 async function loadExistingBeatImage(index: number) {
@@ -1141,6 +1197,59 @@ async function loadExistingBeatAudio(index: number) {
     beatAudios[index] = response.data.audio;
     audioState[index] = "done";
   }
+}
+
+async function loadExistingBeatMovie(index: number) {
+  const response = await apiGet<{ moviePath?: string }>(endpoints.beatMovie.url, { filePath: filePath.value, beatIndex: String(index) });
+  // silently ignore errors — the clip simply hasn't been generated yet
+  if (response.ok && response.data.moviePath) {
+    beatMovies[index] = response.data.moviePath;
+  }
+}
+
+async function playBeatMovie(index: number) {
+  if (!beatMovies[index] || beatMovieLoading[index]) return;
+  if (beatMovieUrls[index]) {
+    beatMovieOpen[index] = true;
+    return;
+  }
+  beatMovieLoading[index] = true;
+  try {
+    const res = await apiFetchRaw(endpoints.downloadMovie.url, {
+      method: "GET",
+      query: { moviePath: beatMovies[index] },
+    });
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`);
+    }
+    // Re-type the .mov blob as video/mp4 — same ISO-BMFF family, and
+    // <video> support for "video/mp4" is broader than "video/quicktime".
+    const blob = new Blob([await res.blob()], { type: "video/mp4" });
+    beatMovieUrls[index] = URL.createObjectURL(blob);
+    beatMovieOpen[index] = true;
+  } catch (err) {
+    alert(extractErrorMessage(err));
+  } finally {
+    Reflect.deleteProperty(beatMovieLoading, index);
+  }
+}
+
+function closeBeatMovie(index: number) {
+  Reflect.deleteProperty(beatMovieOpen, index);
+}
+
+// Drop one beat's cached clip (regenerate is about to replace it on
+// disk). Revoking the object URL frees the blob immediately.
+function invalidateBeatMovie(index: number): void {
+  if (beatMovieUrls[index]) URL.revokeObjectURL(beatMovieUrls[index]);
+  [beatMovies, beatMovieUrls, beatMovieOpen].forEach((map) => Reflect.deleteProperty(map, index));
+}
+
+function resetBeatMovies(): void {
+  Object.values(beatMovieUrls).forEach((url) => URL.revokeObjectURL(url));
+  [beatMovies, beatMovieUrls, beatMovieOpen, beatMovieLoading].forEach((map) => {
+    Object.keys(map).forEach((key) => Reflect.deleteProperty(map, key));
+  });
 }
 
 async function generateAudio(index: number) {
@@ -1429,6 +1538,7 @@ async function initializeScript() {
   Object.keys(charImages).forEach((key) => Reflect.deleteProperty(charImages, key));
   Object.keys(charErrors).forEach((key) => Reflect.deleteProperty(charErrors, key));
   Object.keys(beatDragOver).forEach((key) => Reflect.deleteProperty(beatDragOver, key));
+  resetBeatMovies();
   moviePath.value = null;
   pdfPath.value = null;
   if (sourceDetails.value) sourceDetails.value.open = false;
@@ -1465,6 +1575,7 @@ async function initializeScript() {
   beats.value.forEach((beat, index) => {
     void hydrateBeatImage(beat, index, hasCharacters, AUTO_RENDER_TYPES);
     if (beat.text) loadExistingBeatAudio(index);
+    if (beatMayHaveMovie(beat)) void loadExistingBeatMovie(index);
   });
 
   characterKeys.value.forEach((key) => loadExistingCharacterImage(key));
@@ -1533,6 +1644,7 @@ async function reflectGenerationFinish(entry: PendingGeneration): Promise<void> 
   if (entry.kind === GENERATION_KINDS.beatImage) {
     const idx = Number(entry.key);
     await loadExistingBeatImage(idx);
+    if (beatMayHaveMovie(effectiveBeat(idx))) await loadExistingBeatMovie(idx);
     if (renderState[idx] === "rendering") Reflect.deleteProperty(renderState, idx);
   } else if (entry.kind === GENERATION_KINDS.beatAudio) {
     const idx = Number(entry.key);
@@ -1577,6 +1689,7 @@ async function generateMovie() {
       onBeatImageDone: (beatIndex) => {
         loadExistingBeatImage(beatIndex);
         refreshMissingCharacterImages();
+        if (beatMayHaveMovie(effectiveBeat(beatIndex))) void loadExistingBeatMovie(beatIndex);
       },
       onBeatAudioDone: (beatIndex) => loadExistingBeatAudio(beatIndex),
       onDone: (path) => {
