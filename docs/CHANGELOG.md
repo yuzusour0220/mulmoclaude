@@ -10,6 +10,52 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 ---
 
+## [1.1.1] - 2026-07-17
+
+Follow-up to 1.1.0: the Google OAuth token store becomes host-neutral.
+
+### Changed
+
+- **Google token path** — the refresh token moves from `~/.config/mulmoclaude/google-token.json` to `~/.config/mulmo/google-token.json` (the engine is shared with MulmoTerminal, so the directory drops the app branding). Existing tokens migrate automatically on first read: an atomic non-clobbering copy (`COPYFILE_EXCL`, mode 600 preserved, TOCTOU-safe) plus a legacy-path fallback read so a failed migration never makes a linked account look unlinked. (#2122, #2124)
+
+Ships `@mulmoclaude/core@0.20.1` and `@mulmoclaude/google-plugin@0.1.1`.
+
+---
+
+## [1.1.0] - 2026-07-17
+
+**Google Calendar integration, end to end** — link once, then use it from the chat agent, the settings screen, and your phone. Plus per-beat controls for mulmoScript and collection engine consolidation.
+
+### Highlights
+
+#### Google Calendar integration (#2108 → #2110, #2111 → #2113, #2114 → #2120)
+
+- **Local desktop OAuth (loopback + PKCE)**: the refresh token is stored only on your machine, never sent to any cloud — the gcloud / gh CLI trust model. One consent covers `calendar.events`, `tasks`, and `drive.file` (Tasks / Drive tools land later, #2115).
+- **Settings → Plugins → Google**: link / status / unlink UI, with guidance when the OAuth client JSON is missing or ambiguous (#2113).
+- **Chat agent `google` tool** (new `@mulmoclaude/google-plugin` preset, `personal` role): list upcoming events and create events by asking in plain language. When the account isn't linked, the agent reads the new error-recovery help and walks you through linking (#2120).
+- **Phone remote commands** `google.calendar.createEvent` / `listEvents` over the Firestore command channel — the token stays on the host (#2110).
+- Strict shared RFC3339 validation (offset required, impossible dates / out-of-range offsets rejected) hardened through four Codex review iterations.
+
+#### mulmoScript: per-beat generate / play (#2119)
+
+Generate or play each beat individually from the script editor, with real generation errors surfaced instead of silent failures.
+
+#### Collections engine consolidation (#2116, #2118)
+
+Collection rollups, and `manageCollection` extracted into `@mulmoclaude/core/collection/server` so both hosts share one engine.
+
+### Fixed
+
+- Malformed stored collection files downgrade to a row rejection instead of failing the whole merge-mode put (#2118).
+
+### Docs / internal
+
+- Collection egress documentation (#2117); multi-file attachment regression test (#2109); dependency refresh (#2106, #2123); shipped-plan archive sweep (#2112).
+
+Ships `@mulmoclaude/core@0.20.0`, `@mulmoclaude/google-plugin@0.1.0`, `@mulmoclaude/collection-plugin@0.11.2`.
+
+---
+
 ## npm packages — 2026-07-17 (2)
 
 Package releases riding PR #2124 (host-neutral Google token path, issue #2122):
