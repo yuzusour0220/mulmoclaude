@@ -164,6 +164,8 @@
 
             <SettingsPhotosTab v-else-if="activeTab === 'photos'" :reload-token="photosReloadToken" />
 
+            <SettingsGoogleTab v-else-if="activeTab === 'google'" :reload-token="googleReloadToken" />
+
             <SettingsModelTab v-else-if="activeTab === 'model'" :reload-token="modelReloadToken" @saved="emit('saved')" />
 
             <SettingsVoiceTab v-else-if="activeTab === 'voice'" :reload-token="voiceReloadToken" />
@@ -201,6 +203,7 @@ import SettingsWorkspaceDirsTab from "./SettingsWorkspaceDirsTab.vue";
 import SettingsReferenceDirsTab from "./SettingsReferenceDirsTab.vue";
 import SettingsMapTab from "./SettingsMapTab.vue";
 import SettingsPhotosTab from "./SettingsPhotosTab.vue";
+import SettingsGoogleTab from "./SettingsGoogleTab.vue";
 import SettingsModelTab from "./SettingsModelTab.vue";
 import SettingsVoiceTab from "./SettingsVoiceTab.vue";
 import SettingsChatIndexTab from "./SettingsChatIndexTab.vue";
@@ -255,7 +258,21 @@ const emit = defineEmits<{
 const mcpTabRef = ref<{ flushDraft: () => boolean; hasPendingDraft: () => boolean } | null>(null);
 
 type TabId =
-  "gemini" | "tools" | "mcp" | "dirs" | "refs" | "map" | "photos" | "model" | "voice" | "chatIndex" | "journal" | "notifications" | "skills" | "roles";
+  | "gemini"
+  | "tools"
+  | "mcp"
+  | "dirs"
+  | "refs"
+  | "map"
+  | "photos"
+  | "google"
+  | "model"
+  | "voice"
+  | "chatIndex"
+  | "journal"
+  | "notifications"
+  | "skills"
+  | "roles";
 
 const activeTab = ref<TabId>("tools");
 
@@ -275,7 +292,7 @@ const GROUPS: readonly { key: string; items: readonly TabId[] }[] = [
   { key: "servers", items: ["mcp"] },
   { key: "workspace", items: ["dirs", "refs"] },
   { key: "notifications", items: ["notifications"] },
-  { key: "plugins", items: ["map", "photos"] },
+  { key: "plugins", items: ["map", "photos", "google"] },
   // Management surfaces relocated from the top-bar launcher (#skills /
   // #roles). Both are static configuration, not dynamic workspace data.
   { key: "management", items: ["skills", "roles"] },
@@ -303,6 +320,7 @@ function onMapSaved(): void {
 // the Photos tab refetches the autoCapture flag (could have been
 // hand-edited in settings.json since the last visit).
 const photosReloadToken = ref(0);
+const googleReloadToken = ref(0);
 const modelReloadToken = ref(0);
 const voiceReloadToken = ref(0);
 const chatIndexReloadToken = ref(0);
@@ -513,6 +531,7 @@ watch(
       loadConnectors();
       mapReloadToken.value += 1;
       photosReloadToken.value += 1;
+      googleReloadToken.value += 1;
       modelReloadToken.value += 1;
       voiceReloadToken.value += 1;
       chatIndexReloadToken.value += 1;

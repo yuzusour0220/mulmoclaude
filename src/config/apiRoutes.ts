@@ -173,6 +173,16 @@ const HOST_API_ROUTES = {
     status: "/api/remote-host/status",
   },
 
+  // Local Google account link (settings UI). authorize starts the
+  // loopback + PKCE consent flow on this host and returns the consent URL;
+  // the refresh token never leaves the machine. See
+  // plans/feat-2111-google-settings-ui.md.
+  google: {
+    status: "/api/google/status",
+    authorize: "/api/google/authorize",
+    unlink: "/api/google/unlink",
+  },
+
   mcpTools: {
     list: "/api/mcp-tools",
     invoke: "/api/mcp-tools/:tool",

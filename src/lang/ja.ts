@@ -244,6 +244,7 @@ const jaMessages = {
       refs: "参照ディレクトリ",
       map: "地図",
       photos: "写真",
+      google: "Google",
       model: "モデル",
       voice: "音声",
       chatIndex: "チャットインデックス",
@@ -261,6 +262,23 @@ const jaMessages = {
       management: "管理",
     },
     navAriaLabel: "設定セクション",
+    googleTab: {
+      description:
+        "Google アカウントを連携すると、このマシンから Google API（まずはカレンダー）を直接呼び出せます。リフレッシュトークンはこのマシンにのみ保存され、Google 以外には送信されません。",
+      statusLinked: "連携済み",
+      statusNotLinked: "未連携",
+      statusPending: "ブラウザでの同意完了を待っています…",
+      connect: "Google アカウントを連携",
+      unlink: "連携を解除",
+      unlinkConfirm: "Google アカウントの連携を解除しますか？保存済みトークンは無効化され、このマシンから削除されます。",
+      clientSecretMissing:
+        "OAuth クライアント認証情報が見つかりません。Google Cloud Console からデスクトップアプリ用のクライアント JSON をダウンロードし、~/.secrets/ に配置してください（client_secret_*.json）。",
+      clientSecretAmbiguous:
+        "~/.secrets/ に client_secret_*.json が複数見つかりました。保存済みトークンと OAuth クライアントの組み合わせがずれないよう、1つだけ残してください。",
+      loadError: "Google 連携状態の取得に失敗しました。",
+      connectError: "Google 認可フローの開始に失敗しました。",
+      unlinkError: "Google 連携の解除に失敗しました。",
+    },
     mapTab: {
       description: "地図プラグインで使う Google Maps API キーを設定します。キーはローカルに保存され、Google Maps への通信以外で送信されることはありません。",
       apiKeyLabel: "Google Maps API キー",

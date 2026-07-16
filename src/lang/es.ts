@@ -246,6 +246,7 @@ const esMessages = {
       refs: "Directorios de referencia",
       map: "Mapa",
       photos: "Fotos",
+      google: "Google",
       model: "Modelo",
       voice: "Voz",
       chatIndex: "Índice de chat",
@@ -263,6 +264,23 @@ const esMessages = {
       management: "Gestión",
     },
     navAriaLabel: "Secciones de ajustes",
+    googleTab: {
+      description:
+        "Vincula tu cuenta de Google para que esta máquina pueda llamar a las API de Google (primero Calendar). El token de actualización se guarda solo en esta máquina y nunca se envía a ningún servidor que no sea Google.",
+      statusLinked: "Vinculada",
+      statusNotLinked: "No vinculada",
+      statusPending: "Esperando a que termine el consentimiento en el navegador…",
+      connect: "Vincular cuenta de Google",
+      unlink: "Desvincular",
+      unlinkConfirm: "¿Desvincular la cuenta de Google? El token guardado se revocará y se eliminará de esta máquina.",
+      clientSecretMissing:
+        "No se encontraron credenciales de cliente OAuth. Descarga el JSON de cliente de aplicación de escritorio desde Google Cloud Console y colócalo en ~/.secrets/ (client_secret_*.json).",
+      clientSecretAmbiguous:
+        "Se encontraron varios archivos client_secret_*.json en ~/.secrets/. Conserva solo uno para que el token guardado siga emparejado con el cliente OAuth correcto.",
+      loadError: "No se pudo cargar el estado de la vinculación con Google.",
+      connectError: "No se pudo iniciar el flujo de autorización de Google.",
+      unlinkError: "No se pudo desvincular la cuenta de Google.",
+    },
     mapTab: {
       description: "Configura la clave de la API de Google Maps que usa el plugin de mapas. La clave se guarda localmente y solo se envía a Google Maps.",
       apiKeyLabel: "Clave API de Google Maps",
