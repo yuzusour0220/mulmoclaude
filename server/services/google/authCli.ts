@@ -1,11 +1,16 @@
 // One-shot CLI (`yarn google:auth`): run the loopback + PKCE consent flow and
 // store the refresh token locally. Same trigger model as `gcloud auth login`.
-// This is an interactive terminal entry point, so it talks via console, not
-// the server logger.
+// Interactive terminal entry point — writes straight to stdout/stderr because
+// the server logger's structured output would mangle the URL the user must
+// open when the browser doesn't launch.
 import { spawn } from "node:child_process";
 import { errorMessage } from "../../utils/errors.js";
 import { authorizeGoogle } from "./auth.js";
 import { googleTokenPath } from "./paths.js";
+
+const printLine = (line: string): void => {
+  process.stdout.write(`${line}\n`);
+};
 
 // Same platform triple as the folder-reveal in server/api/routes/files.ts.
 const openInBrowser = (url: string): void => {
@@ -19,17 +24,17 @@ const openInBrowser = (url: string): void => {
 };
 
 const main = async (): Promise<void> => {
-  console.log("Opening the Google consent page in your browser…");
+  printLine("Opening the Google consent page in your browser…");
   await authorizeGoogle({
     onAuthUrl: (url) => {
-      console.log(`If the browser does not open, visit:\n${url}\n`);
+      printLine(`If the browser does not open, visit:\n${url}\n`);
       openInBrowser(url);
     },
   });
-  console.log(`✅ Google account linked. Tokens stored at ${googleTokenPath()} (mode 600).`);
+  printLine(`✅ Google account linked. Tokens stored at ${googleTokenPath()} (mode 600).`);
 };
 
 main().catch((err: unknown) => {
-  console.error(`❌ ${errorMessage(err)}`);
+  process.stderr.write(`❌ ${errorMessage(err)}\n`);
   process.exitCode = 1;
 });

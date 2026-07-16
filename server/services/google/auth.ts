@@ -74,6 +74,11 @@ const authCodeFromCallback = (url: URL, expectedState: string): string => {
   return code;
 };
 
+const respondHtml = (res: http.ServerResponse, status: number, message: string): void => {
+  res.writeHead(status, { "Content-Type": "text/html; charset=utf-8" });
+  res.end(`<html><body><h3>${message}</h3></body></html>`);
+};
+
 const waitForAuthCode = (server: http.Server, expectedState: string, timeoutMs: number): Promise<string> =>
   new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error(`authorization timed out after ${timeoutMs / ONE_SECOND_MS}s`)), timeoutMs);
@@ -84,12 +89,15 @@ const waitForAuthCode = (server: http.Server, expectedState: string, timeoutMs: 
         res.end();
         return;
       }
-      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-      res.end("<html><body><h3>Authorization complete — you can close this tab.</h3></body></html>");
       clearTimeout(timer);
       try {
-        resolve(authCodeFromCallback(url, expectedState));
+        const code = authCodeFromCallback(url, expectedState);
+        respondHtml(res, 200, "Authorization complete — you can close this tab.");
+        resolve(code);
       } catch (err) {
+        // Static text only — the failure detail echoes query-string content,
+        // which must not be reflected into HTML. The CLI prints the detail.
+        respondHtml(res, 400, "Authorization failed — see the terminal for details. You can close this tab.");
         reject(err);
       }
     });
