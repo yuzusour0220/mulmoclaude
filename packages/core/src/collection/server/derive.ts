@@ -6,7 +6,7 @@
 // time; this module gives server consumers (manageCollection getItems)
 // the same numbers the user sees on screen.
 
-import { backlinkRows, projectBacklinkRow } from "../core/backlinks";
+import { backlinkRows, projectBacklinkRow, rollupValue } from "../core/backlinks";
 import { deriveAll, type DeriveRefRecords } from "../core/deriveAll";
 import { loadCollection, type DiscoveryOptions } from "./discovery";
 import type { LoadedCollection } from "./discoveredCollection";
@@ -39,12 +39,13 @@ function uniqueEmbedTargets(schema: CollectionSchema): string[] {
   return [...targets];
 }
 
-/** Slugs of every SOURCE collection a `backlinks` field reverses over —
- *  loaded exactly like ref/embed targets (whole collection, once). */
+/** Slugs of every SOURCE collection a `backlinks` or `rollup` field
+ *  reverses over — loaded exactly like ref/embed targets (whole
+ *  collection, once; the two field kinds share one load). */
 function uniqueBacklinkSources(schema: CollectionSchema): string[] {
   const sources = new Set<string>();
   for (const field of Object.values(schema.fields)) {
-    if (field.type === "backlinks" && field.from.length > 0) sources.add(field.from);
+    if ((field.type === "backlinks" || field.type === "rollup") && field.from.length > 0) sources.add(field.from);
   }
   return [...sources];
 }
@@ -121,8 +122,26 @@ function projectComputed(schema: CollectionSchema, enriched: CollectionItem, lin
     if (field.type === "backlinks") {
       enriched[key] = projectBacklinks(field, schema, enriched, linked);
     }
+    if (field.type === "rollup") {
+      enriched[key] = projectRollup(field, schema, enriched, linked);
+    }
   }
   return enriched;
+}
+
+/** The rollup scalar for one record — same reverse machinery as
+ *  backlinks, collapsed to a number. An unresolvable source is null
+ *  (em-dash); an empty match set is a real 0. */
+function projectRollup(
+  field: Extract<CollectionFieldSpec, { type: "rollup" }>,
+  schema: CollectionSchema,
+  enriched: CollectionItem,
+  linked: Record<string, LinkedTarget>,
+): number | null {
+  const source = linked[field.from];
+  if (!source) return null;
+  const selfId = String(enriched[schema.primaryKey] ?? "");
+  return rollupValue(field, selfId, Object.values(source.byId));
 }
 
 /** Enrich records with every host-computed field: derived formulas

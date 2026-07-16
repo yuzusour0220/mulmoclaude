@@ -221,6 +221,32 @@ const BacklinksFieldZ = z
   })
   .refine((spec) => isSafeSlug(spec.from), slugMessage("from"));
 
+/** A cross-collection AGGREGATE over a backlink relation (plan step ⑤ of
+ *  plans/collection-ontology.md): a computed number — never stored — that
+ *  sums a source column (or counts rows) over the records in `from` whose
+ *  `via` ref points at this record. Same `from`/`via`/`filter` vocabulary
+ *  and reverse-loading machinery as `backlinks`; resolution shared
+ *  server/client via `core/backlinks.ts`'s `rollupValue`. Deliberately a
+ *  STRUCTURED field, not `sumOver(...)` formula syntax — the derived
+ *  evaluator's no-string-literals boundary stays untouched — and
+ *  deliberately just `sum` | `count`. Fail-soft: an unresolvable `from`
+ *  renders em-dash; an empty match set is a real 0. */
+const RollupFieldZ = z
+  .object({
+    type: z.literal("rollup"),
+    ...fieldBase,
+    from: z.string().min(1),
+    via: z.string().trim().min(1),
+    op: z.enum(["sum", "count"]),
+    column: z.string().trim().min(1).optional(),
+    filter: WhenZ.optional(),
+  })
+  .refine((spec) => isSafeSlug(spec.from), slugMessage("from"))
+  .refine((spec) => (spec.op === "sum") === (spec.column !== undefined), {
+    message: 'a rollup\'s `column` names the source column to aggregate: required for op "sum", meaningless for op "count"',
+    path: ["column"],
+  });
+
 /** A checkbox that is a pure PROJECTION of an `enum` field — it stores
  *  nothing of its own. Checked when the enum named by `field` equals
  *  `onValue`; toggling writes `onValue` / `offValue` back to that enum
@@ -245,6 +271,7 @@ export const FieldSpecZ = z.discriminatedUnion("type", [
   DerivedFieldZ,
   EmbedFieldZ,
   BacklinksFieldZ,
+  RollupFieldZ,
   ToggleFieldZ,
 ]);
 

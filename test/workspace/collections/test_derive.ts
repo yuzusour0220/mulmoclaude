@@ -272,6 +272,71 @@ describe("enrichItems — derived across refs", () => {
     assert.equal(rendering.deriveAll, deriveAll);
   });
 
+  it("rollup: sums a source column over matching rows (filter applied, non-numerics skipped), counts, and fails soft", async () => {
+    writeSkill("stock-quotes", {
+      ...quotesSchema,
+      fields: {
+        ...quotesSchema.fields,
+        totalShares: { type: "rollup", label: "Total shares", from: "portfolio", via: "ticker", op: "sum", column: "shares" },
+        openHoldings: {
+          type: "rollup",
+          label: "Open holdings",
+          from: "portfolio",
+          via: "ticker",
+          op: "count",
+          filter: { field: "status", in: ["open"] },
+        },
+        ghosts: { type: "rollup", label: "Ghosts", from: "no-such-collection", via: "ticker", op: "count" },
+      },
+    });
+    writeRecord("data/portfolio/items", "h1", { id: "h1", ticker: "aapl", shares: 10, status: "open" });
+    writeRecord("data/portfolio/items", "h2", { id: "h2", ticker: "aapl", shares: "5", status: "closed" }); // numeric string counts
+    writeRecord("data/portfolio/items", "h3", { id: "h3", ticker: "aapl", status: "open" }); // no shares — skipped by sum, counted by count
+    writeRecord("data/portfolio/items", "h4", { id: "h4", ticker: "msft", shares: 99, status: "open" }); // other ticker
+    const collection = await loadCollection("stock-quotes", opts());
+    assert.ok(collection);
+    const enriched = await enrichItems(collection, [{ symbol: "aapl", price: 200 }, { symbol: "ibm" }], opts());
+    assert.equal(enriched[0]?.totalShares, 15); // 10 + "5"; h3 has no value, h4 is another ticker
+    assert.equal(enriched[0]?.openHoldings, 2); // h1 + h3 (h2 is closed)
+    assert.equal(enriched[0]?.ghosts, null); // unresolvable source → em-dash
+    assert.equal(enriched[1]?.totalShares, 0); // resolvable source, no matches → a real 0
+  });
+
+  it("rollup: the client cell agrees with the server value (determinism cross-check)", async () => {
+    writeSkill("stock-quotes", {
+      ...quotesSchema,
+      fields: {
+        ...quotesSchema.fields,
+        totalShares: { type: "rollup", label: "Total shares", from: "portfolio", via: "ticker", op: "sum", column: "shares" },
+      },
+    });
+    writeRecord("data/portfolio/items", "h1", { id: "h1", ticker: "aapl", shares: 10, status: "open" });
+    writeRecord("data/portfolio/items", "h2", { id: "h2", ticker: "aapl", shares: 5, status: "open" });
+    const collection = await loadCollection("stock-quotes", opts());
+    assert.ok(collection);
+    const [server] = await enrichItems(collection, [{ symbol: "aapl", price: 200 }], opts());
+
+    const portfolio = await loadCollection("portfolio", opts());
+    assert.ok(portfolio);
+    const detail = toDetail(collection) as unknown as CollectionDetail;
+    const rendering = useCollectionRendering(ref<CollectionDetail | null>(detail), ref("en"));
+    rendering.embedCache.value = {
+      portfolio: {
+        schema: portfolio.schema as unknown as CollectionDetail["schema"],
+        items: [
+          { id: "h1", ticker: "aapl", shares: 10, status: "open" },
+          { id: "h2", ticker: "aapl", shares: 5, status: "open" },
+        ],
+      },
+    };
+    const field = detail.schema.fields.totalShares as FieldSpec;
+    assert.equal(server?.totalShares, 15);
+    assert.equal(rendering.rollupDisplay(field, { symbol: "aapl", price: 200 }), "15");
+    // Unresolvable source on the client renders the em-dash, like every deref.
+    rendering.embedCache.value = {};
+    assert.equal(rendering.rollupDisplay(field, { symbol: "aapl", price: 200 }), "—");
+  });
+
   it("backlinks: the client view-model agrees with the server rows (determinism cross-check)", async () => {
     const holdersField = { type: "backlinks", label: "Holders", from: "portfolio", via: "ticker", display: ["shares", "value"] };
     writeSkill("stock-quotes", { ...quotesSchema, fields: { ...quotesSchema.fields, holders: holdersField } });

@@ -126,6 +126,8 @@ The reserved kind from `schema.ts:174-178`, exactly Foundry's Action shape minus
 }
 ```
 
+**✅ DONE 2026-07-16** (`RollupFieldZ` union variant — `column` required iff `op: "sum"`; joins `COMPUTED_TYPES`; shared `rollupValue` in `core/backlinks.ts` (with `coerceNumeric` moved there as the one "numeric" definition); server `projectRollup` + client `rollupDisplay` both run the identical index-then-aggregate over the reverse sources (memoized client-side per cache generation — rollup renders per LIST cell); unresolvable source ⇒ null/em-dash, empty match set ⇒ real 0; `schemaRelations` reports `kind: "rollup"`).
+
 - Evaluator untouched. Fail-soft to em-dash like all derefs. `count` needs no `column`.
 - **Server/client parity**: `deriveAll` runs on both sides with identical inputs; the client must load the same reverse-source collections with the same snapshot, or values diverge. Sequenced after backlinks precisely because it inherits that loading work.
 - No rollups inside arithmetic formulas until a real schema demands it.
@@ -146,7 +148,7 @@ The reserved kind from `schema.ts:174-178`, exactly Foundry's Action shape minus
 ② backlinks                   — ✅ DONE 2026-07-15 (from/via vocabulary + reverse loading established)
 ③ kind:"agent" actions        — ✅ DONE 2026-07-15 (completes the 2×2)
 ④ kind:"mutate"               — ✅ DONE 2026-07-15 (fills the reserved slot)
-⑤ rollup                      — rides on ②'s machinery
+⑤ rollup                      — ✅ DONE 2026-07-16 (rides on ②'s machinery)
 ⑥ egress pattern doc          — falls out of ③ for free (help file + template, no host code)
 ```
 

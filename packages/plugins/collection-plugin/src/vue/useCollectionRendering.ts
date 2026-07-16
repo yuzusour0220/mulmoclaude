@@ -50,6 +50,7 @@ import {
   lookupRefDisplay,
   refOptionsFor,
   renderDerived,
+  renderRollup,
   renderSubCell,
 } from "./useCollectionRendering.renderers";
 
@@ -64,6 +65,10 @@ export interface CollectionRendering {
   embedOptions: (targetSlug: string) => RefOption[];
   embedViewsFor: (record: CollectionItem | null) => Record<string, EmbedView>;
   backlinksViewsFor: (record: CollectionItem | null) => Record<string, BacklinksView>;
+  /** Rollup cell text: the aggregate as a plain number, em-dash when the
+   *  source collection couldn't be resolved. Callable per LIST cell —
+   *  source derivation is memoized per cache generation. */
+  rollupDisplay: (field: FieldSpec, record: CollectionItem | null) => string;
   resolveCurrency: (field: FieldSpec, record: CollectionItem | null | undefined) => string | undefined;
   currencySymbol: (currency: string | undefined) => string;
   formatMoney: (value: unknown, currency: string | undefined, displayLocale: string) => string;
@@ -108,6 +113,7 @@ export function useCollectionRendering(collection: Ref<CollectionDetail | null>,
     embedOptions: (targetSlug) => embedOptionsFor(embedCache.value, targetSlug),
     embedViewsFor: (record) => buildEmbedViews(collection.value?.schema ?? null, embedCache.value, record, locale.value),
     backlinksViewsFor: (record) => buildBacklinksViews(collection.value?.schema ?? null, embedCache.value, record, locale.value),
+    rollupDisplay: (field, record) => renderRollup(field, record, collection.value?.schema ?? null, embedCache.value),
     currencySymbol: (currency) => currencySymbolForLocale(currency, locale.value),
     // A `file` field holds a workspace-relative path; the host resolves it to a
     // served artifact URL (html/svg) or null. The host owns the path guard

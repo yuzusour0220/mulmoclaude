@@ -34,3 +34,37 @@ export function projectBacklinkRow(row: CollectionItem, display: readonly string
   const keys = display.includes(primaryKey) ? display : [primaryKey, ...display];
   return Object.fromEntries(keys.filter((key) => key in row).map((key) => [key, row[key]]));
 }
+
+/** The `rollup` member of the field-spec union. */
+export type RollupFieldSpec = Extract<CollectionFieldSpec, { type: "rollup" }>;
+
+/** Numeric coercion shared by the strict record lint (`./recordZ`) and
+ *  rollup sums: a plain number, or a non-blank numeric string (renderers
+ *  coerce those via `Number(...)`, so they display fine). Anything else —
+ *  arrays (`[]` stringifies to `""` = 0, `[42]` to `"42"`), booleans,
+ *  objects — is NaN. Lives here (zod-free) so both consumers share one
+ *  definition of "numeric". */
+export function coerceNumeric(value: unknown): number {
+  if (typeof value === "number") return value;
+  if (typeof value === "string" && value.trim() !== "") return Number(value);
+  return NaN;
+}
+
+/** The rollup aggregate over the matching source rows (plan step ⑤):
+ *  `count` = how many rows match; `sum` = the total of `column` over
+ *  them, skipping non-numeric / absent values (a partially-filled source
+ *  still sums what's there). An EMPTY match set is a real 0 — the
+ *  fail-soft null lives at the caller, for a source collection that
+ *  couldn't be resolved at all. Same derived-source-records contract as
+ *  `backlinkRows`: pass records derived against themselves, so summing a
+ *  self-contained derived column (an invoice `total`) works. */
+export function rollupValue(spec: Pick<RollupFieldSpec, "via" | "filter" | "op" | "column">, recordId: string, sourceItems: CollectionItem[]): number {
+  const rows = backlinkRows(spec, recordId, sourceItems);
+  if (spec.op === "count") return rows.length;
+  let total = 0;
+  for (const row of rows) {
+    const value = coerceNumeric(spec.column === undefined ? undefined : row[spec.column]);
+    if (Number.isFinite(value)) total += value;
+  }
+  return total;
+}
