@@ -649,6 +649,47 @@ describe("discoverCollections — field-type support", () => {
     assert.equal(collections.length, 0, "both malformed backlinks schemas must be skipped");
   });
 
+  it("accepts `rollup` (sum with column, count without) and reports it in the schema", async () => {
+    writeSkill("test-rollup", {
+      title: "Clients-like",
+      icon: "people",
+      dataPath: "data/rollup/items",
+      primaryKey: "id",
+      fields: {
+        id: { type: "string", label: "ID", primary: true, required: true },
+        unbilledHours: {
+          type: "rollup",
+          label: "Unbilled hours",
+          from: "worklog",
+          via: "clientId",
+          op: "sum",
+          column: "hours",
+          filter: { field: "billed", in: ["false"] },
+        },
+        entryCount: { type: "rollup", label: "Entries", from: "worklog", via: "clientId", op: "count" },
+      },
+    });
+    const collections = await listCollections();
+    assert.equal(collections.length, 1);
+    const field = collections[0]?.schema.fields.unbilledHours;
+    assert.equal(field?.type === "rollup" && field.op, "sum");
+    assert.equal(collections[0]?.schema.fields.entryCount?.type, "rollup");
+  });
+
+  it("rejects rollup misdeclarations: sum without column, count with column, traversal from", async () => {
+    const base = {
+      title: "X",
+      icon: "warning",
+      primaryKey: "id",
+      fields: { id: { type: "string", label: "ID", primary: true, required: true } },
+    };
+    const withRollup = (spec: object) => ({ ...base, fields: { ...base.fields, agg: { type: "rollup", label: "Agg", ...spec } } });
+    writeSkill("test-rollup-nocol", { ...withRollup({ from: "worklog", via: "clientId", op: "sum" }), dataPath: "data/ru1/items" });
+    writeSkill("test-rollup-countcol", { ...withRollup({ from: "worklog", via: "clientId", op: "count", column: "hours" }), dataPath: "data/ru2/items" });
+    writeSkill("test-rollup-traversal", { ...withRollup({ from: "../escape", via: "clientId", op: "count" }), dataPath: "data/ru3/items" });
+    assert.equal((await listCollections()).length, 0, "every misdeclared rollup schema must be skipped");
+  });
+
   it("rejects `embed` whose `to` contains path traversal", async () => {
     writeSkill("test-embed-traversal", {
       title: "Traversal Embed",

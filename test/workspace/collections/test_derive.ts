@@ -272,6 +272,139 @@ describe("enrichItems — derived across refs", () => {
     assert.equal(rendering.deriveAll, deriveAll);
   });
 
+  it("rollup: sums a source column over matching rows (filter applied, non-numerics skipped), counts, and fails soft", async () => {
+    writeSkill("stock-quotes", {
+      ...quotesSchema,
+      fields: {
+        ...quotesSchema.fields,
+        totalShares: { type: "rollup", label: "Total shares", from: "portfolio", via: "ticker", op: "sum", column: "shares" },
+        openHoldings: {
+          type: "rollup",
+          label: "Open holdings",
+          from: "portfolio",
+          via: "ticker",
+          op: "count",
+          filter: { field: "status", in: ["open"] },
+        },
+        ghosts: { type: "rollup", label: "Ghosts", from: "no-such-collection", via: "ticker", op: "count" },
+      },
+    });
+    writeRecord("data/portfolio/items", "h1", { id: "h1", ticker: "aapl", shares: 10, status: "open" });
+    writeRecord("data/portfolio/items", "h2", { id: "h2", ticker: "aapl", shares: "5", status: "closed" }); // numeric string counts
+    writeRecord("data/portfolio/items", "h3", { id: "h3", ticker: "aapl", status: "open" }); // no shares — skipped by sum, counted by count
+    writeRecord("data/portfolio/items", "h4", { id: "h4", ticker: "msft", shares: 99, status: "open" }); // other ticker
+    const collection = await loadCollection("stock-quotes", opts());
+    assert.ok(collection);
+    const enriched = await enrichItems(collection, [{ symbol: "aapl", price: 200 }, { symbol: "ibm" }], opts());
+    assert.equal(enriched[0]?.totalShares, 15); // 10 + "5"; h3 has no value, h4 is another ticker
+    assert.equal(enriched[0]?.openHoldings, 2); // h1 + h3 (h2 is closed)
+    assert.equal(enriched[0]?.ghosts, null); // unresolvable source → em-dash
+    assert.equal(enriched[1]?.totalShares, 0); // resolvable source, no matches → a real 0
+  });
+
+  it("a derived formula can read rollup fields (rollups resolve first) — the W杯 played = home + away shape", async () => {
+    // A match points at a team via EITHER homeTeam or awayTeam, so the
+    // combined count is two one-sided rollups added by a formula.
+    writeSkill("teams", {
+      title: "Teams",
+      icon: "sports_soccer",
+      dataPath: "data/teams/items",
+      primaryKey: "id",
+      fields: {
+        id: { type: "string", label: "ID", primary: true, required: true },
+        homePlayed: { type: "rollup", label: "Home", from: "matches", via: "homeTeam", op: "count" },
+        awayPlayed: { type: "rollup", label: "Away", from: "matches", via: "awayTeam", op: "count" },
+        played: { type: "derived", label: "Played", formula: "homePlayed + awayPlayed" },
+      },
+    });
+    writeSkill("matches", {
+      title: "Matches",
+      icon: "stadium",
+      dataPath: "data/matches/items",
+      primaryKey: "id",
+      fields: {
+        id: { type: "string", label: "ID", primary: true, required: true },
+        homeTeam: { type: "ref", label: "Home", to: "teams" },
+        awayTeam: { type: "ref", label: "Away", to: "teams" },
+      },
+    });
+    const writeMatch = (matchId: string, home: string, away: string) => {
+      const dir = path.join(workdir, "data/matches/items");
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(path.join(dir, `${matchId}.json`), JSON.stringify({ id: matchId, homeTeam: home, awayTeam: away }));
+    };
+    writeMatch("m1", "japan", "sweden");
+    writeMatch("m2", "brazil", "japan");
+    writeMatch("m3", "japan", "brazil");
+    const collection = await loadCollection("teams", opts());
+    assert.ok(collection);
+    const enriched = await enrichItems(collection, [{ id: "japan" }, { id: "sweden" }], opts());
+    assert.equal(enriched[0]?.homePlayed, 2);
+    assert.equal(enriched[0]?.awayPlayed, 1);
+    assert.equal(enriched[0]?.played, 3);
+    assert.equal(enriched[1]?.played, 1);
+
+    // Client parity: evaluateDerivedAgainstItem runs the same rollups-
+    // then-formula order off the primed reverse-source cache.
+    const detail = toDetail(collection) as unknown as CollectionDetail;
+    const rendering = useCollectionRendering(ref<CollectionDetail | null>(detail), ref("en"));
+    const matches = await loadCollection("matches", opts());
+    assert.ok(matches);
+    rendering.embedCache.value = {
+      matches: {
+        schema: matches.schema as unknown as CollectionDetail["schema"],
+        items: [
+          { id: "m1", homeTeam: "japan", awayTeam: "sweden" },
+          { id: "m2", homeTeam: "brazil", awayTeam: "japan" },
+          { id: "m3", homeTeam: "japan", awayTeam: "brazil" },
+        ],
+      },
+    };
+    const playedField = detail.schema.fields.played as FieldSpec;
+    assert.equal(rendering.evaluateDerivedAgainstItem(playedField, "played", { id: "japan" }), 3);
+    assert.deepEqual(rendering.deriveRecord({ id: "japan" }).played, 3);
+  });
+
+  it("rollup: the client cell agrees with the server value (determinism cross-check)", async () => {
+    writeSkill("stock-quotes", {
+      ...quotesSchema,
+      fields: {
+        ...quotesSchema.fields,
+        totalShares: { type: "rollup", label: "Total shares", from: "portfolio", via: "ticker", op: "sum", column: "shares" },
+      },
+    });
+    writeRecord("data/portfolio/items", "h1", { id: "h1", ticker: "aapl", shares: 10, status: "open" });
+    writeRecord("data/portfolio/items", "h2", { id: "h2", ticker: "aapl", shares: 5, status: "open" });
+    const collection = await loadCollection("stock-quotes", opts());
+    assert.ok(collection);
+    const [server] = await enrichItems(collection, [{ symbol: "aapl", price: 200 }], opts());
+
+    const portfolio = await loadCollection("portfolio", opts());
+    assert.ok(portfolio);
+    const detail = toDetail(collection) as unknown as CollectionDetail;
+    const rendering = useCollectionRendering(ref<CollectionDetail | null>(detail), ref("en"));
+    rendering.embedCache.value = {
+      portfolio: {
+        schema: portfolio.schema as unknown as CollectionDetail["schema"],
+        items: [
+          { id: "h1", ticker: "aapl", shares: 10, status: "open" },
+          { id: "h2", ticker: "aapl", shares: 5, status: "open" },
+        ],
+      },
+    };
+    const field = detail.schema.fields.totalShares as FieldSpec;
+    assert.equal(server?.totalShares, 15);
+    assert.equal(rendering.rollupDisplay(field, { symbol: "aapl", price: 200 }), "15");
+    // A record with an EMPTY primary key matches nothing → a real 0 on
+    // BOTH sides, not a client-only em-dash (Codex parity review).
+    const [emptyIdServer] = await enrichItems(collection, [{ price: 1 }], opts());
+    assert.equal(emptyIdServer?.totalShares, 0);
+    assert.equal(rendering.rollupDisplay(field, { price: 1 }), "0");
+    // Unresolvable source on the client renders the em-dash, like every deref.
+    rendering.embedCache.value = {};
+    assert.equal(rendering.rollupDisplay(field, { symbol: "aapl", price: 200 }), "—");
+  });
+
   it("backlinks: the client view-model agrees with the server rows (determinism cross-check)", async () => {
     const holdersField = { type: "backlinks", label: "Holders", from: "portfolio", via: "ticker", display: ["shares", "value"] };
     writeSkill("stock-quotes", { ...quotesSchema, fields: { ...quotesSchema.fields, holders: holdersField } });

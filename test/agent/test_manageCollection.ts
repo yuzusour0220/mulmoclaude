@@ -252,10 +252,13 @@ describe("manageCollection — putItems", () => {
       fields: {
         symbol: { type: "string", label: "Symbol", primary: true, required: true },
         holders: { type: "backlinks", label: "Holders", from: "portfolio", via: "ticker", display: ["shares"] },
+        totalShares: { type: "rollup", label: "Total shares", from: "portfolio", via: "ticker", op: "sum", column: "shares" },
       },
     });
     const backlinks = await runJson({ action: "putItems", slug: "quotes-linked", items: [{ symbol: "x", holders: [] }] });
     assert.match((backlinks.rejected as { problem: string }[])[0]?.problem ?? "", /'holders' is a backlinks view/);
+    const rollup = await runJson({ action: "putItems", slug: "quotes-linked", items: [{ symbol: "y", totalShares: 15 }] });
+    assert.match((rollup.rejected as { problem: string }[])[0]?.problem ?? "", /'totalShares' is a rollup/);
   });
 
   it("rejects path-shaped ids before any write", async () => {
@@ -384,12 +387,14 @@ describe("manageCollection — getOntology", () => {
       fields: {
         id: { type: "string", label: "ID", primary: true, required: true },
         payments: { type: "backlinks", label: "Payments", from: "portfolio", via: "invoiceId", display: ["shares"] },
+        paidTotal: { type: "rollup", label: "Paid", from: "portfolio", via: "invoiceId", op: "sum", column: "shares" },
         lines: { type: "table", label: "Lines", of: { clientId: { type: "ref", label: "Client", to: "portfolio" } } },
       },
     });
     const invoice = entryFor(await getOntology(), "invoice");
     assert.deepEqual(invoice.relations, [
       { field: "payments", kind: "backlinks", to: "portfolio" },
+      { field: "paidTotal", kind: "rollup", to: "portfolio" },
       { field: "lines.clientId", kind: "ref", to: "portfolio" },
     ]);
   });

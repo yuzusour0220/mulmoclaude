@@ -135,13 +135,14 @@ export function uniqueEmbedTargets(schema: CollectionSchema): string[] {
   return [...targets];
 }
 
-/** Slugs of every SOURCE collection a `backlinks` field reverses over.
- *  Top-level only, like `embed` (the schema rejects `backlinks` inside a
- *  table's `of`). Mirrors the server's `uniqueBacklinkSources`. */
+/** Slugs of every SOURCE collection a `backlinks` or `rollup` field
+ *  reverses over (the two share one load). Top-level only, like `embed`
+ *  (the schema rejects both inside a table's `of`). Mirrors the server's
+ *  `uniqueBacklinkSources`. */
 export function uniqueBacklinkSources(schema: CollectionSchema): string[] {
   const sources = new Set<string>();
   for (const field of Object.values(schema.fields)) {
-    if (field.type === "backlinks" && field.from.length > 0) sources.add(field.from);
+    if ((field.type === "backlinks" || field.type === "rollup") && field.from.length > 0) sources.add(field.from);
   }
   return [...sources];
 }

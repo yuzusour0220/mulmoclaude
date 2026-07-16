@@ -27,6 +27,7 @@
 // re-exports it via `../server/validate`.
 
 import { z } from "zod";
+import { coerceNumeric } from "./backlinks";
 import { parseIsoDate, parseIsoDateTime } from "./calendarGrid";
 import { COMPUTED_TYPES } from "./schema";
 import type { CollectionFieldSpec, CollectionItem, CollectionSchema, CollectionSubFieldSpec } from "./schema";
@@ -54,15 +55,8 @@ function enforcedProblem(key: string, spec: AnyFieldSpec, value: unknown): strin
   return null;
 }
 
-/** Numeric coercion for the strict `number`/`money` check: a plain number,
- *  or a non-blank numeric string (renderers coerce those via `Number(...)`,
- *  so they display fine). Anything else — arrays (`[]` stringifies to `""`
- *  = 0, `[42]` to `"42"`), booleans, objects — is NaN and gets flagged. */
-function coerceNumeric(value: unknown): number {
-  if (typeof value === "number") return value;
-  if (typeof value === "string" && value.trim() !== "") return Number(value);
-  return NaN;
-}
+// Numeric coercion for the strict `number`/`money` check — moved to
+// `./backlinks` so rollup sums share the same definition of "numeric".
 
 /** Report-only per-type checks on a PRESENT value. Date / datetime reuse the
  *  calendar's STRICT civil parsers (`parseIsoDate` / `parseIsoDateTime`), so

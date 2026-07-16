@@ -618,6 +618,14 @@
                       >{{ derivedDisplay(field, evaluateDerivedAgainstItem(field, String(key), item), item) }}</span
                     >
 
+                    <!-- Rollup aggregates (cross-collection, host/client-computed) -->
+                    <span
+                      v-else-if="field.type === 'rollup'"
+                      class="inline-block truncate tabular-nums font-bold text-indigo-900 bg-indigo-50/50 px-1.5 py-0.5 rounded border border-indigo-100/50"
+                      :data-testid="`collections-rollup-${key}-${item[collection.schema.primaryKey]}`"
+                      >{{ render.rollupDisplay(field, item) }}</span
+                    >
+
                     <!-- URL string → external link (new tab). `@click.stop` so
                      clicking the link doesn't also open the row's detail. -->
                     <a
@@ -825,6 +833,7 @@ import {
   defangForPrompt,
   actionVisible,
   agentActionRunKey,
+  COMPUTED_TYPES,
   fieldVisible,
   resolveEnumColor,
   buildUpdatedRecord,
@@ -1018,18 +1027,7 @@ const chatInputEl = ref<HTMLTextAreaElement | null>(null);
 // helpers the list table renders with; pass the whole object to the
 // panel as its `render` prop.
 const render = useCollectionRendering(collection, locale);
-const {
-  refRecordCache,
-  refDisplay,
-  formatMoney,
-  resolveCurrency,
-  derivedDisplay,
-  evaluateDerivedAgainstItem,
-  formatCell,
-  isExternalUrl,
-  artifactUrl,
-  fileRoutePath,
-} = render;
+const { refDisplay, formatMoney, resolveCurrency, derivedDisplay, evaluateDerivedAgainstItem, formatCell, isExternalUrl, artifactUrl, fileRoutePath } = render;
 
 const searchQuery = ref("");
 
@@ -1133,7 +1131,7 @@ function derivedSortValue(field: FieldSpec, key: string, item: CollectionItem): 
   if (display === undefined || display === "number" || display === "money") {
     return numericSortValue(evaluateDerivedAgainstItem(field, key, item));
   }
-  const enriched = collection.value ? render.deriveAll(collection.value.schema, item, render.refRecordCache.value) : item;
+  const enriched = render.deriveRecord(item);
   if (display === "date") return dateSortValue(enriched[key]);
   return stringSortValue(enriched[key]);
 }
@@ -1894,12 +1892,11 @@ function openCreate(): void {
       boolTouched[key] = false;
     } else if (field.type === "table") {
       table[key] = [];
-    } else if (field.type !== "derived" && field.type !== "embed" && field.type !== "backlinks" && field.type !== "toggle") {
+    } else if (!COMPUTED_TYPES.has(field.type)) {
       text[key] = "";
     }
-    // derived (computed), embed (display-only, foreign record), backlinks
-    // (reverse refs owned by other records), and toggle (projection of an
-    // enum field) have no draft slot.
+    // The computed/projected kinds (COMPUTED_TYPES: derived, embed,
+    // backlinks, rollup, toggle) have no draft slot.
   }
   // Singleton collections fix the primary key to the schema-declared
   // value (e.g. "me") so the first Add can't pick an arbitrary id.
@@ -1943,7 +1940,7 @@ function openEdit(item: CollectionItem): void {
       table[key] = rows
         .filter((row): row is Record<string, unknown> => Boolean(row) && typeof row === "object" && !Array.isArray(row))
         .map((row) => rowFromItem(row, sub));
-    } else if (field.type !== "derived" && field.type !== "embed" && field.type !== "backlinks" && field.type !== "toggle") {
+    } else if (!COMPUTED_TYPES.has(field.type)) {
       text[key] = raw === undefined || raw === null ? "" : String(raw);
     }
   }
@@ -2083,7 +2080,7 @@ const liveRecord = computed<CollectionItem | null>(() => {
  *  rendering composable; this binds it to the current draft. */
 const liveDerived = computed<CollectionItem | null>(() => {
   if (!collection.value || !liveRecord.value) return null;
-  return render.deriveAll(collection.value.schema, liveRecord.value, refRecordCache.value);
+  return render.deriveRecord(liveRecord.value);
 });
 
 /** Short summary for a `table`-typed cell in the main collection

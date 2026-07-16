@@ -6,7 +6,7 @@
 // time; this module gives server consumers (manageCollection getItems)
 // the same numbers the user sees on screen.
 
-import { backlinkRows, projectBacklinkRow } from "../core/backlinks";
+import { backlinkRows, projectBacklinkRow, rollupValue } from "../core/backlinks";
 import { deriveAll, type DeriveRefRecords } from "../core/deriveAll";
 import { loadCollection, type DiscoveryOptions } from "./discovery";
 import type { LoadedCollection } from "./discoveredCollection";
@@ -39,12 +39,13 @@ function uniqueEmbedTargets(schema: CollectionSchema): string[] {
   return [...targets];
 }
 
-/** Slugs of every SOURCE collection a `backlinks` field reverses over —
- *  loaded exactly like ref/embed targets (whole collection, once). */
+/** Slugs of every SOURCE collection a `backlinks` or `rollup` field
+ *  reverses over — loaded exactly like ref/embed targets (whole
+ *  collection, once; the two field kinds share one load). */
 function uniqueBacklinkSources(schema: CollectionSchema): string[] {
   const sources = new Set<string>();
   for (const field of Object.values(schema.fields)) {
-    if (field.type === "backlinks" && field.from.length > 0) sources.add(field.from);
+    if ((field.type === "backlinks" || field.type === "rollup") && field.from.length > 0) sources.add(field.from);
   }
   return [...sources];
 }
@@ -125,6 +126,25 @@ function projectComputed(schema: CollectionSchema, enriched: CollectionItem, lin
   return enriched;
 }
 
+/** Resolve every rollup field onto a COPY of the record, BEFORE the
+ *  formula pass — a `derived` formula may reference rollup values as
+ *  plain identifiers (`played = homePlayed + awayPlayed`). Same reverse
+ *  machinery as backlinks, collapsed to a number: an unresolvable source
+ *  is null (a formula reading it fails soft to em-dash); an empty match
+ *  set is a real 0. Returns `record` unchanged when the schema declares
+ *  no rollups. */
+function projectRollups(schema: CollectionSchema, record: CollectionItem, linked: Record<string, LinkedTarget>): CollectionItem {
+  let out = record;
+  for (const [key, field] of Object.entries(schema.fields)) {
+    if (field.type !== "rollup") continue;
+    if (out === record) out = { ...record };
+    const source = linked[field.from];
+    const selfId = String(record[schema.primaryKey] ?? "");
+    out[key] = source ? rollupValue(field, selfId, Object.values(source.byId)) : null;
+  }
+  return out;
+}
+
 /** Enrich records with every host-computed field: derived formulas
  *  evaluated (cross-collection derefs included), toggles projected,
  *  embeds resolved. Loads each linked collection ONCE per call. Input
@@ -133,5 +153,8 @@ export async function enrichItems(collection: LoadedCollection, items: Collectio
   const { schema } = collection;
   const linked = await loadLinkedTargets(schema, opts);
   const refRecords = toRefRecords(linked);
-  return items.map((item) => projectComputed(schema, deriveAll(schema, item, refRecords), linked));
+  // Rollups FIRST (formulas may read them), then the formula pass, then
+  // the remaining projections — the client mirrors this order exactly
+  // (`deriveRecord` / `evaluateDerived` in collection-plugin).
+  return items.map((item) => projectComputed(schema, deriveAll(schema, projectRollups(schema, item, linked), refRecords), linked));
 }

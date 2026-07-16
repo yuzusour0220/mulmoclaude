@@ -97,13 +97,13 @@ export type CollectionSubFieldSpec = z.infer<typeof SubFieldSpecZ>;
 
 export type CollectionFieldType = CollectionFieldSpec["type"];
 
-/** derived/embed/backlinks/toggle are host-computed or projected — never
- *  written to the record JSON, so required / value checks and edit-draft
- *  slots must not apply to them. THE single source for "computed" —
- *  lives here (zod-free at runtime) so browser code (`./draft`) and the
- *  zod record compiler (`./recordZ`, which re-exports it) share one set
- *  instead of drifting copies. */
-export const COMPUTED_TYPES: ReadonlySet<CollectionFieldType> = new Set<CollectionFieldType>(["derived", "embed", "backlinks", "toggle"]);
+/** derived/embed/backlinks/rollup/toggle are host-computed or projected —
+ *  never written to the record JSON, so required / value checks and
+ *  edit-draft slots must not apply to them. THE single source for
+ *  "computed" — lives here (zod-free at runtime) so browser code
+ *  (`./draft`) and the zod record compiler (`./recordZ`, which re-exports
+ *  it) share one set instead of drifting copies. */
+export const COMPUTED_TYPES: ReadonlySet<CollectionFieldType> = new Set<CollectionFieldType>(["derived", "embed", "backlinks", "rollup", "toggle"]);
 
 /** Optional visibility predicate: the target (an action button or a
  *  field) renders only when the open record's `field` (stringified) is
