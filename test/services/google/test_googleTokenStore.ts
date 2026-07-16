@@ -105,6 +105,24 @@ describe("token file roundtrip", () => {
     );
   });
 
+  it("falls back to reading the legacy file when migration cannot move it", async () => {
+    const home = await makeFakeHome();
+    // Occupy the new path with a DIRECTORY: the exclusive copy and the new-path
+    // read both fail, exercising the migration-failure fallback portably.
+    await mkdir(googleTokenPath(home), { recursive: true });
+    const legacy = legacyGoogleTokenPath(home);
+    await mkdir(path.dirname(legacy), { recursive: true });
+    await writeFile(legacy, JSON.stringify({ refresh_token: "legacy-token" }), { mode: 0o600 });
+    assert.deepEqual(await loadGoogleTokens(home), { refresh_token: "legacy-token" });
+    assert.equal(
+      await stat(legacy).then(
+        () => true,
+        () => false,
+      ),
+      true,
+    );
+  });
+
   it("returns null for a corrupted token file instead of throwing", async () => {
     const home = await makeFakeHome();
     await mkdir(path.dirname(googleTokenPath(home)), { recursive: true });
