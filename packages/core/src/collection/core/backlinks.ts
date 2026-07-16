@@ -1,5 +1,5 @@
 // Pure resolution for `backlinks` fields (plan step ② of
-// plans/collection-ontology.md): the display-only reverse side of `ref`.
+// plans/done/collection-ontology.md): the display-only reverse side of `ref`.
 // Both the server enrichment (`server/derive.ts`) and the client detail
 // view derive the row set through THESE helpers, so the LLM (getItems)
 // and the user (record panel) always see the same rows — the same

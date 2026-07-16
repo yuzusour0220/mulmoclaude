@@ -423,7 +423,9 @@ text / markdown / html / file fields are left out, so the prompt stays small).
 - Same `id` uniqueness rule (within `collectionActions`); same path-safe
   `template`; same `role` + kind behavior (`"chat"` seeds a visible chat,
   `"agent"` dispatches a silent worker over the whole collection — e.g. a
-  "Sync" button that pushes records to an external system via MCP).
+  "Sync" button that pushes records to an external system via MCP; the
+  known-good sync recipe, including the snapshot-diff state file and the
+  `externalId` write-back, is **`config/helps/egress-sync.md`**).
 - `when` is **ignored** here — there is no record to gate on. Always shown.
 
 ### Completion tracking (bell notifications)

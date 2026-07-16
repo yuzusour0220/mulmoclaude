@@ -200,7 +200,7 @@ const EmbedFieldZ = z
     path: ["id"],
   });
 
-/** Display-only REVERSE refs (plan step ② of plans/collection-ontology.md):
+/** Display-only REVERSE refs (plan step ② of plans/done/collection-ontology.md):
  *  a read-only sub-table of the records in collection `from` whose `via`
  *  ref field stores THIS record's primary key. Stores nothing (joins
  *  `COMPUTED_TYPES`); resolution is shared server/client via
@@ -222,7 +222,7 @@ const BacklinksFieldZ = z
   .refine((spec) => isSafeSlug(spec.from), slugMessage("from"));
 
 /** A cross-collection AGGREGATE over a backlink relation (plan step ⑤ of
- *  plans/collection-ontology.md): a computed number — never stored — that
+ *  plans/done/collection-ontology.md): a computed number — never stored — that
  *  sums a source column (or counts rows) over the records in `from` whose
  *  `via` ref points at this record. Same `from`/`via`/`filter` vocabulary
  *  and reverse-loading machinery as `backlinks`; resolution shared
@@ -309,7 +309,7 @@ const SeededActionZ = z.object({
 });
 
 /** `kind: "mutate"` — a declarative, HOST-executed write; no LLM, no
- *  tokens (plan step ④ of plans/collection-ontology.md). Clicking the
+ *  tokens (plan step ④ of plans/done/collection-ontology.md). Clicking the
  *  button (after an optional `params` mini-form) merges `set` into the
  *  record: values are literals or `$params.<name>` references. `require`
  *  is the state gate — the standard `when` shape, both the visibility

@@ -134,7 +134,7 @@ The reserved kind from `schema.ts:174-178`, exactly Foundry's Action shape minus
 
 ## Rejected / deferred — and why (don't re-propose without new evidence)
 
-- **`egress` write-back block (host machinery)** — REJECTED. Lifecycle triggers + debounce + loop guards = enterprise sync infrastructure, and a two-masters conflict problem that contradicts files-as-source-of-truth. The proposal's loop guard ("worker-originated writes carry a flag") is not implementable: record files carry no provenance, and the raw Write escape hatch bypasses any tool-layer flag. **Write-back ships as a prose pattern instead**: a collection-level `kind: "agent"` "Sync" action (or scheduled automation) whose template diffs against a last-synced snapshot file kept in the collection dir (workspace-is-the-database sync state), records remote ids in `externalId`, and pushes via MCP. Deliverable: a help file under `packages/core/assets/helps/` + one reference template (remember to bump `@mulmoclaude/core`). Caveat to document there: interactively-authenticated MCP servers may be absent for hidden/headless workers. Promote to host machinery only if real usage proves the pattern common AND the prose version insufficient.
+- **`egress` write-back block (host machinery)** — REJECTED. Lifecycle triggers + debounce + loop guards = enterprise sync infrastructure, and a two-masters conflict problem that contradicts files-as-source-of-truth. The proposal's loop guard ("worker-originated writes carry a flag") is not implementable: record files carry no provenance, and the raw Write escape hatch bypasses any tool-layer flag. **Write-back ships as a prose pattern instead**: a collection-level `kind: "agent"` "Sync" action (or scheduled automation) whose template diffs against a last-synced snapshot file kept in the collection dir (workspace-is-the-database sync state), records remote ids in `externalId`, and pushes via MCP. Deliverable: a help file under `packages/core/assets/helps/` + one reference template (remember to bump `@mulmoclaude/core`). Caveat to document there: interactively-authenticated MCP servers may be absent for hidden/headless workers. Promote to host machinery only if real usage proves the pattern common AND the prose version insufficient. **Shipped 2026-07-16** as `packages/core/assets/helps/egress-sync.md` (indexed in `index.md`, pointed to from `collection-skills.md`'s collectionActions section, reference `templates/sync.md` embedded): the five-rule pattern (snapshot diff, `externalId` write-back as the ONLY inbound write, per-record snapshot updates for resumability, partial failure, opt-in deletes) + the hidden-worker MCP-auth caveat.
 - **`transitions` enum state machine** — DEFERRED (pull-based). Most lock-shaped piece; the LLM already reads legal states from schema prose, and no current collection demands it. If a real schema needs it: edit-form dropdown filtering + kanban drop bounce + `putItems` rejection with `problem` + post-hoc lint — never a hard invariant over files. Note: enforcement requires the write path to read the previous record (upsert/merge don't compare old values today).
 - **`sumOver()` formula-string syntax** — REJECTED in favor of `rollup` (above).
 - **Rewriting `toggle` as mutation sugar** — REJECTED. Category mismatch (inline checkbox vs button+form); would regress UX for zero gain.
@@ -149,10 +149,12 @@ The reserved kind from `schema.ts:174-178`, exactly Foundry's Action shape minus
 ③ kind:"agent" actions        — ✅ DONE 2026-07-15 (completes the 2×2)
 ④ kind:"mutate"               — ✅ DONE 2026-07-15 (fills the reserved slot)
 ⑤ rollup                      — ✅ DONE 2026-07-16 (rides on ②'s machinery)
-⑥ egress pattern doc          — falls out of ③ for free (help file + template, no host code)
+⑥ egress pattern doc          — ✅ DONE 2026-07-16 (help file + embedded reference template, no host code)
 ```
 
 Each step is independently shippable and backward compatible (all new schema surface is opt-in).
+
+**PLAN COMPLETE 2026-07-16.** ⓪ #2097/#2098 · ① #2099 · ② #2103 · ③ #2104 · ④ #2105 · ⑤ #2116 · ⑥ (this PR). Field-proven along the way: stock-quotes holders (backlinks), W杯2026 standings fully computed (rollups + derived-over-rollup, with the groupResult-enum pattern standing in for comparative row predicates). Still open if demand appears: the `/collections` ontology graph panel (①'s phase 2), `transitions` (deferred, pull-based), promoting strict record checks to enforced once the lint runs clean.
 
 ## One-line summary
 

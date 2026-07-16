@@ -290,7 +290,7 @@ function parsePutItems(args: Record<string, unknown>, slug: string): PutItemsArg
 
 /** The machine-readable workspace ontology: every collection with its
  *  identity, record count, and outbound `ref`/`embed` relations (plan
- *  step ① of plans/collection-ontology.md). Slugs are discovery-sanitized;
+ *  step ① of plans/done/collection-ontology.md). Slugs are discovery-sanitized;
  *  titles/labels are workspace-authored schema text and ride verbatim —
  *  the same trust class as the record values getItems returns. */
 async function handleGetOntology(deps: ManageCollectionDeps): Promise<string> {
