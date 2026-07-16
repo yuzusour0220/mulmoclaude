@@ -21,15 +21,26 @@ const requiredString = (params: JsonObject, key: string): string => {
   return value;
 };
 
+// Calendar's `dateTime`/`timeMin` are RFC3339 and reject date-only or
+// offset-less values with an opaque 400, so the offset is enforced here where
+// the remote gets an actionable message. `new Date` alone is too lax (it
+// accepts "2026-07-17").
+// Fractional seconds are normalized away first — an optional `(\.\d+)?` group
+// inside the main pattern trips security/detect-unsafe-regex.
+const ISO_DATE_TIME_WITH_OFFSET_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(Z|[+-]\d{2}:\d{2})$/;
+const FRACTIONAL_SECONDS_RE = /\.\d+(?=Z|[+-])/;
+
 const asDateTime = (value: string, key: string): string => {
-  if (Number.isNaN(new Date(value).getTime())) throw new Error(`${key} must be an ISO 8601 date-time string`);
+  const normalized = value.replace(FRACTIONAL_SECONDS_RE, "");
+  const wellFormed = ISO_DATE_TIME_WITH_OFFSET_RE.test(normalized) && !Number.isNaN(new Date(value).getTime());
+  if (!wellFormed) throw new Error(`${key} must be an ISO 8601 date-time with a timezone offset (e.g. 2026-07-17T09:00:00+09:00)`);
   return value;
 };
 
 const optionalDateTime = (params: JsonObject, key: string): string | undefined => {
   const value = params[key];
   if (value === undefined || value === null) return undefined;
-  if (typeof value !== "string") throw new Error(`${key} must be an ISO 8601 date-time string`);
+  if (typeof value !== "string") throw new Error(`${key} must be an ISO 8601 date-time with a timezone offset (e.g. 2026-07-17T09:00:00+09:00)`);
   return asDateTime(value, key);
 };
 
