@@ -267,3 +267,36 @@ minutes rather than stacking them on the same one.
 container from a Windows host (WSL2 + native `dockerd`), with the same mounts / env / argv the
 shipped builders produce, and asserts `handlePermission` comes back over the MCP handshake. See
 `docs/windows-docker-ci.md`.
+
+---
+
+## Google tool — link / credential / API errors
+
+### Symptoms
+
+- The `google` tool (or a `google.calendar.*` remote command) fails with **"Google account not linked on this host"**.
+- Errors mentioning **client_secret**: "no client_secret_*.json found" or "multiple client_secret_*.json files found".
+- **"Google Calendar API: HTTP 403"** with a hint about enabling the API.
+- **"could not obtain a Google access token"** (grant revoked).
+
+### Cause
+
+The `google` tool runs against a Google account linked **locally on this machine** — a refresh
+token stored at `~/.config/mulmoclaude/google-token.json` (mode 600), obtained through a desktop
+OAuth (loopback + PKCE) consent using the client credentials in `~/.secrets/client_secret_*.json`.
+This is independent of claude.ai Google connectors. Each failure names its missing piece.
+
+### Fix
+
+- **Not linked / grant revoked** — ask the user to link (or re-link) the account: Settings →
+  Plugins → Google → "Link Google account", or run `yarn google:auth` in the repo. Then retry the
+  original call. Do NOT try to create or edit the token file yourself.
+- **No client secret** — the user must download the OAuth *desktop-app* client JSON from the
+  Google Cloud Console (APIs & Services → Credentials) and place it in `~/.secrets/` keeping the
+  `client_secret_*.json` filename (chmod 600).
+- **Multiple client secrets** — ask the user to keep exactly one `client_secret_*.json` in
+  `~/.secrets/`; the stored refresh token pairs with one OAuth client, so duplicates are refused
+  rather than guessed at.
+- **HTTP 403 from a Google API** — the API is not enabled for the user's Cloud project. Ask them
+  to enable it in the Cloud Console (APIs & Services → Library — e.g. "Google Calendar API"),
+  then retry. No re-link needed.

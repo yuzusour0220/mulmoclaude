@@ -100,6 +100,7 @@ export const ROLES: Role[] = [
       // installed runtime plugins (`~/mulmoclaude/plugins/*`) are
       // added to roles via Settings → Roles.
       TOOL_NAMES.manageSpotify,
+      TOOL_NAMES.google,
     ],
     queries: [
       // Collection-creation starters moved to the Collections "New collection"

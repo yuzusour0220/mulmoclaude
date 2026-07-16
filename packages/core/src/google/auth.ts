@@ -16,6 +16,12 @@ import { loadClientSecret, type InstalledClientSecret } from "./clientSecret.js"
 import { deleteGoogleTokens, loadGoogleTokens, saveGoogleTokens } from "./tokenStore.js";
 
 export const GOOGLE_CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.events";
+export const GOOGLE_TASKS_SCOPE = "https://www.googleapis.com/auth/tasks";
+export const GOOGLE_DRIVE_FILE_SCOPE = "https://www.googleapis.com/auth/drive.file";
+/** Requested at consent as one set — matches the scopes registered on the
+ *  OAuth consent screen, so a single re-link covers every supported API
+ *  (Calendar now; Tasks / Drive tools ride the same grant later). */
+export const GOOGLE_SCOPES = [GOOGLE_CALENDAR_SCOPE, GOOGLE_TASKS_SCOPE, GOOGLE_DRIVE_FILE_SCOPE];
 const CALLBACK_PATH = "/oauth2callback";
 const AUTH_TIMEOUT_MS = 5 * ONE_MINUTE_MS;
 const STATE_BYTES = 16;
@@ -148,7 +154,7 @@ const buildConsentUrl = (client: OAuth2Client, codeChallenge: string, state: str
   client.generateAuthUrl({
     access_type: "offline",
     prompt: "consent",
-    scope: [GOOGLE_CALENDAR_SCOPE],
+    scope: GOOGLE_SCOPES,
     code_challenge_method: CodeChallengeMethod.S256,
     code_challenge: codeChallenge,
     state,

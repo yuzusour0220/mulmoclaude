@@ -13,6 +13,9 @@ export {
   unlinkGoogle,
   waitForAuthCode,
   GOOGLE_CALENDAR_SCOPE,
+  GOOGLE_TASKS_SCOPE,
+  GOOGLE_DRIVE_FILE_SCOPE,
+  GOOGLE_SCOPES,
   type AuthorizeGoogleOptions,
   type RevokeFetch,
 } from "./auth.js";
