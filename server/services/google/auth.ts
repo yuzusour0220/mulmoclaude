@@ -65,10 +65,13 @@ const startLoopbackServer = (): Promise<{ server: http.Server; port: number }> =
     });
   });
 
+// State is validated before error/code — a callback that can't prove it
+// belongs to this flow must not influence it (its `error` text would
+// otherwise reach the terminal attacker-controlled).
 const authCodeFromCallback = (url: URL, expectedState: string): string => {
+  if (url.searchParams.get("state") !== expectedState) throw new Error("OAuth state mismatch — possible CSRF, aborting");
   const error = url.searchParams.get("error");
   if (error) throw new Error(`Google authorization failed: ${error}`);
-  if (url.searchParams.get("state") !== expectedState) throw new Error("OAuth state mismatch — possible CSRF, aborting");
   const code = url.searchParams.get("code");
   if (!code) throw new Error("authorization callback carried no code");
   return code;
@@ -79,7 +82,7 @@ const respondHtml = (res: http.ServerResponse, status: number, message: string):
   res.end(`<html><body><h3>${message}</h3></body></html>`);
 };
 
-const waitForAuthCode = (server: http.Server, expectedState: string, timeoutMs: number): Promise<string> =>
+export const waitForAuthCode = (server: http.Server, expectedState: string, timeoutMs: number): Promise<string> =>
   new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error(`authorization timed out after ${timeoutMs / ONE_SECOND_MS}s`)), timeoutMs);
     server.on("request", (req, res) => {
@@ -87,6 +90,13 @@ const waitForAuthCode = (server: http.Server, expectedState: string, timeoutMs: 
       if (url.pathname !== CALLBACK_PATH) {
         res.writeHead(404);
         res.end();
+        return;
+      }
+      // A wrong-state request is not our callback (drive-by localhost probe
+      // or stale tab) — answer it but keep waiting for the real redirect, so
+      // an unauthenticated request can't abort the pending flow.
+      if (url.searchParams.get("state") !== expectedState) {
+        respondHtml(res, 400, "Invalid authorization callback. You can close this tab.");
         return;
       }
       clearTimeout(timer);
