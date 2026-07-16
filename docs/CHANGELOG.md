@@ -10,6 +10,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 ---
 
+## npm packages — 2026-07-17 (2)
+
+Package releases riding PR #2124 (host-neutral Google token path, issue #2122):
+
+- **`@mulmoclaude/core@0.20.1`** — the Google token store moves to the host-neutral `~/.config/mulmo/google-token.json` (the engine is shared with MulmoTerminal). Pre-0.20.1 tokens migrate automatically via an atomic non-clobbering copy (`COPYFILE_EXCL`, mode 600 preserved, TOCTOU-safe) with a legacy-path fallback read so a failed migration never strands a linked user. `assets/helps/error-recovery.md` updated.
+- **`@mulmoclaude/google-plugin@0.1.1`** — tool prompt / docs follow the new path; core range `^0.20.1`.
+
+---
+
 ## npm packages — 2026-07-17
 
 Package releases riding PR #2120 (agent-facing Google Calendar tool, issue #2114):
