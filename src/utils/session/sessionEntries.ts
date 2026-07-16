@@ -5,7 +5,7 @@
 //
 // Tracks #175.
 
-import { makeSkillResult, makeTextResult } from "../tools/result";
+import { makeSkillResult, makeTextResult, TEXT_LIKE_RESULT_TOOL_NAMES } from "../tools/result";
 import {
   isSessionOrigin,
   isSkillEntry,
@@ -87,12 +87,16 @@ export function resolveSelectedUuid(toolResults: readonly ToolResultComplete[]):
   return toolResults[toolResults.length - 1].uuid;
 }
 
-// Total character length of every card body. A streamed assistant text
-// card carries its running text in `message`, so this grows as text
-// arrives — the signal we use to spot a card that was truncated when a
-// socket.io frame dropped (#2096).
-function totalMessageLength(results: readonly ToolResultComplete[]): number {
-  return results.reduce((sum, result) => sum + (result.message?.length ?? 0), 0);
+// Total character length of the STREAMED-TEXT card bodies. Only text and
+// skill cards keep their running text in `message` (TEXT_LIKE_RESULT_TOOL_NAMES),
+// and only those grow token-by-token — so only those can be truncated by a
+// dropped socket.io frame while the card COUNT stays equal. Other cards
+// (images, charts, …) carry their payload in `data`, arrive complete in one
+// frame, and are caught by the card-count check — so they're excluded here to
+// avoid a `message` diff on a non-streamed card skewing the decision (#2096,
+// Sourcery review).
+function streamedTextLength(results: readonly ToolResultComplete[]): number {
+  return results.reduce((sum, result) => (TEXT_LIKE_RESULT_TOOL_NAMES.has(result.toolName) ? sum + (result.message?.length ?? 0) : sum), 0);
 }
 
 /** Decide whether a reconnect / finished catch-up should replace the
@@ -110,7 +114,7 @@ export function shouldAdoptServerTranscript(serverResults: readonly ToolResultCo
   if (serverResults.length !== clientResults.length) {
     return serverResults.length > clientResults.length;
   }
-  return totalMessageLength(serverResults) > totalMessageLength(clientResults);
+  return streamedTextLength(serverResults) > streamedTextLength(clientResults);
 }
 
 // Decide the `startedAt` / `updatedAt` to seed the in-memory

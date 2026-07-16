@@ -307,4 +307,15 @@ describe("shouldAdoptServerTranscript", () => {
     assert.equal(shouldAdoptServerTranscript([], []), false);
     assert.equal(shouldAdoptServerTranscript([card("a")], []), true);
   });
+
+  it("ignores non-text (tool) card message diffs — only streamed text/skill bodies count (Sourcery review)", () => {
+    const toolCard = (message: string): ToolResultComplete =>
+      ({ uuid: "img", toolName: "generateImage", message, title: "Image", data: { url: "x" } }) as ToolResultComplete;
+    // Same card count; only the non-streamed tool card's `message` differs.
+    // Its payload lives in `data` and it arrives complete, so it must NOT
+    // trigger adoption on its own.
+    const server = [card("hi"), toolCard("done rendering the sunset image")];
+    const client = [card("hi"), toolCard("rendering")];
+    assert.equal(shouldAdoptServerTranscript(server, client), false);
+  });
 });
