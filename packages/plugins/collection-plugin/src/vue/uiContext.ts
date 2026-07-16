@@ -36,15 +36,12 @@ export type CollectionMutationResult = { ok: true } | { ok: false; error: string
  *  generic failure. */
 export type CollectionApiResult<T> = { ok: true; data: T } | { ok: false; error: string; status: number };
 
-/** A collection / item action's result. `kind: "chat"` returns the seed
- *  prompt + role for the client to start a new chat; `kind: "agent"`
- *  returns `dispatched: true` — the server launched the hidden worker
- *  itself and the client just shows the running state. */
-export interface CollectionActionResult {
-  prompt?: string;
-  role?: string;
-  dispatched?: boolean;
-}
+/** A collection / item action's result, discriminated by `dispatched`:
+ *  `kind: "chat"` returns the seed prompt + role for the client to start
+ *  a new chat; `kind: "agent"` returns `dispatched: true` — the server
+ *  launched the hidden worker itself and the client just shows the
+ *  running state. */
+export type CollectionActionResult = { prompt: string; role: string; dispatched?: undefined } | { dispatched: true; prompt?: undefined; role?: undefined };
 
 /** A collection refresh's result — counts + per-source errors. `dispatched` is
  *  true for agent ingest (a worker was launched; records update async).

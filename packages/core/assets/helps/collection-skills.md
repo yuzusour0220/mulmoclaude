@@ -332,7 +332,7 @@ kinds:
   (cleared by the next success). **End an agent template with**: "edit the
   record via manageCollection and stop — do not present anything."
 
-This is how hard logic the schema can't express gets delegated to natural
+This is how hard logic that the schema can't express gets delegated to natural
 language.
 
 ```json

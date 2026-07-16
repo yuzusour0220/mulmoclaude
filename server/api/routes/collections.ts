@@ -55,7 +55,7 @@ import {
   type RemoteViewItemsResult,
 } from "../../workspace/collections/remoteView.js";
 import { clampLimit, clampOffset, normalizeFields, normalizeMutate } from "@mulmoclaude/core/remote-view";
-import { badRequest, notFound, conflict, forbidden, serverError } from "../../utils/httpError.js";
+import { badRequest, notFound, conflict, forbidden, serverError, serviceUnavailable } from "../../utils/httpError.js";
 import { errorMessage } from "../../utils/errors.js";
 import { log } from "../../system/logger/index.js";
 import { workspacePath } from "../../workspace/workspace.js";
@@ -382,7 +382,7 @@ async function respondForActionKind(
   const outcome = await dispatchAgentAction({ collection, action, seed: seed.prompt, itemId });
   if (!outcome.ok) {
     if (outcome.alreadyRunning) conflict(res, outcome.error);
-    else serverError(res, outcome.error);
+    else serviceUnavailable(res, outcome.error);
     return;
   }
   res.json({ dispatched: true });

@@ -114,7 +114,13 @@ async function onWorkerComplete(collection: LoadedCollection, action: Collection
     log.warn("collections", "agent action bell reconcile failed", { slug: collection.slug, key, error: String(err) });
   }
   log[didError ? "warn" : "info"]("collections", "agent action worker finished", { slug: collection.slug, key, didError });
-  deps.publishChange(collection.slug);
+  // Best-effort like everything else in this hook: a throwing publisher
+  // must not reject the worker's teardown callback.
+  try {
+    deps.publishChange(collection.slug);
+  } catch (err) {
+    log.warn("collections", "agent action completion publish failed", { slug: collection.slug, key, error: String(err) });
+  }
 }
 
 export type DispatchAgentActionResult = { ok: true } | { ok: false; error: string; alreadyRunning?: boolean };
