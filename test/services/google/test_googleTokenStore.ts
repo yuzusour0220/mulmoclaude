@@ -6,7 +6,7 @@ import { mkdir, mkdtemp, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { googleTokenPath, loadGoogleTokens, mergeGoogleTokens, saveGoogleTokens } from "@mulmoclaude/core/google";
+import { googleTokenPath, legacyGoogleTokenPath, loadGoogleTokens, mergeGoogleTokens, saveGoogleTokens } from "@mulmoclaude/core/google";
 
 const makeFakeHome = async (): Promise<string> => await mkdtemp(path.join(tmpdir(), "google-token-test-"));
 
@@ -66,6 +66,43 @@ describe("token file roundtrip", () => {
     await saveGoogleTokens({ refresh_token: "r1" }, home);
     const tokenFileStat = await stat(googleTokenPath(home));
     assert.equal(tokenFileStat.mode & POSIX_MODE_MASK, 0o600);
+  });
+
+  it("migrates a pre-0.20.1 token file from the mulmoclaude-branded dir on load", async () => {
+    const home = await makeFakeHome();
+    const legacy = legacyGoogleTokenPath(home);
+    await mkdir(path.dirname(legacy), { recursive: true });
+    await writeFile(legacy, JSON.stringify({ refresh_token: "legacy-token" }), { mode: 0o600 });
+    assert.deepEqual(await loadGoogleTokens(home), { refresh_token: "legacy-token" });
+    assert.equal(
+      await loadGoogleTokens(home).then(() =>
+        stat(legacy).then(
+          () => true,
+          () => false,
+        ),
+      ),
+      false,
+    );
+    if (process.platform !== "win32") {
+      const migratedStat = await stat(googleTokenPath(home));
+      assert.equal(migratedStat.mode & POSIX_MODE_MASK, 0o600);
+    }
+  });
+
+  it("prefers the new path when both files exist and leaves the legacy copy", async () => {
+    const home = await makeFakeHome();
+    await saveGoogleTokens({ refresh_token: "current" }, home);
+    const legacy = legacyGoogleTokenPath(home);
+    await mkdir(path.dirname(legacy), { recursive: true });
+    await writeFile(legacy, JSON.stringify({ refresh_token: "stale" }), { mode: 0o600 });
+    assert.deepEqual(await loadGoogleTokens(home), { refresh_token: "current" });
+    assert.equal(
+      await stat(legacy).then(
+        () => true,
+        () => false,
+      ),
+      true,
+    );
   });
 
   it("returns null for a corrupted token file instead of throwing", async () => {

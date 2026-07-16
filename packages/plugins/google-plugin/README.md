@@ -5,7 +5,7 @@ account** to the chat agent as one `google` tool (kind-discriminated
 dispatch). Server-only — no Vue View.
 
 - Engine: `@mulmoclaude/core/google` (OAuth loopback + PKCE, token store at
-  `~/.config/mulmoclaude/google-token.json`, Calendar v3 REST). The settings
+  `~/.config/mulmo/google-token.json`, Calendar v3 REST). The settings
   UI, remote-host commands, `yarn google:auth`, and this tool share one link
   state.
 - Kinds: `status`, `calendarListEvents`, `calendarCreateEvent`. Tasks / Drive
