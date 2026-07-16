@@ -1982,10 +1982,10 @@
   dependencies:
     zod "^4.4.3"
 
-"@mulmocast/types@^2.8.0":
-  version "2.8.0"
-  resolved "https://registry.yarnpkg.com/@mulmocast/types/-/types-2.8.0.tgz#ebaf14ddf45f737834109735c68dd223831746ae"
-  integrity sha512-dtPBlo9EQ6VpOGwd6/1cbSNT+4PoXjJwrS2IKV52rkr1SKQ3VpPrEBjMh2BaaGJ78mqAyvbtIp/DZdGTj52QKA==
+"@mulmocast/types@^2.8.1":
+  version "2.8.1"
+  resolved "https://registry.yarnpkg.com/@mulmocast/types/-/types-2.8.1.tgz#58614a3fac8225c1458febd284293fd91ce2beb6"
+  integrity sha512-XYdGxELGinBzHP1M7v5SPOsv7uNXxtd4ECpWjQjEH1U9FJpINqH0fQ811r0lQOXWAYfQptLrKLTXKe1UkzaJAA==
   dependencies:
     "@mulmocast/deck" "^0.7.0"
     zod "^4.4.3"
@@ -7354,7 +7354,7 @@ marked@^16.3.0:
   resolved "https://registry.yarnpkg.com/marked/-/marked-16.4.2.tgz#4959a64be6c486f0db7467ead7ce288de54290a3"
   integrity sha512-TI3V8YYWvkVf3KJe1dRkpnjs68JUPyEa5vjKrp1XEEJUAOaQc+Qj+L1qWbPd0SJuAdQkFU0h73sXXqwDYxsiDA==
 
-marked@^18.0.5, marked@^18.0.6:
+marked@^18.0.6:
   version "18.0.6"
   resolved "https://registry.yarnpkg.com/marked/-/marked-18.0.6.tgz#7faf26fd580b9c8daa75984f18db25631fc4ad63"
   integrity sha512-MrV5puXBfuiy6wl6DLaq3BtIJQAJToAd5zt/ZKhRfGRAuFPALE7/4Y7jnxRQoEgK/pBgurGqLyAuRgZ2xOjr6w==
@@ -7597,21 +7597,21 @@ muggle-string@^0.4.1:
   resolved "https://registry.yarnpkg.com/muggle-string/-/muggle-string-0.4.1.tgz#3b366bd43b32f809dc20659534dd30e7c8a0d328"
   integrity sha512-VNTrAak/KhO2i8dqqnqnAHOa3cYBwXEZe9h+D5h/1ZqFSTEFHdM65lR7RoIqq3tBBYavsOXV84NoHXZ0AkPyqQ==
 
-mulmocast-vision@^1.0.11:
-  version "1.0.11"
-  resolved "https://registry.yarnpkg.com/mulmocast-vision/-/mulmocast-vision-1.0.11.tgz#4ce29b99f214028d2f08b5962334557623b78e74"
-  integrity sha512-j6gY3Ita08Zm0Hoi0ilP1OnmFsBTamyu/1X82F5YytQZdpaVgqZSTS207oHclRR5qAOjrNzszE+aQXRKNEcGAA==
+mulmocast-vision@^1.0.12:
+  version "1.0.12"
+  resolved "https://registry.yarnpkg.com/mulmocast-vision/-/mulmocast-vision-1.0.12.tgz#a057188259008b4ff40ac44a19eac18019e355c2"
+  integrity sha512-qonPyaWFrbsaKaQBtU+KP5H6/0OH/zAwYLxic2dbmYLmgtwiig0Xve068Wa+2otE9+wdz6A+3bQ1vjRKcGv8Ow==
   dependencies:
     "@modelcontextprotocol/sdk" "^1.27.1"
     nunjucks "^3.2.4"
     pdfkit "^0.18.0"
-    puppeteer "^25.2.1"
+    puppeteer "^25.3.0"
     yauzl "^3.4.0"
 
-mulmocast@^2.8.0:
-  version "2.8.0"
-  resolved "https://registry.yarnpkg.com/mulmocast/-/mulmocast-2.8.0.tgz#1ef9318839f0bcd9fd2dff5a22698b01c5e59f4f"
-  integrity sha512-aib4na31Ii5yX2OkpEN5PNyzwDoxa4fmA182HcJzAQ/kNSYbgcc1gqigX9sA3ZPICbSAqRn67LE7QIpSnZ/W6A==
+mulmocast@^2.8.1:
+  version "2.8.1"
+  resolved "https://registry.yarnpkg.com/mulmocast/-/mulmocast-2.8.1.tgz#ca44d1d73225acf15e5cfc59711bda3888e2ee10"
+  integrity sha512-9st5lWmXF9Rh8daId5su6Rbre0/dTWNmCcgPuKTBEtdvXR8d9dLSfZmjIsdRSa72wu5CzuERcCapGWtnLOP2Pg==
   dependencies:
     "@google-cloud/text-to-speech" "^6.4.1"
     "@google/genai" "^2.10.0"
@@ -7637,8 +7637,8 @@ mulmocast@^2.8.0:
     graphai "^2.0.18"
     js-tiktoken "^1.0.21"
     jsdom "^29.1.1"
-    marked "^18.0.5"
-    mulmocast-vision "^1.0.11"
+    marked "^18.0.6"
+    mulmocast-vision "^1.0.12"
     ora "^9.4.1"
     puppeteer "^25.3.0"
     replicate "^1.4.0"
@@ -8403,7 +8403,7 @@ puppeteer-core@25.3.0:
     webdriver-bidi-protocol "0.4.2"
     ws "^8.21.0"
 
-puppeteer@^25.2.1, puppeteer@^25.3.0:
+puppeteer@^25.3.0:
   version "25.3.0"
   resolved "https://registry.yarnpkg.com/puppeteer/-/puppeteer-25.3.0.tgz#a77a9e76b1099ff91d9bc7824b3401cd998fa27e"
   integrity sha512-O1tx8S315aw8eI99HZ5ZNcVEzJ9+jKF//eO5UvfZ3cXJ6okZ5sX3Y50u7DJaM+ewEK4LqXP068tBhfRaWikj+g==
