@@ -181,7 +181,7 @@ grant** (independent of Firebase Auth): the user links the account once — from
 the settings modal (Plugins → Google) or with `yarn google:auth` (both run the
 same loopback + PKCE consent in the browser; the settings flow requires the
 browser to be on the same machine as the host) — and the refresh token stays
-in `~/.config/mulmoclaude/google-token.json` (mode 600) — no Google credential
+in `~/.config/mulmo/google-token.json` (mode 600) — no Google credential
 ever reaches the cloud. Until the account is linked, the handlers
 return a `handler_error` telling the remote to run the auth flow on the host.
 The remote can tell whether a host build supports Calendar by looking for the

@@ -311,7 +311,7 @@ shipped builders produce, and asserts `handlePermission` comes back over the MCP
 ### Cause
 
 The `google` tool runs against a Google account linked **locally on this machine** — a refresh
-token stored at `~/.config/mulmoclaude/google-token.json` (mode 600), obtained through a desktop
+token stored at `~/.config/mulmo/google-token.json` (mode 600), obtained through a desktop
 OAuth (loopback + PKCE) consent using the client credentials in `~/.secrets/client_secret_*.json`.
 This is independent of claude.ai Google connectors. Each failure names its missing piece.
 

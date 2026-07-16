@@ -10,7 +10,7 @@ export const TOOL_DEFINITION = {
   type: "function" as const,
   name: "google" as const,
   prompt:
-    "The user's Google account is linked LOCALLY on this machine — the refresh token lives in ~/.config/mulmoclaude/ and never reaches any cloud. " +
+    "The user's Google account is linked LOCALLY on this machine — the refresh token lives in ~/.config/mulmo/ and never reaches any cloud. " +
     "This is independent of claude.ai Google connectors; the tool works without them. " +
     "If a call fails with 'Google account not linked', ask the user to link it in Settings → Plugins → Google (or run `yarn google:auth`), then retry the original call.",
   description:

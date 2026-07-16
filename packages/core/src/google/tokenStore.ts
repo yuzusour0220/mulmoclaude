@@ -1,11 +1,12 @@
 // Persistence for the Google OAuth tokens (refresh + access) at
-// `~/.config/mulmoclaude/google-token.json`, mode 600. Google omits
+// `~/.config/mulmo/google-token.json`, mode 600. Google omits
 // `refresh_token` from refresh responses, so merges must preserve the one we
 // already hold — losing it forces the user through the browser consent again.
-import { rm } from "node:fs/promises";
+import { constants as fsConstants, copyFile, mkdir, rm, stat } from "node:fs/promises";
+import path from "node:path";
 import type { Credentials } from "google-auth-library";
 import { readJsonOrNull, writeJsonAtomicWithMode } from "./fsJson.js";
-import { googleTokenPath } from "./paths.js";
+import { googleTokenPath, legacyGoogleTokenPath } from "./paths.js";
 
 const TOKEN_FILE_MODE = 0o600;
 
@@ -15,8 +16,39 @@ export function mergeGoogleTokens(existing: Credentials | null, incoming: Creden
   return merged;
 }
 
+const fileExists = async (filePath: string): Promise<boolean> =>
+  await stat(filePath).then(
+    () => true,
+    () => false,
+  );
+
+// Tokens written before 0.20.1 live under the mulmoclaude-branded dir; move
+// them once. COPYFILE_EXCL makes the create atomic-and-non-clobbering — an
+// exists+rename sequence could overwrite a token a concurrent process wrote
+// to the new path in between (TOCTOU). The legacy file is deleted only after
+// a successful copy; on EEXIST (new path won a race, or both files already
+// exist) it is left for any older install still reading it. copyFile
+// preserves the 600 mode.
+async function migrateLegacyTokenFile(home?: string): Promise<void> {
+  const current = googleTokenPath(home);
+  const legacy = legacyGoogleTokenPath(home);
+  if (!(await fileExists(legacy))) return;
+  await mkdir(path.dirname(current), { recursive: true });
+  try {
+    await copyFile(legacy, current, fsConstants.COPYFILE_EXCL);
+  } catch {
+    return;
+  }
+  await rm(legacy, { force: true });
+}
+
 export async function loadGoogleTokens(home?: string): Promise<Credentials | null> {
-  return await readJsonOrNull<Credentials>(googleTokenPath(home));
+  await migrateLegacyTokenFile(home).catch(() => undefined);
+  const current = await readJsonOrNull<Credentials>(googleTokenPath(home));
+  if (current) return current;
+  // Migration is best-effort — a valid legacy token must still count as
+  // linked even when the move failed (permissions, read-only fs, …).
+  return await readJsonOrNull<Credentials>(legacyGoogleTokenPath(home));
 }
 
 export async function saveGoogleTokens(incoming: Credentials, home?: string): Promise<Credentials> {
