@@ -6,9 +6,7 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { unlinkGoogle } from "../../../server/services/google/auth.js";
-import type { fetchWithTimeout } from "../../../server/utils/fetch.js";
-import { loadGoogleTokens, saveGoogleTokens } from "../../../server/services/google/tokenStore.js";
+import { loadGoogleTokens, saveGoogleTokens, unlinkGoogle, type RevokeFetch } from "@mulmoclaude/core/google";
 
 const makeFakeHome = async (): Promise<string> => await mkdtemp(path.join(tmpdir(), "google-unlink-test-"));
 
@@ -19,7 +17,7 @@ interface RevokeCall {
 
 const makeRevokeStub = (result: { status?: number; throwError?: Error } = {}) => {
   const calls: RevokeCall[] = [];
-  const revokeFetch: typeof fetchWithTimeout = async (url, init = {}) => {
+  const revokeFetch: RevokeFetch = async (url, init = {}) => {
     calls.push({ url: String(url), body: typeof init.body === "string" ? init.body : "" });
     if (result.throwError) throw result.throwError;
     return new Response("", { status: result.status ?? 200 });

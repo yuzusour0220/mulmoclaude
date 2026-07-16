@@ -6,8 +6,7 @@ import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { clientSecretPresence, findClientSecretPath, loadClientSecret } from "../../../server/services/google/clientSecret.js";
-import { googleSecretsDir } from "../../../server/services/google/paths.js";
+import { clientSecretPresence, findClientSecretPath, googleSecretsDir, loadClientSecret } from "@mulmoclaude/core/google";
 
 const makeFakeHome = async (files: Record<string, string> = {}): Promise<string> => {
   const home = await mkdtemp(path.join(tmpdir(), "google-secret-test-"));

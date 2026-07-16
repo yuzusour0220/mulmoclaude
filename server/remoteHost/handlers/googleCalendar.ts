@@ -5,8 +5,7 @@
 // token, so no Google credential ever reaches the cloud. Factories keep the
 // validation + mapping unit-testable with the engine stubbed; the default
 // exports wire the real auth/calendar functions.
-import { getGoogleAccessToken } from "../../services/google/auth.js";
-import { createCalendarEvent, DEFAULT_LIST_MAX_RESULTS, listCalendarEvents, MAX_LIST_RESULTS } from "../../services/google/calendar.js";
+import { createCalendarEvent, DEFAULT_LIST_MAX_RESULTS, getGoogleAccessToken, listCalendarEvents, MAX_LIST_RESULTS } from "@mulmoclaude/core/google";
 import type { CommandHandler, JsonObject } from "../commandChannel.js";
 
 export interface GoogleCalendarDeps {

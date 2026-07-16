@@ -4,7 +4,7 @@
 // default filename.
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { isRecord } from "../../utils/types.js";
+import { isRecord } from "./util.js";
 import { googleSecretsDir } from "./paths.js";
 
 export interface InstalledClientSecret {

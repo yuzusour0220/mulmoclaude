@@ -5,8 +5,7 @@ import assert from "node:assert/strict";
 
 import type { JsonObject } from "../../server/remoteHost/commandChannel.js";
 import { createGoogleCalendarCreateEvent, createGoogleCalendarListEvents, type GoogleCalendarDeps } from "../../server/remoteHost/handlers/googleCalendar.js";
-import type { CalendarEventInput, CalendarEventSummary, ListEventsInput } from "../../server/services/google/calendar.js";
-import { DEFAULT_LIST_MAX_RESULTS, MAX_LIST_RESULTS } from "../../server/services/google/calendar.js";
+import { DEFAULT_LIST_MAX_RESULTS, MAX_LIST_RESULTS, type CalendarEventInput, type CalendarEventSummary, type ListEventsInput } from "@mulmoclaude/core/google";
 
 const sampleEvent: CalendarEventSummary = {
   id: "ev1",

@@ -2,6 +2,7 @@ import "dotenv/config";
 // Wire @mulmoclaude/core/collection/server to this host's workspace + logger
 // before any module that touches collection storage loads.
 import "./workspace/collections/configure.js";
+import "./services/google/configure.js";
 import express, { Request, Response, NextFunction } from "express";
 import path from "path";
 import { fileURLToPath } from "url";

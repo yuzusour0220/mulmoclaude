@@ -4,8 +4,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
-import type { authorizeGoogle } from "../../../server/services/google/auth.js";
-import { createGoogleAuthFlow } from "../../../server/services/google/authFlow.js";
+import { createGoogleAuthFlow, type authorizeGoogle } from "@mulmoclaude/core/google";
 
 const settleMicrotasks = async (): Promise<void> => new Promise((resolve) => setImmediate(resolve));
 
