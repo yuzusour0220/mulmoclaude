@@ -9,7 +9,7 @@ import "../../server/workspace/collections/configure.js"; // configure @mulmocla
 
 import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -209,6 +209,23 @@ describe("manageCollection — putItems", () => {
     assert.ok(!existsSync(path.join(workdir, "data/portfolio/items/noname.json")), "rejected row must not be written");
   });
 
+  it("ablateValidation (evaluation-only) writes rows that validation would reject", async () => {
+    const ablated = makeManageCollectionTool({ workspaceRoot: workdir, userSkillsDir: emptyUserDir, ablateValidation: true });
+    const result = JSON.parse(
+      await ablated.handler({
+        action: "putItems",
+        slug: "portfolio",
+        items: [record("badenum-ablated", { status: "nope" })],
+      }),
+    ) as Record<string, unknown>;
+    assert.deepEqual(result.written, ["badenum-ablated"]);
+    assert.deepEqual(result.rejected, []);
+    assert.equal(stored("badenum-ablated").status, "nope", "out-of-enum value written verbatim under ablation");
+    // getItems under ablation stays silent about the bad stored record
+    const listed = JSON.parse(await ablated.handler({ action: "getItems", slug: "portfolio" })) as Record<string, unknown>;
+    assert.equal(listed.warning, undefined);
+  });
+
   it("rejects a row with no primaryKey value", async () => {
     const result = await runJson({ action: "putItems", slug: "portfolio", items: [{ name: "No Id", status: "open" }] });
     const [rejectedRow] = result.rejected as { id: string; problem: string }[];
@@ -227,6 +244,18 @@ describe("manageCollection — putItems", () => {
     assert.deepEqual(result.written, []);
     const embed = await runJson({ action: "putItems", slug: "portfolio", items: [record("c", { owner: { id: "me" } })] });
     assert.match((embed.rejected as { problem: string }[])[0]?.problem ?? "", /'owner' is an embed/);
+    writeSkill("quotes-linked", {
+      title: "Quotes Linked",
+      icon: "trending_up",
+      dataPath: "data/quotes-linked/items",
+      primaryKey: "symbol",
+      fields: {
+        symbol: { type: "string", label: "Symbol", primary: true, required: true },
+        holders: { type: "backlinks", label: "Holders", from: "portfolio", via: "ticker", display: ["shares"] },
+      },
+    });
+    const backlinks = await runJson({ action: "putItems", slug: "quotes-linked", items: [{ symbol: "x", holders: [] }] });
+    assert.match((backlinks.rejected as { problem: string }[])[0]?.problem ?? "", /'holders' is a backlinks view/);
   });
 
   it("rejects path-shaped ids before any write", async () => {
@@ -314,6 +343,67 @@ describe("manageCollection — dotted record ids", () => {
   it("still rejects a `..` id", async () => {
     const result = await runJson({ action: "putItems", slug: "stock-quotes", items: [{ symbol: "a..b", price: 1 }], mode: "create" });
     assert.match((result.rejected as { problem: string }[])[0]?.problem ?? "", /not a valid record id/);
+  });
+});
+
+describe("manageCollection — getOntology", () => {
+  interface OntologyEntry {
+    slug: string;
+    primaryKey: string;
+    displayField: string;
+    recordCount: number;
+    relations: Record<string, unknown>[];
+  }
+  const getOntology = async () => (await runJson({ action: "getOntology" })).collections as OntologyEntry[];
+  const entryFor = (entries: OntologyEntry[], slug: string) => entries.find((entry) => entry.slug === slug) as OntologyEntry;
+
+  it("needs no slug and lists every discovered collection", async () => {
+    const result = await runJson({ action: "getOntology" });
+    assert.equal(result.count, 3);
+    assert.deepEqual(
+      (result.collections as OntologyEntry[]).map((entry) => entry.slug),
+      ["portfolio", "profile", "stock-quotes"],
+    );
+  });
+
+  it("reports outbound ref/embed relations in field declaration order, skipping non-relation fields", async () => {
+    const portfolio = entryFor(await getOntology(), "portfolio");
+    assert.deepEqual(portfolio.relations, [
+      { field: "ticker", kind: "ref", to: "stock-quotes" },
+      { field: "owner", kind: "embed", to: "profile" },
+    ]);
+    assert.deepEqual(entryFor(await getOntology(), "stock-quotes").relations, []);
+  });
+
+  it("reports table sub-refs with a dotted field path, and backlinks with their source", async () => {
+    writeSkill("invoice", {
+      title: "Invoices",
+      icon: "receipt",
+      dataPath: "data/invoice/items",
+      primaryKey: "id",
+      fields: {
+        id: { type: "string", label: "ID", primary: true, required: true },
+        payments: { type: "backlinks", label: "Payments", from: "portfolio", via: "invoiceId", display: ["shares"] },
+        lines: { type: "table", label: "Lines", of: { clientId: { type: "ref", label: "Client", to: "portfolio" } } },
+      },
+    });
+    const invoice = entryFor(await getOntology(), "invoice");
+    assert.deepEqual(invoice.relations, [
+      { field: "payments", kind: "backlinks", to: "portfolio" },
+      { field: "lines.clientId", kind: "ref", to: "portfolio" },
+    ]);
+  });
+
+  it("counts record files without parsing them, and falls back displayField to the primaryKey", async () => {
+    writeFileSync(path.join(workdir, "data/stock-quotes/items", "broken.json"), "not json {");
+    // A symlinked record is unreadable through the collection APIs
+    // (listItems' lstat defense skips it), so it must not count either.
+    symlinkSync(path.join(workdir, "data/profile/items/me.json"), path.join(workdir, "data/stock-quotes/items", "linked.json"));
+    const entries = await getOntology();
+    const quotes = entryFor(entries, "stock-quotes");
+    assert.equal(quotes.recordCount, 2); // aapl + the malformed file — a summary counts files, not parses; symlink excluded
+    assert.equal(quotes.displayField, "symbol");
+    assert.equal(entryFor(entries, "portfolio").recordCount, 0);
   });
 });
 

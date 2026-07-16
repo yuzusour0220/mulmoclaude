@@ -65,11 +65,14 @@
         :key="action.id"
         type="button"
         class="h-8 px-2.5 flex items-center gap-1 rounded border border-indigo-200 bg-white hover:bg-indigo-50 text-indigo-600 font-bold text-xs transition-colors disabled:opacity-50"
-        :disabled="collectionActionPending"
+        :disabled="collectionActionPending || isActionRunning(action.id)"
         :data-testid="`collections-action-${action.id}`"
         @click="runCollectionAction(action)"
       >
-        <span v-if="action.icon" class="material-icons text-sm">{{ action.icon }}</span>
+        <!-- A running `kind:"agent"` worker replaces the icon with a spinner
+             until the completion ping's refetch clears its run key. -->
+        <span v-if="isActionRunning(action.id)" class="material-icons text-sm animate-spin">progress_activity</span>
+        <span v-else-if="action.icon" class="material-icons text-sm">{{ action.icon }}</span>
         <span>{{ action.label }}</span>
       </button>
 
@@ -375,6 +378,7 @@
               :action-error="actionError"
               :action-pending="actionPending"
               :visible-actions="visibleActions"
+              :running-action-ids="viewingRunningActionIds"
               :live-record="liveRecord"
               :live-derived="liveDerived"
               :view-title="viewTitle"
@@ -675,6 +679,7 @@
         :action-error="actionError"
         :action-pending="actionPending"
         :visible-actions="visibleActions"
+        :running-action-ids="viewingRunningActionIds"
         :live-record="liveRecord"
         :live-derived="liveDerived"
         :view-title="viewTitle"
@@ -690,6 +695,18 @@
         @item-chat="onItemChat"
       />
     </CollectionRecordModal>
+
+    <!-- `kind: "mutate"` params mini-form (teleported; stacks over the
+         record modal its button lives in). -->
+    <CollectionMutateParamsModal
+      v-if="mutateModal"
+      :key="`${mutateModal.action.id}-${mutateModal.itemId}`"
+      :action="mutateModal.action"
+      :pending="mutatePending"
+      :error="mutateError"
+      @close="mutateModal = null"
+      @submit="submitMutateParams"
+    />
 
     <!-- Per-collection config (gear): manage/delete custom views. -->
     <CollectionViewConfigModal
@@ -773,6 +790,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onUnmounted, ref, watch } from "vue";
 import { useCollectionI18n } from "../lang";
+import CollectionMutateParamsModal from "./CollectionMutateParamsModal.vue";
 import CollectionRecordModal from "./CollectionRecordModal.vue";
 import CollectionCalendarView from "./CollectionCalendarView.vue";
 import CollectionDayView from "./CollectionDayView.vue";
@@ -806,6 +824,7 @@ import {
   shortHexId,
   defangForPrompt,
   actionVisible,
+  agentActionRunKey,
   fieldVisible,
   resolveEnumColor,
   buildUpdatedRecord,
@@ -817,6 +836,7 @@ import {
   type SortState,
   type SortValue,
   type CollectionAction,
+  type CollectionMutateAction,
   type CollectionCustomView as CustomViewSpec,
   type CollectionDetail,
   type CollectionItem,
@@ -961,6 +981,33 @@ const inlineSavingRows = ref<Set<string>>(new Set());
 const actionPending = ref(false);
 const actionError = ref<string | null>(null);
 const collectionActionPending = ref(false);
+
+// In-flight `kind: "agent"` action run keys. The server's detail response
+// is the source of truth (its dispatch guard); a dispatch adds the key
+// optimistically BEFORE the POST, and the worker's completion ping
+// (publishCollectionChange) triggers the refetch that reconciles it.
+const runningActions = ref<Set<string>>(new Set());
+
+// Generation guard: bumped on every LOCAL runningActions mutation so a
+// detail response that started BEFORE the mutation can't clobber it — a
+// pre-dispatch snapshot would erase the optimistic key and strand the
+// button enabled while the worker runs (Codex + CodeRabbit on PR #2104).
+let runningActionsGen = 0;
+
+function mutateRunningActions(mutate: (next: Set<string>) => void): void {
+  runningActionsGen += 1;
+  const next = new Set(runningActions.value);
+  mutate(next);
+  runningActions.value = next;
+}
+
+/** Adopt a detail response's `runningActions` — only when no local
+ *  mutation happened while the response was in flight (stale snapshots
+ *  are dropped; the completion ping's refetch reconciles soon after). */
+function applyServerRunningActions(keys: string[] | undefined, genAtFetch: number): void {
+  if (runningActionsGen !== genAtFetch) return;
+  runningActions.value = new Set(keys ?? []);
+}
 const chatOpen = ref(false);
 const chatMessage = ref("");
 const chatInputEl = ref<HTMLTextAreaElement | null>(null);
@@ -1080,14 +1127,14 @@ function sortValueOf(field: FieldSpec, key: string, item: CollectionItem): SortV
 }
 
 /** Derived rows sort by their display type: money/number → numeric,
- *  date/datetime → epoch, anything else → the enriched value as a string. */
+ *  date → epoch, anything else → the enriched value as a string. */
 function derivedSortValue(field: FieldSpec, key: string, item: CollectionItem): SortValue {
-  const { display } = field;
+  const display = field.type === "derived" ? field.display : undefined;
   if (display === undefined || display === "number" || display === "money") {
     return numericSortValue(evaluateDerivedAgainstItem(field, key, item));
   }
   const enriched = collection.value ? render.deriveAll(collection.value.schema, item, render.refRecordCache.value) : item;
-  if (display === "date" || display === "datetime") return dateSortValue(enriched[key]);
+  if (display === "date") return dateSortValue(enriched[key]);
   return stringSortValue(enriched[key]);
 }
 
@@ -1205,20 +1252,40 @@ function showRefreshNote(message: string): void {
 /** Collection-level header actions. No `when` predicate (no record). */
 const collectionActions = computed<CollectionAction[]>(() => collection.value?.schema.collectionActions ?? []);
 
+/** True when a `kind: "agent"` action's hidden worker is in flight —
+ *  drives the button spinner + disable. Keys mirror the server's
+ *  dispatch guard via `agentActionRunKey`. */
+function isActionRunning(actionId: string, itemId?: string): boolean {
+  return runningActions.value.has(agentActionRunKey(actionId, itemId));
+}
+
 /** Run a collection-level action: ask the server to assemble the seed
- *  prompt (a progress summary of all records + the template), then start
- *  a new chat in the action's role with it. Generic — no domain knowledge. */
+ *  prompt (a progress summary of all records + the template). `kind:
+ *  "chat"` gets the seed back and starts a new chat; `kind: "agent"` is
+ *  dispatched server-side as a hidden worker — mark it running and let
+ *  the completion ping's refetch reconcile. Generic — no domain knowledge. */
 async function runCollectionAction(action: CollectionAction): Promise<void> {
   const current = collection.value;
-  if (!current || collectionActionPending.value) return;
+  if (!current || collectionActionPending.value || isActionRunning(action.id)) return;
+  // Optimistic key BEFORE the POST: a fast worker's completion ping can
+  // beat the POST's resolution, and adding the key afterwards would
+  // strand the spinner past the only refetch that could clear it.
+  const runKey = action.kind === "agent" ? agentActionRunKey(action.id) : null;
+  if (runKey) mutateRunningActions((next) => next.add(runKey));
   collectionActionPending.value = true;
   inlineError.value = null;
   const result = await cui.runCollectionAction(current.slug, action.id);
   collectionActionPending.value = false;
   if (!result.ok) {
+    // 409 = the server's dispatch guard CONFIRMED a worker is in flight
+    // (e.g. dispatched from another tab) — keep the key so the button
+    // stays disabled; drop it only for real launch failures.
+    if (runKey && result.status !== 409) mutateRunningActions((next) => next.delete(runKey));
     inlineError.value = result.error;
     return;
   }
+  if (result.data.dispatched) return; // key already set; the completion ping's refetch reconciles
+  if (result.data.written) return; // mutate never reaches this handler branch; narrows the union
   if (props.sendTextMessage) {
     props.sendTextMessage(result.data.prompt);
     return;
@@ -1256,21 +1323,82 @@ const visibleActions = computed<CollectionAction[]>(() => {
   return (collection.value?.schema.actions ?? []).filter((action) => actionVisible(action, record));
 });
 
-/** Run a schema-declared action on the open record: ask the server to
- *  assemble the seed prompt, then start a new chat in the action's
- *  role with it. Generic — no knowledge of what the action does. */
+// `kind: "mutate"` mini-form state: the open modal (which action, which
+// record), its in-flight flag, and the server's `problem` text on a
+// rejected write (rendered inline so the user fixes and retries).
+const mutateModal = ref<{ action: CollectionMutateAction; itemId: string } | null>(null);
+const mutatePending = ref(false);
+const mutateError = ref<string | null>(null);
+
+/** POST one mutate action and, on success, adopt the written record for
+ *  the open panel (the write's change ping refreshes the table rows).
+ *  Errors land in the modal when one is open, else on the panel. */
+async function executeMutate(action: CollectionMutateAction, itemId: string, params: Record<string, unknown>): Promise<boolean> {
+  // Re-entrancy guard: Enter-key repeats / double-clicks can outrun the
+  // buttons' :disabled state — one write in flight at a time.
+  if (!collection.value || mutatePending.value) return false;
+  mutatePending.value = true;
+  const result = await cui.runItemAction(collection.value.slug, itemId, action.id, params);
+  mutatePending.value = false;
+  if (!result.ok) {
+    if (mutateModal.value) mutateError.value = result.error;
+    else actionError.value = result.error;
+    return false;
+  }
+  if (result.data.written && viewing.value && String(viewing.value[collection.value.schema.primaryKey] ?? "") === itemId) {
+    viewing.value = result.data.item;
+  }
+  return true;
+}
+
+async function submitMutateParams(params: Record<string, unknown>): Promise<void> {
+  const open = mutateModal.value;
+  if (!open) return;
+  mutateError.value = null;
+  if (await executeMutate(open.action, open.itemId, params)) mutateModal.value = null;
+}
+
+/** Mutate kind: open the params mini-form when the action declares one,
+ *  else apply the declarative write immediately. */
+async function runMutateAction(action: CollectionMutateAction, itemId: string): Promise<void> {
+  actionError.value = null;
+  if (action.params && Object.keys(action.params).length > 0) {
+    mutateError.value = null;
+    mutateModal.value = { action, itemId };
+    return;
+  }
+  await executeMutate(action, itemId, {});
+}
+
+/** Run a schema-declared action on the open record. `kind: "mutate"`
+ *  never leaves the host: with `params` it opens the mini-form, else it
+ *  applies immediately. `kind: "chat"` gets the seed back and starts a
+ *  new chat; `kind: "agent"` is dispatched server-side as a hidden
+ *  worker — mark it running and let the completion ping's refetch
+ *  reconcile. Generic — no knowledge of what the action does. */
 async function runAction(action: CollectionAction): Promise<void> {
   if (!collection.value || !viewing.value) return;
   const itemId = String(viewing.value[collection.value.schema.primaryKey] ?? "");
-  if (!itemId) return;
+  if (!itemId || isActionRunning(action.id, itemId)) return;
+  if (action.kind === "mutate") {
+    await runMutateAction(action, itemId);
+    return;
+  }
+  // Optimistic key BEFORE the POST — see runCollectionAction.
+  const runKey = action.kind === "agent" ? agentActionRunKey(action.id, itemId) : null;
+  if (runKey) mutateRunningActions((next) => next.add(runKey));
   actionPending.value = true;
   actionError.value = null;
   const result = await cui.runItemAction(collection.value.slug, itemId, action.id);
   actionPending.value = false;
   if (!result.ok) {
+    // 409 = already running server-side — keep the key; see runCollectionAction.
+    if (runKey && result.status !== 409) mutateRunningActions((next) => next.delete(runKey));
     actionError.value = result.error;
     return;
   }
+  if (result.data.dispatched) return; // key already set; the completion ping's refetch reconciles
+  if (result.data.written) return; // mutate never reaches this handler branch; narrows the union
   // In a chat card we have a channel into the current session — send
   // the seed prompt there rather than spawning a new chat. Standalone
   // route mode has no such channel, so start a fresh chat in the
@@ -1281,6 +1409,17 @@ async function runAction(action: CollectionAction): Promise<void> {
   }
   appApi.startNewChat(result.data.prompt, result.data.role);
 }
+
+/** Ids of the open record's actions whose hidden worker is running — the
+ *  record panel renders those buttons with a spinner, disabled. */
+const viewingRunningActionIds = computed<string[]>(() => {
+  const current = collection.value;
+  const record = viewing.value;
+  if (!current || !record) return [];
+  const itemId = String(record[current.schema.primaryKey] ?? "");
+  if (!itemId) return [];
+  return (current.schema.actions ?? []).filter((action) => isActionRunning(action.id, itemId)).map((action) => action.id);
+});
 
 /** Open the chat modal, blanking any prior draft and focusing the input. */
 function openChat(): void {
@@ -1361,6 +1500,7 @@ async function loadCollection(slug: string): Promise<void> {
   collection.value = null;
   items.value = [];
   dataIssues.value = []; // never carry a previous collection's issues over
+  mutateRunningActions((next) => next.clear()); // ditto for another collection's spinners
   searchQuery.value = ""; // Reset search query on collection load
   // NOTE: the active column sort is NOT reset here — it's part of the view
   // state, so it must survive a refresh / edit reload and an embedded card
@@ -1368,6 +1508,7 @@ async function loadCollection(slug: string): Promise<void> {
   render.resetLinkedCaches();
   viewing.value = null;
   openDay.value = null; // never carry a previous collection's open day over
+  const runningGen = runningActionsGen;
   const result = await cui.fetchCollectionDetail(slug);
   loading.value = false;
   if (!result.ok) {
@@ -1385,6 +1526,7 @@ async function loadCollection(slug: string): Promise<void> {
   collection.value = result.data.collection;
   items.value = result.data.items;
   dataIssues.value = result.data.issues ?? [];
+  applyServerRunningActions(result.data.runningActions, runningGen);
   enumOriginallyEmpty.value = snapshotEmptyEnums(result.data.collection.schema, result.data.items);
   // Fan out to fetch each unique target collection so the table can
   // render ref values as display names (not slugs) and the form
@@ -1419,12 +1561,14 @@ async function loadCollection(slug: string): Promise<void> {
  *  fetch is a no-op (keep the current data) — a transient blip shouldn't blank a
  *  view the user is reading. */
 async function refreshItemsInPlace(slug: string): Promise<void> {
+  const runningGen = runningActionsGen;
   const result = await cui.fetchCollectionDetail(slug);
   // Bail if the fetch failed or the user switched collections mid-flight.
   if (!result.ok || activeSlug.value !== slug) return;
   collection.value = result.data.collection;
   items.value = result.data.items;
   dataIssues.value = result.data.issues ?? [];
+  applyServerRunningActions(result.data.runningActions, runningGen);
   enumOriginallyEmpty.value = snapshotEmptyEnums(result.data.collection.schema, result.data.items);
   await render.loadLinkedCollections(result.data.collection.schema, slug);
   if (activeSlug.value !== slug) return; // re-check after the await
@@ -1461,15 +1605,17 @@ function maybeAutoRefreshFeed(slug: string): void {
  *  and it'd be identical in every row). The detail modal and the edit
  *  form iterate the full `schema.fields` so embeds render there too. */
 // Fields shown as columns in the list table. Excludes `embed`
-// (display-only fixed record, no per-record value), `image` — a
-// per-row <img> fetches one file each, too expensive for a collection
-// with many records, and the image is shown in the detail view anyway —
-// and the primary key (an id is plumbing, not data: it identifies the
-// row via data-testid / ref links but doesn't earn a column).
+// (display-only fixed record, no per-record value), `backlinks` (a
+// whole reverse-ref sub-table can't live in a cell — detail view only),
+// `image` — a per-row <img> fetches one file each, too expensive for a
+// collection with many records, and the image is shown in the detail
+// view anyway — and the primary key (an id is plumbing, not data: it
+// identifies the row via data-testid / ref links but doesn't earn a
+// column).
 const listColumnFields = computed<[string, FieldSpec][]>(() =>
   collection.value
     ? Object.entries(collection.value.schema.fields).filter(
-        ([key, field]) => field.type !== "embed" && field.type !== "image" && key !== collection.value?.schema.primaryKey,
+        ([key, field]) => field.type !== "embed" && field.type !== "backlinks" && field.type !== "image" && key !== collection.value?.schema.primaryKey,
       )
     : [],
 );
@@ -1748,11 +1894,12 @@ function openCreate(): void {
       boolTouched[key] = false;
     } else if (field.type === "table") {
       table[key] = [];
-    } else if (field.type !== "derived" && field.type !== "embed" && field.type !== "toggle") {
+    } else if (field.type !== "derived" && field.type !== "embed" && field.type !== "backlinks" && field.type !== "toggle") {
       text[key] = "";
     }
-    // derived (computed), embed (display-only, foreign record), and toggle
-    // (projection of an enum field) have no draft slot.
+    // derived (computed), embed (display-only, foreign record), backlinks
+    // (reverse refs owned by other records), and toggle (projection of an
+    // enum field) have no draft slot.
   }
   // Singleton collections fix the primary key to the schema-declared
   // value (e.g. "me") so the first Add can't pick an arbitrary id.
@@ -1796,7 +1943,7 @@ function openEdit(item: CollectionItem): void {
       table[key] = rows
         .filter((row): row is Record<string, unknown> => Boolean(row) && typeof row === "object" && !Array.isArray(row))
         .map((row) => rowFromItem(row, sub));
-    } else if (field.type !== "derived" && field.type !== "embed" && field.type !== "toggle") {
+    } else if (field.type !== "derived" && field.type !== "embed" && field.type !== "backlinks" && field.type !== "toggle") {
       text[key] = raw === undefined || raw === null ? "" : String(raw);
     }
   }
@@ -2020,19 +2167,18 @@ async function commitInlineEdit(item: CollectionItem, key: string, field: FieldS
 /** Whether a `toggle` field reads as checked: its projected enum field
  *  currently equals `onValue`. The toggle stores nothing itself. */
 function toggleChecked(item: CollectionItem, field: FieldSpec): boolean {
-  return field.field !== undefined && String(item[field.field] ?? "") === field.onValue;
+  return field.type === "toggle" && String(item[field.field] ?? "") === field.onValue;
 }
 
 /** Flip a `toggle`: write the projected enum field to `offValue` when
  *  currently checked, else `onValue`. Reuses the inline-edit PUT path
  *  (optimistic + rollback) — the toggle has no value of its own. */
 function commitToggle(item: CollectionItem, field: FieldSpec): void {
+  if (field.type !== "toggle" || !collection.value) return;
   const targetKey = field.field;
-  if (!targetKey || !collection.value) return;
   const enumField = collection.value.schema.fields[targetKey];
   if (!enumField) return;
   const next = toggleChecked(item, field) ? field.offValue : field.onValue;
-  if (next === undefined) return;
   void commitInlineEdit(item, targetKey, enumField, next);
 }
 

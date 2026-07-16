@@ -133,14 +133,17 @@ export function requireViewToken(action: ViewCapability) {
 // Matches a view-data request path with or without the `/api` mount prefix:
 // the global CSRF middleware sees `/api/collections/<slug>/view-data` while
 // the `/api`-mounted bearer closure sees `/collections/<slug>/view-data`.
-// Anchored both ends; `[^/]+` is the slug segment.
+// Anchored both ends; `[^/]+` is the slug segment. Two separate regexes
+// (base path / the token-scoped mutate-action endpoint) rather than one
+// with an optional tail — the combined form trips the unsafe-regex lint.
 const VIEW_DATA_PATH_RE = /^\/(?:api\/)?collections\/[^/]+\/view-data$/;
+const VIEW_DATA_ACTION_PATH_RE = /^\/(?:api\/)?collections\/[^/]+\/view-data\/actions\/[^/]+$/;
 
-/** True for the view-data endpoint path (either mount base). Used in
+/** True for the view-data endpoint paths (either mount base). Used in
  *  `server/index.ts` to exempt these routes from the global bearer + CSRF
  *  guards — they are guarded instead by {@link requireViewToken}. */
 export function isViewDataPath(pathname: string): boolean {
-  return VIEW_DATA_PATH_RE.test(pathname);
+  return VIEW_DATA_PATH_RE.test(pathname) || VIEW_DATA_ACTION_PATH_RE.test(pathname);
 }
 
 export { CAPABILITIES as VIEW_CAPABILITIES };

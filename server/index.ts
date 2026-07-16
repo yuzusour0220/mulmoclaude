@@ -65,6 +65,7 @@ import { createJournalRouter } from "./api/routes/journal.js";
 import { createTranslationRouter } from "./api/routes/translation.js";
 import { announcePluginMetaDiagnostics } from "./plugins/diagnostics.js";
 import { announceOptionalDeps } from "./system/announceOptionalDeps.js";
+import { announceGeminiKey } from "./system/announceGeminiKey.js";
 import { migrateLegacyBillingPresets } from "./workspace/billing-migration.js";
 import { APP_VERSION } from "./system/appVersion.js";
 import { createChatService } from "@mulmobridge/chat-service";
@@ -87,7 +88,7 @@ import { initWorkspace, workspacePath } from "./workspace/workspace.js";
 import { runMemoryMigrationOnce } from "./workspace/memory/run.js";
 import { runTopicMigrationOnce } from "./workspace/memory/topic-run.js";
 import { migrateCookingRecipesFromPlugin } from "./workspace/cooking-recipes/migrate.js";
-import { env, isGeminiAvailable } from "./system/env.js";
+import { env, isAblated, isGeminiAvailable } from "./system/env.js";
 import { buildSandboxStatus } from "./api/sandboxStatus.js";
 import { existsSync, readFileSync } from "fs";
 import { realpath as fsRealpath } from "fs/promises";
@@ -968,6 +969,9 @@ async function initBootDiagnostics(): Promise<void> {
   // later opaque crash. Never throws.
   await announceOptionalDeps();
 
+  // --- Gemini key presence (#2081) ---
+  announceGeminiKey();
+
   // --- Voice input sidecar warm-up ---
   // If local voice input is enabled and its model is already on disk,
   // pre-spawn the whisper-server sidecar now (deps were just probed) so
@@ -990,9 +994,13 @@ async function initBootDiagnostics(): Promise<void> {
   // first to catch up changes that landed while the server was down.
   // Errors are logged inside; fire-and-forget so a slow scan doesn't
   // hold up the rest of boot.
-  startCollectionWatchers().catch((err: unknown) => {
-    log.warn("collections", "watcher boot failed", { error: String(err) });
-  });
+  if (isAblated("reconciler")) {
+    log.warn("collections", "ABLATION ACTIVE: reconciler disabled — no watchers, bells, or spawn recurrence (evaluation only)");
+  } else {
+    startCollectionWatchers().catch((err: unknown) => {
+      log.warn("collections", "watcher boot failed", { error: String(err) });
+    });
+  }
 }
 
 function attachTransports(httpServer: ReturnType<typeof app.listen>, pubsub: IPubSub): void {

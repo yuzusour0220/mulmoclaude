@@ -168,6 +168,7 @@ const HOST_API_ROUTES = {
   // plans/feat-remote-host-firestore-list-collections.md.
   remoteHost: {
     connect: "/api/remote-host/connect",
+    reconnect: "/api/remote-host/reconnect",
     disconnect: "/api/remote-host/disconnect",
     status: "/api/remote-host/status",
   },
@@ -341,6 +342,11 @@ const HOST_API_ROUTES = {
      *  Guarded by the scoped view token (NOT the global bearer); exempt from
      *  the global bearer + CSRF middleware. See server/api/auth/viewToken.ts. */
     viewData: "/api/collections/:slug/view-data",
+    /** POST → invoke a `kind: "mutate"` action from a custom view (body:
+     *  { itemId, params? }) → { written, itemId, item }. Requires the `write`
+     *  capability on the view token; mutate kind ONLY — a view token must
+     *  never be able to start LLM work (chat/agent stay bearer-guarded). */
+    viewDataAction: "/api/collections/:slug/view-data/actions/:actionId",
     /** DELETE → remove one custom view: drop it from schema.json `views[]` and
      *  unlink its `views/<file>.html` (global-bearer auth) → { deleted, viewId }.
      *  Source-aware; refuses user-scope + preset collections. */

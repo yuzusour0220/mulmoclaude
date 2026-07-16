@@ -10,6 +10,65 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 ---
 
+## [1.0.0] - 2026-07-14
+
+MulmoClaude reaches **1.0** — the first stable release. Functionally it builds directly on 0.9.7, adding **Web Push on task finish** (get a push on your phone the moment the answer to a question you asked is ready) and a launcher fix that loads `.env` from the directory you launch from. 18 non-merge commits since 0.9.7.
+
+### Highlights
+
+#### Web Push on task finish (#2086)
+
+Enable **Settings → Notifications → Web Push** to get a push on your registered devices when a turn you started finishes — the "ask a question, step away, get pinged when the answer's ready" flow, working even with the browser tab closed as long as the host machine is up. Only **human-initiated** turns fire it (scheduler / skill / bridge / system turns are excluded), and only while the **RemoteHost** channel is connected (that's what supplies the Firebase sign-in) — otherwise it's a silent no-op. The send core is the new auth-agnostic **`@mulmobridge/web-push`** package, extracted so MulmoClaude and MulmoTerminal share one source of truth for the mulmoserver `sendPush` wire contract; device registration and delivery stay server-side (mulmoserver#46).
+
+### Fixed
+
+- **Launcher loads `<launch-dir>/.env`** (#2081) — `npx mulmoclaude` now reads a `.env` in the directory you launch from, so `GEMINI_API_KEY` (and other env vars) take effect without exporting them by hand. Previously only the isolated `~/mulmoclaude` workspace was consulted.
+
+### Changed
+
+- Dependency refresh (#2088).
+
+### `@mulmoclaude/core@0.13.1` - 2026-07-14
+
+- **Docs (#2081)**: the Gemini API-key help now tells users to put `GEMINI_API_KEY` in a `.env` file **in the directory they launch MulmoClaude from** (not the isolated `~/mulmoclaude` workspace), matching the launcher's new launch-dir `.env` loading. Ships via `assets/helps/gemini.md`.
+
+📦 npm: [`mulmoclaude@1.0.0`](https://www.npmjs.com/package/mulmoclaude/v/1.0.0)
+
+---
+
+## [0.9.7] - 2026-07-14
+
+Chat input no longer locks while the agent is running — messages you type are queued and flushed in order once the run finishes. RemoteHost (driving MulmoClaude from a phone) now persists its Firebase session in the browser and reconnects across server/browser restarts, without a re-login popup — bundled via `@mulmoclaude/core@0.13.0`. 25 non-merge commits since 0.9.6.
+
+### Highlights
+
+#### Chat input: queue sends while the agent runs (#2067)
+
+The composer no longer disables while a run is in progress — messages you type are buffered and sent in order once the agent is free, instead of the input locking. The buffer is scoped per session, and Ctrl/Cmd+Enter inserts a newline without triggering the slash menu.
+
+#### RemoteHost session persistence (#2073, #2075)
+
+A host's Firebase session is now parked in the browser and restored after a server or browser restart, so a phone paired to the host stays connected without a re-login popup. Reconnect is non-destructive: a transient network failure keeps the live session, while an expired or malformed session blob is dropped rather than retried forever. Shipped in `@mulmoclaude/core@0.13.0` (see the sub-note below for the API surface).
+
+### Fixed
+
+- e2e-live CI: pinned the auth token to stop an intermittent 401 flake caused by a token-regeneration race (#2069).
+
+### Documentation
+
+- Documented the MCP stdio-under-Docker opt-in (`hostExecInDocker`, a per-server toggle) and environment-variable passthrough, propagated across all README translations, with a plain-language "Short version" lead and a Japanese edition of the sandbox guide (#2071). The feature itself shipped earlier (#1421); this release documents it.
+
+### `@mulmoclaude/core@0.13.0` - 2026-07-13
+
+RemoteHost session persistence (receptron/mulmoserver#50, case A'): a host's Firebase session is parked in the browser and restored after a server restart, without a re-login popup. First core release carrying this API (#2074) and the mulmoclaude-wiring hardening (#2076).
+
+- **New API**: `createHostSessionPersistence()` (seed/export-able Firebase Auth persistence) and `createRemoteHostSession(config)` — `open(seedBlob?, validate?)` / `close()` / `exportSession()` / `onSessionChange()`. New exports: `isSeedableBlob`, `RemoteHostSessionValidate`, `HostAuthPersistenceClass`, `HostAuthPersistenceInstance`.
+- **Fix (#2076)**: persistence is now a class as `initializeAuth` requires — fixes `INTERNAL ASSERTION FAILED: Expected a class definition` that broke `createRemoteHostSession.open()`. Non-destructive `(re)connect` via a pre-teardown `validate` hook (a failed sign-in / expired blob keeps the live session). Reconnect classifies expired/malformed blobs (drop) vs transient failures (keep), so a network blip no longer forces a re-login and a corrupt blob is not retried forever.
+
+📦 npm: [`@mulmoclaude/core@0.13.0`](https://www.npmjs.com/package/@mulmoclaude/core/v/0.13.0)
+
+---
+
 ## [0.9.6] - 2026-07-12
 
 Resolves the `handlePermission not found` MCP-broker failure family end-to-end — one error symptom with three distinct root causes (#2052 / #2056 / #2057) — so the Docker sandbox and scheduled runs stop losing all their tools at once. Adds a mobile-PWA QR code to the remote-host popover. 95 non-merge commits since 0.9.5.

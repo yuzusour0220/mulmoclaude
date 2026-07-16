@@ -17,6 +17,7 @@ import type { Ref } from "vue";
 import { collectionUi } from "./uiContext";
 import { deriveAll } from "@mulmoclaude/core/collection";
 import type {
+  BacklinksView,
   CollectionDetail,
   CollectionItem,
   CollectionSchema,
@@ -42,6 +43,7 @@ import {
 } from "./useCollectionRendering.helpers";
 import { useLinkedCollectionCaches } from "./useLinkedCollectionCaches";
 import {
+  buildBacklinksViews,
   buildEmbedViews,
   embedOptionsFor,
   evaluateDerived,
@@ -61,6 +63,7 @@ export interface CollectionRendering {
   refOptions: (targetSlug: string) => RefOption[];
   embedOptions: (targetSlug: string) => RefOption[];
   embedViewsFor: (record: CollectionItem | null) => Record<string, EmbedView>;
+  backlinksViewsFor: (record: CollectionItem | null) => Record<string, BacklinksView>;
   resolveCurrency: (field: FieldSpec, record: CollectionItem | null | undefined) => string | undefined;
   currencySymbol: (currency: string | undefined) => string;
   formatMoney: (value: unknown, currency: string | undefined, displayLocale: string) => string;
@@ -104,6 +107,7 @@ export function useCollectionRendering(collection: Ref<CollectionDetail | null>,
     refOptions: (targetSlug) => refOptionsFor(refCache.value, targetSlug),
     embedOptions: (targetSlug) => embedOptionsFor(embedCache.value, targetSlug),
     embedViewsFor: (record) => buildEmbedViews(collection.value?.schema ?? null, embedCache.value, record, locale.value),
+    backlinksViewsFor: (record) => buildBacklinksViews(collection.value?.schema ?? null, embedCache.value, record, locale.value),
     currencySymbol: (currency) => currencySymbolForLocale(currency, locale.value),
     // A `file` field holds a workspace-relative path; the host resolves it to a
     // served artifact URL (html/svg) or null. The host owns the path guard

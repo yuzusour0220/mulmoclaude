@@ -18,8 +18,7 @@ import type { Attachment } from "@mulmobridge/protocol";
 import { saveAttachment } from "../../utils/files/attachment-store.js";
 import { errorMessage } from "../../utils/errors.js";
 import { log } from "../../system/logger/index.js";
-import { currentUid } from "../auth.js";
-import { storage } from "../firebase.js";
+import { currentStorage, currentUid } from "../session.js";
 
 const PREFIX = "remote-host";
 
@@ -75,7 +74,7 @@ export const createIngestAttachments =
 // Pull an object's bytes + content type from Storage. `getBytes` (not the
 // browser-only `getBlob`) returns an ArrayBuffer that works on the Node host.
 const fetchObject = async (storagePath: string): Promise<{ base64: string; contentType: string }> => {
-  const objectRef = ref(storage, storagePath);
+  const objectRef = ref(currentStorage(), storagePath);
   const [bytes, metadata] = await Promise.all([getBytes(objectRef, MAX_DOWNLOAD_BYTES), getMetadata(objectRef)]);
   return { base64: Buffer.from(bytes).toString("base64"), contentType: metadata.contentType ?? "application/octet-stream" };
 };
@@ -84,5 +83,5 @@ export const ingestAttachments = createIngestAttachments({
   uid: currentUid,
   fetchObject,
   saveAttachment,
-  deleteObject: (storagePath) => deleteObject(ref(storage, storagePath)),
+  deleteObject: (storagePath) => deleteObject(ref(currentStorage(), storagePath)),
 });

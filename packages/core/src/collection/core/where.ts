@@ -2,36 +2,33 @@
 // `DynamicIconSource.where` / `DynamicIconRule.where` in `./schema`).
 // An AND of typed conditions — richer than the single-field `CollectionWhen`
 // used elsewhere (fields/actions via `./actionVisible`), which stays as-is
-// for its existing callers. No fs, no host state.
+// for its existing callers. No fs, no host state. The condition SHAPES are
+// derived from the zod source of truth in `./schemaZ` (type-only imports —
+// this evaluator stays zod-free at runtime).
 
-/** Comparison operators one `WhereCond` may apply to `record[field]`. */
-export type WhereOp = "eq" | "ne" | "in" | "gt" | "gte" | "lt" | "lte" | "contains";
+import type { z } from "zod";
+import type { ValueRefZ, WhereCondZ, WhereZ } from "./schemaZ";
 
 /** Reads the comparison value from a field instead of a schema literal:
  *  - `record` set → another record: `recordsById[record][field]` (e.g. a
  *    `_config` singleton's `defaultCity`, following a per-user setting);
  *  - `record` omitted → the SAME record being matched (field-to-field, e.g.
  *    `spent > budget`). */
-export interface ValueRef {
-  record?: string;
-  field: string;
-}
+export type ValueRef = z.infer<typeof ValueRefZ>;
 
 /** One typed condition: `record[field] <op> value`. The comparison value is
  *  either a literal `value` (a plain string for every op except `in`, which
  *  takes the allowed set) or a `valueFrom` reference resolved against the
  *  `recordsById` map passed to `matchesWhere`. Exactly one of the two is
- *  expected — enforced by zod at the schema boundary (`server/discovery.ts`),
- *  not here. */
-export interface WhereCond {
-  field: string;
-  op: WhereOp;
-  value?: string | string[];
-  valueFrom?: ValueRef;
-}
+ *  expected — enforced by zod at the schema boundary (`./schemaZ`), not
+ *  here. */
+export type WhereCond = z.infer<typeof WhereCondZ>;
+
+/** Comparison operators one `WhereCond` may apply to `record[field]`. */
+export type WhereOp = WhereCond["op"];
 
 /** A `where` clause is the AND of its conditions — every one must match. */
-export type Where = WhereCond[];
+export type Where = z.infer<typeof WhereZ>;
 
 /** True when `record[field]` is absent (`undefined`/`null`) — the only case
  *  where `ne` and every other op disagree on the result. */

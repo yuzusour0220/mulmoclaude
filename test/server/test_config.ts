@@ -224,6 +224,26 @@ describe("loadSettings", () => {
   });
 });
 
+describe("pushEnabled (Web Push on task finish)", () => {
+  it("validates a boolean pushEnabled on both the full and patch shapes", () => {
+    assert.ok(mod.isAppSettings({ extraAllowedTools: [], pushEnabled: true }));
+    assert.equal(mod.isAppSettings({ extraAllowedTools: [], pushEnabled: "yes" }), false);
+    assert.ok(mod.isAppSettingsPatch({ pushEnabled: false }));
+    assert.equal(mod.isAppSettingsPatch({ pushEnabled: 1 }), false);
+  });
+
+  it("round-trips through save/load", () => {
+    mod.saveSettings({ extraAllowedTools: [], pushEnabled: true });
+    assert.equal(mod.loadSettings().pushEnabled, true);
+  });
+
+  it("defaults to off when unset and reads back what was set", () => {
+    assert.equal(mod.isPushEnabled({ extraAllowedTools: [] }), false);
+    assert.equal(mod.isPushEnabled({ extraAllowedTools: [], pushEnabled: false }), false);
+    assert.equal(mod.isPushEnabled({ extraAllowedTools: [], pushEnabled: true }), true);
+  });
+});
+
 describe("isMcpServerSpec", () => {
   it("accepts valid http specs", () => {
     assert.ok(mod.isMcpServerSpec({ type: "http", url: "https://example.com/mcp" }));

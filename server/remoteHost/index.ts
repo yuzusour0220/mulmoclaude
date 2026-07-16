@@ -7,30 +7,33 @@
 // supplies host specifics — hostId, the handler table, the firestore-bound
 // runner, and a logger adapter — and exposes the default singleton the route uses.
 //
-// Single-account, single-host (HOST_ID = "mulmoclaude"), in-memory session: a
-// server restart drops the session and needs a re-connect.
+// Single-account, single-host (HOST_ID = "mulmoclaude"). The Firebase session is
+// parked in the browser (case A', mulmoserver#50), so a server restart doesn't
+// force a re-login: the client reconnects from its stored blob.
 import { createRemoteHost, startHostRunner } from "@mulmoclaude/core/remote-host/server";
 
 import { log } from "../system/logger/index.js";
 import { HOST_ID } from "./commandChannel.js";
-import { currentUid, signInHost, signOutHost } from "./auth.js";
-import { firestore } from "./firebase.js";
+import { currentFirestore, currentUid, restore, signIn, signOut } from "./session.js";
 import { handlers } from "./handlers/index.js";
 import { onExpire } from "./onExpire.js";
 
 export type { RemoteHostStatus } from "@mulmoclaude/core/remote-host/server";
+export { exportSession, RemoteHostSessionExpiredError } from "./session.js";
 
 const PREFIX = "remote-host";
 
-// Default singleton wired to the real Firebase deps — imported by the route. The
-// runner is pre-bound with this host's firestore instance; the logger adapts the
-// factory's plain-string calls to the host logger's (prefix, msg) shape.
+// Default singleton wired to the session-backed Firebase deps — imported by the
+// route. The runner reads the CURRENT session's firestore (it changes each
+// (re)connect); the logger adapts the factory's plain-string calls to the host
+// logger's (prefix, msg) shape.
 const instance = createRemoteHost({
   hostId: HOST_ID,
-  signIn: signInHost,
-  signOut: signOutHost,
+  signIn,
+  restore,
+  signOut,
   currentUid,
-  startRunner: (channel, hostHandlers, options) => startHostRunner(firestore, channel, hostHandlers, options),
+  startRunner: (channel, hostHandlers, options) => startHostRunner(currentFirestore(), channel, hostHandlers, options),
   handlers,
   onExpire,
   log: {
@@ -40,4 +43,4 @@ const instance = createRemoteHost({
   },
 });
 
-export const { connect, disconnect, status } = instance;
+export const { connect, reconnect, disconnect, status } = instance;

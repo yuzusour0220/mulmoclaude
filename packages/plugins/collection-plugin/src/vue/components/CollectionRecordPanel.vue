@@ -45,11 +45,14 @@
           :key="action.id"
           type="button"
           class="h-8 px-2.5 rounded border border-indigo-200 bg-indigo-50/50 text-indigo-600 hover:bg-indigo-600 hover:text-white hover:border-indigo-600 font-bold text-xs transition-all flex items-center gap-1 disabled:opacity-50"
-          :disabled="actionPending"
+          :disabled="actionPending || runningActionIds.includes(action.id)"
           :data-testid="`collections-detail-action-${action.id}`"
           @click="emit('runAction', action)"
         >
-          <span v-if="action.icon" class="material-icons text-sm">{{ action.icon }}</span>
+          <!-- A running `kind:"agent"` worker replaces the icon with a spinner
+               until the completion ping's refetch clears its run key. -->
+          <span v-if="runningActionIds.includes(action.id)" class="material-icons text-sm animate-spin">progress_activity</span>
+          <span v-else-if="action.icon" class="material-icons text-sm">{{ action.icon }}</span>
           <span>{{ action.label }}</span>
         </button>
 
@@ -414,6 +417,9 @@
             <!-- Embed view -->
             <CollectionEmbedView v-else-if="field.type === 'embed' && embedViews[key]" :view="embedViews[key]" :field-key="String(key)" />
 
+            <!-- Backlinks: read-only reverse-ref sub-table -->
+            <CollectionBacklinksView v-else-if="field.type === 'backlinks' && backlinksViews[key]" :view="backlinksViews[key]" :field-key="String(key)" />
+
             <!-- Image (workspace-relative path → <img> via auth-exempt /api/files/raw) -->
             <img
               v-else-if="field.type === 'image' && typeof detailRecord[key] === 'string' && detailRecord[key]"
@@ -503,6 +509,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { useCollectionI18n } from "../lang";
+import CollectionBacklinksView from "./CollectionBacklinksView.vue";
 import CollectionEmbedView from "./CollectionEmbedView.vue";
 import { fieldVisible, resolveEnumColor, emptyRow } from "@mulmoclaude/core/collection";
 import { collectionUi } from "../uiContext";
@@ -532,6 +539,9 @@ const props = defineProps<{
   actionError: string | null;
   actionPending: boolean;
   visibleActions: CollectionAction[];
+  /** Ids of the open record's `kind: "agent"` actions whose hidden worker
+   *  is in flight — those buttons render a spinner, disabled. */
+  runningActionIds: string[];
   /** Live record computed from the draft (drives derived previews). */
   liveRecord: CollectionItem | null;
   /** Live record with derived fields resolved. */
@@ -591,6 +601,10 @@ const detailRecord = computed<CollectionItem>(() => (editing.value ? (props.live
 // whenever the open / draft record changes.
 const embedViews = computed(() => props.render.embedViewsFor(detailRecord.value));
 
+// Backlinks view-models resolve against the active record too (the row set
+// is "who points at THIS record"), so they follow the same recompute rule.
+const backlinksViews = computed(() => props.render.backlinksViewsFor(detailRecord.value));
+
 // Map each embed's storage field (`idField`) → the embed that owns it. The
 // embed hosts the picker (a dropdown in edit mode) and the read-only block, so
 // the raw storage field gets no standalone cell of its own — same spirit as a
@@ -619,18 +633,19 @@ const rootTestid = computed<string>(() => {
 });
 
 /** Whether a field gets an editable control in edit mode. Toggle (a
- *  projection of an enum that has its own input), derived (computed), and
- *  embed (a foreign record) stay read-only in both modes, so the cell
- *  geometry never changes on the view↔edit toggle. */
+ *  projection of an enum that has its own input), derived (computed),
+ *  embed (a foreign record), and backlinks (reverse refs owned by OTHER
+ *  records) stay read-only in both modes, so the cell geometry never
+ *  changes on the view↔edit toggle. */
 function isEditableType(type: FieldSpec["type"]): boolean {
-  return type !== "toggle" && type !== "derived" && type !== "embed";
+  return type !== "toggle" && type !== "derived" && type !== "embed" && type !== "backlinks";
 }
 
 /** Wide field types span the full grid width in BOTH modes — keeping
  *  `image` full-width here (not just when viewing) is what stops a field
  *  from jumping columns when editing starts. */
 function colSpanClass(field: FieldSpec): "col-span-full" | "col-span-1" {
-  return ["table", "markdown", "embed", "image"].includes(field.type) ? "col-span-full" : "col-span-1";
+  return ["table", "markdown", "embed", "backlinks", "image"].includes(field.type) ? "col-span-full" : "col-span-1";
 }
 
 /** Whether to render a field's cell. Identical rule in both modes so no
@@ -661,7 +676,8 @@ function isFieldRequiredInUi(field: FieldSpec): boolean {
 /** Required flag for an embed's per-record picker — read off the storage
  *  field it writes (`idField`), since the embed itself stores nothing. */
 function embedPickerRequired(field: FieldSpec): boolean {
-  const target = field.idField ? props.collection.schema.fields[field.idField] : undefined;
+  const idField = field.type === "embed" ? field.idField : undefined;
+  const target = idField ? props.collection.schema.fields[idField] : undefined;
   return target ? isFieldRequiredInUi(target) : false;
 }
 

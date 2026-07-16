@@ -427,7 +427,9 @@ Exécutez d'abord `claude mcp` une fois dans un terminal et complétez le flux O
 Ajoutez des serveurs MCP externes sans éditer le JSON à la main. Deux types sont pris en charge :
 
 - **HTTP** — serveurs distants (par ex. `https://example.com/mcp`). Fonctionne dans tous les modes ; dans Docker, les URL `localhost` / `127.0.0.1` sont réécrites automatiquement en `host.docker.internal`.
-- **Stdio** — sous-processus local, limité à `npx` / `node` / `tsx` pour la sécurité. Lorsque l'isolation Docker est activée, les chemins de scripts doivent se trouver sous l'espace de travail pour être résolus à l'intérieur du conteneur.
+- **Stdio** — sous-processus local (p. ex. un MCP `npx`), limité à `npx` / `node` / `tsx` pour la sécurité. S'exécute sur l'hôte lorsque l'isolation Docker est **désactivée**. Lorsqu'elle est **activée**, les entrées stdio sont **ignorées par défaut** (l'image d'isolation minimale ne peut pas héberger des runtimes arbitraires) — utilisez `"hostExecInDocker": true` pour en exécuter un sur l'hôte derrière une passerelle `stdio ↔ HTTP`. Voir [docs/mcp-sandbox.md](docs/mcp-sandbox.md).
+
+Transmettez les identifiants à un serveur stdio via une table **`env`** (`"env": { "IMAP_PASS": "…" }`). Les valeurs sont littérales et stockées dans `mcp.json` (mode `0600`, mais **en clair** — protection par permissions de fichier, pas un coffre-fort). Tous les détails, y compris l'option `hostExecInDocker` et la façon dont `env` atteint le processus, sont dans [docs/mcp-sandbox.md](docs/mcp-sandbox.md).
 
 La configuration se trouve sous `<workspace>/config/` :
 
@@ -479,6 +481,25 @@ Contraintes appliquées par le serveur lors du chargement du fichier :
 - `url` HTTP doit s'analyser comme `http:` ou `https:`.
 - `command` stdio est limité à `npx`, `node` ou `tsx`.
 - Les entrées qui échouent à la validation sont silencieusement ignorées au chargement (un avertissement est consigné) ; le reste du fichier s'applique tout de même.
+
+**Exemple** — un serveur stdio avec identifiants qui fonctionne aussi sous l'isolation Docker (p. ex. un MCP IMAP) :
+
+```json
+{
+  "mcpServers": {
+    "imap": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "some-imap-mcp"],
+      "env": { "IMAP_HOST": "imap.example.com", "IMAP_USER": "me", "IMAP_PASS": "secret" },
+      "hostExecInDocker": true,
+      "enabled": true
+    }
+  }
+}
+```
+
+`hostExecInDocker` exécute ce serveur sur l'hôte, hors de l'isolation. C'est une option par serveur — activez-la pour autant de serveurs que nécessaire, mais uniquement ceux de confiance. Sans l'isolation, elle est ignorée (le serveur s'exécute déjà sur l'hôte).
 
 **Exemple `settings.json`** :
 

@@ -10,8 +10,16 @@ import { readdir, readFile, lstat } from "node:fs/promises";
 import path from "node:path";
 import { getWorkspaceRoot, log } from "./host";
 import { isContainedInRoot } from "./paths";
+import { firstRecordProblem, type RecordCheckTier } from "../core/recordZ";
 import type { LoadedCollection } from "./discoveredCollection";
 import type { CollectionItem, CollectionSchema } from "../core/schema";
+
+// The compiled record validators (and COMPUTED_TYPES, which moved next to
+// them) live in the isomorphic ../core/recordZ; re-exported here so the
+// existing `collection/server` importers resolve unchanged and future
+// consumers (the reserved `mutate` action's `params` form) share the
+// same compiler.
+export { COMPUTED_TYPES, compileRecordZ, recordFieldProblem, type RecordCheckTier } from "../core/recordZ";
 
 export interface RecordIssue {
   /** Record filename, e.g. `lesson-003.json`. */
@@ -22,9 +30,6 @@ export interface RecordIssue {
 
 // Don't flood the result; the first batch is enough to act on.
 const MAX_ISSUES = 25;
-// derived/embed/toggle are host-computed or projected — never written to
-// the record JSON, so required / value checks must not apply to them.
-export const COMPUTED_TYPES: ReadonlySet<string> = new Set(["derived", "embed", "toggle"]);
 
 /** Read every `<id>.json` under the collection's dataDir and report the
  *  ones that won't load or violate the schema. An empty list means every
@@ -89,29 +94,27 @@ async function inspectRecord(fullPath: string, name: string, schema: CollectionS
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
     return { file: name, problem: "not a JSON object — skipped, won't appear" };
   }
-  const problem = validateRecordObject(parsed as CollectionItem, name.replace(/\.json$/, ""), schema);
+  // "strict" tier: the file scan is REPORT-ONLY (surfaced through
+  // presentCollection / the detail response), so it lints the per-type
+  // rules the write gate does not yet enforce — legacy records written
+  // under the loose rules get reported here, never rejected on write.
+  const problem = validateRecordObject(parsed as CollectionItem, name.replace(/\.json$/, ""), schema, "strict");
   return problem ? { file: name, problem } : null;
 }
 
 /** First schema problem on an in-memory record (primaryKey↔id mismatch,
- *  missing required, bad enum value), or null when it's fine. One issue
- *  per record keeps the report short and the fix obvious. Pure +
- *  exported so write paths (manageCollection putItems) can gate on the
- *  SAME rules the post-hoc file scan reports — `itemId` is the id the
- *  record is (or would be) stored under. */
-export function validateRecordObject(record: CollectionItem, itemId: string, schema: CollectionSchema): string | null {
+ *  then the compiled per-field checks — see `../core/recordZ` for the two
+ *  tiers), or null when it's fine. One issue per record keeps the report
+ *  short and the fix obvious. Pure + exported so write paths
+ *  (manageCollection putItems) can gate on the SAME enforced rules the
+ *  post-hoc file scan reports — `itemId` is the id the record is (or
+ *  would be) stored under. The default `"enforced"` tier keeps every
+ *  write gate on the historical three checks; only pass `"strict"` from
+ *  report-only surfaces. */
+export function validateRecordObject(record: CollectionItem, itemId: string, schema: CollectionSchema, tier: RecordCheckTier = "enforced"): string | null {
   const idValue = record[schema.primaryKey];
   if (typeof idValue !== "string" || idValue !== itemId) {
     return `'${schema.primaryKey}' is '${String(idValue ?? "")}' but must equal the filename ('${itemId}'), or the record can't be opened`;
   }
-  for (const [field, spec] of Object.entries(schema.fields)) {
-    if (COMPUTED_TYPES.has(spec.type)) continue;
-    const value = record[field];
-    const empty = value === undefined || value === null || value === "";
-    if (spec.required && empty) return `missing required field '${field}'`;
-    if (!empty && spec.type === "enum" && spec.values && !spec.values.includes(String(value))) {
-      return `'${field}' = '${String(value)}' is not one of [${spec.values.join(", ")}]`;
-    }
-  }
-  return null;
+  return firstRecordProblem(record, schema, tier);
 }

@@ -60,8 +60,11 @@ export function formatCell(value: unknown, type: FieldType): string {
 
 /** Resolve the ISO 4217 code for a money field: a per-record
  *  `currencyField` (when present and non-blank) wins over the field's
- *  literal `currency`. */
+ *  literal `currency`. Only `money` / `derived` variants carry currency
+ *  keys; any other field resolves to undefined (the formatter's USD
+ *  fallback), as before. */
 export function resolveCurrency(field: FieldSpec, record: CollectionItem | null | undefined): string | undefined {
+  if (field.type !== "money" && field.type !== "derived") return undefined;
   if (field.currencyField && record) {
     const code = record[field.currencyField];
     if (typeof code === "string" && code.trim().length > 0) return code;
@@ -132,6 +135,17 @@ export function uniqueEmbedTargets(schema: CollectionSchema): string[] {
   return [...targets];
 }
 
+/** Slugs of every SOURCE collection a `backlinks` field reverses over.
+ *  Top-level only, like `embed` (the schema rejects `backlinks` inside a
+ *  table's `of`). Mirrors the server's `uniqueBacklinkSources`. */
+export function uniqueBacklinkSources(schema: CollectionSchema): string[] {
+  const sources = new Set<string>();
+  for (const field of Object.values(schema.fields)) {
+    if (field.type === "backlinks" && field.from.length > 0) sources.add(field.from);
+  }
+  return [...sources];
+}
+
 export function buildRefDisplayMap(detail: CollectionDetailResponse): RefDisplayMap {
   const { fields, primaryKey } = detail.collection.schema;
   const displayField = displayFieldFor(fields, primaryKey);
@@ -145,14 +159,23 @@ export function buildRefDisplayMap(detail: CollectionDetailResponse): RefDisplay
   return map;
 }
 
-export function buildRefRecordMap(detail: CollectionDetailResponse): RefRecordMap {
-  const { schema } = detail.collection;
+/** Index DERIVED records by primary key — the client mirror of the
+ *  server's `loadTarget` indexing: string non-empty ids only, one record
+ *  per id (a duplicate keeps the LAST record in its FIRST position —
+ *  plain-object key semantics). Shared by the ref-record cache and the
+ *  backlinks view so every client consumer agrees with server enrichment
+ *  on which source records exist. */
+export function derivedRecordsById(schema: CollectionSchema, items: CollectionItem[]): RefRecordMap {
   const map: RefRecordMap = {};
-  for (const item of detail.items) {
+  for (const item of items) {
     const slugRaw = item[schema.primaryKey];
     if (typeof slugRaw === "string" && slugRaw.length > 0) map[slugRaw] = deriveAll(schema, item, {});
   }
   return map;
+}
+
+export function buildRefRecordMap(detail: CollectionDetailResponse): RefRecordMap {
+  return derivedRecordsById(detail.collection.schema, detail.items);
 }
 
 export function sortedRefOptions(map: RefDisplayMap): RefOption[] {

@@ -107,10 +107,18 @@ describe("viewToken — isViewDataPath", () => {
     assert.equal(isViewDataPath("/api/collections/my-slug/view-data"), true);
   });
 
+  it("matches the token-scoped mutate-action path (both mount bases)", () => {
+    assert.equal(isViewDataPath("/collections/my-slug/view-data/actions/assign"), true);
+    assert.equal(isViewDataPath("/api/collections/my-slug/view-data/actions/assign"), true);
+  });
+
   it("does not match sibling collection routes", () => {
     assert.equal(isViewDataPath("/api/collections/my-slug/items"), false);
     assert.equal(isViewDataPath("/api/collections/my-slug/view-token"), false);
     assert.equal(isViewDataPath("/api/collections/my-slug/view-data/extra"), false);
+    // The bearer-guarded item-action route must NOT be token-exempt.
+    assert.equal(isViewDataPath("/api/collections/my-slug/items/x/actions/assign"), false);
+    assert.equal(isViewDataPath("/api/collections/my-slug/view-data/actions/assign/extra"), false);
   });
 });
 

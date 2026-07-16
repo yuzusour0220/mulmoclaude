@@ -31,7 +31,7 @@ data/skills/<slug>/            ← YOU write here (Write / Edit)
   SKILL.md  ·  schema.json  ·  templates/*.md
 
 data/<name>/items/             ← the records (separate from the skill dir)
-  <id>.json         ← one record per file (you write; host reads + renders)
+  <id>.json         ← one record per file (write via manageCollection putItems)
 ```
 
 - **Author under `data/skills/<slug>/`, NEVER `.claude/skills/<slug>/`
@@ -148,7 +148,7 @@ skipped, never crashes the host):
 
 `string` · `text` (multi-line) · `email` · `number` · `date` (`YYYY-MM-DD`) ·
 `datetime` (`YYYY-MM-DDTHH:MM`) · `boolean` · `markdown` · `money` · `enum` ·
-`ref` · `embed` · `table` · `derived` · `image` · `file` · `toggle`
+`ref` · `embed` · `backlinks` · `table` · `derived` · `image` · `file` · `toggle`
 
 Every field spec needs a `type` and a `label`. Extra keys by type:
 
@@ -179,9 +179,23 @@ Every field spec needs a `type` and a `label`. Extra keys by type:
   sibling as a dropdown picker in the editor and hides its own cell (the embed
   owns it). E.g. a multi-issuer invoice: a `ref` field `issuerId → profile`
   plus `{ "type": "embed", "to": "profile", "idField": "issuerId" }`.
+- **`backlinks`** — `from: "<source-slug>"`, `via: "<ref-field-in-source>"`,
+  `display: ["<source-col>", ...]`, optional `filter: { "field": ..., "in": [...] }`.
+  The **reverse** side of a `ref`: a read-only sub-table (detail view only) of
+  the records in `from` whose `via` ref points at this record — each row links
+  to that record. **Nothing is stored** on this record (like `derived`/`embed`);
+  you never write it, and the rows update whenever the source records change.
+  `display` names the source columns to show — a derived source column works
+  when its formula is self-contained (e.g. an invoice `total` summing its own
+  line items), but one that derefs yet another collection renders em-dash;
+  `filter` narrows rows by a source field's value, same shape as `when`. E.g. a
+  client's open invoices:
+  `{ "type": "backlinks", "label": "Invoices", "from": "invoice", "via": "clientId", "display": ["issueDate", "total", "status"], "filter": { "field": "status", "in": ["draft", "sent"] } }`.
+  Resolution is fail-soft: an unknown `from` / `via` / `display` column just
+  renders an empty sub-table — no error, so author the `ref` side first.
 - **`table`** — `of: { <col>: <sub-field-spec>, ... }`. An array of rows. Each
-  sub-field is a flat spec; sub-fields **cannot** be `table` or `derived`
-  (no nested tables, no computed columns).
+  sub-field is a flat spec; sub-fields **cannot** be `table`, `derived`, or
+  `backlinks` (no nested tables, no computed columns).
 - **`derived`** — `formula: "<expr>"`, optional `display` (`number` default, or
   `money` / `string` / `date`) and `currency`. **Read-only, host-computed** —
   you NEVER write derived values into the JSON; the host recomputes them on
@@ -302,11 +316,50 @@ Rules and limits:
 
 ### Actions (per-record buttons)
 
-Each entry in `actions` renders a button in the read-only detail view. The only
-`kind` today is `"chat"`: clicking it starts a **new chat in a role**, seeded
-with a template + the record data — the role then does the work with its tools.
-This is how hard logic the schema can't express (PDF generation, bookkeeping
-journals, drafting an email) gets delegated to natural language.
+Each entry in `actions` renders a button in the read-only detail view. Three
+kinds:
+
+- **`"chat"`** — clicking it starts a **new visible chat in a role**, seeded
+  with a template + the record data — the role then does the work with its
+  tools. Pick it when the output IS the conversation or the user may need to
+  steer: PDF generation, bookkeeping journals, drafting an email.
+- **`"agent"`** — clicking it dispatches a **hidden background worker** with
+  the SAME seed; the worker edits the record via `manageCollection` and
+  finishes silently — no chat window, the record just updates. Pick it for
+  mechanical enrichment where a transcript would be noise: refresh a price,
+  fetch metadata, look something up and write it back. The button shows a
+  spinner while the worker runs; a failed run raises one bell notification
+  (cleared by the next success). **End an agent template with**: "edit the
+  record via manageCollection and stop — do not present anything."
+- **`"mutate"`** — **no LLM at all**: the host applies a declarative write the
+  moment the button is clicked (after an optional mini-form). Pick it when the
+  write needs zero judgment — "Mark paid", "Assign", any fixed state
+  transition. Instant and token-free. Shape (no `role`/`template`):
+
+  ```json
+  {
+    "id": "assign", "label": "Assign", "icon": "person_add",
+    "kind": "mutate",
+    "require": { "field": "status", "in": ["open"] },
+    "params": { "assignee": { "type": "string", "label": "Assignee", "required": true } },
+    "set": { "assignee": "$params.assignee", "status": "assigned" }
+  }
+  ```
+
+  `set` merges into the record (only the named fields change) — values are
+  literals or `$params.<name>` references. `require` replaces `when` (same
+  shape, same visibility-is-authorization rule, re-checked server-side).
+  `params` declares an optional mini-form using the table sub-field DSL; the
+  submitted values are validated like record fields, and the write itself runs
+  through the same gate as `putItems` (a rejected write shows the `problem`).
+  Constraints (schema-validated): `set` keys must name declared, non-computed
+  fields (never the primaryKey); every `$params` reference must name a
+  declared param; mutate is **record-level only** (not in `collectionActions`).
+  Group several fields in one `set` so "paid" can mean `status` + `paidDate`
+  written together. `toggle` stays the right tool for a single checkbox.
+
+This is how hard logic that the schema can't express gets delegated to natural
+language (and, for `"mutate"`, how the schema-expressible part stays free).
 
 ```json
 {
@@ -350,7 +403,9 @@ text / markdown / html / file fields are left out, so the prompt stays small).
 ```
 
 - Same `id` uniqueness rule (within `collectionActions`); same path-safe
-  `template`; same `role`-seeds-a-new-chat behavior.
+  `template`; same `role` + kind behavior (`"chat"` seeds a visible chat,
+  `"agent"` dispatches a silent worker over the whole collection — e.g. a
+  "Sync" button that pushes records to an external system via MCP).
 - `when` is **ignored** here — there is no record to gate on. Always shown.
 
 ### Completion tracking (bell notifications)
@@ -761,10 +816,32 @@ single source of truth and the "done" checkbox is a `toggle` field projecting it
 
 ## Records — one JSON object per file
 
-- Write each record to `<dataPath>/<id>.json` via the **Write** tool; the `id`
-  field's value is the filename (no extension).
+Each record is a plain file at `<dataPath>/<id>.json` (the `id` field's value is
+the filename, no extension) — that is the storage model. But you read and write
+records through **`manageCollection`**, not raw file I/O:
+
+- **Create / update — `putItems`.** Every row is validated against the schema
+  BEFORE the write (required fields, enum membership, primaryKey = record id)
+  and the result reports `{ written, rejected }` — fix each rejected row from
+  its `problem` text and retry just those rows. Use `mode: "create"` when
+  adding, so an id collision is rejected instead of silently overwritten, and
+  `mode: "merge"` with a partial row (`{ id, <changed fields> }`) when
+  updating — the default upsert replaces the WHOLE record and would erase
+  every optional field the row omits.
+- **Read / list — `getItems`.** The only way to see host-computed `derived` /
+  `toggle` / `embed` values (the stored JSON never contains them). Pass `ids`
+  / `fields` on large collections to keep the result small — e.g.
+  `fields: ["id"]` to check for an id collision before an add.
+- **Delete** — remove the record file (`manageCollection` has no delete).
+- **Cross-collection questions — `getOntology`.** Returns every collection in
+  the workspace with its `primaryKey`, effective `displayField`, record count,
+  and outbound `ref` / `embed` relations (field → target slug, including refs
+  inside `table` columns as `lines.clientId`). When a question spans
+  collections ("which clients have unpaid invoices AND unlogged hours?"),
+  call it first to see which collections exist and how they join, then
+  `getItems` only the ones involved — instead of reading every schema.json.
 - **Id charset** (enforced by `safeRecordId` in
-  `packages/plugins/collection-plugin/src/server/paths.ts` — the single source of
+  `packages/core/src/collection/server/paths.ts` — the single source of
   truth; `manageCollection` rejects ids that fail it): start and end with a
   letter or digit; inside, also `-`, `_`, and `.` are allowed (so natural keys
   like a Slack ts `1718900000.123456` or a SemVer `1.2.3` work). **No** path
@@ -774,6 +851,25 @@ single source of truth and the "done" checkbox is a `toggle` field projecting it
   enforces this on every targeted read/write, so an id that only _looks_ fine in
   a full `getItems` listing but violates the rule can't be updated or deleted by
   id — fix the id, don't work around it with raw file I/O.
+- **Never write `derived` fields**, and never write an `embed` or `backlinks`
+  field — all are display-only / host-computed (`putItems` rejects rows that
+  carry them).
+- Leave optional fields out of the row entirely rather than writing empty
+  strings.
+- For a `ref` field, write the raw target slug, and make sure that record
+  actually exists in the target collection — an invalid slug renders as a broken
+  link. The host enforces structure and safety; **you own semantic correctness**
+  (valid refs, sane values).
+
+### Raw file I/O on records — the escape hatch
+
+Read / Write / Edit on the record files stays available (files are the source
+of truth), but it skips `putItems`' pre-write validation — a mistake lands on
+disk instead of coming back as a `rejected` row. Reach for it only when the
+tool can't do the job: bulk file surgery, or repairing a file so malformed
+that `manageCollection` can't address it. If you do write record files
+directly:
+
 - **The file MUST be valid JSON.** A malformed record is **silently skipped** at
   read time (logged server-side, but invisible in the UI) — so one bad file out
   of fifteen looks like "fourteen records vanished." The #1 cause is an
@@ -782,22 +878,12 @@ single source of truth and the "done" checkbox is a `toggle` field projecting it
   (`text`, `markdown`, a long `objective`), either escape every inner ASCII quote
   as `\"`, or — better — use the language's own quotation marks (`「」`/`『』` for
   Japanese, `‘ ’`/`“ ”` or `'…'` for English) so no escaping is needed.
-  `presentCollection` re-validates the records and reports any unreadable /
+- `presentCollection` re-validates the records and reports any unreadable /
   malformed / schema-violating files back to you (a `⚠️` in its result) — so
-  always follow a batch of writes with a `presentCollection` call and **act on
-  any ⚠️ it returns** (Read → fix → Write), rather than assuming every record
-  landed.
-- **List the directory first** and pick a fresh id rather than silently
-  overwriting. Update = Read, merge, Write back (preserve fields you weren't
-  asked to change). Delete = remove the file.
-- **Never write `derived` fields**, and never write an `embed` field — both are
-  display-only / host-computed.
-- Leave optional fields out of the JSON entirely rather than writing empty
-  strings.
-- For a `ref` field, write the raw target slug, and make sure that record
-  actually exists in the target collection — an invalid slug renders as a broken
-  link. The host enforces structure and safety; **you own semantic correctness**
-  (valid refs, sane values).
+  always follow a batch of direct writes with a `presentCollection` call and
+  **act on any ⚠️ it returns**, rather than assuming every record landed.
+  (This safety net applies after `putItems` batches too, but direct writes are
+  where it earns its keep.)
 
 ## End-to-end: creating a new collection skill
 

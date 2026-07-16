@@ -36,11 +36,16 @@ export type CollectionMutationResult = { ok: true } | { ok: false; error: string
  *  generic failure. */
 export type CollectionApiResult<T> = { ok: true; data: T } | { ok: false; error: string; status: number };
 
-/** A collection / item action's result — a seed prompt + role for a new chat. */
-export interface CollectionActionResult {
-  prompt: string;
-  role: string;
-}
+/** A collection / item action's result, one variant per action kind:
+ *  `kind: "chat"` returns the seed prompt + role for the client to start
+ *  a new chat; `kind: "agent"` returns `dispatched: true` (the server
+ *  launched the hidden worker itself — the client just shows the running
+ *  state); `kind: "mutate"` returns `written: true` + the written record
+ *  so the client can update the open panel in place. */
+export type CollectionActionResult =
+  | { prompt: string; role: string; dispatched?: undefined; written?: undefined }
+  | { dispatched: true; prompt?: undefined; role?: undefined; written?: undefined }
+  | { written: true; itemId: string; item: CollectionItem; prompt?: undefined; role?: undefined; dispatched?: undefined };
 
 /** A collection refresh's result — counts + per-source errors. `dispatched` is
  *  true for agent ingest (a worker was launched; records update async).
@@ -262,8 +267,10 @@ export interface CollectionUi {
   deleteCollection: (slug: string) => Promise<CollectionMutationResult>;
   /** Delete a feed via the project-scope feed-delete route (`…feeds.detail`). */
   deleteFeed: (slug: string) => Promise<CollectionMutationResult>;
-  /** Run a per-record action (`apiPost` over `…collections.itemAction`). */
-  runItemAction: (slug: string, itemId: string, actionId: string) => Promise<CollectionApiResult<CollectionActionResult>>;
+  /** Run a per-record action (`apiPost` over `…collections.itemAction`).
+   *  `params` carries a mutate action's mini-form values (omitted for the
+   *  other kinds / param-less mutations). */
+  runItemAction: (slug: string, itemId: string, actionId: string, params?: Record<string, unknown>) => Promise<CollectionApiResult<CollectionActionResult>>;
   /** Run a collection-level action (`apiPost` over `…collections.collectionAction`). */
   runCollectionAction: (slug: string, actionId: string) => Promise<CollectionApiResult<CollectionActionResult>>;
   /** Refresh a feed-backed collection (`apiPost` over `…collections.refresh`). */
