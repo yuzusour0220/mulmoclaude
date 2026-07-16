@@ -58,6 +58,7 @@ import {
 } from "../../workspace/collections/remoteView.js";
 import { clampLimit, clampOffset, normalizeFields, normalizeMutate } from "@mulmoclaude/core/remote-view";
 import { badRequest, notFound, conflict, forbidden, serverError, serviceUnavailable } from "../../utils/httpError.js";
+import { ONE_MINUTE_MS } from "../../utils/time.js";
 import { errorMessage } from "../../utils/errors.js";
 import { log } from "../../system/logger/index.js";
 import { workspacePath } from "../../workspace/workspace.js";
@@ -562,12 +563,48 @@ function sendToolResult(res: Response, raw: string): void {
 // cookie), so no ambient-credential leak — an origin without the token just
 // reads a 401. The custom Authorization header makes the request non-simple,
 // so the browser preflights; the OPTIONS handler below answers it.
-function viewDataCors(_req: Request, res: Response, next: NextFunction): void {
+// Exported for the CORS regression test: a sandboxed view's mutate-action
+// call is a non-simple cross-origin POST, so a missing method here fails
+// the browser preflight before any handler runs (Codex on PR #2105).
+export const VIEW_DATA_CORS_METHODS = "GET, PUT, POST, OPTIONS";
+
+export function viewDataCors(_req: Request, res: Response, next: NextFunction): void {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type");
-  res.setHeader("Access-Control-Allow-Methods", "GET, PUT, OPTIONS");
+  res.setHeader("Access-Control-Allow-Methods", VIEW_DATA_CORS_METHODS);
   next();
 }
+
+/** Minimal fixed-window rate limiter for the token-scoped mutate-action
+ *  route (CodeQL js/missing-rate-limiting): per source IP + slug, well
+ *  above any human click rate but a lid on a runaway view loop. In-memory
+ *  — the host is single-process — with a lazy sweep so the map can't grow
+ *  unbounded. Exported factory so the unit test can drive the window. */
+export function makeViewActionRateLimiter(max: number, windowMs: number, now: () => number = Date.now) {
+  const hits = new Map<string, { count: number; resetAt: number }>();
+  return (req: Request<{ slug?: string }>, res: Response, next: NextFunction): void => {
+    const nowMs = now();
+    if (hits.size > 1000) {
+      for (const [key, entry] of hits) if (entry.resetAt <= nowMs) hits.delete(key);
+    }
+    const key = `${req.ip ?? ""}\n${req.params.slug ?? ""}`;
+    const entry = hits.get(key);
+    if (!entry || entry.resetAt <= nowMs) {
+      hits.set(key, { count: 1, resetAt: nowMs + windowMs });
+      next();
+      return;
+    }
+    entry.count += 1;
+    if (entry.count > max) {
+      res.status(429).json({ error: "rate limit exceeded — retry shortly" });
+      return;
+    }
+    next();
+  };
+}
+
+const VIEW_ACTION_RATE_LIMIT_PER_MINUTE = 60;
+const viewActionRateLimit = makeViewActionRateLimiter(VIEW_ACTION_RATE_LIMIT_PER_MINUTE, ONE_MINUTE_MS);
 
 router.options(API_ROUTES.collections.viewData, viewDataCors, (_req: Request, res: Response) => {
   res.status(204).end();
@@ -853,6 +890,7 @@ router.options(API_ROUTES.collections.viewDataAction, viewDataCors, (_req: Reque
 router.post(
   API_ROUTES.collections.viewDataAction,
   viewDataCors,
+  viewActionRateLimit,
   requireViewToken("write"),
   async (req: Request<{ slug: string; actionId: string }>, res: Response<ActionRunResponse>) => {
     try {

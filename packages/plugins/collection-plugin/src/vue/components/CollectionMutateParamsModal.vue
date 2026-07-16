@@ -38,6 +38,7 @@
               type="checkbox"
               class="h-5 w-5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500/20 cursor-pointer"
               :data-testid="`collections-mutate-input-${key}`"
+              @change="boolTouched[String(key)] = true"
             />
             <span class="text-xs font-semibold" :class="bool[key] ? 'text-indigo-600' : 'text-slate-500'">
               {{ bool[key] ? t("common.yes") : t("common.no") }}
@@ -130,22 +131,26 @@ const emit = defineEmits<{
 const { t } = useCollectionI18n();
 
 // Draft slots, mirroring the record form's split: strings for everything
-// with a text-ish input, booleans for checkboxes.
+// with a text-ish input, booleans for checkboxes (plus a touched flag —
+// an optional boolean the user never touched must be OMITTED, not sent
+// as false, so a `$params.<bool>` ref preserves the stored value).
 const text = reactive<Record<string, string>>({});
 const bool = reactive<Record<string, boolean>>({});
+const boolTouched = reactive<Record<string, boolean>>({});
 for (const [key, spec] of Object.entries(props.action.params ?? {})) {
   if (spec.type === "boolean") bool[key] = false;
   else text[key] = "";
 }
 
 /** Convert the draft to the submitted params: numbers parsed, booleans
- *  as-is, empty optionals OMITTED (the server treats an absent param as
- *  "don't write" for `$params` refs — merge semantics). */
+ *  included only when touched or required, empty optionals OMITTED (the
+ *  server treats an absent param as "don't write" for `$params` refs —
+ *  merge semantics). */
 function submit(): void {
   const params: Record<string, unknown> = {};
   for (const [key, spec] of Object.entries(props.action.params ?? {})) {
     if (spec.type === "boolean") {
-      params[key] = bool[key] === true;
+      if (boolTouched[key] || spec.required) params[key] = bool[key] === true;
       continue;
     }
     const raw = (text[key] ?? "").trim();
