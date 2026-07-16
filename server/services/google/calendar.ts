@@ -1,6 +1,6 @@
 // Google Calendar v3 REST calls against the user's primary calendar. Plain
 // fetch instead of the `googleapis` SDK — two endpoints don't justify the
-// dependency (see plans/feat-google-oauth-calendar.md).
+// dependency (see plans/done/feat-google-oauth-calendar.md).
 import { errorMessage } from "../../utils/errors.js";
 import { fetchWithTimeout } from "../../utils/fetch.js";
 import { truncate } from "../../utils/text.js";
