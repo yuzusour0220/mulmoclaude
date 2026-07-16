@@ -50,6 +50,7 @@
     "express": "^5.2.1",
     "fast-xml-parser": "^5.10.0",
     "firebase": "12.16.0",
+    "google-auth-library": "^10.9.0",
     "gui-chat-protocol": "0.4.0",
     "heic-convert": "^2.1.0",
     "ignore": "^7.0.6",

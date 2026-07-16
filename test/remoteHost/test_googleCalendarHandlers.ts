@@ -1,0 +1,166 @@
+// Unit tests for the google.calendar.* command handlers: param validation,
+// clamping, and wiring — the Google engine is stubbed (no network, no token).
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
+
+import type { JsonObject } from "../../server/remoteHost/commandChannel.js";
+import { createGoogleCalendarCreateEvent, createGoogleCalendarListEvents, type GoogleCalendarDeps } from "../../server/remoteHost/handlers/googleCalendar.js";
+import type { CalendarEventInput, CalendarEventSummary, ListEventsInput } from "../../server/services/google/calendar.js";
+import { DEFAULT_LIST_MAX_RESULTS, MAX_LIST_RESULTS } from "../../server/services/google/calendar.js";
+
+const sampleEvent: CalendarEventSummary = {
+  id: "ev1",
+  summary: "Standup",
+  start: "2026-07-17T09:00:00+09:00",
+  end: "2026-07-17T09:15:00+09:00",
+  htmlLink: "https://calendar.google.com/event?eid=ev1",
+  status: "confirmed",
+};
+
+interface StubCalls {
+  createInputs: CalendarEventInput[];
+  listInputs: ListEventsInput[];
+  tokenRequests: number;
+}
+
+const stubDeps = (): { deps: GoogleCalendarDeps; calls: StubCalls } => {
+  const calls: StubCalls = { createInputs: [], listInputs: [], tokenRequests: 0 };
+  const deps: GoogleCalendarDeps = {
+    getAccessToken: async () => {
+      calls.tokenRequests += 1;
+      return "stub-access-token";
+    },
+    createEvent: async (_token, input) => {
+      calls.createInputs.push(input);
+      return sampleEvent;
+    },
+    listEvents: async (_token, input = {}) => {
+      calls.listInputs.push(input);
+      return [sampleEvent];
+    },
+  };
+  return { deps, calls };
+};
+
+describe("createGoogleCalendarCreateEvent", () => {
+  const validParams = { summary: "Standup", start: "2026-07-17T09:00:00+09:00", end: "2026-07-17T09:15:00+09:00" };
+
+  it("creates an event and returns it under { event }", async () => {
+    const { deps, calls } = stubDeps();
+    const result = await createGoogleCalendarCreateEvent(deps)({ ...validParams, description: "daily" });
+    assert.deepEqual(result, { event: sampleEvent });
+    assert.equal(calls.tokenRequests, 1);
+    assert.deepEqual(calls.createInputs, [{ summary: "Standup", startDateTime: validParams.start, endDateTime: validParams.end, description: "daily" }]);
+  });
+
+  it("passes description as undefined when omitted", async () => {
+    const { deps, calls } = stubDeps();
+    await createGoogleCalendarCreateEvent(deps)({ ...validParams });
+    assert.equal(calls.createInputs[0]?.description, undefined);
+  });
+
+  for (const key of ["summary", "start", "end"] as const) {
+    it(`rejects when ${key} is missing`, async () => {
+      const { deps } = stubDeps();
+      const params = Object.fromEntries(Object.entries(validParams).filter(([name]) => name !== key));
+      await assert.rejects(Promise.resolve(createGoogleCalendarCreateEvent(deps)(params)), new RegExp(`${key} must be a non-empty string`));
+    });
+  }
+
+  it("rejects an empty summary", async () => {
+    const { deps } = stubDeps();
+    await assert.rejects(Promise.resolve(createGoogleCalendarCreateEvent(deps)({ ...validParams, summary: "  " })), /summary must be a non-empty string/);
+  });
+
+  const badDateTimes: { given: string; label: string }[] = [
+    { given: "not-a-date", label: "rejects a non-date start" },
+    { given: "2026-07-17", label: "rejects a date-only start (Google would 400 on dateTime)" },
+    { given: "2026-07-17T09:00:00", label: "rejects a start without a timezone offset" },
+    { given: "2026-13-01T09:00:00Z", label: "rejects a well-shaped but impossible date" },
+  ];
+  for (const { given, label } of badDateTimes) {
+    it(label, async () => {
+      const { deps } = stubDeps();
+      await assert.rejects(
+        Promise.resolve(createGoogleCalendarCreateEvent(deps)({ ...validParams, start: given })),
+        /start must be an ISO 8601 date-time with a timezone offset/,
+      );
+    });
+  }
+
+  const goodDateTimes: { given: string; label: string }[] = [
+    { given: "2026-07-17T09:00:00Z", label: "accepts a UTC (Z) start" },
+    { given: "2026-07-17T09:00:00.500+09:00", label: "accepts fractional seconds with an offset" },
+  ];
+  for (const { given, label } of goodDateTimes) {
+    it(label, async () => {
+      const { deps, calls } = stubDeps();
+      await createGoogleCalendarCreateEvent(deps)({ ...validParams, start: given });
+      assert.equal(calls.createInputs[0]?.startDateTime, given);
+    });
+  }
+
+  it("does not fetch a token when validation fails", async () => {
+    const { deps, calls } = stubDeps();
+    await assert.rejects(Promise.resolve(createGoogleCalendarCreateEvent(deps)({})));
+    assert.equal(calls.tokenRequests, 0);
+  });
+});
+
+describe("createGoogleCalendarListEvents", () => {
+  it("lists events with defaults when no params are given", async () => {
+    const { deps, calls } = stubDeps();
+    const result = await createGoogleCalendarListEvents(deps)({});
+    assert.deepEqual(result, { events: [sampleEvent] });
+    assert.deepEqual(calls.listInputs, [{ timeMin: undefined, maxResults: DEFAULT_LIST_MAX_RESULTS }]);
+  });
+
+  it("passes a valid timeMin through", async () => {
+    const { deps, calls } = stubDeps();
+    await createGoogleCalendarListEvents(deps)({ timeMin: "2026-07-17T00:00:00Z" });
+    assert.equal(calls.listInputs[0]?.timeMin, "2026-07-17T00:00:00Z");
+  });
+
+  it("rejects a malformed timeMin", async () => {
+    const { deps } = stubDeps();
+    await assert.rejects(
+      Promise.resolve(createGoogleCalendarListEvents(deps)({ timeMin: "yesterday-ish" })),
+      /timeMin must be an ISO 8601 date-time with a timezone offset/,
+    );
+  });
+
+  it("rejects a date-only timeMin", async () => {
+    const { deps } = stubDeps();
+    await assert.rejects(
+      Promise.resolve(createGoogleCalendarListEvents(deps)({ timeMin: "2026-07-17" })),
+      /timeMin must be an ISO 8601 date-time with a timezone offset/,
+    );
+  });
+
+  it("rejects a non-string timeMin", async () => {
+    const { deps } = stubDeps();
+    await assert.rejects(
+      Promise.resolve(createGoogleCalendarListEvents(deps)({ timeMin: 12345 })),
+      /timeMin must be an ISO 8601 date-time with a timezone offset/,
+    );
+  });
+
+  const clampCases: { given: number | string | undefined; expected: number; label: string }[] = [
+    { given: 5, expected: 5, label: "keeps an in-range maxResults" },
+    { given: 1, expected: 1, label: "keeps the lower bound" },
+    { given: 0, expected: 1, label: "raises 0 to the lower bound" },
+    { given: -3, expected: 1, label: "raises negatives to the lower bound" },
+    { given: MAX_LIST_RESULTS + 100, expected: MAX_LIST_RESULTS, label: "caps oversized maxResults" },
+    { given: 2.5, expected: DEFAULT_LIST_MAX_RESULTS, label: "falls back to default for non-integers" },
+    { given: "20", expected: DEFAULT_LIST_MAX_RESULTS, label: "falls back to default for strings" },
+    { given: undefined, expected: DEFAULT_LIST_MAX_RESULTS, label: "falls back to default when absent" },
+  ];
+  for (const { given, expected, label } of clampCases) {
+    it(label, async () => {
+      const { deps, calls } = stubDeps();
+      const params: JsonObject = given === undefined ? {} : { maxResults: given };
+      await createGoogleCalendarListEvents(deps)(params);
+      assert.equal(calls.listInputs[0]?.maxResults, expected);
+    });
+  }
+});
