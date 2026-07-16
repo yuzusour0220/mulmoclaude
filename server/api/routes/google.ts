@@ -1,6 +1,6 @@
 // HTTP routes for the local Google account link (settings UI).
 //
-//   GET  /api/google/status     → { linked, pending, clientSecretFound, lastError }
+//   GET  /api/google/status     → { linked, pending, clientSecret, lastError }
 //   POST /api/google/authorize  → { authUrl }  (starts the loopback + PKCE flow)
 //   POST /api/google/unlink     → { linked: false }
 //
@@ -13,7 +13,7 @@ import { Router, Request, Response } from "express";
 import { API_ROUTES } from "../../../src/config/apiRoutes.js";
 import { unlinkGoogle } from "../../services/google/auth.js";
 import { googleAuthFlow } from "../../services/google/authFlow.js";
-import { hasClientSecret } from "../../services/google/clientSecret.js";
+import { clientSecretPresence, type ClientSecretPresence } from "../../services/google/clientSecret.js";
 import { loadGoogleTokens } from "../../services/google/tokenStore.js";
 import { errorMessage } from "../../utils/errors.js";
 import { serverError } from "../../utils/httpError.js";
@@ -25,15 +25,15 @@ const router = Router();
 interface GoogleStatusResponse {
   linked: boolean;
   pending: boolean;
-  clientSecretFound: boolean;
+  clientSecret: ClientSecretPresence;
   lastError: string | null;
 }
 
 router.get(API_ROUTES.google.status, async (_req: Request, res: Response<GoogleStatusResponse>) => {
   try {
-    const [tokens, clientSecretFound] = await Promise.all([loadGoogleTokens(), hasClientSecret()]);
+    const [tokens, clientSecret] = await Promise.all([loadGoogleTokens(), clientSecretPresence()]);
     const flow = googleAuthFlow.status();
-    res.json({ linked: Boolean(tokens?.refresh_token), pending: flow.pending, clientSecretFound, lastError: flow.lastError });
+    res.json({ linked: Boolean(tokens?.refresh_token), pending: flow.pending, clientSecret, lastError: flow.lastError });
   } catch (err) {
     serverError(res, errorMessage(err, "google status failed"));
   }

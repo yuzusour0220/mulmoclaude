@@ -272,6 +272,8 @@ const deMessages = {
       unlinkConfirm: "Google-Konto-Verknüpfung aufheben? Das gespeicherte Token wird widerrufen und von diesem Rechner gelöscht.",
       clientSecretMissing:
         "Keine OAuth-Client-Anmeldedaten gefunden. Lade das Desktop-App-Client-JSON aus der Google Cloud Console herunter und lege es in ~/.secrets/ ab (client_secret_*.json).",
+      clientSecretAmbiguous:
+        "In ~/.secrets/ wurden mehrere client_secret_*.json-Dateien gefunden. Behalte genau eine, damit das gespeicherte Token dem richtigen OAuth-Client zugeordnet bleibt.",
       loadError: "Der Google-Verknüpfungsstatus konnte nicht geladen werden.",
       connectError: "Der Google-Autorisierungsablauf konnte nicht gestartet werden.",
       unlinkError: "Die Google-Verknüpfung konnte nicht aufgehoben werden.",

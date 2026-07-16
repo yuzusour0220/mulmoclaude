@@ -2,8 +2,11 @@
   <div class="space-y-3" data-testid="settings-google-tab">
     <p class="text-sm text-gray-700">{{ t("settingsModal.googleTab.description") }}</p>
 
-    <p v-if="loaded && !clientSecretFound" class="text-sm text-amber-700" data-testid="settings-google-secret-missing">
+    <p v-if="loaded && clientSecret === 'missing'" class="text-sm text-amber-700" data-testid="settings-google-secret-missing">
       {{ t("settingsModal.googleTab.clientSecretMissing") }}
+    </p>
+    <p v-if="loaded && clientSecret === 'ambiguous'" class="text-sm text-amber-700" data-testid="settings-google-secret-ambiguous">
+      {{ t("settingsModal.googleTab.clientSecretAmbiguous") }}
     </p>
 
     <div v-if="loaded" class="flex items-center gap-3">
@@ -11,7 +14,7 @@
       <button
         v-if="!linked"
         class="px-2 py-1 text-xs rounded bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50"
-        :disabled="busy || pending || !clientSecretFound"
+        :disabled="busy || pending || clientSecret !== 'found'"
         data-testid="settings-google-connect-btn"
         @click="connect"
       >
@@ -47,10 +50,12 @@ const props = defineProps<{
   reloadToken: number;
 }>();
 
+type ClientSecretPresence = "found" | "missing" | "ambiguous";
+
 interface GoogleStatusResponse {
   linked: boolean;
   pending: boolean;
-  clientSecretFound: boolean;
+  clientSecret: ClientSecretPresence;
   lastError: string | null;
 }
 
@@ -59,7 +64,7 @@ const MAX_POLL_BACKOFF_MS = 30_000;
 
 const linked = ref(false);
 const pending = ref(false);
-const clientSecretFound = ref(false);
+const clientSecret = ref<ClientSecretPresence>("found");
 const loaded = ref(false);
 const busy = ref(false);
 const errorText = ref("");
@@ -99,7 +104,7 @@ async function refresh(): Promise<void> {
   pollFailures.value = 0;
   linked.value = response.data.linked;
   pending.value = response.data.pending;
-  clientSecretFound.value = response.data.clientSecretFound;
+  clientSecret.value = response.data.clientSecret;
   errorText.value = response.data.lastError ?? "";
   loaded.value = true;
   schedulePoll();

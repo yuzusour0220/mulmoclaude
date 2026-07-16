@@ -270,6 +270,8 @@ const ptBRMessages = {
       unlinkConfirm: "Desvincular a conta do Google? O token salvo será revogado e excluído desta máquina.",
       clientSecretMissing:
         "Nenhuma credencial de cliente OAuth encontrada. Baixe o JSON do cliente de app desktop no Google Cloud Console e coloque-o em ~/.secrets/ (client_secret_*.json).",
+      clientSecretAmbiguous:
+        "Vários arquivos client_secret_*.json foram encontrados em ~/.secrets/. Mantenha apenas um para que o token salvo continue pareado com o cliente OAuth correto.",
       loadError: "Falha ao carregar o estado da vinculação com o Google.",
       connectError: "Falha ao iniciar o fluxo de autorização do Google.",
       unlinkError: "Falha ao desvincular a conta do Google.",

@@ -274,6 +274,8 @@ const koMessages = {
       unlinkConfirm: "Google 계정 연결을 해제할까요? 저장된 토큰은 취소되고 이 컴퓨터에서 삭제됩니다.",
       clientSecretMissing:
         "OAuth 클라이언트 자격 증명을 찾을 수 없습니다. Google Cloud Console에서 데스크톱 앱용 클라이언트 JSON을 다운로드하여 ~/.secrets/에 두세요(client_secret_*.json).",
+      clientSecretAmbiguous:
+        "~/.secrets/에서 client_secret_*.json 파일이 여러 개 발견되었습니다. 저장된 토큰과 OAuth 클라이언트가 어긋나지 않도록 하나만 남겨 주세요.",
       loadError: "Google 연결 상태를 불러오지 못했습니다.",
       connectError: "Google 인증 절차를 시작하지 못했습니다.",
       unlinkError: "Google 연결 해제에 실패했습니다.",

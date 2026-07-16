@@ -267,6 +267,7 @@ const zhMessages = {
       unlink: "解除关联",
       unlinkConfirm: "要解除 Google 账号的关联吗？已保存的令牌将被吊销并从本机删除。",
       clientSecretMissing: "未找到 OAuth 客户端凭据。请从 Google Cloud Console 下载桌面应用客户端 JSON 并放入 ~/.secrets/（client_secret_*.json）。",
+      clientSecretAmbiguous: "在 ~/.secrets/ 中找到多个 client_secret_*.json。请只保留一个，以免已保存的令牌与 OAuth 客户端不匹配。",
       loadError: "获取 Google 关联状态失败。",
       connectError: "启动 Google 授权流程失败。",
       unlinkError: "解除 Google 关联失败。",

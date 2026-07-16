@@ -346,7 +346,7 @@ test.describe("Google account tab", () => {
   interface GoogleStatus {
     linked: boolean;
     pending: boolean;
-    clientSecretFound: boolean;
+    clientSecret: "found" | "missing" | "ambiguous";
     lastError: string | null;
   }
 
@@ -365,7 +365,7 @@ test.describe("Google account tab", () => {
 
   test("shows not-linked status and starts the authorize flow", async ({ page }) => {
     await mockConfigApi(page);
-    await mockGoogleStatus(page, { linked: false, pending: false, clientSecretFound: true, lastError: null });
+    await mockGoogleStatus(page, { linked: false, pending: false, clientSecret: "found", lastError: null });
     let authorizeCalls = 0;
     await page.route(
       (url) => url.pathname === "/api/google/authorize",
@@ -388,7 +388,7 @@ test.describe("Google account tab", () => {
 
   test("shows linked status with an unlink button", async ({ page }) => {
     await mockConfigApi(page);
-    await mockGoogleStatus(page, { linked: true, pending: false, clientSecretFound: true, lastError: null });
+    await mockGoogleStatus(page, { linked: true, pending: false, clientSecret: "found", lastError: null });
 
     await openGoogleTab(page);
     await expect(page.locator('[data-testid="settings-google-status"]')).toHaveText("Linked");
@@ -398,10 +398,20 @@ test.describe("Google account tab", () => {
 
   test("guides the user when no client secret is installed", async ({ page }) => {
     await mockConfigApi(page);
-    await mockGoogleStatus(page, { linked: false, pending: false, clientSecretFound: false, lastError: null });
+    await mockGoogleStatus(page, { linked: false, pending: false, clientSecret: "missing", lastError: null });
 
     await openGoogleTab(page);
     await expect(page.locator('[data-testid="settings-google-secret-missing"]')).toBeVisible();
+    await expect(page.locator('[data-testid="settings-google-connect-btn"]')).toBeDisabled();
+  });
+
+  test("guides the user to remove duplicates when multiple client secrets exist", async ({ page }) => {
+    await mockConfigApi(page);
+    await mockGoogleStatus(page, { linked: false, pending: false, clientSecret: "ambiguous", lastError: null });
+
+    await openGoogleTab(page);
+    await expect(page.locator('[data-testid="settings-google-secret-ambiguous"]')).toBeVisible();
+    await expect(page.locator('[data-testid="settings-google-secret-missing"]')).not.toBeVisible();
     await expect(page.locator('[data-testid="settings-google-connect-btn"]')).toBeDisabled();
   });
 });

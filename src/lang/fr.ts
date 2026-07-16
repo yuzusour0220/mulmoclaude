@@ -270,6 +270,8 @@ const frMessages = {
       unlinkConfirm: "Dissocier le compte Google ? Le jeton enregistré sera révoqué et supprimé de cette machine.",
       clientSecretMissing:
         "Aucun identifiant client OAuth trouvé. Téléchargez le JSON du client d'application de bureau depuis la Google Cloud Console et placez-le dans ~/.secrets/ (client_secret_*.json).",
+      clientSecretAmbiguous:
+        "Plusieurs fichiers client_secret_*.json ont été trouvés dans ~/.secrets/. N'en conservez qu'un seul afin que le jeton enregistré reste associé au bon client OAuth.",
       loadError: "Échec du chargement de l'état de l'association Google.",
       connectError: "Échec du démarrage du flux d'autorisation Google.",
       unlinkError: "Échec de la dissociation du compte Google.",

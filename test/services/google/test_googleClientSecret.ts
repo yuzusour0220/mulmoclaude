@@ -6,7 +6,7 @@ import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { findClientSecretPath, hasClientSecret, loadClientSecret } from "../../../server/services/google/clientSecret.js";
+import { clientSecretPresence, findClientSecretPath, loadClientSecret } from "../../../server/services/google/clientSecret.js";
 import { googleSecretsDir } from "../../../server/services/google/paths.js";
 
 const makeFakeHome = async (files: Record<string, string> = {}): Promise<string> => {
@@ -46,20 +46,25 @@ describe("findClientSecretPath", () => {
   });
 });
 
-describe("hasClientSecret", () => {
-  it("returns true when exactly one client secret exists", async () => {
+describe("clientSecretPresence", () => {
+  it("returns 'found' when exactly one client secret exists", async () => {
     const home = await makeFakeHome({ "client_secret_abc.json": validSecret });
-    assert.equal(await hasClientSecret(home), true);
+    assert.equal(await clientSecretPresence(home), "found");
   });
 
-  it("returns false when none exists", async () => {
+  it("returns 'missing' when none exists", async () => {
     const home = await makeFakeHome();
-    assert.equal(await hasClientSecret(home), false);
+    assert.equal(await clientSecretPresence(home), "missing");
   });
 
-  it("returns false on ambiguity (multiple files)", async () => {
+  it("returns 'ambiguous' for multiple files — a distinct state from 'missing'", async () => {
     const home = await makeFakeHome({ "client_secret_a.json": validSecret, "client_secret_b.json": validSecret });
-    assert.equal(await hasClientSecret(home), false);
+    assert.equal(await clientSecretPresence(home), "ambiguous");
+  });
+
+  it("ignores non-matching files when counting", async () => {
+    const home = await makeFakeHome({ "client_secret_a.json": validSecret, "unrelated.json": "{}" });
+    assert.equal(await clientSecretPresence(home), "found");
   });
 });
 
