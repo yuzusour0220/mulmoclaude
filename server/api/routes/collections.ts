@@ -837,6 +837,63 @@ router.put(API_ROUTES.collections.viewData, viewDataCors, requireViewToken("writ
   }
 });
 
+// Preflight for the token-scoped mutate-action endpoint (POST + JSON from a
+// sandboxed opaque-origin iframe — same CORS story as view-data itself).
+router.options(API_ROUTES.collections.viewDataAction, viewDataCors, (_req: Request, res: Response) => {
+  res.sendStatus(204);
+});
+
+// Token-scoped mutate-action invocation: lets a `write`-capable custom view
+// press a DECLARED mutate button instead of re-encoding the transition as a
+// hand-rolled putItems (which would skip `require` and duplicate the `set`
+// logic into the view's HTML). Mutate kind ONLY — a view token must never
+// be able to start LLM work, so chat/agent actions stay behind the global
+// bearer. The pipeline is the same one the UI button runs: `require`
+// re-checked against the record, params validated, write gate, atomic write.
+router.post(
+  API_ROUTES.collections.viewDataAction,
+  viewDataCors,
+  requireViewToken("write"),
+  async (req: Request<{ slug: string; actionId: string }>, res: Response<ActionRunResponse>) => {
+    try {
+      const collection = await loadCollection(req.params.slug);
+      if (!collection) {
+        notFound(res, `collection '${req.params.slug}' not found`);
+        return;
+      }
+      const action = collection.schema.actions?.find((entry) => entry.id === req.params.actionId);
+      if (!action) {
+        notFound(res, `action '${req.params.actionId}' not found on collection '${collection.slug}'`);
+        return;
+      }
+      if (action.kind !== "mutate") {
+        forbidden(res, `action '${action.id}' has kind "${action.kind}" — view tokens can only invoke "mutate" actions`);
+        return;
+      }
+      const body = (req.body ?? {}) as { itemId?: unknown; params?: unknown };
+      const itemId = typeof body.itemId === "string" ? body.itemId.trim() : "";
+      if (!itemId) {
+        badRequest(res, "`itemId` is required (the record's primary-key value)");
+        return;
+      }
+      const record = await readItem(collection.dataDir, itemId);
+      if (!record) {
+        notFound(res, `item '${itemId}' not found`);
+        return;
+      }
+      // Same visibility-is-authorization re-check the bearer route runs.
+      if (!actionVisible(action, record)) {
+        conflict(res, `action '${action.id}' is not available for item '${itemId}' in its current state`);
+        return;
+      }
+      await respondForMutateAction(res, collection, action, itemId, body);
+    } catch (err) {
+      log.warn("collections", "view mutate action failed", { slug: req.params.slug, actionId: req.params.actionId, error: errorMessage(err) });
+      serverError(res, errorMessage(err));
+    }
+  },
+);
+
 // Map a non-ok view-delete result to the matching HTTP error. Kept beside the
 // route so the handler stays short and the status mapping is unit-testable.
 function sendDeleteViewRefusal(res: Response, result: Exclude<DeleteViewResult, { kind: "ok" }>): void {
