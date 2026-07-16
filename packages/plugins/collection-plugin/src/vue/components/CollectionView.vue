@@ -65,11 +65,14 @@
         :key="action.id"
         type="button"
         class="h-8 px-2.5 flex items-center gap-1 rounded border border-indigo-200 bg-white hover:bg-indigo-50 text-indigo-600 font-bold text-xs transition-colors disabled:opacity-50"
-        :disabled="collectionActionPending"
+        :disabled="collectionActionPending || isActionRunning(action.id)"
         :data-testid="`collections-action-${action.id}`"
         @click="runCollectionAction(action)"
       >
-        <span v-if="action.icon" class="material-icons text-sm">{{ action.icon }}</span>
+        <!-- A running `kind:"agent"` worker replaces the icon with a spinner
+             until the completion ping's refetch clears its run key. -->
+        <span v-if="isActionRunning(action.id)" class="material-icons text-sm animate-spin">progress_activity</span>
+        <span v-else-if="action.icon" class="material-icons text-sm">{{ action.icon }}</span>
         <span>{{ action.label }}</span>
       </button>
 
@@ -375,6 +378,7 @@
               :action-error="actionError"
               :action-pending="actionPending"
               :visible-actions="visibleActions"
+              :running-action-ids="viewingRunningActionIds"
               :live-record="liveRecord"
               :live-derived="liveDerived"
               :view-title="viewTitle"
@@ -675,6 +679,7 @@
         :action-error="actionError"
         :action-pending="actionPending"
         :visible-actions="visibleActions"
+        :running-action-ids="viewingRunningActionIds"
         :live-record="liveRecord"
         :live-derived="liveDerived"
         :view-title="viewTitle"
@@ -806,6 +811,7 @@ import {
   shortHexId,
   defangForPrompt,
   actionVisible,
+  agentActionRunKey,
   fieldVisible,
   resolveEnumColor,
   buildUpdatedRecord,
@@ -961,6 +967,33 @@ const inlineSavingRows = ref<Set<string>>(new Set());
 const actionPending = ref(false);
 const actionError = ref<string | null>(null);
 const collectionActionPending = ref(false);
+
+// In-flight `kind: "agent"` action run keys. The server's detail response
+// is the source of truth (its dispatch guard); a dispatch adds the key
+// optimistically BEFORE the POST, and the worker's completion ping
+// (publishCollectionChange) triggers the refetch that reconciles it.
+const runningActions = ref<Set<string>>(new Set());
+
+// Generation guard: bumped on every LOCAL runningActions mutation so a
+// detail response that started BEFORE the mutation can't clobber it — a
+// pre-dispatch snapshot would erase the optimistic key and strand the
+// button enabled while the worker runs (Codex + CodeRabbit on PR #2104).
+let runningActionsGen = 0;
+
+function mutateRunningActions(mutate: (next: Set<string>) => void): void {
+  runningActionsGen += 1;
+  const next = new Set(runningActions.value);
+  mutate(next);
+  runningActions.value = next;
+}
+
+/** Adopt a detail response's `runningActions` — only when no local
+ *  mutation happened while the response was in flight (stale snapshots
+ *  are dropped; the completion ping's refetch reconciles soon after). */
+function applyServerRunningActions(keys: string[] | undefined, genAtFetch: number): void {
+  if (runningActionsGen !== genAtFetch) return;
+  runningActions.value = new Set(keys ?? []);
+}
 const chatOpen = ref(false);
 const chatMessage = ref("");
 const chatInputEl = ref<HTMLTextAreaElement | null>(null);
@@ -1205,20 +1238,39 @@ function showRefreshNote(message: string): void {
 /** Collection-level header actions. No `when` predicate (no record). */
 const collectionActions = computed<CollectionAction[]>(() => collection.value?.schema.collectionActions ?? []);
 
+/** True when a `kind: "agent"` action's hidden worker is in flight —
+ *  drives the button spinner + disable. Keys mirror the server's
+ *  dispatch guard via `agentActionRunKey`. */
+function isActionRunning(actionId: string, itemId?: string): boolean {
+  return runningActions.value.has(agentActionRunKey(actionId, itemId));
+}
+
 /** Run a collection-level action: ask the server to assemble the seed
- *  prompt (a progress summary of all records + the template), then start
- *  a new chat in the action's role with it. Generic — no domain knowledge. */
+ *  prompt (a progress summary of all records + the template). `kind:
+ *  "chat"` gets the seed back and starts a new chat; `kind: "agent"` is
+ *  dispatched server-side as a hidden worker — mark it running and let
+ *  the completion ping's refetch reconcile. Generic — no domain knowledge. */
 async function runCollectionAction(action: CollectionAction): Promise<void> {
   const current = collection.value;
-  if (!current || collectionActionPending.value) return;
+  if (!current || collectionActionPending.value || isActionRunning(action.id)) return;
+  // Optimistic key BEFORE the POST: a fast worker's completion ping can
+  // beat the POST's resolution, and adding the key afterwards would
+  // strand the spinner past the only refetch that could clear it.
+  const runKey = action.kind === "agent" ? agentActionRunKey(action.id) : null;
+  if (runKey) mutateRunningActions((next) => next.add(runKey));
   collectionActionPending.value = true;
   inlineError.value = null;
   const result = await cui.runCollectionAction(current.slug, action.id);
   collectionActionPending.value = false;
   if (!result.ok) {
+    // 409 = the server's dispatch guard CONFIRMED a worker is in flight
+    // (e.g. dispatched from another tab) — keep the key so the button
+    // stays disabled; drop it only for real launch failures.
+    if (runKey && result.status !== 409) mutateRunningActions((next) => next.delete(runKey));
     inlineError.value = result.error;
     return;
   }
+  if (result.data.dispatched) return; // key already set; the completion ping's refetch reconciles
   if (props.sendTextMessage) {
     props.sendTextMessage(result.data.prompt);
     return;
@@ -1257,20 +1309,28 @@ const visibleActions = computed<CollectionAction[]>(() => {
 });
 
 /** Run a schema-declared action on the open record: ask the server to
- *  assemble the seed prompt, then start a new chat in the action's
- *  role with it. Generic — no knowledge of what the action does. */
+ *  assemble the seed prompt. `kind: "chat"` gets the seed back and starts
+ *  a new chat; `kind: "agent"` is dispatched server-side as a hidden
+ *  worker — mark it running and let the completion ping's refetch
+ *  reconcile. Generic — no knowledge of what the action does. */
 async function runAction(action: CollectionAction): Promise<void> {
   if (!collection.value || !viewing.value) return;
   const itemId = String(viewing.value[collection.value.schema.primaryKey] ?? "");
-  if (!itemId) return;
+  if (!itemId || isActionRunning(action.id, itemId)) return;
+  // Optimistic key BEFORE the POST — see runCollectionAction.
+  const runKey = action.kind === "agent" ? agentActionRunKey(action.id, itemId) : null;
+  if (runKey) mutateRunningActions((next) => next.add(runKey));
   actionPending.value = true;
   actionError.value = null;
   const result = await cui.runItemAction(collection.value.slug, itemId, action.id);
   actionPending.value = false;
   if (!result.ok) {
+    // 409 = already running server-side — keep the key; see runCollectionAction.
+    if (runKey && result.status !== 409) mutateRunningActions((next) => next.delete(runKey));
     actionError.value = result.error;
     return;
   }
+  if (result.data.dispatched) return; // key already set; the completion ping's refetch reconciles
   // In a chat card we have a channel into the current session — send
   // the seed prompt there rather than spawning a new chat. Standalone
   // route mode has no such channel, so start a fresh chat in the
@@ -1281,6 +1341,17 @@ async function runAction(action: CollectionAction): Promise<void> {
   }
   appApi.startNewChat(result.data.prompt, result.data.role);
 }
+
+/** Ids of the open record's actions whose hidden worker is running — the
+ *  record panel renders those buttons with a spinner, disabled. */
+const viewingRunningActionIds = computed<string[]>(() => {
+  const current = collection.value;
+  const record = viewing.value;
+  if (!current || !record) return [];
+  const itemId = String(record[current.schema.primaryKey] ?? "");
+  if (!itemId) return [];
+  return (current.schema.actions ?? []).filter((action) => isActionRunning(action.id, itemId)).map((action) => action.id);
+});
 
 /** Open the chat modal, blanking any prior draft and focusing the input. */
 function openChat(): void {
@@ -1361,6 +1432,7 @@ async function loadCollection(slug: string): Promise<void> {
   collection.value = null;
   items.value = [];
   dataIssues.value = []; // never carry a previous collection's issues over
+  mutateRunningActions((next) => next.clear()); // ditto for another collection's spinners
   searchQuery.value = ""; // Reset search query on collection load
   // NOTE: the active column sort is NOT reset here — it's part of the view
   // state, so it must survive a refresh / edit reload and an embedded card
@@ -1368,6 +1440,7 @@ async function loadCollection(slug: string): Promise<void> {
   render.resetLinkedCaches();
   viewing.value = null;
   openDay.value = null; // never carry a previous collection's open day over
+  const runningGen = runningActionsGen;
   const result = await cui.fetchCollectionDetail(slug);
   loading.value = false;
   if (!result.ok) {
@@ -1385,6 +1458,7 @@ async function loadCollection(slug: string): Promise<void> {
   collection.value = result.data.collection;
   items.value = result.data.items;
   dataIssues.value = result.data.issues ?? [];
+  applyServerRunningActions(result.data.runningActions, runningGen);
   enumOriginallyEmpty.value = snapshotEmptyEnums(result.data.collection.schema, result.data.items);
   // Fan out to fetch each unique target collection so the table can
   // render ref values as display names (not slugs) and the form
@@ -1419,12 +1493,14 @@ async function loadCollection(slug: string): Promise<void> {
  *  fetch is a no-op (keep the current data) — a transient blip shouldn't blank a
  *  view the user is reading. */
 async function refreshItemsInPlace(slug: string): Promise<void> {
+  const runningGen = runningActionsGen;
   const result = await cui.fetchCollectionDetail(slug);
   // Bail if the fetch failed or the user switched collections mid-flight.
   if (!result.ok || activeSlug.value !== slug) return;
   collection.value = result.data.collection;
   items.value = result.data.items;
   dataIssues.value = result.data.issues ?? [];
+  applyServerRunningActions(result.data.runningActions, runningGen);
   enumOriginallyEmpty.value = snapshotEmptyEnums(result.data.collection.schema, result.data.items);
   await render.loadLinkedCollections(result.data.collection.schema, slug);
   if (activeSlug.value !== slug) return; // re-check after the await

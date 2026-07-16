@@ -45,11 +45,14 @@
           :key="action.id"
           type="button"
           class="h-8 px-2.5 rounded border border-indigo-200 bg-indigo-50/50 text-indigo-600 hover:bg-indigo-600 hover:text-white hover:border-indigo-600 font-bold text-xs transition-all flex items-center gap-1 disabled:opacity-50"
-          :disabled="actionPending"
+          :disabled="actionPending || runningActionIds.includes(action.id)"
           :data-testid="`collections-detail-action-${action.id}`"
           @click="emit('runAction', action)"
         >
-          <span v-if="action.icon" class="material-icons text-sm">{{ action.icon }}</span>
+          <!-- A running `kind:"agent"` worker replaces the icon with a spinner
+               until the completion ping's refetch clears its run key. -->
+          <span v-if="runningActionIds.includes(action.id)" class="material-icons text-sm animate-spin">progress_activity</span>
+          <span v-else-if="action.icon" class="material-icons text-sm">{{ action.icon }}</span>
           <span>{{ action.label }}</span>
         </button>
 
@@ -536,6 +539,9 @@ const props = defineProps<{
   actionError: string | null;
   actionPending: boolean;
   visibleActions: CollectionAction[];
+  /** Ids of the open record's `kind: "agent"` actions whose hidden worker
+   *  is in flight — those buttons render a spinner, disabled. */
+  runningActionIds: string[];
   /** Live record computed from the draft (drives derived previews). */
   liveRecord: CollectionItem | null;
   /** Live record with derived fields resolved. */

@@ -55,12 +55,13 @@ import {
   type RemoteViewItemsResult,
 } from "../../workspace/collections/remoteView.js";
 import { clampLimit, clampOffset, normalizeFields, normalizeMutate } from "@mulmoclaude/core/remote-view";
-import { badRequest, notFound, conflict, forbidden, serverError } from "../../utils/httpError.js";
+import { badRequest, notFound, conflict, forbidden, serverError, serviceUnavailable } from "../../utils/httpError.js";
 import { errorMessage } from "../../utils/errors.js";
 import { log } from "../../system/logger/index.js";
 import { workspacePath } from "../../workspace/workspace.js";
 import { refreshOne } from "@mulmoclaude/core/feeds/server";
 import { manageCollection } from "../../agent/mcp-tools/manageCollection.js";
+import { dispatchAgentAction, runningAgentActions } from "./collectionAgentActions.js";
 import { clampCapabilities, mintViewToken, requireViewToken, type ViewCapability } from "../auth/viewToken.js";
 
 const router = Router();
@@ -76,6 +77,9 @@ interface CollectionDetailResponse {
    *  violation) and are silently skipped at read time. Drives the
    *  in-view Repair prompt. Omitted/empty when every record is fine. */
   issues?: RecordIssue[];
+  /** In-flight `kind: "agent"` action run keys — drives the button
+   *  spinners. Omitted when nothing is running (absent-when-clean). */
+  runningActions?: string[];
 }
 
 interface ItemMutationResponse {
@@ -107,6 +111,14 @@ interface ActionSeedResponse {
   /** Role id the new chat should run in (from the action). */
   role: string;
 }
+
+/** `kind: "agent"`: the server dispatched the hidden worker itself — no
+ *  seed rides back to the client, which just shows the running state. */
+interface ActionDispatchedResponse {
+  dispatched: true;
+}
+
+type ActionRunResponse = ActionSeedResponse | ActionDispatchedResponse;
 
 // Client-list summary: the static `toSummary` plus, for a collection that
 // declares `dynamicIcon`, the computed icon + the source slug(s) a live
@@ -150,9 +162,15 @@ router.get(API_ROUTES.collections.detail, async (req: Request<{ slug: string }>,
     } catch (err) {
       log.warn("collections", "detail validation skipped", { slug: collection.slug, error: errorMessage(err) });
     }
-    // Omit `issues` entirely when everything is fine, matching the
-    // "absent when clean" contract on CollectionDetailResponse.
-    res.json({ collection: toDetail(collection), items, ...(issues.length > 0 ? { issues } : {}) });
+    // Omit `issues` / `runningActions` entirely when everything is fine,
+    // matching the "absent when clean" contract on CollectionDetailResponse.
+    const runningActions = runningAgentActions(collection.slug);
+    res.json({
+      collection: toDetail(collection),
+      items,
+      ...(issues.length > 0 ? { issues } : {}),
+      ...(runningActions.length > 0 ? { runningActions } : {}),
+    });
   } catch (err) {
     log.warn("collections", "detail failed", { slug: collection.slug, error: errorMessage(err) });
     serverError(res, errorMessage(err));
@@ -344,11 +362,38 @@ router.post(API_ROUTES.collections.refresh, async (req: Request<{ slug: string }
   }
 });
 
+// Route the assembled seed by the action's kind: `"chat"` returns it for
+// the client to start a visible chat; `"agent"` dispatches the hidden
+// worker here and returns only `{ dispatched }` — the client shows the
+// running state (spinner via the detail response's `runningActions`).
+// 409 on a double-dispatch (the stamp-at-dispatch guard); 503 on a
+// cap-miss / launch failure so the button un-sticks and reads honest.
+async function respondForActionKind(
+  res: Response<ActionRunResponse>,
+  collection: LoadedCollection,
+  action: CollectionAction,
+  seed: ActionSeedResponse,
+  itemId?: string,
+): Promise<void> {
+  if (action.kind !== "agent") {
+    res.json(seed);
+    return;
+  }
+  const outcome = await dispatchAgentAction({ collection, action, seed: seed.prompt, itemId });
+  if (!outcome.ok) {
+    if (outcome.alreadyRunning) conflict(res, outcome.error);
+    else serviceUnavailable(res, outcome.error);
+    return;
+  }
+  res.json({ dispatched: true });
+}
+
 // Assemble a schema-declared action's seed prompt for one record. The
 // route is fully generic — it reads the record + the action's template
 // from the skill dir and returns the seed + the role to run it in; the
-// client starts the chat. No domain (invoice / PDF / role) literals.
-router.post(API_ROUTES.collections.itemAction, async (req: Request<{ slug: string; itemId: string; actionId: string }>, res: Response<ActionSeedResponse>) => {
+// client starts the chat (or, for `kind: "agent"`, the server dispatches
+// the hidden worker itself). No domain (invoice / PDF / role) literals.
+router.post(API_ROUTES.collections.itemAction, async (req: Request<{ slug: string; itemId: string; actionId: string }>, res: Response<ActionRunResponse>) => {
   const collection = await loadCollection(req.params.slug);
   if (!collection) {
     notFound(res, `collection '${req.params.slug}' not found`);
@@ -378,8 +423,9 @@ router.post(API_ROUTES.collections.itemAction, async (req: Request<{ slug: strin
       serverError(res, `template '${action.template}' for action '${action.id}' could not be read`);
       return;
     }
-    log.info("collections", "action seed built", { slug: collection.slug, itemId: req.params.itemId, actionId: action.id });
-    res.json({ prompt: buildActionSeedPrompt(record, template, promptPathsFor(collection, workspacePath)), role: action.role });
+    log.info("collections", "action seed built", { slug: collection.slug, itemId: req.params.itemId, actionId: action.id, kind: action.kind });
+    const seed = { prompt: buildActionSeedPrompt(record, template, promptPathsFor(collection, workspacePath)), role: action.role };
+    await respondForActionKind(res, collection, action, seed, req.params.itemId);
   } catch (err) {
     log.warn("collections", "action seed failed", {
       slug: collection.slug,
@@ -405,7 +451,7 @@ async function buildCollectionActionSeed(collection: LoadedCollection, action: C
 
 // Like the per-record route but with no `itemId`: there is no record to read or
 // gate on, so the seed injects a progress summary instead. No domain literals.
-router.post(API_ROUTES.collections.collectionAction, async (req: Request<{ slug: string; actionId: string }>, res: Response<ActionSeedResponse>) => {
+router.post(API_ROUTES.collections.collectionAction, async (req: Request<{ slug: string; actionId: string }>, res: Response<ActionRunResponse>) => {
   const collection = await loadCollection(req.params.slug);
   if (!collection) {
     notFound(res, `collection '${req.params.slug}' not found`);
@@ -422,7 +468,7 @@ router.post(API_ROUTES.collections.collectionAction, async (req: Request<{ slug:
       serverError(res, `template '${action.template}' for action '${action.id}' could not be read`);
       return;
     }
-    res.json(seed);
+    await respondForActionKind(res, collection, action, seed);
   } catch (err) {
     log.warn("collections", "collection action seed failed", { slug: collection.slug, actionId: req.params.actionId, error: errorMessage(err) });
     serverError(res, errorMessage(err));

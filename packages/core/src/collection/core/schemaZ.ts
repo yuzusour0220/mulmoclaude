@@ -253,15 +253,21 @@ export const FieldSpecZ = z.discriminatedUnion("type", [
 
 /** A schema-declared record action, rendered as a button in the read-only
  *  detail view. Domain-free: the host validates the shape; the meaning
- *  (which role, which template) is data. v1 ships only `kind: "chat"` —
- *  start a new chat in `role` with a templated seed prompt; the enum
- *  reserves room for a future `"mutate"` (status transitions) without
- *  another schema-shape change. */
+ *  (which role, which template) is data. Kinds:
+ *  - `"chat"` — start a new VISIBLE chat in `role` with the templated
+ *    seed prompt (judgment work: drafting, planning, conversation).
+ *  - `"agent"` — dispatch a HIDDEN worker (origin `system`) with the SAME
+ *    seed; it edits records via manageCollection and finishes silently
+ *    (mechanical enrichment: refresh a price, fetch metadata). Spinner
+ *    while running, deduped failure bell on error — see
+ *    server/api/routes/collectionAgentActions.ts.
+ *  The enum still reserves room for a future `"mutate"` (declarative
+ *  host-executed writes) without another schema-shape change. */
 export const ActionSpecZ = z.object({
   id: z.string().trim().min(1),
   label: z.string().trim().min(1),
   icon: z.string().trim().min(1).optional(),
-  kind: z.enum(["chat"]),
+  kind: z.enum(["chat", "agent"]),
   role: z.string().trim().min(1),
   template: z
     .string()

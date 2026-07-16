@@ -74,6 +74,8 @@ New computed field type (joins `COMPUTED_TYPES`): stores nothing; detail view re
 
 Fill the reserved 2×2: chat/agent × record/collection. Same `CollectionAction` shape, new kind:
 
+**✅ DONE 2026-07-15** (`ActionSpecZ` kind enum gains `"agent"`; dispatcher `server/api/routes/collectionAgentActions.ts` — stamp-at-dispatch in-flight guard keyed by the shared `agentActionRunKey` (core `actionVisible.ts`), deduped failure bell via the notifier, `publishCollectionChange` on completion so the client refetches; both action routes branch on kind and reply `{ dispatched: true }`; the detail response carries `runningActions` and the client renders per-button spinners from it).
+
 ```jsonc
 "actions": [{
   "id": "reprice", "label": "Refresh price", "icon": "sync",
@@ -140,7 +142,7 @@ The reserved kind from `schema.ts:174-178`, exactly Foundry's Action shape minus
 ⓪ zod single-source refactor  — Phase A blocks everything; Phase B blocks ④ (mutate params)
 ① getOntology (LLM summary)   — ✅ DONE 2026-07-15 (graph panel still pending as its phase 2)
 ② backlinks                   — ✅ DONE 2026-07-15 (from/via vocabulary + reverse loading established)
-③ kind:"agent" actions        — infra exists end-to-end; completes the 2×2
+③ kind:"agent" actions        — ✅ DONE 2026-07-15 (completes the 2×2)
 ④ kind:"mutate"               — fills the reserved slot; guards as paved path
 ⑤ rollup                      — rides on ②'s machinery
 ⑥ egress pattern doc          — falls out of ③ for free (help file + template, no host code)

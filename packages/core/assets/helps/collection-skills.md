@@ -316,11 +316,24 @@ Rules and limits:
 
 ### Actions (per-record buttons)
 
-Each entry in `actions` renders a button in the read-only detail view. The only
-`kind` today is `"chat"`: clicking it starts a **new chat in a role**, seeded
-with a template + the record data — the role then does the work with its tools.
-This is how hard logic the schema can't express (PDF generation, bookkeeping
-journals, drafting an email) gets delegated to natural language.
+Each entry in `actions` renders a button in the read-only detail view. Two
+kinds:
+
+- **`"chat"`** — clicking it starts a **new visible chat in a role**, seeded
+  with a template + the record data — the role then does the work with its
+  tools. Pick it when the output IS the conversation or the user may need to
+  steer: PDF generation, bookkeeping journals, drafting an email.
+- **`"agent"`** — clicking it dispatches a **hidden background worker** with
+  the SAME seed; the worker edits the record via `manageCollection` and
+  finishes silently — no chat window, the record just updates. Pick it for
+  mechanical enrichment where a transcript would be noise: refresh a price,
+  fetch metadata, look something up and write it back. The button shows a
+  spinner while the worker runs; a failed run raises one bell notification
+  (cleared by the next success). **End an agent template with**: "edit the
+  record via manageCollection and stop — do not present anything."
+
+This is how hard logic that the schema can't express gets delegated to natural
+language.
 
 ```json
 {
@@ -364,7 +377,9 @@ text / markdown / html / file fields are left out, so the prompt stays small).
 ```
 
 - Same `id` uniqueness rule (within `collectionActions`); same path-safe
-  `template`; same `role`-seeds-a-new-chat behavior.
+  `template`; same `role` + kind behavior (`"chat"` seeds a visible chat,
+  `"agent"` dispatches a silent worker over the whole collection — e.g. a
+  "Sync" button that pushes records to an external system via MCP).
 - `when` is **ignored** here — there is no record to gate on. Always shown.
 
 ### Completion tracking (bell notifications)
