@@ -29,6 +29,7 @@ Your browser opens to `http://localhost:3001`. That's it.
 | "Schedule a daily news digest"  | Recurring task that runs automatically                |
 | "Generate an image of a sunset" | AI-generated image (Gemini)                           |
 | "Make slides on …"              | Marp-rendered slide deck with PDF export              |
+| "Add this to my calendar"       | Event in your Google Calendar (local OAuth link)      |
 | "Subscribe to this RSS feed"    | Data feed on `/feeds`, fetched on a schedule          |
 
 **Pages you can visit directly**: `/wiki` (browse + lint), `/feeds` (data feeds), `/collections` (data apps — Discover tab to import community collections, Contribute to share your own), `/automations` (recurring tasks), `/files`, `/skills`, `/roles`. Each page has its own chat composer that spawns a fresh chat already aware of the page context.
@@ -123,6 +124,7 @@ Recommended: ≥ 32 characters of random data (shorter values trigger a startup 
 - **Marp slides** — `marp: true` frontmatter on any markdown file renders a slide deck in the canvas with PDF export. Custom themes via `config/marp-themes/<name>.css`.
 - **Auto memory** — the agent maintains a typed memory layout (`conversations/memory/<type>/<topic>.md`) and reads it ambient-style.
 - **Web Push on task finish** — enable in Settings → Notifications to get a push on your phone when the answer to a question you asked is ready, even with the browser closed. Requires the RemoteHost connection + a registered device (see [`docs/remote-host.md`](https://github.com/receptron/mulmoclaude/blob/main/docs/remote-host.md#web-push-on-task-finish-2086)).
+- **Google Calendar (local OAuth)** — link your Google account in Settings → Plugins → Google; the agent gets a `google` tool to list / create events, and the phone remote can trigger the same commands. The refresh token stays on your machine (`~/.config/mulmoclaude/`) — no Google credential ever reaches a cloud. One-time setup: place an OAuth *desktop-app* client JSON from the Google Cloud Console in `~/.secrets/` (see [`docs/remote-host.md`](https://github.com/receptron/mulmoclaude/blob/main/docs/remote-host.md)).
 
 ## Plugin authoring (`--dev-plugin`)
 
