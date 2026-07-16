@@ -316,7 +316,7 @@ Rules and limits:
 
 ### Actions (per-record buttons)
 
-Each entry in `actions` renders a button in the read-only detail view. Two
+Each entry in `actions` renders a button in the read-only detail view. Three
 kinds:
 
 - **`"chat"`** — clicking it starts a **new visible chat in a role**, seeded
@@ -331,9 +331,35 @@ kinds:
   spinner while the worker runs; a failed run raises one bell notification
   (cleared by the next success). **End an agent template with**: "edit the
   record via manageCollection and stop — do not present anything."
+- **`"mutate"`** — **no LLM at all**: the host applies a declarative write the
+  moment the button is clicked (after an optional mini-form). Pick it when the
+  write needs zero judgment — "Mark paid", "Assign", any fixed state
+  transition. Instant and token-free. Shape (no `role`/`template`):
+
+  ```json
+  {
+    "id": "assign", "label": "Assign", "icon": "person_add",
+    "kind": "mutate",
+    "require": { "field": "status", "in": ["open"] },
+    "params": { "assignee": { "type": "string", "label": "Assignee", "required": true } },
+    "set": { "assignee": "$params.assignee", "status": "assigned" }
+  }
+  ```
+
+  `set` merges into the record (only the named fields change) — values are
+  literals or `$params.<name>` references. `require` replaces `when` (same
+  shape, same visibility-is-authorization rule, re-checked server-side).
+  `params` declares an optional mini-form using the table sub-field DSL; the
+  submitted values are validated like record fields, and the write itself runs
+  through the same gate as `putItems` (a rejected write shows the `problem`).
+  Constraints (schema-validated): `set` keys must name declared, non-computed
+  fields (never the primaryKey); every `$params` reference must name a
+  declared param; mutate is **record-level only** (not in `collectionActions`).
+  Group several fields in one `set` so "paid" can mean `status` + `paidDate`
+  written together. `toggle` stays the right tool for a single checkbox.
 
 This is how hard logic that the schema can't express gets delegated to natural
-language.
+language (and, for `"mutate"`, how the schema-expressible part stays free).
 
 ```json
 {

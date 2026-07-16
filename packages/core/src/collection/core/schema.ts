@@ -121,13 +121,21 @@ export type CollectionActionWhen = CollectionWhen;
 /** A schema-declared, per-record action rendered as a button in the
  *  read-only detail view. Pure UI/behaviour directive — never stored,
  *  never validated against record data. All domain specifics (label,
- *  role, template) live in the schema / skill folder, so the host
- *  stays generic. See `ActionSpecZ`. */
+ *  role, template — or the declarative `set`) live in the schema / skill
+ *  folder, so the host stays generic. A discriminated union on `kind`;
+ *  see `ActionSpecZ`. */
 export type CollectionAction = z.infer<typeof ActionSpecZ>;
 
-/** The kind of work an action kicks off. v1 ships only `"chat"`; the enum
- *  (in `ActionSpecZ`) reserves room for a future `"mutate"`. */
+/** The kind of work an action kicks off: `"chat"` (visible LLM chat),
+ *  `"agent"` (hidden LLM worker), or `"mutate"` (declarative host write,
+ *  no LLM). */
 export type CollectionActionKind = CollectionAction["kind"];
+
+/** The LLM-seeded action variants (`role` + `template`). */
+export type CollectionSeededAction = Extract<CollectionAction, { kind: "chat" | "agent" }>;
+
+/** The declarative host-write variant (`set` + optional `require`/`params`). */
+export type CollectionMutateAction = Extract<CollectionAction, { kind: "mutate" }>;
 
 /** A custom (LLM-authored) HTML view for a collection. The host renders
  *  `file` in a sandboxed iframe over the collection's records; the view

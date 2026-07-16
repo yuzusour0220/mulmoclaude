@@ -31,11 +31,13 @@ import {
   resolveCreateItemId,
   toDetail,
   toSummary,
+  applyMutateAction,
   validateCollectionRecords,
   writeItem,
 } from "../../workspace/collections/index.js";
 import type {
-  CollectionAction,
+  CollectionMutateAction,
+  CollectionSeededAction,
   CollectionDetail,
   CollectionItem,
   CollectionSummary,
@@ -118,7 +120,15 @@ interface ActionDispatchedResponse {
   dispatched: true;
 }
 
-type ActionRunResponse = ActionSeedResponse | ActionDispatchedResponse;
+/** `kind: "mutate"`: the server applied the declarative write itself —
+ *  the written record rides back so the client can update in place. */
+interface ActionMutatedResponse {
+  written: true;
+  itemId: string;
+  item: CollectionItem;
+}
+
+type ActionRunResponse = ActionSeedResponse | ActionDispatchedResponse | ActionMutatedResponse;
 
 // Client-list summary: the static `toSummary` plus, for a collection that
 // declares `dynamicIcon`, the computed icon + the source slug(s) a live
@@ -371,7 +381,7 @@ router.post(API_ROUTES.collections.refresh, async (req: Request<{ slug: string }
 async function respondForActionKind(
   res: Response<ActionRunResponse>,
   collection: LoadedCollection,
-  action: CollectionAction,
+  action: CollectionSeededAction,
   seed: ActionSeedResponse,
   itemId?: string,
 ): Promise<void> {
@@ -388,11 +398,38 @@ async function respondForActionKind(
   res.json({ dispatched: true });
 }
 
+// Execute a `kind: "mutate"` action: validate the mini-form params, merge
+// the resolved `set` over the record through the standard write gate, and
+// answer with the written record so the client can update in place. The
+// engine work lives in `applyMutateAction` (core); this maps its outcome
+// to HTTP.
+async function respondForMutateAction(
+  res: Response<ActionRunResponse>,
+  collection: LoadedCollection,
+  action: CollectionMutateAction,
+  itemId: string,
+  body: { params?: unknown } | undefined,
+): Promise<void> {
+  const raw = body?.params;
+  const params = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
+  const outcome = await applyMutateAction(collection, action, itemId, params);
+  if (!outcome.ok) {
+    log.info("collections", "mutate action refused", { slug: collection.slug, itemId, actionId: action.id, status: outcome.status, problem: outcome.problem });
+    if (outcome.status === "not-found") notFound(res, outcome.problem);
+    else if (outcome.status === "write-refused") serverError(res, outcome.problem);
+    else badRequest(res, outcome.problem);
+    return;
+  }
+  log.info("collections", "mutate action applied", { slug: collection.slug, itemId, actionId: action.id });
+  res.json({ written: true, itemId, item: outcome.item });
+}
+
 // Assemble a schema-declared action's seed prompt for one record. The
 // route is fully generic — it reads the record + the action's template
 // from the skill dir and returns the seed + the role to run it in; the
 // client starts the chat (or, for `kind: "agent"`, the server dispatches
-// the hidden worker itself). No domain (invoice / PDF / role) literals.
+// the hidden worker itself; for `kind: "mutate"`, it applies the
+// declarative write). No domain (invoice / PDF / role) literals.
 router.post(API_ROUTES.collections.itemAction, async (req: Request<{ slug: string; itemId: string; actionId: string }>, res: Response<ActionRunResponse>) => {
   const collection = await loadCollection(req.params.slug);
   if (!collection) {
@@ -418,6 +455,13 @@ router.post(API_ROUTES.collections.itemAction, async (req: Request<{ slug: strin
       conflict(res, `action '${action.id}' is not available for item '${req.params.itemId}' in its current state`);
       return;
     }
+    // `kind: "mutate"` needs no template / seed / LLM — the host applies
+    // the declarative write itself (require was just enforced above,
+    // same visibility-is-authorization rule as the seeded kinds).
+    if (action.kind === "mutate") {
+      await respondForMutateAction(res, collection, action, req.params.itemId, req.body as { params?: unknown } | undefined);
+      return;
+    }
     const template = await readSkillTemplate(collection.skillDir, action.template);
     if (template === null) {
       serverError(res, `template '${action.template}' for action '${action.id}' could not be read`);
@@ -441,7 +485,7 @@ router.post(API_ROUTES.collections.itemAction, async (req: Request<{ slug: strin
 // a compact progress summary of every record. Returns null when the template
 // can't be read. Pure plumbing — kept out of the route handler to stay under the
 // function-size limit.
-async function buildCollectionActionSeed(collection: LoadedCollection, action: CollectionAction): Promise<ActionSeedResponse | null> {
+async function buildCollectionActionSeed(collection: LoadedCollection, action: CollectionSeededAction): Promise<ActionSeedResponse | null> {
   const template = await readSkillTemplate(collection.skillDir, action.template);
   if (template === null) return null;
   const items = await listItems(collection.dataDir);
@@ -460,6 +504,12 @@ router.post(API_ROUTES.collections.collectionAction, async (req: Request<{ slug:
   const action = collection.schema.collectionActions?.find((entry) => entry.id === req.params.actionId);
   if (!action) {
     notFound(res, `collection action '${req.params.actionId}' not found on collection '${collection.slug}'`);
+    return;
+  }
+  // Schema validation already rejects mutate in `collectionActions` (no
+  // record to write); this is the defensive twin that also narrows the type.
+  if (action.kind === "mutate") {
+    badRequest(res, `collection action '${action.id}' has kind "mutate" — mutate actions are record-level only`);
     return;
   }
   try {

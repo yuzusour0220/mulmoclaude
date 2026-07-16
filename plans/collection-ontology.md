@@ -94,6 +94,8 @@ Fill the reserved 2×2: chat/agent × record/collection. Same `CollectionAction`
 
 The reserved kind from `schema.ts:174-178`, exactly Foundry's Action shape minus the lock:
 
+**✅ DONE 2026-07-15** (`ActionSpecZ` is now a discriminated union on `kind` — `SeededActionZ` (chat/agent: role+template+when) | `MutateActionZ` (require+params+set); `$params.<name>` parsing shared via `core/mutateAction.ts`; executor `server/mutate.ts` = params validated by the Phase B compiler (`recordFieldProblem`, strict tier) → resolved `set` merged over the computed-stripped stored record → `validateRecordObject` write gate → atomic `writeItem`; schema refines pin `set` keys to declared non-computed fields, `$params` refs to declared params, and mutate to record-level; the client renders a `params` mini-form (`CollectionMutateParamsModal.vue`) and adopts the written record in place).
+
 ```jsonc
 "actions": [{
   "id": "assign", "label": "Assign", "icon": "person_add",
@@ -143,7 +145,7 @@ The reserved kind from `schema.ts:174-178`, exactly Foundry's Action shape minus
 ① getOntology (LLM summary)   — ✅ DONE 2026-07-15 (graph panel still pending as its phase 2)
 ② backlinks                   — ✅ DONE 2026-07-15 (from/via vocabulary + reverse loading established)
 ③ kind:"agent" actions        — ✅ DONE 2026-07-15 (completes the 2×2)
-④ kind:"mutate"               — fills the reserved slot; guards as paved path
+④ kind:"mutate"               — ✅ DONE 2026-07-15 (fills the reserved slot)
 ⑤ rollup                      — rides on ②'s machinery
 ⑥ egress pattern doc          — falls out of ③ for free (help file + template, no host code)
 ```

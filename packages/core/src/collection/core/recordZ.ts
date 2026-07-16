@@ -113,7 +113,7 @@ function strictTableProblem(key: string, spec: Extract<CollectionFieldSpec, { ty
  *  Enforced checks always run (and their messages never vary by tier — the
  *  scan and the write gate must agree on them); strict adds the per-type
  *  layer on present values only. */
-export function recordFieldProblem(key: string, spec: CollectionFieldSpec, value: unknown, tier: RecordCheckTier): string | null {
+export function recordFieldProblem(key: string, spec: AnyFieldSpec, value: unknown, tier: RecordCheckTier): string | null {
   const enforced = enforcedProblem(key, spec, value);
   if (enforced || tier === "enforced") return enforced;
   if (isEmptyValue(value)) return null;

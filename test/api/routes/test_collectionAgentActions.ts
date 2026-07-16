@@ -16,9 +16,9 @@ import {
   runningAgentActions,
   type AgentActionDeps,
 } from "../../../server/api/routes/collectionAgentActions.js";
-import type { CollectionAction, LoadedCollection } from "../../../server/workspace/collections/index.js";
+import type { CollectionSeededAction, LoadedCollection } from "../../../server/workspace/collections/index.js";
 
-const action: CollectionAction = { id: "reprice", label: "Refresh price", kind: "agent", role: "finance", template: "templates/reprice.md" };
+const action: CollectionSeededAction = { id: "reprice", label: "Refresh price", kind: "agent", role: "finance", template: "templates/reprice.md" };
 
 const collection = {
   slug: "stock-quotes",

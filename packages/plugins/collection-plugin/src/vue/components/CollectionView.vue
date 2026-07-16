@@ -696,6 +696,18 @@
       />
     </CollectionRecordModal>
 
+    <!-- `kind: "mutate"` params mini-form (teleported; stacks over the
+         record modal its button lives in). -->
+    <CollectionMutateParamsModal
+      v-if="mutateModal"
+      :key="`${mutateModal.action.id}-${mutateModal.itemId}`"
+      :action="mutateModal.action"
+      :pending="mutatePending"
+      :error="mutateError"
+      @close="mutateModal = null"
+      @submit="submitMutateParams"
+    />
+
     <!-- Per-collection config (gear): manage/delete custom views. -->
     <CollectionViewConfigModal
       v-if="configOpen && collection"
@@ -778,6 +790,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onUnmounted, ref, watch } from "vue";
 import { useCollectionI18n } from "../lang";
+import CollectionMutateParamsModal from "./CollectionMutateParamsModal.vue";
 import CollectionRecordModal from "./CollectionRecordModal.vue";
 import CollectionCalendarView from "./CollectionCalendarView.vue";
 import CollectionDayView from "./CollectionDayView.vue";
@@ -823,6 +836,7 @@ import {
   type SortState,
   type SortValue,
   type CollectionAction,
+  type CollectionMutateAction,
   type CollectionCustomView as CustomViewSpec,
   type CollectionDetail,
   type CollectionItem,
@@ -1271,6 +1285,7 @@ async function runCollectionAction(action: CollectionAction): Promise<void> {
     return;
   }
   if (result.data.dispatched) return; // key already set; the completion ping's refetch reconciles
+  if (result.data.written) return; // mutate never reaches this handler branch; narrows the union
   if (props.sendTextMessage) {
     props.sendTextMessage(result.data.prompt);
     return;
@@ -1308,15 +1323,65 @@ const visibleActions = computed<CollectionAction[]>(() => {
   return (collection.value?.schema.actions ?? []).filter((action) => actionVisible(action, record));
 });
 
-/** Run a schema-declared action on the open record: ask the server to
- *  assemble the seed prompt. `kind: "chat"` gets the seed back and starts
- *  a new chat; `kind: "agent"` is dispatched server-side as a hidden
+// `kind: "mutate"` mini-form state: the open modal (which action, which
+// record), its in-flight flag, and the server's `problem` text on a
+// rejected write (rendered inline so the user fixes and retries).
+const mutateModal = ref<{ action: CollectionMutateAction; itemId: string } | null>(null);
+const mutatePending = ref(false);
+const mutateError = ref<string | null>(null);
+
+/** POST one mutate action and, on success, adopt the written record for
+ *  the open panel (the write's change ping refreshes the table rows).
+ *  Errors land in the modal when one is open, else on the panel. */
+async function executeMutate(action: CollectionMutateAction, itemId: string, params: Record<string, unknown>): Promise<boolean> {
+  if (!collection.value) return false;
+  mutatePending.value = true;
+  const result = await cui.runItemAction(collection.value.slug, itemId, action.id, params);
+  mutatePending.value = false;
+  if (!result.ok) {
+    if (mutateModal.value) mutateError.value = result.error;
+    else actionError.value = result.error;
+    return false;
+  }
+  if (result.data.written && viewing.value && String(viewing.value[collection.value.schema.primaryKey] ?? "") === itemId) {
+    viewing.value = result.data.item;
+  }
+  return true;
+}
+
+async function submitMutateParams(params: Record<string, unknown>): Promise<void> {
+  const open = mutateModal.value;
+  if (!open) return;
+  mutateError.value = null;
+  if (await executeMutate(open.action, open.itemId, params)) mutateModal.value = null;
+}
+
+/** Mutate kind: open the params mini-form when the action declares one,
+ *  else apply the declarative write immediately. */
+async function runMutateAction(action: CollectionMutateAction, itemId: string): Promise<void> {
+  actionError.value = null;
+  if (action.params && Object.keys(action.params).length > 0) {
+    mutateError.value = null;
+    mutateModal.value = { action, itemId };
+    return;
+  }
+  await executeMutate(action, itemId, {});
+}
+
+/** Run a schema-declared action on the open record. `kind: "mutate"`
+ *  never leaves the host: with `params` it opens the mini-form, else it
+ *  applies immediately. `kind: "chat"` gets the seed back and starts a
+ *  new chat; `kind: "agent"` is dispatched server-side as a hidden
  *  worker — mark it running and let the completion ping's refetch
  *  reconcile. Generic — no knowledge of what the action does. */
 async function runAction(action: CollectionAction): Promise<void> {
   if (!collection.value || !viewing.value) return;
   const itemId = String(viewing.value[collection.value.schema.primaryKey] ?? "");
   if (!itemId || isActionRunning(action.id, itemId)) return;
+  if (action.kind === "mutate") {
+    await runMutateAction(action, itemId);
+    return;
+  }
   // Optimistic key BEFORE the POST — see runCollectionAction.
   const runKey = action.kind === "agent" ? agentActionRunKey(action.id, itemId) : null;
   if (runKey) mutateRunningActions((next) => next.add(runKey));
@@ -1331,6 +1396,7 @@ async function runAction(action: CollectionAction): Promise<void> {
     return;
   }
   if (result.data.dispatched) return; // key already set; the completion ping's refetch reconciles
+  if (result.data.written) return; // mutate never reaches this handler branch; narrows the union
   // In a chat card we have a channel into the current session — send
   // the seed prompt there rather than spawning a new chat. Standalone
   // route mode has no such channel, so start a fresh chat in the
