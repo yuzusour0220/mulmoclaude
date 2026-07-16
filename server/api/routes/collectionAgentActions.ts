@@ -1,5 +1,5 @@
 // Dispatch for `kind: "agent"` collection actions (plan step ③ of
-// plans/collection-ontology.md): the button launches a HIDDEN worker
+// plans/done/collection-ontology.md): the button launches a HIDDEN worker
 // (origin `system` — never in the session list) seeded exactly like the
 // action's chat twin, and the worker edits records via manageCollection
 // and finishes silently. The user-facing contract mirrors agent ingest:

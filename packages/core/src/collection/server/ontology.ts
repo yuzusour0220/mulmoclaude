@@ -1,5 +1,5 @@
 // The machine-readable workspace ontology (plan step ① of
-// plans/collection-ontology.md): one entry per discovered collection with
+// plans/done/collection-ontology.md): one entry per discovered collection with
 // the identity + relationship facts an agent needs to reason ACROSS
 // collections — which slugs exist, how they point at each other, how big
 // they are — without re-reading every schema.json. Derived on demand from

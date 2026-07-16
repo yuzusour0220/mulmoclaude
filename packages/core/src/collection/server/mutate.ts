@@ -1,5 +1,5 @@
 // Execute a `kind: "mutate"` action (plan step ④ of
-// plans/collection-ontology.md): the HOST applies a declarative,
+// plans/done/collection-ontology.md): the HOST applies a declarative,
 // merge-semantics write to one record — no LLM, no tokens. The pipeline
 // deliberately reuses the governed write path's pieces, never a third
 // mechanism:

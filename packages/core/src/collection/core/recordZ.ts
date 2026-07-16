@@ -1,5 +1,5 @@
 // Compiled per-collection zod RECORD validators (plan step ⓪ Phase B of
-// plans/collection-ontology.md): `compileRecordZ(schema, tier)` turns a
+// plans/done/collection-ontology.md): `compileRecordZ(schema, tier)` turns a
 // CollectionSchema's `fields` into a zod object validator for the stored
 // record JSON, so every consumer of record validation — the putItems write
 // gate, the post-hoc file scan, and (future) `mutate` action `params` forms —
