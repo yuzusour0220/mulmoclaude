@@ -560,6 +560,7 @@ import {
   getMissingCharacterKeys,
   isAllSlideDeck,
   isSameScript,
+  beatMayHaveMovie,
   shouldAutoRenderBeat,
   streamMovieEvents,
   validateBeatJSON,
@@ -1152,7 +1153,7 @@ async function renderBeat(index: number) {
   renderedImages[index] = response.data.image ?? "";
   renderState[index] = "done";
   refreshMissingCharacterImages();
-  if (effectiveBeat(index).moviePrompt) void loadExistingBeatMovie(index);
+  if (beatMayHaveMovie(effectiveBeat(index))) void loadExistingBeatMovie(index);
 }
 
 async function regenerateBeat(index: number) {
@@ -1177,7 +1178,7 @@ async function regenerateBeat(index: number) {
   }
   renderedImages[index] = response.data.image ?? "";
   renderState[index] = "done";
-  if (effectiveBeat(index).moviePrompt) void loadExistingBeatMovie(index);
+  if (beatMayHaveMovie(effectiveBeat(index))) void loadExistingBeatMovie(index);
 }
 
 async function loadExistingBeatImage(index: number) {
@@ -1574,7 +1575,7 @@ async function initializeScript() {
   beats.value.forEach((beat, index) => {
     void hydrateBeatImage(beat, index, hasCharacters, AUTO_RENDER_TYPES);
     if (beat.text) loadExistingBeatAudio(index);
-    if (beat.moviePrompt) void loadExistingBeatMovie(index);
+    if (beatMayHaveMovie(beat)) void loadExistingBeatMovie(index);
   });
 
   characterKeys.value.forEach((key) => loadExistingCharacterImage(key));
@@ -1643,7 +1644,7 @@ async function reflectGenerationFinish(entry: PendingGeneration): Promise<void> 
   if (entry.kind === GENERATION_KINDS.beatImage) {
     const idx = Number(entry.key);
     await loadExistingBeatImage(idx);
-    if (effectiveBeat(idx).moviePrompt) await loadExistingBeatMovie(idx);
+    if (beatMayHaveMovie(effectiveBeat(idx))) await loadExistingBeatMovie(idx);
     if (renderState[idx] === "rendering") Reflect.deleteProperty(renderState, idx);
   } else if (entry.kind === GENERATION_KINDS.beatAudio) {
     const idx = Number(entry.key);
@@ -1688,7 +1689,7 @@ async function generateMovie() {
       onBeatImageDone: (beatIndex) => {
         loadExistingBeatImage(beatIndex);
         refreshMissingCharacterImages();
-        if (effectiveBeat(beatIndex).moviePrompt) void loadExistingBeatMovie(beatIndex);
+        if (beatMayHaveMovie(effectiveBeat(beatIndex))) void loadExistingBeatMovie(beatIndex);
       },
       onBeatAudioDone: (beatIndex) => loadExistingBeatAudio(beatIndex),
       onDone: (path) => {

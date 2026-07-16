@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   applyMovieEvent,
+  beatMayHaveMovie,
   extractErrorMessage,
   getMissingCharacterKeys,
   isAllSlideDeck,
@@ -404,5 +405,30 @@ describe("isAllSlideDeck", () => {
   it("returns false when beat is not an object", () => {
     assert.equal(isAllSlideDeck({ beats: [null] }), false);
     assert.equal(isAllSlideDeck({ beats: ["not a beat"] }), false);
+  });
+});
+
+describe("beatMayHaveMovie", () => {
+  it("returns true for moviePrompt beats", () => {
+    assert.equal(beatMayHaveMovie({ moviePrompt: "a hand draws the sketch" }), true);
+  });
+
+  it("returns true for animated html_tailwind beats (boolean and options-object forms)", () => {
+    assert.equal(beatMayHaveMovie({ image: { type: "html_tailwind", animation: true } }), true);
+    assert.equal(beatMayHaveMovie({ image: { type: "html_tailwind", animation: { fps: 30 } } }), true);
+  });
+
+  it("returns false for html_tailwind without animation", () => {
+    assert.equal(beatMayHaveMovie({ image: { type: "html_tailwind" } }), false);
+  });
+
+  it("returns false for animation on a non-html_tailwind type", () => {
+    assert.equal(beatMayHaveMovie({ image: { type: "markdown", animation: true } }), false);
+  });
+
+  it("returns false for image-only, text-only, and empty beats", () => {
+    assert.equal(beatMayHaveMovie({ image: { type: "textSlide" } }), false);
+    assert.equal(beatMayHaveMovie({ moviePrompt: "" }), false);
+    assert.equal(beatMayHaveMovie({}), false);
   });
 });
