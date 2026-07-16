@@ -55,6 +55,7 @@ interface GoogleStatusResponse {
 }
 
 const STATUS_POLL_INTERVAL_MS = 2_000;
+const MAX_POLL_FAILURES = 10;
 
 const linked = ref(false);
 const pending = ref(false);
@@ -63,6 +64,7 @@ const loaded = ref(false);
 const busy = ref(false);
 const errorText = ref("");
 const pollTimer = ref<ReturnType<typeof setTimeout> | null>(null);
+const pollFailures = ref(0);
 
 const statusText = computed(() => {
   if (pending.value) return t("settingsModal.googleTab.statusPending");
@@ -84,8 +86,14 @@ async function refresh(): Promise<void> {
   const response = await apiGet<GoogleStatusResponse>(API_ROUTES.google.status);
   if (!response.ok) {
     errorText.value = response.error || t("settingsModal.googleTab.loadError");
+    // A transient failure must not strand an active consent flow in
+    // "pending" forever — keep polling (bounded) so the UI recovers once
+    // the server answers again.
+    pollFailures.value += 1;
+    if (pollFailures.value < MAX_POLL_FAILURES) schedulePoll();
     return;
   }
+  pollFailures.value = 0;
   linked.value = response.data.linked;
   pending.value = response.data.pending;
   clientSecretFound.value = response.data.clientSecretFound;
@@ -105,6 +113,7 @@ async function connect(): Promise<void> {
   }
   window.open(response.data.authUrl, "_blank", "noopener");
   pending.value = true;
+  pollFailures.value = 0;
   schedulePoll();
 }
 

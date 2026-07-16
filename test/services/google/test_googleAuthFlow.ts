@@ -46,6 +46,20 @@ describe("createGoogleAuthFlow", () => {
     assert.equal(stub.callCount(), 1);
   });
 
+  it("shares one flow across concurrent start() calls even when the URL arrives asynchronously", async () => {
+    let calls = 0;
+    const authorize: typeof authorizeGoogle = async (opts = {}) => {
+      calls += 1;
+      return new Promise(() => {
+        setImmediate(() => opts.onAuthUrl?.("https://accounts.google.com/consent?async=1"));
+      });
+    };
+    const flow = createGoogleAuthFlow(authorize);
+    const [first, second] = await Promise.all([flow.start(), flow.start()]);
+    assert.equal(first.authUrl, second.authUrl);
+    assert.equal(calls, 1);
+  });
+
   it("clears pending on completion and allows a fresh flow", async () => {
     const stub = makeAuthorizeStub();
     const flow = createGoogleAuthFlow(stub.authorize);
@@ -83,6 +97,7 @@ describe("createGoogleAuthFlow", () => {
     };
     const flow = createGoogleAuthFlow(authorize);
     await assert.rejects(flow.start(), /no client secret/);
+    await settleMicrotasks();
     assert.deepEqual(flow.status(), { pending: false, lastError: "no client secret" });
   });
 });

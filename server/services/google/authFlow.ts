@@ -1,9 +1,10 @@
 // In-flight manager for the settings-UI OAuth flow. authorizeGoogle()
 // resolves only after the user finishes the browser consent, so the HTTP
 // layer starts it in the background, returns the consent URL immediately,
-// and reports progress via status polling. One flow at a time — starting
-// again while pending returns the same URL instead of spawning a second
-// loopback listener.
+// and reports progress via status polling. One flow at a time — the guard
+// is the in-flight start promise itself (set synchronously before any
+// await), so concurrent authorize requests share one flow instead of
+// spawning parallel loopback listeners.
 import { log } from "../../system/logger/index.js";
 import { errorMessage } from "../../utils/errors.js";
 import { authorizeGoogle } from "./auth.js";
@@ -19,18 +20,15 @@ export interface GoogleAuthFlow {
 }
 
 export const createGoogleAuthFlow = (authorize: typeof authorizeGoogle): GoogleAuthFlow => {
-  let pendingAuthUrl: string | null = null;
+  let inFlightStart: Promise<{ authUrl: string }> | null = null;
+  let flowRunning = false;
   let lastError: string | null = null;
 
-  const start = async (): Promise<{ authUrl: string }> => {
-    if (pendingAuthUrl) return { authUrl: pendingAuthUrl };
-    lastError = null;
-    const authUrl = await new Promise<string>((resolve, reject) => {
+  const launchFlow = (): Promise<{ authUrl: string }> =>
+    new Promise((resolve, reject) => {
+      flowRunning = true;
       authorize({
-        onAuthUrl: (url) => {
-          pendingAuthUrl = url;
-          resolve(url);
-        },
+        onAuthUrl: (url) => resolve({ authUrl: url }),
       })
         .then(() => log.info("google", "authorize flow completed"))
         .catch((err: unknown) => {
@@ -41,13 +39,19 @@ export const createGoogleAuthFlow = (authorize: typeof authorizeGoogle): GoogleA
           reject(err instanceof Error ? err : new Error(String(err)));
         })
         .finally(() => {
-          pendingAuthUrl = null;
+          flowRunning = false;
+          inFlightStart = null;
         });
     });
-    return { authUrl };
+
+  const start = (): Promise<{ authUrl: string }> => {
+    if (inFlightStart) return inFlightStart;
+    lastError = null;
+    inFlightStart = launchFlow();
+    return inFlightStart;
   };
 
-  const status = (): GoogleAuthFlowStatus => ({ pending: pendingAuthUrl !== null, lastError });
+  const status = (): GoogleAuthFlowStatus => ({ pending: flowRunning, lastError });
 
   return { start, status };
 };
