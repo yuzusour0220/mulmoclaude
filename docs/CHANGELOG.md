@@ -10,6 +10,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 ---
 
+## npm packages — 2026-07-17
+
+Package releases riding PR #2120 (agent-facing Google Calendar tool, issue #2114):
+
+- **`@mulmoclaude/core@0.20.0`** — new server-only `./google` subpath: the local Google OAuth engine extracted from the host — loopback + PKCE consent (`authorizeGoogle`), token store at `~/.config/mulmoclaude/google-token.json` (mode 600, atomic writes with the Windows transient-rename retry), single-flight auth-flow manager, Calendar v3 REST helpers, and the strict shared RFC3339 validator (`isIsoDateTimeWithOffset`, rejecting offset-less / impossible / out-of-range values). Adds the Google recovery section to `assets/helps/error-recovery.md`; `google-auth-library` becomes a core dependency. Consent scopes: `calendar.events`, `tasks`, `drive.file`.
+- **`@mulmoclaude/google-plugin@0.1.0`** — initial release. Server-only runtime plugin exposing one `google` tool to the chat agent (`status` / `calendarListEvents` / `calendarCreateEvent`), dispatching into `@mulmoclaude/core/google` so every surface shares one locally stored grant. Preset plugin, gated to the `personal` role.
+- **`@mulmoclaude/collection-plugin@0.11.2`** — dependency alignment: `@mulmoclaude/core` range widened to `^0.20.0`; no functional changes.
+
+---
+
 ## [1.0.0] - 2026-07-14
 
 MulmoClaude reaches **1.0** — the first stable release. Functionally it builds directly on 0.9.7, adding **Web Push on task finish** (get a push on your phone the moment the answer to a question you asked is ready) and a launcher fix that loads `.env` from the directory you launch from. 18 non-merge commits since 0.9.7.
