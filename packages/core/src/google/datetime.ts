@@ -5,7 +5,7 @@
 
 // Fractional seconds are normalized away first — an optional `(\.\d+)?`
 // group inside the main pattern trips security/detect-unsafe-regex.
-const ISO_DATE_TIME_WITH_OFFSET_RE = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(Z|[+-]\d{2}:\d{2})$/;
+const ISO_DATE_TIME_WITH_OFFSET_RE = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:Z|[+-](\d{2}):(\d{2}))$/;
 const FRACTIONAL_SECONDS_RE = /\.\d+(?=Z|[+-])/;
 
 const MAX_HOUR = 23;
@@ -24,5 +24,8 @@ export const isIsoDateTimeWithOffset = (value: string): boolean => {
   const match = ISO_DATE_TIME_WITH_OFFSET_RE.exec(value.replace(FRACTIONAL_SECONDS_RE, ""));
   if (!match) return false;
   const [year = 0, month = 0, day = 0, hour = 0, minute = 0, second = 0] = match.slice(1, 7).map(Number);
-  return isRealCalendarDate(year, month, day) && hour <= MAX_HOUR && minute <= MAX_MINUTE && second <= MAX_SECOND;
+  const timeInRange = hour <= MAX_HOUR && minute <= MAX_MINUTE && second <= MAX_SECOND;
+  // RFC3339 bounds the offset to 00-23:59; groups 7/8 are undefined for "Z".
+  const offsetInRange = match[7] === undefined || (Number(match[7]) <= MAX_HOUR && Number(match[8]) <= MAX_MINUTE);
+  return isRealCalendarDate(year, month, day) && timeInRange && offsetInRange;
 };

@@ -8,7 +8,13 @@ import { isIsoDateTimeWithOffset } from "@mulmoclaude/core/google";
 import { GoogleArgs } from "../src/args";
 
 describe("isIsoDateTimeWithOffset", () => {
-  const accepted = ["2026-07-17T09:00:00+09:00", "2026-07-17T09:00:00Z", "2026-07-17T09:00:00.000Z", "2026-07-17T23:59:59.5-05:00"];
+  const accepted = [
+    "2026-07-17T09:00:00+09:00",
+    "2026-07-17T09:00:00Z",
+    "2026-07-17T09:00:00.000Z",
+    "2026-07-17T23:59:59.5-05:00",
+    "2026-07-17T09:00:00+23:59",
+  ];
   for (const value of accepted) {
     it(`accepts ${value}`, () => {
       assert.equal(isIsoDateTimeWithOffset(value), true);
@@ -22,6 +28,8 @@ describe("isIsoDateTimeWithOffset", () => {
     "2026-13-01T09:00:00Z",
     "2026-02-31T09:00:00Z",
     "2026-07-17T24:00:00Z",
+    "2026-07-17T09:00:00+24:00",
+    "2026-07-17T09:00:00+14:61",
     "2026-07-17T09:00Z",
     "",
   ];
