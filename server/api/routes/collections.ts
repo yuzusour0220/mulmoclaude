@@ -415,13 +415,22 @@ async function respondForMutateAction(
   const params = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
   const outcome = await applyMutateAction(collection, action, itemId, params);
   if (!outcome.ok) {
-    log.info("collections", "mutate action refused", { slug: collection.slug, itemId, actionId: action.id, status: outcome.status, problem: outcome.problem });
+    // `itemId` is caller-controlled (a route param) — strip CR/LF so a
+    // crafted id can't forge log lines, same pattern as the view routes.
+    log.info("collections", "mutate action refused", {
+      slug: collection.slug,
+      itemId: itemId.replace(/[\r\n]/g, " "),
+      actionId: action.id,
+      status: outcome.status,
+      problem: outcome.problem,
+    });
     if (outcome.status === "not-found") notFound(res, outcome.problem);
+    else if (outcome.status === "require-unmet") conflict(res, outcome.problem);
     else if (outcome.status === "write-refused") serverError(res, outcome.problem);
     else badRequest(res, outcome.problem);
     return;
   }
-  log.info("collections", "mutate action applied", { slug: collection.slug, itemId, actionId: action.id });
+  log.info("collections", "mutate action applied", { slug: collection.slug, itemId: itemId.replace(/[\r\n]/g, " "), actionId: action.id });
   res.json({ written: true, itemId, item: outcome.item });
 }
 
@@ -926,7 +935,13 @@ router.post(
       }
       await respondForMutateAction(res, collection, action, itemId, body);
     } catch (err) {
-      log.warn("collections", "view mutate action failed", { slug: req.params.slug, actionId: req.params.actionId, error: errorMessage(err) });
+      // Route params are caller-controlled — strip CR/LF so a crafted
+      // slug/actionId can't forge log lines (same pattern as viewI18n).
+      log.warn("collections", "view mutate action failed", {
+        slug: req.params.slug.replace(/[\r\n]/g, " "),
+        actionId: req.params.actionId.replace(/[\r\n]/g, " "),
+        error: errorMessage(err),
+      });
       serverError(res, errorMessage(err));
     }
   },

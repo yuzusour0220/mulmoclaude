@@ -15,10 +15,14 @@
 //      governed path runs;
 //   4. write   — `writeItem` (atomic, change-publishing).
 //
-// The `require` state gate is enforced by the CALLER (the route, via
-// `actionVisible` against the record it already read) — visibility is
-// the authorization rule, shared with the chat/agent kinds.
+// The `require` state gate is enforced HERE, against the exact snapshot
+// the merge runs on — the route's earlier `actionVisible` pre-check is a
+// fast 409 on a stale button, but a concurrent write between the route's
+// read and ours could otherwise slip a mutation past a gate that no
+// longer holds (Codex on PR #2105). Visibility is the authorization
+// rule, shared with the chat/agent kinds.
 
+import { actionVisible } from "../core/actionVisible";
 import { COMPUTED_TYPES, recordFieldProblem } from "../core/recordZ";
 import { resolveMutateSet } from "../core/mutateAction";
 import { readItem, writeItem, type IoOptions } from "./io";
@@ -29,8 +33,9 @@ import type { CollectionItem, CollectionMutateAction } from "../core/schema";
 export type MutateActionOutcome =
   | { ok: true; item: CollectionItem }
   /** `status` picks the HTTP mapping: bad params / a write-gate reject are
-   *  the caller's 400s, a missing record its 404, a refused write its 500. */
-  | { ok: false; status: "invalid-params" | "invalid-record" | "not-found" | "write-refused"; problem: string };
+   *  the caller's 400s, a missing record its 404, an unmet `require` its
+   *  409, a refused write its 500. */
+  | { ok: false; status: "invalid-params" | "invalid-record" | "not-found" | "require-unmet" | "write-refused"; problem: string };
 
 /** First problem with the submitted params, or null. Every declared param
  *  is checked by the shared record-field validator; keys the action never
@@ -63,6 +68,13 @@ export async function applyMutateAction(
 
   const existing = await readItem(collection.dataDir, itemId, opts);
   if (!existing) return { ok: false, status: "not-found", problem: `item '${itemId}' not found` };
+
+  // Re-check `require` against THIS read — the snapshot the merge below
+  // actually uses — so a write that landed after the route's pre-check
+  // can't let the mutation run with its gate no longer satisfied.
+  if (!actionVisible(action, existing)) {
+    return { ok: false, status: "require-unmet", problem: `action '${action.id}' is not available for item '${itemId}' in its current state` };
+  }
 
   // Merge over the stored record with computed keys stripped — a legacy /
   // raw-written record can carry a stale derived/embed value, and

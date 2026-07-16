@@ -123,4 +123,18 @@ describe("applyMutateAction — the governed pipeline", () => {
     const outcome = await applyMutateAction(await tickets(), assignAction, "ghost", { assignee: "kai" }, opts());
     assert.equal(!outcome.ok && outcome.status, "not-found");
   });
+
+  it("re-checks `require` against ITS OWN read — a gate no longer met at write time is a 409, not a write", async () => {
+    // Simulates the TOCTOU window Codex flagged on #2105: the route's
+    // pre-check passed on an earlier snapshot, but the record moved out
+    // of the gated state before the executor read it. The executor must
+    // gate on the snapshot it actually merges.
+    writeRecord("tick-1", { id: "tick-1", title: "Fix the door", status: "done" });
+    const outcome = await applyMutateAction(await tickets(), assignAction, "tick-1", { assignee: "kai" }, opts());
+    assert.equal(outcome.ok, false);
+    assert.equal(!outcome.ok && outcome.status, "require-unmet");
+    const stored = await readItem(path.join(workdir, "data/tickets/items"), "tick-1", opts());
+    assert.equal(stored?.status, "done"); // nothing was written
+    assert.equal(stored?.assignee, undefined);
+  });
 });

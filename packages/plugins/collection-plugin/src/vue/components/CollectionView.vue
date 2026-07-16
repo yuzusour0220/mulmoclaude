@@ -1334,7 +1334,9 @@ const mutateError = ref<string | null>(null);
  *  the open panel (the write's change ping refreshes the table rows).
  *  Errors land in the modal when one is open, else on the panel. */
 async function executeMutate(action: CollectionMutateAction, itemId: string, params: Record<string, unknown>): Promise<boolean> {
-  if (!collection.value) return false;
+  // Re-entrancy guard: Enter-key repeats / double-clicks can outrun the
+  // buttons' :disabled state — one write in flight at a time.
+  if (!collection.value || mutatePending.value) return false;
   mutatePending.value = true;
   const result = await cui.runItemAction(collection.value.slug, itemId, action.id, params);
   mutatePending.value = false;
