@@ -56,17 +56,17 @@
     }
   },
   "devDependencies": {
-    "@tailwindcss/vite": "^4.3.2",
+    "@tailwindcss/vite": "^4.3.3",
     "@types/express": "^5.0.6",
     "@types/node": "^26.1.1",
     "@vitejs/plugin-vue": "^6.0.8",
     "express": "^5.2.1",
     "gui-chat-protocol": "0.4.0",
-    "tailwindcss": "^4.3.2",
+    "tailwindcss": "^4.3.3",
     "tsx": "^4.23.1",
     "typescript": "^6.0.3",
-    "vite": "^8.1.4",
-    "vue": "^3.5.39",
+    "vite": "^8.1.5",
+    "vue": "^3.5.40",
     "vue-i18n": "11.4.6",
     "vue-tsc": "^3.3.7"
   },
