@@ -1263,7 +1263,10 @@ async function runCollectionAction(action: CollectionAction): Promise<void> {
   const result = await cui.runCollectionAction(current.slug, action.id);
   collectionActionPending.value = false;
   if (!result.ok) {
-    if (runKey) mutateRunningActions((next) => next.delete(runKey));
+    // 409 = the server's dispatch guard CONFIRMED a worker is in flight
+    // (e.g. dispatched from another tab) — keep the key so the button
+    // stays disabled; drop it only for real launch failures.
+    if (runKey && result.status !== 409) mutateRunningActions((next) => next.delete(runKey));
     inlineError.value = result.error;
     return;
   }
@@ -1322,7 +1325,8 @@ async function runAction(action: CollectionAction): Promise<void> {
   const result = await cui.runItemAction(collection.value.slug, itemId, action.id);
   actionPending.value = false;
   if (!result.ok) {
-    if (runKey) mutateRunningActions((next) => next.delete(runKey));
+    // 409 = already running server-side — keep the key; see runCollectionAction.
+    if (runKey && result.status !== 409) mutateRunningActions((next) => next.delete(runKey));
     actionError.value = result.error;
     return;
   }
