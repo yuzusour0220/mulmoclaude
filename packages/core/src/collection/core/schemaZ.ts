@@ -18,8 +18,9 @@
 
 import { z } from "zod";
 import { isSafeSlug, isSafeRecordId } from "./ids";
+import { paramRefName } from "./mutateAction";
 import { isSafeActionTemplatePath, isSafeCustomViewI18nPath, isSafeCustomViewPath } from "./templatePath";
-import { INGEST_KINDS, AGENT_INGEST_KIND, FEED_SCHEDULES } from "./schema";
+import { COMPUTED_TYPES, INGEST_KINDS, AGENT_INGEST_KIND, FEED_SCHEDULES } from "./schema";
 
 // ---------------------------------------------------------------------------
 // Shared predicate shapes
@@ -251,23 +252,24 @@ export const FieldSpecZ = z.discriminatedUnion("type", [
 // Actions & custom views
 // ---------------------------------------------------------------------------
 
-/** A schema-declared record action, rendered as a button in the read-only
- *  detail view. Domain-free: the host validates the shape; the meaning
- *  (which role, which template) is data. Kinds:
+// Keys every action variant carries.
+const actionBase = {
+  id: z.string().trim().min(1),
+  label: z.string().trim().min(1),
+  icon: z.string().trim().min(1).optional(),
+};
+
+/** The LLM-seeded action kinds — same shape, different visibility:
  *  - `"chat"` — start a new VISIBLE chat in `role` with the templated
  *    seed prompt (judgment work: drafting, planning, conversation).
  *  - `"agent"` — dispatch a HIDDEN worker (origin `system`) with the SAME
  *    seed; it edits records via manageCollection and finishes silently
  *    (mechanical enrichment: refresh a price, fetch metadata). Spinner
  *    while running, deduped failure bell on error — see
- *    server/api/routes/collectionAgentActions.ts.
- *  The enum still reserves room for a future `"mutate"` (declarative
- *  host-executed writes) without another schema-shape change. */
-export const ActionSpecZ = z.object({
-  id: z.string().trim().min(1),
-  label: z.string().trim().min(1),
-  icon: z.string().trim().min(1).optional(),
+ *    server/api/routes/collectionAgentActions.ts. */
+const SeededActionZ = z.object({
   kind: z.enum(["chat", "agent"]),
+  ...actionBase,
   role: z.string().trim().min(1),
   template: z
     .string()
@@ -276,6 +278,37 @@ export const ActionSpecZ = z.object({
     .refine(isSafeActionTemplatePath, "must be a safe path under `templates/` (e.g. `templates/invoice.md`; no `..`, no leading `/`, no backslash)"),
   when: WhenZ.optional(),
 });
+
+/** `kind: "mutate"` — a declarative, HOST-executed write; no LLM, no
+ *  tokens (plan step ④ of plans/collection-ontology.md). Clicking the
+ *  button (after an optional `params` mini-form) merges `set` into the
+ *  record: values are literals or `$params.<name>` references. `require`
+ *  is the state gate — the standard `when` shape, both the visibility
+ *  rule AND the server-side authorization rule, exactly like `when` on
+ *  the seeded kinds. `params` reuses the table sub-field DSL, and the
+ *  form is validated by the SAME compiled record checks `putItems` uses
+ *  (`recordFieldProblem`), not a third mechanism. Record-level only —
+ *  a collection-level mutate has no record to write (schema refine
+ *  below). Merge semantics make half-states unconstructible THROUGH
+ *  THIS PATH; the raw file stays editable by design (lint, not lock). */
+const MutateActionZ = z
+  .object({
+    kind: z.literal("mutate"),
+    ...actionBase,
+    require: WhenZ.optional(),
+    params: z.record(z.string().trim().min(1), SubFieldSpecZ).optional(),
+    set: z.record(z.string().trim().min(1), z.union([z.string(), z.number(), z.boolean()])),
+  })
+  .refine((spec) => Object.keys(spec.set).length > 0, {
+    message: "a mutate action's `set` must name at least one field to write",
+    path: ["set"],
+  });
+
+/** A schema-declared record action, rendered as a button in the read-only
+ *  detail view. Domain-free: the host validates the shape; the meaning
+ *  (role + template prose, or the declarative `set`) is data. A
+ *  discriminated union on `kind` — each kind declares only its own keys. */
+export const ActionSpecZ = z.discriminatedUnion("kind", [SeededActionZ, MutateActionZ]);
 
 /** A custom (LLM-authored) HTML view registration. Domain-free: the host
  *  validates the shape; the view's behaviour lives in the HTML file. `file`
@@ -736,6 +769,47 @@ export const CollectionSchemaZ = z
       path: ["collectionActions"],
     },
   )
+  // A mutate action's `set` writes real STORED fields: a typo'd key
+  // would write a stray value forever, a computed/projected field is
+  // never persisted, and the primaryKey is the filename (renaming is
+  // not a mutation).
+  .refine(
+    (schema) =>
+      (schema.actions ?? []).every(
+        (action) =>
+          action.kind !== "mutate" ||
+          Object.keys(action.set).every((key) => {
+            const target = schema.fields[key];
+            return target !== undefined && !COMPUTED_TYPES.has(target.type) && key !== schema.primaryKey;
+          }),
+      ),
+    {
+      message: "a mutate action's `set` keys must name declared, non-computed fields (and never the primaryKey)",
+      path: ["actions"],
+    },
+  )
+  // Every `$params.<name>` reference in `set` must name a declared
+  // param — an undeclared one would silently no-op the assignment.
+  .refine(
+    (schema) =>
+      (schema.actions ?? []).every(
+        (action) =>
+          action.kind !== "mutate" ||
+          Object.values(action.set).every((value) => {
+            const ref = paramRefName(value);
+            return ref === null || (action.params ?? {})[ref] !== undefined;
+          }),
+      ),
+    {
+      message: "a mutate action's `$params.<name>` references must name keys declared in its `params`",
+      path: ["actions"],
+    },
+  )
+  // A collection-level action has no record to write.
+  .refine((schema) => (schema.collectionActions ?? []).every((action) => action.kind !== "mutate"), {
+    message: '`collectionActions` cannot contain `kind: "mutate"` — a collection-level action has no record to write',
+    path: ["collectionActions"],
+  })
   // A `currencyField` pointer must name a real top-level field that
   // holds a code string — a typo (`curreny`) would otherwise pass the
   // per-field check, then silently fall back to the literal / USD at

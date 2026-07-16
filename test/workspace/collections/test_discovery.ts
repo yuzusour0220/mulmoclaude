@@ -865,9 +865,12 @@ describe("discoverCollections — actions", () => {
     });
     const collections = await listCollections();
     assert.equal(collections.length, 1);
-    assert.equal(collections[0]?.schema.actions?.[0]?.id, "pdf");
-    assert.equal(collections[0]?.schema.actions?.[0]?.role, "accounting");
-    assert.equal(collections[0]?.schema.actions?.[0]?.template, "templates/invoice.md");
+    const pdfAction = collections[0]?.schema.actions?.[0];
+    assert.equal(pdfAction?.id, "pdf");
+    // Narrow to the seeded variant — role/template only exist there.
+    assert.ok(pdfAction?.kind === "chat");
+    assert.equal(pdfAction.role, "accounting");
+    assert.equal(pdfAction.template, "templates/invoice.md");
   });
 
   it("accepts a schema with a valid agent action (record + collection level)", async () => {
@@ -884,6 +887,52 @@ describe("discoverCollections — actions", () => {
     assert.equal(collections.length, 1);
     assert.equal(collections[0]?.schema.actions?.[0]?.kind, "agent");
     assert.equal(collections[0]?.schema.collectionActions?.[0]?.kind, "agent");
+  });
+
+  it("accepts a mutate action (require + params + $params refs in set)", async () => {
+    writeSkill("test-mutate", {
+      title: "Tickets",
+      icon: "assignment",
+      dataPath: "data/mutate/items",
+      primaryKey: "id",
+      fields: {
+        id: { type: "string", label: "ID", primary: true, required: true },
+        status: { type: "enum", label: "Status", values: ["open", "assigned", "done"] },
+        assignee: { type: "string", label: "Assignee" },
+      },
+      actions: [
+        {
+          id: "assign",
+          label: "Assign",
+          kind: "mutate",
+          require: { field: "status", in: ["open"] },
+          params: { assignee: { type: "string", label: "Assignee", required: true } },
+          set: { assignee: "$params.assignee", status: "assigned" },
+        },
+      ],
+    });
+    const collections = await listCollections();
+    assert.equal(collections.length, 1);
+    const parsed = collections[0]?.schema.actions?.[0];
+    assert.equal(parsed?.kind, "mutate");
+    assert.equal(parsed?.kind === "mutate" && parsed.set.status, "assigned");
+  });
+
+  it("rejects mutate misdeclarations: computed/unknown/primaryKey set targets, undeclared $params, collection-level, empty set", async () => {
+    const fieldsWithComputed = {
+      id: { type: "string", label: "ID", primary: true, required: true },
+      count: { type: "number", label: "Count" },
+      doubled: { type: "derived", label: "Doubled", formula: "count * 2" },
+    };
+    const base = { title: "X", icon: "warning", primaryKey: "id", fields: fieldsWithComputed };
+    const mutate = (set: object, params?: object) => [{ id: "m", label: "M", kind: "mutate", set, ...(params ? { params } : {}) }];
+    writeSkill("test-mutate-computed", { ...base, dataPath: "data/mut1/items", actions: mutate({ doubled: 4 }) });
+    writeSkill("test-mutate-unknown", { ...base, dataPath: "data/mut2/items", actions: mutate({ nope: "x" }) });
+    writeSkill("test-mutate-primary", { ...base, dataPath: "data/mut3/items", actions: mutate({ id: "renamed" }) });
+    writeSkill("test-mutate-badref", { ...base, dataPath: "data/mut4/items", actions: mutate({ count: "$params.missing" }) });
+    writeSkill("test-mutate-empty-set", { ...base, dataPath: "data/mut5/items", actions: mutate({}) });
+    writeSkill("test-mutate-collection-level", { ...base, dataPath: "data/mut6/items", collectionActions: mutate({ count: 1 }) });
+    assert.equal((await listCollections()).length, 0, "every misdeclared mutate schema must be skipped");
   });
 
   it("rejects an action missing required fields (role)", async () => {
@@ -949,7 +998,9 @@ describe("discoverCollections — actions", () => {
     });
     const collections = await listCollections();
     assert.equal(collections.length, 1);
-    assert.equal(collections[0]?.schema.actions?.[0]?.template, "templates/mail/welcome.md");
+    const mailAction = collections[0]?.schema.actions?.[0];
+    assert.ok(mailAction?.kind === "chat");
+    assert.equal(mailAction.template, "templates/mail/welcome.md");
   });
 
   it("rejects duplicate action ids", async () => {
@@ -980,7 +1031,9 @@ describe("discoverCollections — actions", () => {
     });
     const collections = await listCollections();
     assert.equal(collections.length, 1);
-    assert.deepEqual(collections[0]?.schema.actions?.[0]?.when, { field: "status", in: ["sent", "paid"] });
+    const gated = collections[0]?.schema.actions?.[0];
+    assert.ok(gated?.kind === "chat");
+    assert.deepEqual(gated.when, { field: "status", in: ["sent", "paid"] });
   });
 
   it("rejects a `when` missing `field`", async () => {

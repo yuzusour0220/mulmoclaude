@@ -31,11 +31,13 @@ import {
   resolveCreateItemId,
   toDetail,
   toSummary,
+  applyMutateAction,
   validateCollectionRecords,
   writeItem,
 } from "../../workspace/collections/index.js";
 import type {
-  CollectionAction,
+  CollectionMutateAction,
+  CollectionSeededAction,
   CollectionDetail,
   CollectionItem,
   CollectionSummary,
@@ -56,6 +58,7 @@ import {
 } from "../../workspace/collections/remoteView.js";
 import { clampLimit, clampOffset, normalizeFields, normalizeMutate } from "@mulmoclaude/core/remote-view";
 import { badRequest, notFound, conflict, forbidden, serverError, serviceUnavailable } from "../../utils/httpError.js";
+import { ONE_MINUTE_MS } from "../../utils/time.js";
 import { errorMessage } from "../../utils/errors.js";
 import { log } from "../../system/logger/index.js";
 import { workspacePath } from "../../workspace/workspace.js";
@@ -118,7 +121,15 @@ interface ActionDispatchedResponse {
   dispatched: true;
 }
 
-type ActionRunResponse = ActionSeedResponse | ActionDispatchedResponse;
+/** `kind: "mutate"`: the server applied the declarative write itself —
+ *  the written record rides back so the client can update in place. */
+interface ActionMutatedResponse {
+  written: true;
+  itemId: string;
+  item: CollectionItem;
+}
+
+type ActionRunResponse = ActionSeedResponse | ActionDispatchedResponse | ActionMutatedResponse;
 
 // Client-list summary: the static `toSummary` plus, for a collection that
 // declares `dynamicIcon`, the computed icon + the source slug(s) a live
@@ -371,7 +382,7 @@ router.post(API_ROUTES.collections.refresh, async (req: Request<{ slug: string }
 async function respondForActionKind(
   res: Response<ActionRunResponse>,
   collection: LoadedCollection,
-  action: CollectionAction,
+  action: CollectionSeededAction,
   seed: ActionSeedResponse,
   itemId?: string,
 ): Promise<void> {
@@ -388,11 +399,47 @@ async function respondForActionKind(
   res.json({ dispatched: true });
 }
 
+// Execute a `kind: "mutate"` action: validate the mini-form params, merge
+// the resolved `set` over the record through the standard write gate, and
+// answer with the written record so the client can update in place. The
+// engine work lives in `applyMutateAction` (core); this maps its outcome
+// to HTTP.
+async function respondForMutateAction(
+  res: Response<ActionRunResponse>,
+  collection: LoadedCollection,
+  action: CollectionMutateAction,
+  itemId: string,
+  body: { params?: unknown } | undefined,
+): Promise<void> {
+  const raw = body?.params;
+  const params = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
+  const outcome = await applyMutateAction(collection, action, itemId, params);
+  if (!outcome.ok) {
+    // `itemId` is caller-controlled (a route param) — strip CR/LF so a
+    // crafted id can't forge log lines, same pattern as the view routes.
+    log.info("collections", "mutate action refused", {
+      slug: collection.slug,
+      itemId: itemId.replace(/[\r\n]/g, " "),
+      actionId: action.id,
+      status: outcome.status,
+      problem: outcome.problem,
+    });
+    if (outcome.status === "not-found") notFound(res, outcome.problem);
+    else if (outcome.status === "require-unmet") conflict(res, outcome.problem);
+    else if (outcome.status === "write-refused") serverError(res, outcome.problem);
+    else badRequest(res, outcome.problem);
+    return;
+  }
+  log.info("collections", "mutate action applied", { slug: collection.slug, itemId: itemId.replace(/[\r\n]/g, " "), actionId: action.id });
+  res.json({ written: true, itemId, item: outcome.item });
+}
+
 // Assemble a schema-declared action's seed prompt for one record. The
 // route is fully generic — it reads the record + the action's template
 // from the skill dir and returns the seed + the role to run it in; the
 // client starts the chat (or, for `kind: "agent"`, the server dispatches
-// the hidden worker itself). No domain (invoice / PDF / role) literals.
+// the hidden worker itself; for `kind: "mutate"`, it applies the
+// declarative write). No domain (invoice / PDF / role) literals.
 router.post(API_ROUTES.collections.itemAction, async (req: Request<{ slug: string; itemId: string; actionId: string }>, res: Response<ActionRunResponse>) => {
   const collection = await loadCollection(req.params.slug);
   if (!collection) {
@@ -418,6 +465,13 @@ router.post(API_ROUTES.collections.itemAction, async (req: Request<{ slug: strin
       conflict(res, `action '${action.id}' is not available for item '${req.params.itemId}' in its current state`);
       return;
     }
+    // `kind: "mutate"` needs no template / seed / LLM — the host applies
+    // the declarative write itself (require was just enforced above,
+    // same visibility-is-authorization rule as the seeded kinds).
+    if (action.kind === "mutate") {
+      await respondForMutateAction(res, collection, action, req.params.itemId, req.body as { params?: unknown } | undefined);
+      return;
+    }
     const template = await readSkillTemplate(collection.skillDir, action.template);
     if (template === null) {
       serverError(res, `template '${action.template}' for action '${action.id}' could not be read`);
@@ -441,7 +495,7 @@ router.post(API_ROUTES.collections.itemAction, async (req: Request<{ slug: strin
 // a compact progress summary of every record. Returns null when the template
 // can't be read. Pure plumbing — kept out of the route handler to stay under the
 // function-size limit.
-async function buildCollectionActionSeed(collection: LoadedCollection, action: CollectionAction): Promise<ActionSeedResponse | null> {
+async function buildCollectionActionSeed(collection: LoadedCollection, action: CollectionSeededAction): Promise<ActionSeedResponse | null> {
   const template = await readSkillTemplate(collection.skillDir, action.template);
   if (template === null) return null;
   const items = await listItems(collection.dataDir);
@@ -460,6 +514,12 @@ router.post(API_ROUTES.collections.collectionAction, async (req: Request<{ slug:
   const action = collection.schema.collectionActions?.find((entry) => entry.id === req.params.actionId);
   if (!action) {
     notFound(res, `collection action '${req.params.actionId}' not found on collection '${collection.slug}'`);
+    return;
+  }
+  // Schema validation already rejects mutate in `collectionActions` (no
+  // record to write); this is the defensive twin that also narrows the type.
+  if (action.kind === "mutate") {
+    badRequest(res, `collection action '${action.id}' has kind "mutate" — mutate actions are record-level only`);
     return;
   }
   try {
@@ -512,12 +572,48 @@ function sendToolResult(res: Response, raw: string): void {
 // cookie), so no ambient-credential leak — an origin without the token just
 // reads a 401. The custom Authorization header makes the request non-simple,
 // so the browser preflights; the OPTIONS handler below answers it.
-function viewDataCors(_req: Request, res: Response, next: NextFunction): void {
+// Exported for the CORS regression test: a sandboxed view's mutate-action
+// call is a non-simple cross-origin POST, so a missing method here fails
+// the browser preflight before any handler runs (Codex on PR #2105).
+export const VIEW_DATA_CORS_METHODS = "GET, PUT, POST, OPTIONS";
+
+export function viewDataCors(_req: Request, res: Response, next: NextFunction): void {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type");
-  res.setHeader("Access-Control-Allow-Methods", "GET, PUT, OPTIONS");
+  res.setHeader("Access-Control-Allow-Methods", VIEW_DATA_CORS_METHODS);
   next();
 }
+
+/** Minimal fixed-window rate limiter for the token-scoped mutate-action
+ *  route (CodeQL js/missing-rate-limiting): per source IP + slug, well
+ *  above any human click rate but a lid on a runaway view loop. In-memory
+ *  — the host is single-process — with a lazy sweep so the map can't grow
+ *  unbounded. Exported factory so the unit test can drive the window. */
+export function makeViewActionRateLimiter(max: number, windowMs: number, now: () => number = Date.now) {
+  const hits = new Map<string, { count: number; resetAt: number }>();
+  return (req: Request<{ slug?: string }>, res: Response, next: NextFunction): void => {
+    const nowMs = now();
+    if (hits.size > 1000) {
+      for (const [key, entry] of hits) if (entry.resetAt <= nowMs) hits.delete(key);
+    }
+    const key = `${req.ip ?? ""}\n${req.params.slug ?? ""}`;
+    const entry = hits.get(key);
+    if (!entry || entry.resetAt <= nowMs) {
+      hits.set(key, { count: 1, resetAt: nowMs + windowMs });
+      next();
+      return;
+    }
+    entry.count += 1;
+    if (entry.count > max) {
+      res.status(429).json({ error: "rate limit exceeded — retry shortly" });
+      return;
+    }
+    next();
+  };
+}
+
+const VIEW_ACTION_RATE_LIMIT_PER_MINUTE = 60;
+const viewActionRateLimit = makeViewActionRateLimiter(VIEW_ACTION_RATE_LIMIT_PER_MINUTE, ONE_MINUTE_MS);
 
 router.options(API_ROUTES.collections.viewData, viewDataCors, (_req: Request, res: Response) => {
   res.status(204).end();
@@ -786,6 +882,70 @@ router.put(API_ROUTES.collections.viewData, viewDataCors, requireViewToken("writ
     serverError(res, errorMessage(err));
   }
 });
+
+// Preflight for the token-scoped mutate-action endpoint (POST + JSON from a
+// sandboxed opaque-origin iframe — same CORS story as view-data itself).
+router.options(API_ROUTES.collections.viewDataAction, viewDataCors, (_req: Request, res: Response) => {
+  res.sendStatus(204);
+});
+
+// Token-scoped mutate-action invocation: lets a `write`-capable custom view
+// press a DECLARED mutate button instead of re-encoding the transition as a
+// hand-rolled putItems (which would skip `require` and duplicate the `set`
+// logic into the view's HTML). Mutate kind ONLY — a view token must never
+// be able to start LLM work, so chat/agent actions stay behind the global
+// bearer. The pipeline is the same one the UI button runs: `require`
+// re-checked against the record, params validated, write gate, atomic write.
+router.post(
+  API_ROUTES.collections.viewDataAction,
+  viewDataCors,
+  viewActionRateLimit,
+  requireViewToken("write"),
+  async (req: Request<{ slug: string; actionId: string }>, res: Response<ActionRunResponse>) => {
+    try {
+      const collection = await loadCollection(req.params.slug);
+      if (!collection) {
+        notFound(res, `collection '${req.params.slug}' not found`);
+        return;
+      }
+      const action = collection.schema.actions?.find((entry) => entry.id === req.params.actionId);
+      if (!action) {
+        notFound(res, `action '${req.params.actionId}' not found on collection '${collection.slug}'`);
+        return;
+      }
+      if (action.kind !== "mutate") {
+        forbidden(res, `action '${action.id}' has kind "${action.kind}" — view tokens can only invoke "mutate" actions`);
+        return;
+      }
+      const body = (req.body ?? {}) as { itemId?: unknown; params?: unknown };
+      const itemId = typeof body.itemId === "string" ? body.itemId.trim() : "";
+      if (!itemId) {
+        badRequest(res, "`itemId` is required (the record's primary-key value)");
+        return;
+      }
+      const record = await readItem(collection.dataDir, itemId);
+      if (!record) {
+        notFound(res, `item '${itemId}' not found`);
+        return;
+      }
+      // Same visibility-is-authorization re-check the bearer route runs.
+      if (!actionVisible(action, record)) {
+        conflict(res, `action '${action.id}' is not available for item '${itemId}' in its current state`);
+        return;
+      }
+      await respondForMutateAction(res, collection, action, itemId, body);
+    } catch (err) {
+      // Route params are caller-controlled — strip CR/LF so a crafted
+      // slug/actionId can't forge log lines (same pattern as viewI18n).
+      log.warn("collections", "view mutate action failed", {
+        slug: req.params.slug.replace(/[\r\n]/g, " "),
+        actionId: req.params.actionId.replace(/[\r\n]/g, " "),
+        error: errorMessage(err),
+      });
+      serverError(res, errorMessage(err));
+    }
+  },
+);
 
 // Map a non-ok view-delete result to the matching HTTP error. Kept beside the
 // route so the handler stays short and the status mapping is unit-testable.

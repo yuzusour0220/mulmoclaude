@@ -21,6 +21,7 @@ export * from "./paths";
 export * from "./templatePath";
 export * from "./io";
 export * from "./validate";
+export * from "./mutate";
 export * from "./discovery";
 export * from "./ontology";
 export * from "./derive";

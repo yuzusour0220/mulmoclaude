@@ -133,7 +133,7 @@ configureCollectionUi({
   deleteItem: (slug, itemId) => apiDelete(itemUrl(slug, itemId)),
   deleteCollection: (slug) => apiDelete(withSlug(API_ROUTES.collections.detail, slug)),
   deleteFeed: (slug) => apiDelete(withSlug(API_ROUTES.feeds.detail, slug)),
-  runItemAction: (slug, itemId, actionId) => apiPost(itemActionUrl(slug, itemId, actionId), {}),
+  runItemAction: (slug, itemId, actionId, params) => apiPost(itemActionUrl(slug, itemId, actionId), params ? { params } : {}),
   runCollectionAction: (slug, actionId) => apiPost(collectionActionUrl(slug, actionId), {}),
   refreshCollection: (slug) => apiPost(withSlug(API_ROUTES.collections.refresh, slug), {}),
 

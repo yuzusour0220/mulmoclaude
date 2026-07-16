@@ -123,6 +123,34 @@ const { written, rejected } = await res.json(); // fix & re-send any rejected ro
 Surface any `rejected` rows to the user with their `problem` text — don't fail
 silently.
 
+### Invoking a `kind: "mutate"` action (only with the `write` capability)
+
+If the schema declares a `kind: "mutate"` action (a declarative state
+transition — e.g. an `assign` button with `require`/`params`/`set`), invoke it
+instead of re-encoding the same field writes as a PUT: the server re-checks the
+action's `require` gate, validates the `params`, and applies the `set`
+atomically — one source of truth for the transition, in the schema.
+
+```js
+const res = await fetch(dataUrl + "/actions/assign", {
+  method: "POST",
+  headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
+  body: JSON.stringify({ itemId: "task-3", params: { assignee: "kai" } }),
+});
+if (res.ok) {
+  const { item } = await res.json(); // the written record
+} else {
+  const { error } = await res.json(); // 400 bad param / 409 require not met — show it
+}
+```
+
+- `itemId` is the record's primary-key value; `params` only if the action
+  declares them.
+- **Mutate kind only.** `chat` / `agent` actions can never be invoked with a
+  view token (they start LLM work) — you get a 403.
+- A 409 means the record's current state fails the action's `require` — treat
+  it as "button disabled", not an error to retry.
+
 ### Staying live — `onChange`
 
 By default a view paints once, on load. To keep it fresh, register a callback —

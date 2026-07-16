@@ -24,7 +24,7 @@ import { publish as publishNotifier, clear as clearNotifier } from "@mulmoclaude
 import { agentActionRunKey } from "@mulmoclaude/core/collection";
 import { publishCollectionChange } from "@mulmoclaude/core/collection/server";
 import { log } from "../../system/logger/index.js";
-import type { CollectionAction, LoadedCollection } from "../../workspace/collections/index.js";
+import type { CollectionSeededAction, LoadedCollection } from "../../workspace/collections/index.js";
 
 export { agentActionRunKey };
 
@@ -98,7 +98,13 @@ function clearRunning(slug: string, key: string): void {
  *  channel so the client refetches (clearing its spinner even when the
  *  failed worker wrote nothing). Best-effort — runs in the agent run's
  *  teardown and must never throw. */
-async function onWorkerComplete(collection: LoadedCollection, action: CollectionAction, key: string, didError: boolean, deps: AgentActionDeps): Promise<void> {
+async function onWorkerComplete(
+  collection: LoadedCollection,
+  action: CollectionSeededAction,
+  key: string,
+  didError: boolean,
+  deps: AgentActionDeps,
+): Promise<void> {
   clearRunning(collection.slug, key);
   const bellKey = `${collection.slug}\n${key}`;
   try {
@@ -131,7 +137,7 @@ export type DispatchAgentActionResult = { ok: true } | { ok: false; error: strin
  *  error clears the guard and reports `ok: false` so the button un-sticks
  *  and the route answers honestly. */
 export async function dispatchAgentAction(
-  args: { collection: LoadedCollection; action: CollectionAction; seed: string; itemId?: string },
+  args: { collection: LoadedCollection; action: CollectionSeededAction; seed: string; itemId?: string },
   deps: AgentActionDeps = defaultDeps,
 ): Promise<DispatchAgentActionResult> {
   const { collection, action, itemId } = args;

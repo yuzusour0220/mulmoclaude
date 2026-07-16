@@ -27,16 +27,20 @@ export function whenMatches(when: WhenPredicate | undefined, record: Record<stri
   return when.in.includes(String(value));
 }
 
-/** Minimal shape this helper needs from an action — just its optional
- *  `when` predicate. Accepts the full CollectionAction too. */
+/** Minimal shape this helper needs from an action — the optional state
+ *  gate, whichever name its kind uses: `when` on the seeded kinds
+ *  (chat/agent), `require` on mutate. Accepts the full CollectionAction
+ *  union (each variant declares at most one of the two). */
 export interface ActionWithWhen {
   when?: WhenPredicate;
+  require?: WhenPredicate;
 }
 
-/** True when the action's button should render against `record`
- *  (see whenMatches). */
+/** True when the action's button should render against `record` — and,
+ *  server-side, whether it may RUN (visibility is the authorization
+ *  rule, for every kind). */
 export function actionVisible(action: ActionWithWhen, record: Record<string, unknown>): boolean {
-  return whenMatches(action.when, record);
+  return whenMatches(action.when ?? action.require, record);
 }
 
 /** The run key naming one in-flight `kind: "agent"` action button —
