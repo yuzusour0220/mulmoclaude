@@ -55,7 +55,7 @@ interface GoogleStatusResponse {
 }
 
 const STATUS_POLL_INTERVAL_MS = 2_000;
-const MAX_POLL_FAILURES = 10;
+const MAX_POLL_BACKOFF_MS = 30_000;
 
 const linked = ref(false);
 const pending = ref(false);
@@ -65,6 +65,7 @@ const busy = ref(false);
 const errorText = ref("");
 const pollTimer = ref<ReturnType<typeof setTimeout> | null>(null);
 const pollFailures = ref(0);
+let disposed = false;
 
 const statusText = computed(() => {
   if (pending.value) return t("settingsModal.googleTab.statusPending");
@@ -74,23 +75,25 @@ const statusText = computed(() => {
 const statusColour = computed(() => (linked.value ? "text-green-600" : "text-gray-500"));
 
 // The flow finishes out-of-band (browser consent → loopback listener), so
-// while the server reports pending the tab polls until linked flips or the
-// server-side flow times out (pending goes false either way — the poll is
-// self-terminating).
-const schedulePoll = (): void => {
+// while the server reports pending the tab polls until pending flips false
+// (the loopback flow times out server-side, so this terminates). Transient
+// fetch failures back off but never give up — `pending` mirrors the server
+// state, not our reachability, so a blip mid-consent must neither strand
+// nor clear it.
+const backoffDelayMs = (failures: number): number => Math.min(STATUS_POLL_INTERVAL_MS * 2 ** failures, MAX_POLL_BACKOFF_MS);
+
+const schedulePoll = (delayMs: number = STATUS_POLL_INTERVAL_MS): void => {
   if (pollTimer.value) clearTimeout(pollTimer.value);
-  pollTimer.value = pending.value ? setTimeout(() => void refresh(), STATUS_POLL_INTERVAL_MS) : null;
+  pollTimer.value = !disposed && pending.value ? setTimeout(() => void refresh(), delayMs) : null;
 };
 
 async function refresh(): Promise<void> {
   const response = await apiGet<GoogleStatusResponse>(API_ROUTES.google.status);
+  if (disposed) return;
   if (!response.ok) {
     errorText.value = response.error || t("settingsModal.googleTab.loadError");
-    // A transient failure must not strand an active consent flow in
-    // "pending" forever — keep polling (bounded) so the UI recovers once
-    // the server answers again.
     pollFailures.value += 1;
-    if (pollFailures.value < MAX_POLL_FAILURES) schedulePoll();
+    schedulePoll(backoffDelayMs(pollFailures.value));
     return;
   }
   pollFailures.value = 0;
@@ -139,6 +142,7 @@ watch(
 );
 
 onBeforeUnmount(() => {
+  disposed = true;
   if (pollTimer.value) clearTimeout(pollTimer.value);
 });
 </script>
