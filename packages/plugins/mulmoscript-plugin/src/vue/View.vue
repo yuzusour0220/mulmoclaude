@@ -1086,13 +1086,15 @@ async function updateBeat(index: number) {
   }
   const prevImage = JSON.stringify(effectiveBeat(index).image);
 
+  const requestedFilePath = filePath.value;
   Reflect.deleteProperty(beatSaveErrors, index);
   beatSaving[index] = true;
   const response = await api.call("updateBeat", {
-    filePath: filePath.value,
+    filePath: requestedFilePath,
     beatIndex: index,
     beat,
   });
+  if (staleSince(requestedFilePath)) return;
   Reflect.deleteProperty(beatSaving, index);
   if (!response.ok) {
     beatSaveErrors[index] = { kind: "saveFailed", error: response.error };
@@ -1109,12 +1111,14 @@ async function updateBeat(index: number) {
 }
 
 async function renderBeat(index: number) {
+  const requestedFilePath = filePath.value;
   renderState[index] = "rendering";
   const response = await api.call("renderBeat", {
-    filePath: filePath.value,
+    filePath: requestedFilePath,
     beatIndex: index,
     chatSessionId: chatSessionId.value,
   });
+  if (staleSince(requestedFilePath)) return;
   if (!response.ok) {
     renderErrors[index] = response.error || "Render failed";
     renderState[index] = "error";
@@ -1127,15 +1131,17 @@ async function renderBeat(index: number) {
 }
 
 async function regenerateBeat(index: number) {
+  const requestedFilePath = filePath.value;
   Reflect.deleteProperty(renderedImages, index);
   invalidateBeatMovie(index);
   renderState[index] = "rendering";
   const response = await api.call("renderBeat", {
-    filePath: filePath.value,
+    filePath: requestedFilePath,
     beatIndex: index,
     force: true,
     chatSessionId: chatSessionId.value,
   });
+  if (staleSince(requestedFilePath)) return;
   if (!response.ok) {
     renderErrors[index] = response.error || "Render failed";
     renderState[index] = "error";
@@ -1146,8 +1152,19 @@ async function regenerateBeat(index: number) {
   if (beatMayHaveMovie(effectiveBeat(index))) void loadExistingBeatMovie(index);
 }
 
+// Stale-response guard shared by every per-beat/character loader and
+// mutator below: capture the wire path at call time and discard the
+// response when the user has navigated to a different result meanwhile —
+// otherwise late responses from script A's bulk mount-time probes would
+// write into the per-beat maps that now belong to script B.
+function staleSince(requestedFilePath: string): boolean {
+  return filePath.value !== requestedFilePath;
+}
+
 async function loadExistingBeatImage(index: number) {
-  const response = await api.call("beatImage", { filePath: filePath.value, beatIndex: index });
+  const requestedFilePath = filePath.value;
+  const response = await api.call("beatImage", { filePath: requestedFilePath, beatIndex: index });
+  if (staleSince(requestedFilePath)) return;
   // silently ignore errors — image simply hasn't been generated yet
   if (response.ok && response.data.image) {
     renderedImages[index] = response.data.image;
@@ -1156,7 +1173,9 @@ async function loadExistingBeatImage(index: number) {
 }
 
 async function loadExistingBeatAudio(index: number) {
-  const response = await api.call("beatAudio", { filePath: filePath.value, beatIndex: index });
+  const requestedFilePath = filePath.value;
+  const response = await api.call("beatAudio", { filePath: requestedFilePath, beatIndex: index });
+  if (staleSince(requestedFilePath)) return;
   // silently ignore errors
   if (response.ok && response.data.audio) {
     beatAudios[index] = response.data.audio;
@@ -1165,7 +1184,9 @@ async function loadExistingBeatAudio(index: number) {
 }
 
 async function loadExistingBeatMovie(index: number) {
-  const response = await api.call("beatMovie", { filePath: filePath.value, beatIndex: index });
+  const requestedFilePath = filePath.value;
+  const response = await api.call("beatMovie", { filePath: requestedFilePath, beatIndex: index });
+  if (staleSince(requestedFilePath)) return;
   // silently ignore errors — the clip simply hasn't been generated yet
   if (response.ok && response.data.moviePath) {
     beatMovies[index] = response.data.moviePath;
@@ -1212,13 +1233,15 @@ function resetBeatMovies(): void {
 }
 
 async function generateAudio(index: number) {
+  const requestedFilePath = filePath.value;
   audioState[index] = "generating";
   Reflect.deleteProperty(audioErrors, index);
   const response = await api.call("generateBeatAudio", {
-    filePath: filePath.value,
+    filePath: requestedFilePath,
     beatIndex: index,
     chatSessionId: chatSessionId.value,
   });
+  if (staleSince(requestedFilePath)) return;
   if (!response.ok) {
     audioErrors[index] = response.error || "Audio generation failed";
     audioState[index] = "error";
@@ -1284,11 +1307,13 @@ async function onBeatDrop(event: DragEvent, index: number) {
     renderState[index] = "error";
     return;
   }
+  const requestedFilePath = filePath.value;
   const response = await api.call("uploadBeatImage", {
-    filePath: filePath.value,
+    filePath: requestedFilePath,
     beatIndex: index,
     imageData,
   });
+  if (staleSince(requestedFilePath)) return;
   if (!response.ok) {
     renderErrors[index] = response.error || "Upload failed";
     renderState[index] = "error";
@@ -1329,7 +1354,9 @@ async function onCharDrop(event: DragEvent, key: string) {
     charRenderState[key] = "error";
     return;
   }
-  const response = await api.call("uploadCharacterImage", { filePath: filePath.value, key, imageData });
+  const requestedFilePath = filePath.value;
+  const response = await api.call("uploadCharacterImage", { filePath: requestedFilePath, key, imageData });
+  if (staleSince(requestedFilePath)) return;
   if (!response.ok) {
     charErrors[key] = response.error || "Upload failed";
     charRenderState[key] = "error";
@@ -1352,7 +1379,9 @@ function openCharacterLightbox(key: string) {
 }
 
 async function loadExistingCharacterImage(key: string) {
-  const response = await api.call("characterImage", { filePath: filePath.value, key });
+  const requestedFilePath = filePath.value;
+  const response = await api.call("characterImage", { filePath: requestedFilePath, key });
+  if (staleSince(requestedFilePath)) return;
   // silently ignore errors
   if (response.ok && response.data.image) {
     charImages[key] = response.data.image;
@@ -1365,14 +1394,16 @@ function refreshMissingCharacterImages() {
 }
 
 async function renderCharacter(key: string, force: boolean) {
+  const requestedFilePath = filePath.value;
   charRenderState[key] = "rendering";
   Reflect.deleteProperty(charErrors, key);
   const response = await api.call("renderCharacter", {
-    filePath: filePath.value,
+    filePath: requestedFilePath,
     key,
     force,
     chatSessionId: chatSessionId.value,
   });
+  if (staleSince(requestedFilePath)) return;
   if (!response.ok) {
     charErrors[key] = response.error || "Render failed";
     charRenderState[key] = "error";

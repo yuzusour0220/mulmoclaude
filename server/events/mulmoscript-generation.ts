@@ -52,6 +52,13 @@ export function initMulmoScriptGenerationPublisher(instance: IPubSub): void {
  * (dispatch callers without a session, MulmoTerminal) — the session
  * channel no-ops but the plugin channel and the snapshot still fire, so
  * the View stays live either way.
+ *
+ * Publishing is EDGE-triggered on the refcount: only the first start and
+ * the last finish of concurrent same-key runs reach the channels, so the
+ * first completion can't clear subscribers' spinners (or the session's
+ * pendingGenerations entry) while a duplicate run is still active. A
+ * finish with no tracked start (the movie/PDF pipelines' per-beat
+ * completion pulses) always publishes.
  */
 export function publishMulmoGeneration(
   chatSessionId: string | undefined,
@@ -61,20 +68,22 @@ export function publishMulmoGeneration(
   finished: boolean,
   error?: string,
 ): void {
-  publishGeneration(chatSessionId, kind, filePath, key, finished, error);
   const mapKey = generationKey(kind, filePath, key);
   const existing = inFlight.get(mapKey);
   if (finished) {
     if (existing && existing.count > 1) {
       existing.count -= 1;
-    } else {
-      inFlight.delete(mapKey);
+      return; // a duplicate run is still active — suppress the early finish
     }
-  } else if (existing) {
-    existing.count += 1;
+    inFlight.delete(mapKey);
   } else {
+    if (existing) {
+      existing.count += 1;
+      return; // already reported as started
+    }
     inFlight.set(mapKey, { kind, filePath, key, count: 1 });
   }
+  publishGeneration(chatSessionId, kind, filePath, key, finished, error);
   const event: MulmoScriptGenerationSnapshotEntry = { kind, filePath, key, done: finished, ...(error ? { error } : {}) };
   pubsubInstance?.publish(pluginChannelName(MULMOSCRIPT_SCOPE, GENERATION_EVENT), event);
 }
