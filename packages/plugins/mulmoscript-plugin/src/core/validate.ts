@@ -1,17 +1,18 @@
-// Request-body validators for the mulmo-script PUT endpoints. Split
-// from `mulmo-script.ts` so the pure shape checks can be unit-tested
-// without spinning up Express.
+// Body validators for the mulmoScript update endpoints, moved verbatim from
+// the host's `server/api/routes/mulmoScriptValidate.ts` so MulmoClaude and
+// MulmoTerminal share one definition of a "valid script" / "valid beat".
 //
 // The `@mulmocast/types` package exports zod schemas that mirror the
-// canonical MulmoScript / MulmoBeat shapes. Using them here keeps the
-// server and client agreeing on what a "valid script" is — the same
-// schemas back client-side edit-time validation in
-// `src/plugins/presentMulmoScript/View.vue`.
+// canonical MulmoScript / MulmoBeat shapes. The same schemas back client-side
+// edit-time validation in the presentMulmoScript View.
 
 import { mulmoBeatSchema, mulmoScriptSchema } from "@mulmocast/types";
-import { isRecord } from "../../utils/types.js";
 
 export type ValidationResult<T> = { ok: true; value: T } | { ok: false; error: string };
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
 
 function formatZodIssues(
   // Zod's `$ZodIssue.path` is `PropertyKey[]` (includes `symbol`).

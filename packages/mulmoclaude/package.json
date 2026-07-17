@@ -41,6 +41,7 @@
     "@mulmoclaude/form-plugin": "^0.1.4",
     "@mulmoclaude/html-plugin": "^0.2.5",
     "@mulmoclaude/markdown-plugin": "^0.1.10",
+    "@mulmoclaude/mulmoscript-plugin": "^0.1.0",
     "@mulmoclaude/spotify-plugin": "^0.1.1",
     "@mulmoclaude/x-plugin": "^0.1.2",
     "@receptron/task-scheduler": "^0.1.0",

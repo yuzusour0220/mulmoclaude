@@ -1,0 +1,40 @@
+{
+  "name": "@mulmoclaude/mulmoscript-plugin",
+  "version": "0.1.0",
+  "description": "presentMulmoScript — MulmoScript storyboard tool for MulmoClaude and MulmoTerminal. Phase-1 server core: tool definition + save/reopen/update logic against the generic gui-chat-protocol files.artifacts capability. Vue View and heavy render backends follow in later phases (see plans/feat-mulmoscript-plugin.md).",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "vite build",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test test/test_*.ts"
+  },
+  "peerDependencies": {
+    "@mulmocast/types": "^2.8.1",
+    "gui-chat-protocol": "^0.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "tsx": "^4.23.1",
+    "typescript": "^6.0.3",
+    "vite": "^8.1.4",
+    "vite-plugin-dts": "^5.0.3"
+  },
+  "license": "MIT"
+}
