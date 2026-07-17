@@ -34,8 +34,6 @@ const canvasPlugin: ToolPlugin<ImageToolData> = {
   viewComponent: wrapWithScope("canvas", View),
   previewComponent: wrapWithScope("canvas", Preview),
 };
-
-export default canvasPlugin;
 export { TOOL_NAME };
 
 export const REGISTRATION: PluginRegistration = {

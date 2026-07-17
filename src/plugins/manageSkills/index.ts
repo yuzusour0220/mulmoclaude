@@ -47,8 +47,6 @@ const manageSkillsPlugin: ToolPlugin<ManageSkillsData> = {
   viewComponent: wrapWithScope("skills", View),
   previewComponent: wrapWithScope("skills", Preview),
 };
-
-export default manageSkillsPlugin;
 export { TOOL_NAME };
 
 export const REGISTRATION: PluginRegistration = {
