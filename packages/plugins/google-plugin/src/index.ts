@@ -1,9 +1,11 @@
 // Google plugin — server side. Thin dispatch over the shared engine in
 // @mulmoclaude/core/google: the OAuth grant, token file, and Calendar
-// REST calls are owned by core, so this tool, the settings UI, the
-// remote-host commands, and `yarn google:auth` all share one link
-// state. Server-only (no Vue View) — results render as plain tool
-// output in the chat.
+// REST calls are owned by core, so this tool, the host's settings UI,
+// remote commands, and auth CLI all share one link state. Server-only
+// (no Vue View) — results render as plain tool output in the chat.
+// User-facing guidance stays host-neutral (#2128): the plugin runs on
+// multiple hosts (MulmoClaude, MulmoTerminal) whose link flows differ,
+// and each host's own help carries the specific steps.
 import { definePlugin } from "gui-chat-protocol";
 import {
   clientSecretPresence,
@@ -18,7 +20,7 @@ import { TOOL_DEFINITION } from "./definition";
 
 export { TOOL_DEFINITION };
 
-const LINK_GUIDANCE = "Ask the user to link their Google account in Settings → Plugins → Google (or run `yarn google:auth`), then retry.";
+const LINK_GUIDANCE = "Ask the user to link their Google account in this app's settings, then retry.";
 
 export default definePlugin(({ log }) => {
   return {
