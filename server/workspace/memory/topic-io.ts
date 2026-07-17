@@ -33,10 +33,6 @@ export function topicMemoryIndexPath(workspaceRoot: string): string {
   return path.join(workspaceRoot, WORKSPACE_FILES.memoryIndex);
 }
 
-export function topicFilePath(workspaceRoot: string, type: MemoryType, topic: string): string {
-  return path.join(topicMemoryRoot(workspaceRoot), type, `${topic}.md`);
-}
-
 // Both loaders walk types in `MEMORY_TYPES` order (a stable
 // constant) and sort filenames within each type by name. This pins
 // the order of entries in the agent's system prompt so a `readdir`

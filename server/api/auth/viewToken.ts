@@ -28,8 +28,6 @@ import { ONE_HOUR_MS } from "../../utils/time.js";
 
 export type ViewCapability = "read" | "write";
 
-const CAPABILITIES: readonly ViewCapability[] = ["read", "write"];
-
 function isCapability(value: unknown): value is ViewCapability {
   return value === "read" || value === "write";
 }
@@ -145,5 +143,3 @@ const VIEW_DATA_ACTION_PATH_RE = /^\/(?:api\/)?collections\/[^/]+\/view-data\/ac
 export function isViewDataPath(pathname: string): boolean {
   return VIEW_DATA_PATH_RE.test(pathname) || VIEW_DATA_ACTION_PATH_RE.test(pathname);
 }
-
-export { CAPABILITIES as VIEW_CAPABILITIES };
