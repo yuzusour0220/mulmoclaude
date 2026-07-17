@@ -56,6 +56,15 @@ Ships `@mulmoclaude/core@0.20.0`, `@mulmoclaude/google-plugin@0.1.0`, `@mulmocla
 
 ---
 
+## npm packages — 2026-07-17 (3)
+
+Package releases riding PR #2130 (host-neutral link guidance, issue #2128):
+
+- **`@mulmoclaude/core@0.20.2`** — the `getGoogleAccessToken()` not-linked error drops MulmoClaude-only wording; hosts' own help carries the specific link steps.
+- **`@mulmoclaude/google-plugin@0.1.2`** — the tool prompt and `status` guidance say "link their Google account in this app's settings" (MulmoTerminal has no "Settings → Plugins → Google" and no `yarn google:auth`); the README documents both hosts' actual flows.
+
+---
+
 ## npm packages — 2026-07-17 (2)
 
 Package releases riding PR #2124 (host-neutral Google token path, issue #2122):
