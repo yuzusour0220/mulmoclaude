@@ -4,7 +4,7 @@ Read this when adding a new workspace package, debugging a "Cannot find module" 
 
 The script runs **four tiers in order**:
 
-1. `@mulmobridge/protocol` + `@receptron/task-scheduler` — no internal deps, run in parallel
+1. `@mulmobridge/protocol` + `@mulmobridge/web-push` + `@mulmobridge/webhook-runtime` + `@receptron/task-scheduler` — no internal deps, run in parallel
 2. `@mulmobridge/{client, chat-service, mock-server}` — depend on tier 1
 3. **All bridges** under `packages/bridges/*` whose name starts with `@mulmobridge/` and has a `build` script
 4. **All runtime plugins** under `packages/plugins/*` whose name starts with `@mulmoclaude/` AND ends with `-plugin` and has a `build` script
