@@ -20,6 +20,7 @@ import {
   generateBeatAudioOp,
   generateMovieOp,
   generatePdfOp,
+  guardStoryWirePath,
   movieStatusOp,
   pdfStatusOp,
   renderBeatOp,
@@ -105,6 +106,10 @@ function keyArgs(args: Record<string, unknown>): KeyArgs | null {
 }
 
 async function saveKind(args: Record<string, unknown>): Promise<unknown> {
+  // Realpath symlink containment before the package's lexical guard —
+  // see guardStoryWirePath in mulmo-script-ops.ts (Codex P1 on #2133).
+  const guard = guardStoryWirePath(args.filePath);
+  if (guard) return fromOpFailure(guard);
   const outcome = await executeMulmoScriptSave(makeExecuteContext(), {
     script: args.script,
     filename: str(args.filename),
@@ -115,6 +120,8 @@ async function saveKind(args: Record<string, unknown>): Promise<unknown> {
 }
 
 async function updateKind(kind: "updateBeat" | "updateScript", args: Record<string, unknown>): Promise<unknown> {
+  const guard = guardStoryWirePath(args.filePath);
+  if (guard) return fromOpFailure(guard);
   const outcome = kind === "updateBeat" ? await executeUpdateBeat(makeExecuteContext(), args) : await executeUpdateScript(makeExecuteContext(), args);
   return outcome.ok ? { ok: true } : fromPackageFailure(outcome);
 }

@@ -13,7 +13,7 @@
 // `pendingGenerations` channel AND the plugin pubsub channel the package
 // View subscribes to.
 
-import { existsSync, mkdirSync, realpathSync, readFileSync, statSync, unlinkSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, realpathSync, readFileSync, statSync, unlinkSync } from "fs";
 import path from "path";
 import { WORKSPACE_PATHS } from "../../workspace/paths.js";
 import { writeFileAtomic } from "../../utils/files/atomic.js";
@@ -152,6 +152,24 @@ export function resolveStory(filePath: string): { ok: true; absolutePath: string
     return opBadRequest("Invalid filePath");
   }
   return { ok: true, absolutePath: resolved };
+}
+
+/**
+ * Realpath containment pre-guard for wire paths handed to the shared
+ * package's save/reopen/update executes. The package's own path guard is
+ * lexical (it runs against the generic FileOps, whose read/write follows
+ * symlinks), so the HOST re-asserts the pre-extraction resolveStoryPath
+ * realpath boundary before invoking the package — a symlink planted below
+ * artifacts/stories can't read or write outside the tree (Codex P1 on
+ * #2133; the old route had this defence on purpose).
+ *
+ * Returns null when `filePath` isn't a non-empty string — shape validation
+ * (including the script-vs-filePath mode check) belongs to the package.
+ */
+export function guardStoryWirePath(filePath: unknown): OpFailure | null {
+  if (typeof filePath !== "string" || filePath === "") return null;
+  const resolved = resolveStory(filePath);
+  return resolved.ok ? null : resolved;
 }
 
 // mulmocast shells out to ffmpeg for movie / beat rendering. When
@@ -641,7 +659,7 @@ async function runBackgroundMovieGeneration(absoluteFilePath: string, wireFilePa
 
     if (!result.ok) {
       genError = result.error;
-      writeErrorSidecar(errorSidecarPath, result.error);
+      await writeErrorSidecar(errorSidecarPath, result.error);
       log.warn("mulmo-script", "background movie generation failed", { filePath: wireFilePath, error: result.error });
       return;
     }
@@ -651,7 +669,7 @@ async function runBackgroundMovieGeneration(absoluteFilePath: string, wireFilePa
     });
   } catch (err) {
     genError = errorMessage(err);
-    writeErrorSidecar(errorSidecarPath, genError);
+    await writeErrorSidecar(errorSidecarPath, genError);
     log.error("mulmo-script", "background movie generation crashed", { filePath: wireFilePath, error: genError });
   } finally {
     inFlightMovies.delete(absoluteFilePath);
@@ -659,9 +677,11 @@ async function runBackgroundMovieGeneration(absoluteFilePath: string, wireFilePa
   }
 }
 
-function writeErrorSidecar(errorSidecarPath: string, message: string): void {
+// writeFileAtomic so a crash mid-write can't leave a truncated sidecar
+// (CodeRabbit on #2133).
+async function writeErrorSidecar(errorSidecarPath: string, message: string): Promise<void> {
   try {
-    writeFileSync(errorSidecarPath, message);
+    await writeFileAtomic(errorSidecarPath, message);
   } catch (writeErr) {
     log.error("mulmo-script", "failed to write error sidecar", {
       errorSidecarPath,

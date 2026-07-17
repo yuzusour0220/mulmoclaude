@@ -38,7 +38,10 @@ const MULMOSCRIPT_SCOPE = "mulmoScript";
 const GENERATION_EVENT = "generation";
 
 let pubsubInstance: IPubSub | null = null;
-const inFlight = new Map<string, { kind: GenerationKind; filePath: string; key: string }>();
+// Refcounted: two concurrent generations with the same kind/filePath/key
+// (e.g. the same beat rendered from two tabs) must not have the first
+// completion erase the second run's snapshot entry (CodeRabbit on #2133).
+const inFlight = new Map<string, { kind: GenerationKind; filePath: string; key: string; count: number }>();
 
 export function initMulmoScriptGenerationPublisher(instance: IPubSub): void {
   pubsubInstance = instance;
@@ -60,10 +63,17 @@ export function publishMulmoGeneration(
 ): void {
   publishGeneration(chatSessionId, kind, filePath, key, finished, error);
   const mapKey = generationKey(kind, filePath, key);
+  const existing = inFlight.get(mapKey);
   if (finished) {
-    inFlight.delete(mapKey);
+    if (existing && existing.count > 1) {
+      existing.count -= 1;
+    } else {
+      inFlight.delete(mapKey);
+    }
+  } else if (existing) {
+    existing.count += 1;
   } else {
-    inFlight.set(mapKey, { kind, filePath, key });
+    inFlight.set(mapKey, { kind, filePath, key, count: 1 });
   }
   const event: MulmoScriptGenerationSnapshotEntry = { kind, filePath, key, done: finished, ...(error ? { error } : {}) };
   pubsubInstance?.publish(pluginChannelName(MULMOSCRIPT_SCOPE, GENERATION_EVENT), event);
@@ -72,7 +82,7 @@ export function publishMulmoGeneration(
 /** Snapshot of generations currently in flight for one script — the
  *  View's mount-time catch-up, filtered to its wire `filePath`. */
 export function pendingMulmoGenerations(filePath: string): MulmoScriptGenerationSnapshotEntry[] {
-  return [...inFlight.values()].filter((entry) => entry.filePath === filePath).map((entry) => ({ ...entry, done: false }));
+  return [...inFlight.values()].filter((entry) => entry.filePath === filePath).map(({ kind, key }) => ({ kind, filePath, key, done: false }));
 }
 
 /** Test-only — clear module state so each test starts clean. */

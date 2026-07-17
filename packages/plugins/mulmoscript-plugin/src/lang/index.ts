@@ -15,7 +15,9 @@ const MESSAGES = { de, en, es, fr, ja, ko, "pt-BR": ptBR, zh } as const;
 type SupportedLocale = keyof typeof MESSAGES;
 
 function isSupportedLocale(value: string): value is SupportedLocale {
-  return value in MESSAGES;
+  // Object.hasOwn (not `in`) so inherited names like "toString" can never
+  // masquerade as a locale.
+  return Object.hasOwn(MESSAGES, value);
 }
 
 /** Reactive message bundle for the active host locale. The plugin carries its

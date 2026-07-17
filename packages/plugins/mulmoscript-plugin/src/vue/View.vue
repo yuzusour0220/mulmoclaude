@@ -1475,6 +1475,13 @@ async function initializeScript() {
   resetBeatMovies();
   moviePath.value = null;
   pdfPath.value = null;
+  // Movie/PDF spinners are per-script: without this reset, switching
+  // away from a generating script would leave the new script's toolbar
+  // spinning. The pendingGenerations snapshot below re-lights them when
+  // the NEW script really does have work in flight.
+  movieGenerating.value = false;
+  pdfGenerating.value = false;
+  movieError.value = null;
   if (sourceDetails.value) sourceDetails.value.open = false;
 
   // #1074 — re-read the script file from disk before per-beat
@@ -1510,7 +1517,14 @@ async function initializeScript() {
   characterKeys.value.forEach((key) => loadExistingCharacterImage(key));
 
   if (filePath.value) {
-    const response = await api.call("movieStatus", { filePath: filePath.value });
+    // Stale-response guard: if the user navigates to a different result
+    // while these calls are in flight, their answers describe the OLD
+    // script — drop them instead of stamping them onto the new one.
+    const requestedFilePath = filePath.value;
+    const isStale = () => filePath.value !== requestedFilePath;
+
+    const response = await api.call("movieStatus", { filePath: requestedFilePath });
+    if (isStale()) return;
     if (response.ok && response.data.moviePath) {
       moviePath.value = response.data.moviePath;
     }
@@ -1518,7 +1532,8 @@ async function initializeScript() {
     // Also check whether a PDF was previously generated and is still
     // newer than the source; status returns null otherwise so the UI
     // re-offers the Generate button.
-    const pdfResponse = await api.call("pdfStatus", { filePath: filePath.value });
+    const pdfResponse = await api.call("pdfStatus", { filePath: requestedFilePath });
+    if (isStale()) return;
     if (pdfResponse.ok && pdfResponse.data.pdfPath) {
       pdfPath.value = pdfResponse.data.pdfPath;
     }
@@ -1527,7 +1542,8 @@ async function initializeScript() {
     // mounted (user switched away mid-generation and came back).
     // Snapshot via dispatch; live updates arrive on the pubsub
     // subscription below.
-    const pending = await api.call("pendingGenerations", { filePath: filePath.value });
+    const pending = await api.call("pendingGenerations", { filePath: requestedFilePath });
+    if (isStale()) return;
     if (pending.ok) {
       for (const entry of pending.data.pending) {
         reflectGenerationStart(entry);
@@ -1602,8 +1618,10 @@ async function reflectGenerationFinish(entry: MulmoScriptGenerationEvent): Promi
 }
 
 async function refreshMoviePath(): Promise<void> {
-  if (!filePath.value) return;
-  const response = await api.call("movieStatus", { filePath: filePath.value });
+  const requestedFilePath = filePath.value;
+  if (!requestedFilePath) return;
+  const response = await api.call("movieStatus", { filePath: requestedFilePath });
+  if (filePath.value !== requestedFilePath) return;
   if (response.ok && response.data.moviePath) {
     moviePath.value = response.data.moviePath;
   }
@@ -1615,12 +1633,18 @@ async function refreshMoviePath(): Promise<void> {
 // `reflectGenerationFinish`, which reloads each asset off disk —
 // replacing the pre-extraction SSE stream.
 async function generateMovie() {
+  // This dispatch is held open for the whole pipeline (minutes). If the
+  // user navigates to a different result meanwhile, the resolution
+  // describes the OLD script — drop it; the new script's own
+  // initializeScript / pubsub subscription owns the visible state.
+  const requestedFilePath = filePath.value;
   movieGenerating.value = true;
   movieError.value = null;
   const response = await api.call("generateMovie", {
-    filePath: filePath.value,
+    filePath: requestedFilePath,
     chatSessionId: chatSessionId.value,
   });
+  if (filePath.value !== requestedFilePath) return;
   movieGenerating.value = false;
   if (!response.ok) {
     // Surface inline (instead of `alert()` which blocks + has no
@@ -1667,19 +1691,24 @@ async function downloadMovie() {
 // pubsub `generation` channel.
 
 async function refreshPdfPath(): Promise<void> {
-  if (!filePath.value) return;
-  const response = await api.call("pdfStatus", { filePath: filePath.value });
+  const requestedFilePath = filePath.value;
+  if (!requestedFilePath) return;
+  const response = await api.call("pdfStatus", { filePath: requestedFilePath });
+  if (filePath.value !== requestedFilePath) return;
   if (response.ok && response.data.pdfPath) {
     pdfPath.value = response.data.pdfPath;
   }
 }
 
 async function generatePdf() {
+  // Long-held dispatch — same stale-navigation guard as generateMovie.
+  const requestedFilePath = filePath.value;
   pdfGenerating.value = true;
   const response = await api.call("generatePdf", {
-    filePath: filePath.value,
+    filePath: requestedFilePath,
     chatSessionId: chatSessionId.value,
   });
+  if (filePath.value !== requestedFilePath) return;
   pdfGenerating.value = false;
   if (!response.ok) {
     alert(response.error);

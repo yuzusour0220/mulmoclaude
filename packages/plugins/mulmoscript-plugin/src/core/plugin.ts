@@ -168,8 +168,14 @@ export async function executeMulmoScript(context: MulmoScriptExecuteContext, arg
       instructions: "Acknowledge the error and retry with a valid `script` (new) or an existing `filePath`.",
     };
   }
+  // The tool schema advertises `autoGenerateMovie`, but movie generation
+  // needs host backends (mulmocast/ffmpeg) this generic execute path
+  // doesn't have — MulmoClaude honours the flag in its own save route.
+  // Say so in the result rather than silently dropping the option, so the
+  // agent doesn't tell the user a movie is on its way.
+  const ignoredMovieNote = args.autoGenerateMovie === true ? " (autoGenerateMovie is not supported by this host and was ignored)" : "";
   return {
-    message: outcome.message,
+    message: `${outcome.message}${ignoredMovieNote}`,
     data: { script: outcome.script, filePath: outcome.filePath },
     instructions: "Display the storyboard to the user.",
   };

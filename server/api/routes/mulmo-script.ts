@@ -13,6 +13,7 @@ import {
   beatMovieOp,
   characterImageOp,
   ffmpegGuard,
+  guardStoryWirePath,
   generateBeatAudioOp,
   inFlightMovies,
   inFlightPdfs,
@@ -100,19 +101,28 @@ interface FilePathQuery {
   filePath?: string;
 }
 
-// Query params arrive as `string | string[] | …` at runtime (repeated
-// `?filePath=` keys become arrays); the typeof guards reject non-string
-// shapes before they can reach any path logic (CodeQL
-// js/type-confusion-through-parameter-tampering).
+// Request values arrive untyped at runtime — query params can be arrays
+// (repeated `?filePath=` keys) and JSON bodies can carry any shape. The
+// guards below reject non-string / non-index values before they can reach
+// any path or beat-indexed logic (CodeQL
+// js/type-confusion-through-parameter-tampering + Codex review on #2133).
 function stringQuery(value: unknown): string | null {
   return typeof value === "string" && value !== "" ? value : null;
+}
+
+// Beat indexes must be non-negative integers — `-1` / `1.5` must fail as a
+// deterministic 400 instead of indexing undefined beats downstream.
+function validBeatIndex(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0;
 }
 
 function parseBeatQuery<TRes>(req: Request<object, TRes, object, BeatQuery>, res: Response): { filePath: string; beatIndex: number } | null {
   const filePath = stringQuery(req.query.filePath);
   const beatIndexStr = stringQuery(req.query.beatIndex);
-  const beatIndex = beatIndexStr !== null ? parseInt(beatIndexStr, 10) : undefined;
-  if (!filePath || beatIndex === undefined || isNaN(beatIndex)) {
+  // Number() (not parseInt) so "1.5" stays fractional and fails the
+  // integer check instead of silently truncating to 1.
+  const beatIndex = beatIndexStr !== null ? Number(beatIndexStr) : undefined;
+  if (!filePath || !validBeatIndex(beatIndex)) {
     badRequest(res, "filePath and beatIndex are required");
     return null;
   }
@@ -146,6 +156,13 @@ function sendPackageFailure(res: Response, failure: MulmoScriptFailure): void {
 // in `server/agent/plugin-names.ts` routes the tool name straight here,
 // so any per-mode logic on the client would be invisible to it.
 bindRoute(router, API_ROUTES.mulmoScript.save, async (req: Request<object, object, SaveMulmoScriptArgs>, res: Response) => {
+  // Realpath symlink containment before the package's lexical guard —
+  // see guardStoryWirePath.
+  const guard = guardStoryWirePath(req.body?.filePath);
+  if (guard) {
+    sendOpFailure(res, guard);
+    return;
+  }
   const outcome = await executeMulmoScriptSave(makeExecuteContext(), req.body ?? {});
   if (!outcome.ok) {
     sendPackageFailure(res, outcome);
@@ -169,6 +186,11 @@ bindRoute(router, API_ROUTES.mulmoScript.save, async (req: Request<object, objec
 });
 
 bindRoute(router, API_ROUTES.mulmoScript.updateBeat, async (req: Request<object, object, unknown>, res: Response) => {
+  const guard = guardStoryWirePath((req.body as { filePath?: unknown } | undefined)?.filePath);
+  if (guard) {
+    sendOpFailure(res, guard);
+    return;
+  }
   const outcome = await executeUpdateBeat(makeExecuteContext(), req.body);
   if (!outcome.ok) {
     sendPackageFailure(res, outcome);
@@ -178,6 +200,11 @@ bindRoute(router, API_ROUTES.mulmoScript.updateBeat, async (req: Request<object,
 });
 
 bindRoute(router, API_ROUTES.mulmoScript.updateScript, async (req: Request<object, object, unknown>, res: Response) => {
+  const guard = guardStoryWirePath((req.body as { filePath?: unknown } | undefined)?.filePath);
+  if (guard) {
+    sendOpFailure(res, guard);
+    return;
+  }
   const outcome = await executeUpdateScript(makeExecuteContext(), req.body);
   if (!outcome.ok) {
     sendPackageFailure(res, outcome);
@@ -249,7 +276,7 @@ bindRoute(
   API_ROUTES.mulmoScript.generateBeatAudio,
   async (req: Request<object, object, GenerateBeatAudioBody>, res: Response<GenerateBeatAudioResponse>) => {
     const { filePath, beatIndex, force, chatSessionId } = req.body;
-    if (!filePath || beatIndex === undefined) {
+    if (typeof filePath !== "string" || !filePath || !validBeatIndex(beatIndex)) {
       badRequest(res, "filePath and beatIndex are required");
       return;
     }
@@ -264,7 +291,7 @@ bindRoute(
 
 bindRoute(router, API_ROUTES.mulmoScript.renderBeat, async (req: Request<object, object, RenderBeatBody>, res: Response) => {
   const { filePath, beatIndex, force, chatSessionId } = req.body;
-  if (!filePath || beatIndex === undefined) {
+  if (typeof filePath !== "string" || !filePath || !validBeatIndex(beatIndex)) {
     badRequest(res, "filePath and beatIndex are required");
     return;
   }
@@ -283,7 +310,7 @@ bindRoute(router, API_ROUTES.mulmoScript.renderBeat, async (req: Request<object,
 bindRoute(router, API_ROUTES.mulmoScript.generateMovie, async (req: Request<object, object, { filePath: string; chatSessionId?: string }>, res: Response) => {
   const { filePath, chatSessionId } = req.body;
 
-  if (!filePath) {
+  if (typeof filePath !== "string" || !filePath) {
     badRequest(res, "filePath is required");
     return;
   }
@@ -375,7 +402,7 @@ bindRoute(
   API_ROUTES.mulmoScript.uploadBeatImage,
   async (req: Request<object, BeatImageResponse, UploadBeatImageBody>, res: Response<BeatImageResponse>) => {
     const { filePath, beatIndex, imageData } = req.body;
-    if (!filePath || beatIndex === undefined || !imageData) {
+    if (typeof filePath !== "string" || !filePath || !validBeatIndex(beatIndex) || typeof imageData !== "string" || !imageData) {
       badRequest(res, "filePath, beatIndex, and imageData are required");
       return;
     }
@@ -393,7 +420,7 @@ bindRoute(
   API_ROUTES.mulmoScript.renderCharacter,
   async (req: Request<object, CharacterImageResponse, RenderCharacterBody>, res: Response<CharacterImageResponse>) => {
     const { filePath, key, force, chatSessionId } = req.body;
-    if (!filePath || !key) {
+    if (typeof filePath !== "string" || !filePath || typeof key !== "string" || !key) {
       badRequest(res, "filePath and key are required");
       return;
     }
@@ -411,7 +438,7 @@ bindRoute(
   API_ROUTES.mulmoScript.uploadCharacterImage,
   async (req: Request<object, CharacterImageResponse, UploadCharacterImageBody>, res: Response<CharacterImageResponse>) => {
     const { filePath, key, imageData } = req.body;
-    if (!filePath || !key || !imageData) {
+    if (typeof filePath !== "string" || !filePath || typeof key !== "string" || !key || typeof imageData !== "string" || !imageData) {
       badRequest(res, "filePath, key, and imageData are required");
       return;
     }
@@ -460,7 +487,7 @@ bindRoute(
 // movie SSE route above.
 async function handleGeneratePdf(req: Request<object, object, { filePath: string; chatSessionId?: string }>, res: Response): Promise<void> {
   const { filePath, chatSessionId } = req.body;
-  if (!filePath) {
+  if (typeof filePath !== "string" || !filePath) {
     badRequest(res, "filePath is required");
     return;
   }
