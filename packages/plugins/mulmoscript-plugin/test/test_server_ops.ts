@@ -1,5 +1,8 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { mkdirSync, mkdtempSync, writeFileSync } from "fs";
+import { tmpdir } from "os";
+import path from "path";
 import type { FileOps } from "gui-chat-protocol";
 import type { MulmoBeat } from "@mulmocast/types";
 import { buildBeatIdIndex, createMulmoScriptServerOps, type StoryContext } from "../src/server/ops";
@@ -313,5 +316,41 @@ describe("buildBeatIdIndex", () => {
     const index = buildBeatIdIndex(beats("dup", "dup"));
     assert.equal(index.size, 1);
     assert.equal(index.get("dup"), 1);
+  });
+});
+
+describe("resolveStory — wire path spellings", () => {
+  // Real temp dir: resolveStory realpaths the stories dir and requires
+  // the target to exist, so the stub storiesDir used above won't do.
+  function makeRealOps() {
+    const workspace = mkdtempSync(path.join(tmpdir(), "mulmoscript-resolve-"));
+    const storiesDir = path.join(workspace, "artifacts", "stories");
+    mkdirSync(storiesDir, { recursive: true });
+    writeFileSync(path.join(storiesDir, "foo.json"), "{}");
+    return createMulmoScriptServerOps({ storiesDir, artifacts: stubFileOps, writeFileAtomic: async () => {} });
+  }
+
+  it("resolves canonical, bare, and workspace-relative spellings to the same file", () => {
+    const ops = makeRealOps();
+    const canonical = ops.resolveStory("stories/foo.json");
+    assert.ok(canonical.ok);
+    for (const spelling of ["foo.json", "artifacts/stories/foo.json"]) {
+      const resolved = ops.resolveStory(spelling);
+      assert.ok(resolved.ok, `expected ${spelling} to resolve`);
+      assert.equal(resolved.absolutePath, canonical.absolutePath);
+    }
+  });
+
+  it("still rejects traversal under the artifacts/stories spelling", () => {
+    const ops = makeRealOps();
+    const resolved = ops.resolveStory("artifacts/stories/../../secret.json");
+    assert.equal(resolved.ok, false);
+  });
+
+  it("404s a missing file under the artifacts/stories spelling", () => {
+    const ops = makeRealOps();
+    const resolved = ops.resolveStory("artifacts/stories/missing.json");
+    assert.ok(!resolved.ok);
+    assert.equal(resolved.code, "not_found");
   });
 });

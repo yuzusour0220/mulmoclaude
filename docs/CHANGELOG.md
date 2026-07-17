@@ -10,6 +10,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 ---
 
+## npm packages — 2026-07-17 (7)
+
+presentMulmoScript `filePath` base clarified (the wire form `stories/<name>.json` has been **artifacts-relative, not workspace-relative**, ever since #284 moved the stories dir to `artifacts/stories/` — the tool description was never updated):
+
+- **`@mulmoclaude/mulmoscript-plugin@0.2.1`** — tool schema no longer calls `filePath` "workspace-relative"; it now states the path is resolved against the workspace's `artifacts/` directory. Resolvers (`normalizeStoryPath`, server `resolveStory`) additionally accept the workspace-relative spelling `artifacts/stories/<rel>` the stale description taught, normalizing it to the canonical `stories/<rel>` wire form (responses always echo the canonical form). A bare `artifacts/foo.json` keeps its historical meaning (a file of that name under the stories dir).
+- **`@mulmoclaude/core@0.22.1`** — `helps/mulmoscript.md` now states where relative `{ "kind": "path" }` media sources resolve from: the script file's own directory (`<workspace>/artifacts/stories/`), not the workspace root.
+
+---
+
 ## npm packages — 2026-07-17 (5)
 
 Package release riding PR #2133 (presentMulmoScript extraction, phases 1+2 of `plans/feat-mulmoscript-plugin.md`):

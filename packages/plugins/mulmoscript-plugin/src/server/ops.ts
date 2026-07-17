@@ -185,7 +185,7 @@ export function createMulmoScriptServerOps(backend: MulmoScriptServerBackend) {
    * Resolve and validate a stories wire path to its absolute realpath.
    *
    * Uses the realpath-based resolveWithinRoot helper to defeat
-   * symlink-based escapes. Callers pass workspace-relative paths like
+   * symlink-based escapes. Callers pass wire paths like
    * "stories/foo.json" or "stories/__movies__/bar.mp4". We strip the
    * leading "stories/" segment and resolve the remainder against the
    * realpath of the stories directory itself — this works whether
@@ -202,12 +202,18 @@ export function createMulmoScriptServerOps(backend: MulmoScriptServerBackend) {
     if (path.isAbsolute(filePath)) {
       return opBadRequest("Invalid filePath");
     }
+    // Accept the workspace-relative spelling "artifacts/stories/<rel>"
+    // the tool description historically taught (the wire form was truly
+    // workspace-relative before the stories dir moved under artifacts/
+    // in #284) by reducing it to the canonical "stories/<rel>".
+    const ARTIFACTS_STORIES = "artifacts/stories";
+    const wirePath = filePath === ARTIFACTS_STORIES || filePath.startsWith(`${ARTIFACTS_STORIES}/`) ? filePath.slice("artifacts/".length) : filePath;
     // Strip the optional "stories/" prefix so the remainder is a path
     // relative to storiesReal. Accepts both "stories/foo.json" (the
     // canonical caller convention) and bare "foo.json".
     const STORIES_PREFIX = `stories${path.sep}`;
     const relFromStories =
-      filePath === "stories" ? "" : filePath.startsWith(STORIES_PREFIX) || filePath.startsWith("stories/") ? filePath.slice("stories/".length) : filePath;
+      wirePath === "stories" ? "" : wirePath.startsWith(STORIES_PREFIX) || wirePath.startsWith("stories/") ? wirePath.slice("stories/".length) : wirePath;
     // resolveWithinRoot enforces both the realpath boundary AND
     // existence; ENOENT and traversal both produce null. Distinguish
     // them via a follow-up existsSync so 404 vs 400 stays accurate —
