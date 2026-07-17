@@ -145,6 +145,12 @@ package and the host became a consumer. The transport redesign:
 - MulmoTerminal: add to `plugins.json` `packages`, a `server/backends/
   mulmoscript.ts` (like its `html.ts`, plus dedicated SSE/binary routes),
   mulmocast + ffmpeg + provider keys in its environment.
+- **Required:** MulmoTerminal must apply a realpath symlink-containment
+  guard on wire `filePath`s before invoking the package's save/reopen/
+  update executes (or use a realpath-checking FileOps). The package's own
+  guard is lexical, and the generic FileOps read/write follows symlinks —
+  MulmoClaude re-asserts the boundary host-side via `guardStoryWirePath`
+  (Codex P1 on #2133).
 
 ## Publish
 
