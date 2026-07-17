@@ -2,9 +2,9 @@
   <div class="space-y-3" data-testid="settings-google-tab">
     <p class="text-sm text-gray-700">{{ t("settingsModal.googleTab.description") }}</p>
 
-    <p v-if="loaded && clientSecret === 'missing'" class="text-sm text-amber-700" data-testid="settings-google-secret-missing">
-      {{ t("settingsModal.googleTab.clientSecretMissing") }}
-    </p>
+    <!-- `missing` is the normal case now: the broker supplies the OAuth client,
+         so only an ambiguous ~/.secrets/ (which the engine refuses to guess at)
+         still needs the user's attention. -->
     <p v-if="loaded && clientSecret === 'ambiguous'" class="text-sm text-amber-700" data-testid="settings-google-secret-ambiguous">
       {{ t("settingsModal.googleTab.clientSecretAmbiguous") }}
     </p>
@@ -14,7 +14,7 @@
       <button
         v-if="!linked"
         class="px-2 py-1 text-xs rounded bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50"
-        :disabled="busy || pending || clientSecret !== 'found'"
+        :disabled="busy || pending || clientSecret === 'ambiguous'"
         data-testid="settings-google-connect-btn"
         @click="connect"
       >

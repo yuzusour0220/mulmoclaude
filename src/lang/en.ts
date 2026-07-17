@@ -287,8 +287,6 @@ const enMessages = {
       connect: "Link Google account",
       unlink: "Unlink",
       unlinkConfirm: "Unlink the Google account? The saved token is revoked and deleted from this machine.",
-      clientSecretMissing:
-        "No OAuth client credentials found. Download the desktop-app client JSON from the Google Cloud Console and place it in ~/.secrets/ (client_secret_*.json).",
       clientSecretAmbiguous:
         "Multiple client_secret_*.json files were found in ~/.secrets/. Keep exactly one so the stored token stays paired with the right OAuth client.",
       loadError: "Failed to load the Google link status.",

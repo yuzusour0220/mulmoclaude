@@ -396,13 +396,15 @@ test.describe("Google account tab", () => {
     await expect(page.locator('[data-testid="settings-google-connect-btn"]')).not.toBeVisible();
   });
 
-  test("guides the user when no client secret is installed", async ({ page }) => {
+  // No client secret is the normal case: the broker supplies the OAuth client,
+  // so linking must stay one click away with nothing to warn about (#2131).
+  test("offers linking with no warning when the user has no client secret of their own", async ({ page }) => {
     await mockConfigApi(page);
     await mockGoogleStatus(page, { linked: false, pending: false, clientSecret: "missing", lastError: null });
 
     await openGoogleTab(page);
-    await expect(page.locator('[data-testid="settings-google-secret-missing"]')).toBeVisible();
-    await expect(page.locator('[data-testid="settings-google-connect-btn"]')).toBeDisabled();
+    await expect(page.locator('[data-testid="settings-google-secret-ambiguous"]')).not.toBeVisible();
+    await expect(page.locator('[data-testid="settings-google-connect-btn"]')).toBeEnabled();
   });
 
   test("guides the user to remove duplicates when multiple client secrets exist", async ({ page }) => {
@@ -411,7 +413,6 @@ test.describe("Google account tab", () => {
 
     await openGoogleTab(page);
     await expect(page.locator('[data-testid="settings-google-secret-ambiguous"]')).toBeVisible();
-    await expect(page.locator('[data-testid="settings-google-secret-missing"]')).not.toBeVisible();
     await expect(page.locator('[data-testid="settings-google-connect-btn"]')).toBeDisabled();
   });
 });

@@ -1,5 +1,7 @@
-// Unit tests for the client-secret loader: discovery by prefix in ~/.secrets
-// and validation of the desktop-app ("installed") JSON shape.
+// Unit tests for the client-secret loader: discovery by prefix in ~/.secrets,
+// and the rule that only desktop-app ("installed") clients count — a web
+// client legitimately shares that directory for anyone who also deploys the
+// broker, and it cannot drive the loopback consent.
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
@@ -18,73 +20,91 @@ const makeFakeHome = async (files: Record<string, string> = {}): Promise<string>
   return home;
 };
 
-const validSecret = JSON.stringify({ installed: { client_id: "id-123", client_secret: "secret-456", redirect_uris: ["http://localhost"] } });
+const desktopSecret = JSON.stringify({ installed: { client_id: "id-123", client_secret: "secret-456", redirect_uris: ["http://localhost"] } });
+const webSecret = JSON.stringify({ web: { client_id: "web-id", client_secret: "web-secret" } });
 
 describe("findClientSecretPath", () => {
-  it("finds a client_secret_*.json by prefix", async () => {
-    const home = await makeFakeHome({ "client_secret_abc.apps.googleusercontent.com.json": validSecret });
+  it("finds a desktop client_secret_*.json by prefix", async () => {
+    const home = await makeFakeHome({ "client_secret_abc.apps.googleusercontent.com.json": desktopSecret });
     assert.match(await findClientSecretPath(home), /client_secret_abc/);
   });
 
   it("ignores unrelated files in ~/.secrets", async () => {
     const home = await makeFakeHome({ "other-key.json": "{}", "client_secret_notes.txt": "nope" });
-    await assert.rejects(findClientSecretPath(home), /no client_secret_\*\.json found/);
+    await assert.rejects(findClientSecretPath(home), /no desktop-app client_secret/);
   });
 
-  it("fails on ambiguity when multiple client_secret files exist", async () => {
-    const home = await makeFakeHome({ "client_secret_b.json": validSecret, "client_secret_a.json": validSecret });
+  // The broker's own web client sits here for whoever deployed it; it must not
+  // make the user's desktop client look ambiguous.
+  it("skips a web-app client sharing the directory", async () => {
+    const home = await makeFakeHome({ "client_secret_desktop.json": desktopSecret, "client_secret_web.json": webSecret });
+    assert.match(await findClientSecretPath(home), /client_secret_desktop/);
+  });
+
+  it("skips a malformed file rather than refusing the whole directory", async () => {
+    const home = await makeFakeHome({ "client_secret_desktop.json": desktopSecret, "client_secret_broken.json": "{oops" });
+    assert.match(await findClientSecretPath(home), /client_secret_desktop/);
+  });
+
+  it("fails on ambiguity when multiple desktop clients exist", async () => {
+    const home = await makeFakeHome({ "client_secret_b.json": desktopSecret, "client_secret_a.json": desktopSecret });
     await assert.rejects(
       findClientSecretPath(home),
-      /multiple client_secret_\*\.json files found .*client_secret_a\.json, client_secret_b\.json.* keep exactly one/,
+      /multiple desktop-app client_secret_\*\.json files found .*client_secret_a\.json, client_secret_b\.json.* keep exactly one/,
     );
   });
 
-  it("fails with guidance when ~/.secrets does not exist", async () => {
+  it("points at the sign-in service when ~/.secrets does not exist", async () => {
     const home = await mkdtemp(path.join(tmpdir(), "google-secret-test-"));
-    await assert.rejects(findClientSecretPath(home), /download the OAuth desktop-app credentials/);
+    await assert.rejects(findClientSecretPath(home), /links through the sign-in service/);
   });
 });
 
 describe("clientSecretPresence", () => {
-  it("returns 'found' when exactly one client secret exists", async () => {
-    const home = await makeFakeHome({ "client_secret_abc.json": validSecret });
+  it("returns 'found' when exactly one desktop client exists", async () => {
+    const home = await makeFakeHome({ "client_secret_abc.json": desktopSecret });
     assert.equal(await clientSecretPresence(home), "found");
   });
 
-  it("returns 'missing' when none exists", async () => {
+  it("returns 'missing' when none exists — the ordinary, broker-served case", async () => {
     const home = await makeFakeHome();
     assert.equal(await clientSecretPresence(home), "missing");
   });
 
-  it("returns 'ambiguous' for multiple files — a distinct state from 'missing'", async () => {
-    const home = await makeFakeHome({ "client_secret_a.json": validSecret, "client_secret_b.json": validSecret });
+  it("returns 'missing' when only a web client is present", async () => {
+    const home = await makeFakeHome({ "client_secret_web.json": webSecret });
+    assert.equal(await clientSecretPresence(home), "missing");
+  });
+
+  it("returns 'ambiguous' for multiple desktop clients — a distinct state from 'missing'", async () => {
+    const home = await makeFakeHome({ "client_secret_a.json": desktopSecret, "client_secret_b.json": desktopSecret });
     assert.equal(await clientSecretPresence(home), "ambiguous");
   });
 
   it("ignores non-matching files when counting", async () => {
-    const home = await makeFakeHome({ "client_secret_a.json": validSecret, "unrelated.json": "{}" });
+    const home = await makeFakeHome({ "client_secret_a.json": desktopSecret, "unrelated.json": "{}" });
     assert.equal(await clientSecretPresence(home), "found");
   });
 });
 
 describe("loadClientSecret", () => {
   it("returns client_id and client_secret from the installed shape", async () => {
-    const home = await makeFakeHome({ "client_secret_abc.json": validSecret });
+    const home = await makeFakeHome({ "client_secret_abc.json": desktopSecret });
     assert.deepEqual(await loadClientSecret(home), { client_id: "id-123", client_secret: "secret-456" });
   });
 
-  it("rejects a web-app credential (no installed key)", async () => {
-    const home = await makeFakeHome({ "client_secret_web.json": JSON.stringify({ web: { client_id: "x", client_secret: "y" } }) });
-    await assert.rejects(loadClientSecret(home), /not a desktop-app OAuth client secret/);
+  it("reports no desktop client when only a web-app credential exists", async () => {
+    const home = await makeFakeHome({ "client_secret_web.json": webSecret });
+    await assert.rejects(loadClientSecret(home), /no desktop-app client_secret/);
   });
 
-  it("rejects an installed shape missing client_secret", async () => {
+  it("reports no desktop client for an installed shape missing client_secret", async () => {
     const home = await makeFakeHome({ "client_secret_partial.json": JSON.stringify({ installed: { client_id: "only-id" } }) });
-    await assert.rejects(loadClientSecret(home), /not a desktop-app OAuth client secret/);
+    await assert.rejects(loadClientSecret(home), /no desktop-app client_secret/);
   });
 
-  it("rejects malformed JSON", async () => {
+  it("reports no desktop client for malformed JSON", async () => {
     const home = await makeFakeHome({ "client_secret_broken.json": "{oops" });
-    await assert.rejects(loadClientSecret(home), SyntaxError);
+    await assert.rejects(loadClientSecret(home), /no desktop-app client_secret/);
   });
 });

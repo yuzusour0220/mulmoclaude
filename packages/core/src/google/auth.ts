@@ -1,19 +1,25 @@
 // Google OAuth for the host machine, independent of Firebase Auth (which
-// discards refresh tokens). Entry points:
-//   - authorizeGoogle(): one-shot loopback + PKCE browser consent flow
-//     (desktop-app clients may redirect to any 127.0.0.1 port), storing the
-//     refresh token locally via tokenStore.
-//   - getGoogleAccessToken(): mints a fresh access token from the stored
-//     refresh token; the OAuth2Client "tokens" event persists rotations.
-//   - unlinkGoogle(): best-effort revoke at Google + local token delete.
+// discards refresh tokens). Two ways to reach a linked account:
+//
+//   - LOCAL: the user dropped their own desktop-app client JSON in
+//     `~/.secrets/`. Everything (consent, exchange, refresh) happens on this
+//     machine — nothing but Google is contacted.
+//   - BROKER (the default): no client JSON, so the mulmoserver broker applies
+//     the client secret for the exchange / refresh it cannot be done without.
+//     Tokens still only ever live here. See broker.ts.
+//
+// Either way the loopback listener, the PKCE verifier, and the token file are
+// this machine's. `issuedVia` on the stored token records which path minted it
+// so renewals take the matching one.
 import { randomBytes } from "node:crypto";
 import http from "node:http";
 import { CodeChallengeMethod, OAuth2Client, type Credentials } from "google-auth-library";
+import { brokerExchange, brokerRefresh, brokerStart } from "./broker.js";
 import { log } from "./host.js";
 import { errorMessage, ONE_MINUTE_MS, ONE_SECOND_MS } from "./util.js";
 import { fetchWithTimeout } from "./fetch.js";
-import { loadClientSecret, type InstalledClientSecret } from "./clientSecret.js";
-import { deleteGoogleTokens, loadGoogleTokens, saveGoogleTokens } from "./tokenStore.js";
+import { clientSecretPresence, loadClientSecret, type InstalledClientSecret } from "./clientSecret.js";
+import { deleteGoogleTokens, loadGoogleTokens, saveGoogleTokens, type IssuedVia } from "./tokenStore.js";
 
 export const GOOGLE_CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.events";
 export const GOOGLE_TASKS_SCOPE = "https://www.googleapis.com/auth/tasks";
@@ -25,6 +31,9 @@ export const GOOGLE_SCOPES = [GOOGLE_CALENDAR_SCOPE, GOOGLE_TASKS_SCOPE, GOOGLE_
 const CALLBACK_PATH = "/oauth2callback";
 const AUTH_TIMEOUT_MS = 5 * ONE_MINUTE_MS;
 const STATE_BYTES = 16;
+/** Renew a minute early so a call can't start with a token that expires
+ *  mid-flight. */
+const EXPIRY_MARGIN_MS = ONE_MINUTE_MS;
 
 export interface AuthorizeGoogleOptions {
   home?: string;
@@ -44,6 +53,30 @@ const persistRotatedTokens = (client: OAuth2Client, home?: string): void => {
   });
 };
 
+const REVOKED_GRANT_MESSAGE = "could not obtain a Google access token — the grant may have been revoked; re-link the account";
+
+const localAccessToken = async (saved: Credentials, home?: string): Promise<string> => {
+  const client = createClient(await loadClientSecret(home));
+  client.setCredentials(saved);
+  persistRotatedTokens(client, home);
+  const { token } = await client.getAccessToken();
+  if (!token) throw new Error(REVOKED_GRANT_MESSAGE);
+  return token;
+};
+
+// The broker mints access tokens because only it holds the client secret. The
+// refreshed token is written back so the next call can reuse it until expiry
+// instead of hitting the broker every time.
+const brokerAccessToken = async (saved: Credentials, home?: string): Promise<string> => {
+  if (typeof saved.expiry_date === "number" && saved.access_token && saved.expiry_date - EXPIRY_MARGIN_MS > Date.now()) {
+    return saved.access_token;
+  }
+  const refreshed = await brokerRefresh(saved.refresh_token ?? "");
+  if (!refreshed.access_token) throw new Error(REVOKED_GRANT_MESSAGE);
+  await saveGoogleTokens(refreshed, home);
+  return refreshed.access_token;
+};
+
 export async function getGoogleAccessToken(home?: string): Promise<string> {
   const saved = await loadGoogleTokens(home);
   if (!saved?.refresh_token) {
@@ -51,14 +84,9 @@ export async function getGoogleAccessToken(home?: string): Promise<string> {
     // flows differ (#2128); each host's own help carries the specific steps.
     throw new Error("Google account not linked on this host — ask the user to link their Google account in this app's settings, then retry");
   }
-  const client = createClient(await loadClientSecret(home));
-  client.setCredentials(saved);
-  persistRotatedTokens(client, home);
-  const { token } = await client.getAccessToken();
-  if (!token) {
-    throw new Error("could not obtain a Google access token — the grant may have been revoked; re-link the account");
-  }
-  return token;
+  // Tokens written before the broker existed carry no marker; they were all
+  // minted from a local client, so that stays the default.
+  return saved.issuedVia === "broker" ? await brokerAccessToken(saved, home) : await localAccessToken(saved, home);
 }
 
 const REVOKE_URL = "https://oauth2.googleapis.com/revoke";
@@ -162,21 +190,55 @@ const buildConsentUrl = (client: OAuth2Client, codeChallenge: string, state: str
     state,
   });
 
+// PKCE material is generated by an OAuth2Client with no credentials — the
+// helper is pure crypto, and in broker mode there is no client to construct.
+const generatePkce = async (): Promise<{ codeVerifier: string; codeChallenge: string }> => {
+  const { codeVerifier, codeChallenge } = await new OAuth2Client().generateCodeVerifierAsync();
+  if (!codeChallenge) throw new Error("failed to derive a PKCE code challenge");
+  return { codeVerifier, codeChallenge };
+};
+
+const authorizeWithLocalClient = async (
+  secret: InstalledClientSecret,
+  server: http.Server,
+  port: number,
+  opts: AuthorizeGoogleOptions,
+): Promise<Credentials> => {
+  const client = createClient(secret, `http://127.0.0.1:${port}${CALLBACK_PATH}`);
+  const { codeVerifier, codeChallenge } = await client.generateCodeVerifierAsync();
+  if (!codeChallenge) throw new Error("failed to derive a PKCE code challenge");
+  const state = randomBytes(STATE_BYTES).toString("hex");
+  opts.onAuthUrl?.(buildConsentUrl(client, codeChallenge, state));
+  const code = await waitForAuthCode(server, state, opts.timeoutMs ?? AUTH_TIMEOUT_MS);
+  const { tokens } = await client.getToken({ code, codeVerifier });
+  if (!tokens.refresh_token) {
+    throw new Error("Google returned no refresh token — remove this app under Google Account → Security → Third-party access, then retry");
+  }
+  return tokens;
+};
+
+// The broker signs `state` with a key it never releases, so it — not this
+// host — builds the authorization URL. `state` then round-trips through the
+// browser and comes back to our loopback, where waitForAuthCode matches it.
+const authorizeWithBroker = async (server: http.Server, port: number, opts: AuthorizeGoogleOptions): Promise<Credentials> => {
+  const { codeVerifier, codeChallenge } = await generatePkce();
+  const { authUrl, state } = await brokerStart(port, codeChallenge);
+  opts.onAuthUrl?.(authUrl);
+  const code = await waitForAuthCode(server, state, opts.timeoutMs ?? AUTH_TIMEOUT_MS);
+  return await brokerExchange({ code, state, codeVerifier });
+};
+
 export async function authorizeGoogle(opts: AuthorizeGoogleOptions = {}): Promise<Credentials> {
-  const secret = await loadClientSecret(opts.home);
+  // A user-supplied client wins: it keeps the whole flow on this machine, and
+  // silently preferring the broker would ignore a deliberate setup.
+  const useLocalClient = (await clientSecretPresence(opts.home)) === "found";
   const { server, port } = await startLoopbackServer();
   try {
-    const client = createClient(secret, `http://127.0.0.1:${port}${CALLBACK_PATH}`);
-    const { codeVerifier, codeChallenge } = await client.generateCodeVerifierAsync();
-    if (!codeChallenge) throw new Error("failed to derive a PKCE code challenge");
-    const state = randomBytes(STATE_BYTES).toString("hex");
-    opts.onAuthUrl?.(buildConsentUrl(client, codeChallenge, state));
-    const code = await waitForAuthCode(server, state, opts.timeoutMs ?? AUTH_TIMEOUT_MS);
-    const { tokens } = await client.getToken({ code, codeVerifier });
-    if (!tokens.refresh_token) {
-      throw new Error("Google returned no refresh token — remove this app under Google Account → Security → Third-party access, then retry");
-    }
-    return await saveGoogleTokens(tokens, opts.home);
+    const issuedVia: IssuedVia = useLocalClient ? "local" : "broker";
+    const tokens = useLocalClient
+      ? await authorizeWithLocalClient(await loadClientSecret(opts.home), server, port, opts)
+      : await authorizeWithBroker(server, port, opts);
+    return await saveGoogleTokens({ ...tokens, issuedVia }, opts.home);
   } finally {
     server.close();
   }

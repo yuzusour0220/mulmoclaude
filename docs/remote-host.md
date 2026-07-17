@@ -181,8 +181,24 @@ grant** (independent of Firebase Auth): the user links the account once — from
 the settings modal (Plugins → Google) or with `yarn google:auth` (both run the
 same loopback + PKCE consent in the browser; the settings flow requires the
 browser to be on the same machine as the host) — and the refresh token stays
-in `~/.config/mulmo/google-token.json` (mode 600) — no Google credential
-ever reaches the cloud. Until the account is linked, the handlers
+in `~/.config/mulmo/google-token.json` (mode 600).
+
+Google requires a client secret at its token endpoint even under PKCE, so a
+user with no Cloud project of their own cannot finish a link unaided. Two
+paths, chosen automatically:
+
+- **Default** — the **mulmoserver broker** (`/googleOAuthStart`, `/googleOAuthCallback`,
+  `/googleOAuthExchange`, `/googleOAuthRefresh`; receptron/mulmoserver#54) applies the secret.
+  It is **stateless**: it stores no token and no code, and the callback 302s the *authorization
+  code* — never a token — back to this host's loopback, which then exchanges it itself. The
+  tokens never leave the machine, so there is no central honeypot. The broker is contacted only
+  when linking and when an expired access token needs renewing.
+- **Own client** — if `~/.secrets/client_secret_*.json` is present it wins, and the whole flow
+  (consent, exchange, refresh) stays on this machine. Self-hosters keep full independence.
+
+The stored token records which path minted it (`issuedVia`), so renewals take
+the matching one; tokens written before the broker existed are treated as
+`local`. Until the account is linked, the handlers
 return a `handler_error` telling the remote to run the auth flow on the host.
 The remote can tell whether a host build supports Calendar by looking for the
 `google.calendar.*` method names in the presence `capabilities` (auto-derived,

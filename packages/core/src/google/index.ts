@@ -8,7 +8,8 @@ export { configureGoogleHost, type GoogleLogger } from "./host.js";
 export { isIsoDateTimeWithOffset } from "./datetime.js";
 export { googleConfigDir, googleSecretsDir, googleTokenPath, legacyGoogleTokenPath } from "./paths.js";
 export { clientSecretPresence, findClientSecretPath, loadClientSecret, type ClientSecretPresence, type InstalledClientSecret } from "./clientSecret.js";
-export { deleteGoogleTokens, loadGoogleTokens, mergeGoogleTokens, saveGoogleTokens } from "./tokenStore.js";
+export { deleteGoogleTokens, loadGoogleTokens, mergeGoogleTokens, saveGoogleTokens, type IssuedVia, type StoredGoogleTokens } from "./tokenStore.js";
+export { brokerBaseUrl, brokerExchange, brokerRefresh, brokerStart, type BrokerStartResponse } from "./broker.js";
 export {
   authorizeGoogle,
   getGoogleAccessToken,

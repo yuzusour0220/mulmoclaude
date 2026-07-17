@@ -304,31 +304,41 @@ shipped builders produce, and asserts `handlePermission` comes back over the MCP
 ### Symptoms
 
 - The `google` tool (or a `google.calendar.*` remote command) fails with **"Google account not linked on this host"**.
-- Errors mentioning **client_secret**: "no client_secret_*.json found" or "multiple client_secret_*.json files found".
+- **"Google sign-in service unreachable"** or **"Google sign-in service returned HTTP …"**.
+- **"multiple client_secret_*.json files found"**.
 - **"Google Calendar API: HTTP 403"** with a hint about enabling the API.
 - **"could not obtain a Google access token"** (grant revoked).
 
 ### Cause
 
 The `google` tool runs against a Google account linked **locally on this machine** — a refresh
-token stored at `~/.config/mulmo/google-token.json` (mode 600), obtained through a desktop
-OAuth (loopback + PKCE) consent using the client credentials in `~/.secrets/client_secret_*.json`.
-This is independent of claude.ai Google connectors. Each failure names its missing piece.
+token stored at `~/.config/mulmo/google-token.json` (mode 600), obtained through a browser
+consent (loopback + PKCE). This is independent of claude.ai Google connectors.
+
+Two ways the link can be minted, and the tool picks automatically:
+
+- **Default**: the user just clicks link and consents. The mulmoserver broker applies the OAuth
+  client secret for the token exchange / renewal (Google requires one); it stores nothing —
+  the tokens live only on this machine. **The user needs no Google Cloud setup.**
+- **Own client** (advanced / self-hosters): if `~/.secrets/client_secret_*.json` exists, the
+  whole flow stays on this machine and the broker is never contacted.
 
 ### Fix
 
-- **Not linked / grant revoked** — ask the user to link (or re-link) the account: Settings →
-  Plugins → Google → "Link Google account", or run `yarn google:auth` in the repo. Then retry the
-  original call. Do NOT try to create or edit the token file yourself.
-- **No client secret** — the user must download the OAuth *desktop-app* client JSON from the
-  Google Cloud Console (APIs & Services → Credentials) and place it in `~/.secrets/` keeping the
-  `client_secret_*.json` filename (chmod 600).
-- **Multiple client secrets** — ask the user to keep exactly one `client_secret_*.json` in
-  `~/.secrets/`; the stored refresh token pairs with one OAuth client, so duplicates are refused
-  rather than guessed at.
-- **HTTP 403 from a Google API** — the API is not enabled for the user's Cloud project. The error
-  names the API; ask them to enable that one in the Cloud Console (APIs & Services → Library —
-  "Google Calendar API", "Google Tasks API", or "Google Drive API"), then retry. No re-link needed.
+- **Not linked / grant revoked** — ask the user to link (or re-link) the account from this app's
+  settings, then retry. Do NOT tell them to create a Google Cloud project, and do NOT try to
+  create or edit the token file yourself.
+- **Sign-in service unreachable / HTTP error** — the broker is down or the network is blocked.
+  It is only needed to link and to renew an expired access token; ask the user to retry shortly.
+  (A user with their own `~/.secrets/client_secret_*.json` never depends on it.)
+- **Multiple client secrets** — the user has several `client_secret_*.json` in `~/.secrets/`;
+  a stored refresh token pairs with exactly one OAuth client, so the choice is refused rather
+  than guessed at. Ask them to keep one — or remove all of them to use the default flow.
+- **HTTP 403 from a Google API** — the API is not enabled for the Cloud project behind the
+  client in use. With their own client, ask them to enable that API in the Cloud Console
+  (APIs & Services → Library — the error names it: "Google Calendar API", "Google Tasks API",
+  or "Google Drive API"), then retry — no re-link needed. On the default (broker) flow this
+  should not happen; report it rather than sending the user to the Console.
 - **Drive shows nothing / "I can't find the user's file"** — not an error. The app holds the
   `drive.file` scope, so it can only ever see files IT created; the user's wider Drive is
   invisible by design. Say so plainly instead of implying an empty Drive.
