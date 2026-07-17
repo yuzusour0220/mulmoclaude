@@ -1085,6 +1085,7 @@ async function updateBeat(index: number) {
     return;
   }
   const prevImage = JSON.stringify(effectiveBeat(index).image);
+  const prevText = effectiveBeat(index).text;
 
   const requestedFilePath = filePath.value;
   Reflect.deleteProperty(beatSaveErrors, index);
@@ -1107,6 +1108,24 @@ async function updateBeat(index: number) {
   if (JSON.stringify(beat.image) !== prevImage) {
     Reflect.deleteProperty(renderedImages, index);
     renderBeat(index);
+  }
+
+  // Audio files are content-addressed by the beat's text
+  // (getBeatAudioPathOrUrl hashes text + voice), so after a text edit
+  // the cached data URI belongs to the OLD narration. Drop it so the
+  // "Generate Audio" button reappears, then re-probe — if the new text
+  // matches previously generated audio (e.g. the edit was a revert),
+  // the probe restores Play without a paid TTS call.
+  if (beat.text !== prevText) {
+    // If this beat's old narration is mid-playback, stop it first —
+    // the deletes below remove the Play/Stop control from the row,
+    // which would otherwise leave the stale audio playing with no
+    // way to stop it (Codex review on #2143).
+    if (playingAudio.value?.index === index) stopAllPlayback();
+    Reflect.deleteProperty(beatAudios, index);
+    Reflect.deleteProperty(audioState, index);
+    Reflect.deleteProperty(audioErrors, index);
+    if (beat.text) void loadExistingBeatAudio(index);
   }
 }
 
