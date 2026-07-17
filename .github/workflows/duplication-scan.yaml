@@ -103,7 +103,9 @@ jobs:
             --output report
 
       - name: Upload SARIF to Code Scanning
-        uses: github/codeql-action/upload-sarif@v3
+        # Hash-pinned: .github/zizmor.yml grants a tag-pin exemption to
+        # `actions/*` only, and codeql-action lives under `github/*`.
+        uses: github/codeql-action/upload-sarif@b7351df727350dca84cb9d725d57dcf5bc82ba26  # v3.37.1
         with:
           sarif_file: report/jscpd-report.sarif
           # Distinct category keeps these alerts from colliding with the
