@@ -10,6 +10,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 ---
 
+## npm packages — 2026-07-17 (5)
+
+Package release riding PR #2133 (presentMulmoScript extraction, phases 1+2 of `plans/feat-mulmoscript-plugin.md`):
+
+- **`@mulmoclaude/mulmoscript-plugin@0.1.0`** — NEW shared package for the `presentMulmoScript` tool, extracted so MulmoTerminal can import it like `@mulmoclaude/{markdown,form,chart,html}-plugin` (phase 3 does that wiring). **Server core (`.`)**: tool definition, body validators (former `mulmoScriptValidate.ts`), and save / reopen / update-beat / update-script logic against the generic `files.artifacts` capability. **`./vue` + `./style.css`**: the 1,950-line storyboard View + Preview with their own 8-locale i18n; the View reaches every backend through kind-discriminated `useRuntime().dispatch` envelopes, hears generation progress on the plugin pubsub `generation` channel (SSE streams and the `useActiveSession()` watcher both retired; a `pendingGenerations` snapshot dispatch covers views mounted mid-generation), and takes host transport (`chatSessionId`, authenticated `fetchMediaBlob`) via the optional host-adapter injection. MulmoClaude's route bodies moved to shared ops (`mulmo-script-ops.ts`) backing both the legacy REST routes and the new dispatch handler. Review hardening on the way in: non-negative-integer `beatIndex` validation on both surfaces, string-typed query guards, realpath symlink containment restored host-side (`guardStoryWirePath`), edge-triggered (refcounted) generation events, and stale-response guards on every View probe/mutator.
+
+Hosts wiring the package's save/update executes must apply a realpath symlink-containment guard on wire paths — the package's own guard is lexical (see the phase-3 notes in the plan).
+
+---
+
 ## [1.2.0] - 2026-07-17
 
 **Google, without the setup.** Linking now takes a click and a consent screen — no Google Cloud project, no client JSON. And the agent can reach Tasks and Drive, not just Calendar.
