@@ -25,10 +25,14 @@ on:
   pull_request:
     branches:
       - main
-    # Dead exports can only change when source or the knip config changes.
+    # Dead exports can only change when an analyzed input changes. Keep this
+    # in sync with `knip.json`'s entry/project globs — notably `**/*.mjs`
+    # (scripts/ entry points) and tsconfig, which drives module resolution.
     paths:
       - '**/*.ts'
+      - '**/*.mjs'
       - '**/*.vue'
+      - '**/tsconfig*.json'
       - 'knip.json'
       - '.github/workflows/dead-code-scan.yaml'
   workflow_dispatch:
