@@ -137,20 +137,32 @@ package and the host became a consumer. The transport redesign:
   (`/api/plugins/runtime/mulmoScript/dispatch`) with kind-discriminated
   route mocks.
 
-## Phase 3 — heavy backends + MulmoTerminal wiring (follow-up PRs)
+## Phase 3a — ops into the package's `./server` entry (DONE)
 
-- Move probe/upload/generation orchestration into the package's server entry
-  (direct mulmocast dep), with progress + ffmpeg-probe + provider config
-  injected via a package-defined backend context.
+The entire ops layer (probes, renders, uploads, movie/PDF pipelines,
+generation tracker, dispatch router, `mulmoErrorCapture`, realpath
+containment) moved into `@mulmoclaude/mulmoscript-plugin/server` — a
+Node-only entry with `mulmocast` + `graphai` as peers. Host-specific
+transport is injected via `MulmoScriptServerBackend`: stories dir,
+artifacts FileOps, hardened atomic write, ffmpeg probe, logger, and the
+edge-triggered `onGenerationEvent` fan-out. MulmoClaude's binding lives in
+`server/plugins/mulmoscript-server.ts` (creates the instance, registers
+the built-in dispatch via the package's `createMulmoScriptDispatchHandler`,
+wires the pubsub publisher); the REST routes consume the same instance.
+`mulmo-script-ops.ts`, `mulmoscript-builtin.ts`,
+`events/mulmoscript-generation.ts`, and `utils/mulmoErrorCapture.ts` were
+deleted from the host.
+
+## Phase 3b — MulmoTerminal wiring (follow-up PR, other repo)
 - MulmoTerminal: add to `plugins.json` `packages`, a `server/backends/
   mulmoscript.ts` (like its `html.ts`, plus dedicated SSE/binary routes),
   mulmocast + ffmpeg + provider keys in its environment.
-- **Required:** MulmoTerminal must apply a realpath symlink-containment
-  guard on wire `filePath`s before invoking the package's save/reopen/
-  update executes (or use a realpath-checking FileOps). The package's own
-  guard is lexical, and the generic FileOps read/write follows symlinks —
-  MulmoClaude re-asserts the boundary host-side via `guardStoryWirePath`
-  (Codex P1 on #2133).
+- Realpath symlink containment (Codex P1 on #2133) is satisfied for free
+  by phase 3a: the package's dispatch handler guards the save/reopen/update
+  kinds with the instance's realpath-based `guardStoryWirePath` — any host
+  that registers `createMulmoScriptDispatchHandler` inherits it. A host
+  adding its OWN routes over the phase-1 core executes must still apply the
+  guard itself.
 
 ## Publish
 

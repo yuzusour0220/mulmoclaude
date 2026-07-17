@@ -48,10 +48,6 @@ import "./plugins/markdown-builtin.js";
 // Side-effect: registers the built-in "html" dispatch handler so the
 // presentHtml View's useRuntime().dispatch({ kind }) resolves (phase 2).
 import "./plugins/html-builtin.js";
-// Side-effect: registers the built-in "mulmoScript" dispatch handler so the
-// presentMulmoScript View's useRuntime().dispatch({ kind }) resolves
-// (plans/feat-mulmoscript-plugin.md phase 2).
-import "./plugins/mulmoscript-builtin.js";
 import { loadRuntimePlugins } from "./plugins/runtime-loader.js";
 import { evaluateDevPluginGate, loadDevPlugins, parseDevPluginsEnv } from "./plugins/dev-loader.js";
 import { watchDevPlugins } from "./plugins/dev-watcher.js";
@@ -79,7 +75,10 @@ import { readSessionJsonl, readSessionMeta } from "./utils/files/session-io.js";
 import { resolveBridgeSessionRole } from "./api/bridge/sessionRole.js";
 import { onSessionEvent, initSessionStore } from "./events/session-store/index.js";
 import { initFileChangePublisher } from "./events/file-change.js";
-import { initMulmoScriptGenerationPublisher } from "./events/mulmoscript-generation.js";
+// Importing also binds the shared mulmoScript server ops to this host's
+// backend and registers the built-in "mulmoScript" dispatch handler (side
+// effect at module load — plans/feat-mulmoscript-plugin.md phase 3).
+import { initMulmoScriptGenerationPublisher } from "./plugins/mulmoscript-server.js";
 import { initCollectionChangePublisher } from "./events/collection-change.js";
 import { getRole, loadAllRoles } from "./workspace/roles.js";
 import { discoverSkills } from "./workspace/skills/index.js";

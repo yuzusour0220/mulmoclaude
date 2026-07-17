@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { GraphAILogger } from "graphai";
 
-import { composeMulmoErrorMessage, describeMulmoCause, enableGraphAIErrorCapture, withMulmoErrorCapture } from "../../../server/utils/mulmoErrorCapture.ts";
+import { composeMulmoErrorMessage, describeMulmoCause, enableGraphAIErrorCapture, withMulmoErrorCapture } from "../src/server/mulmoErrorCapture";
 
 describe("describeMulmoCause", () => {
   it("returns null for non-Error values", () => {
