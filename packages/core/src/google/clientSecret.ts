@@ -17,9 +17,13 @@ export interface InstalledClientSecret {
   client_secret: string;
 }
 
+// Empty strings must not count: they would satisfy a `typeof` check, get
+// picked as the client, and fail at Google with an opaque invalid_client.
+const isNonEmptyString = (value: unknown): value is string => typeof value === "string" && value !== "";
+
 const isInstalledClientSecret = (value: unknown): value is { installed: InstalledClientSecret } => {
   if (!isRecord(value) || !isRecord(value.installed)) return false;
-  return typeof value.installed.client_id === "string" && typeof value.installed.client_secret === "string";
+  return isNonEmptyString(value.installed.client_id) && isNonEmptyString(value.installed.client_secret);
 };
 
 const isClientSecretFileName = (name: string): boolean => name.startsWith("client_secret_") && name.endsWith(".json");

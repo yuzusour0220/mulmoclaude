@@ -33,7 +33,26 @@ export interface BrokerStartResponse {
   state: string;
 }
 
+const LOOPBACK_HOSTNAMES = new Set(["127.0.0.1", "localhost", "::1", "[::1]"]);
+
+/** Codes, PKCE verifiers and refresh tokens travel to the broker, so cleartext
+ *  is refused outright — an override pointed at `http://…` would put them on
+ *  the wire. Loopback stays allowed: that is where tests stub the broker, and
+ *  it never leaves the machine. */
+const assertSecureBrokerUrl = (url: string): void => {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error(`invalid Google sign-in service URL: ${url}`);
+  }
+  if (parsed.protocol === "https:") return;
+  if (parsed.protocol === "http:" && LOOPBACK_HOSTNAMES.has(parsed.hostname)) return;
+  throw new Error(`the Google sign-in service must be reached over HTTPS (got ${parsed.protocol}//${parsed.host})`);
+};
+
 const brokerFetch = async (url: string, init: { method?: string; body?: string } = {}): Promise<unknown> => {
+  assertSecureBrokerUrl(url);
   let response: Response;
   try {
     response = await fetchWithTimeout(url, {

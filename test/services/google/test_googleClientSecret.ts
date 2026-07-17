@@ -108,3 +108,21 @@ describe("loadClientSecret", () => {
     await assert.rejects(loadClientSecret(home), /no desktop-app client_secret/);
   });
 });
+
+describe("empty credential fields", () => {
+  // These satisfy a typeof check but fail at Google with an opaque
+  // invalid_client, so they must not be selectable as a client.
+  it("does not count an installed shape with empty strings", async () => {
+    const home = await makeFakeHome({ "client_secret_empty.json": JSON.stringify({ installed: { client_id: "", client_secret: "" } }) });
+    assert.equal(await clientSecretPresence(home), "missing");
+  });
+
+  it("prefers a valid client over one with empty fields", async () => {
+    const home = await makeFakeHome({
+      "client_secret_a_empty.json": JSON.stringify({ installed: { client_id: "", client_secret: "" } }),
+      "client_secret_b_valid.json": desktopSecret,
+    });
+    assert.equal(await clientSecretPresence(home), "found");
+    assert.match(await findClientSecretPath(home), /client_secret_b_valid/);
+  });
+});

@@ -8,7 +8,7 @@ import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { authorizeGoogle, clientSecretPresence, googleSecretsDir } from "@mulmoclaude/core/google";
+import { authorizeGoogle, clientSecretPresence, getGoogleAccessToken, googleSecretsDir, googleTokenPath, saveGoogleTokens } from "@mulmoclaude/core/google";
 
 const desktopSecret = JSON.stringify({ installed: { client_id: "id-123", client_secret: "secret-456" } });
 
@@ -31,5 +31,27 @@ describe("authorizeGoogle client routing", () => {
     let issuedUrl: string | null = null;
     await assert.rejects(authorizeGoogle({ home, onAuthUrl: (url) => (issuedUrl = url), timeoutMs: 1_000 }), /multiple desktop-app client_secret/);
     assert.equal(issuedUrl, null);
+  });
+});
+
+// A local-issued token needs the client that minted it. The two ways that
+// client can go missing have different fixes, and telling the user the wrong
+// one costs them a re-consent they did not need.
+describe("getGoogleAccessToken guidance for a local-issued token", () => {
+  const saveLocalToken = async (home: string): Promise<void> => {
+    await mkdir(path.dirname(googleTokenPath(home)), { recursive: true });
+    await saveGoogleTokens({ refresh_token: "rt-local", issuedVia: "local" }, home);
+  };
+
+  it("points at the duplicate files when two desktop clients are present", async () => {
+    const home = await makeFakeHome({ "client_secret_a.json": desktopSecret, "client_secret_b.json": desktopSecret });
+    await saveLocalToken(home);
+    await assert.rejects(getGoogleAccessToken(home), /multiple desktop-app client_secret/);
+  });
+
+  it("asks for a re-link when the desktop client is gone entirely", async () => {
+    const home = await makeFakeHome();
+    await saveLocalToken(home);
+    await assert.rejects(getGoogleAccessToken(home), /link their Google account again/);
   });
 });

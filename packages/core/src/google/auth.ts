@@ -56,11 +56,16 @@ const persistRotatedTokens = (client: OAuth2Client, home?: string): void => {
 const REVOKED_GRANT_MESSAGE = "could not obtain a Google access token — the grant may have been revoked; re-link the account";
 
 const localAccessToken = async (saved: Credentials, home?: string): Promise<string> => {
-  // The saved token is bound to the client_id that minted it, so a link made
-  // with a since-removed desktop client cannot be renewed by anything else —
-  // including the broker. Re-linking is the only way out; say so, rather than
-  // letting the loader's "no desktop client" wording imply a setup problem.
-  if ((await clientSecretPresence(home)) !== "found") {
+  const presence = await clientSecretPresence(home);
+  // Two desktop clients: the token is still renewable — the engine just can't
+  // tell which client minted it. The fix is to remove the duplicate, so raise
+  // the loader's own wording rather than sending the user through a re-link.
+  if (presence === "ambiguous") await loadClientSecret(home);
+  // No client at all: the token is bound to the client_id that minted it, so
+  // nothing — not even the broker — can renew it. Re-linking is the only way
+  // out; the loader's "no desktop client" wording would read like a setup
+  // problem instead.
+  if (presence === "missing") {
     throw new Error(
       "the saved Google link was created with an OAuth client that is no longer configured on this host — ask the user to link their Google account again in this app's settings",
     );

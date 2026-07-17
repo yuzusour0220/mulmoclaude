@@ -164,3 +164,28 @@ describe("brokerRefresh", () => {
     }
   });
 });
+
+describe("broker transport safety", () => {
+  // Codes, PKCE verifiers and refresh tokens travel to these endpoints.
+  it("refuses a cleartext broker on a remote host", async () => {
+    await assert.rejects(brokerStart(51234, "c".repeat(43), "http://broker.example.test"), /must be reached over HTTPS/);
+  });
+
+  it("refuses cleartext for exchange and refresh too", async () => {
+    await assert.rejects(brokerExchange({ code: "c", state: "s", codeVerifier: "v" }, "http://broker.example.test"), /must be reached over HTTPS/);
+    await assert.rejects(brokerRefresh("rt", "http://broker.example.test"), /must be reached over HTTPS/);
+  });
+
+  it("allows loopback over http — it never leaves the machine (and is where tests stub it)", async () => {
+    const stub = await startStubBroker({ "/googleOAuthRefresh": { body: { access_token: "fresh" } } });
+    try {
+      assert.equal((await brokerRefresh("rt", stub.baseUrl)).access_token, "fresh");
+    } finally {
+      stub.close();
+    }
+  });
+
+  it("rejects a malformed override rather than guessing", async () => {
+    await assert.rejects(brokerStart(51234, "c".repeat(43), "not-a-url"), /invalid Google sign-in service URL/);
+  });
+});
