@@ -51,8 +51,6 @@ const presentHtmlPlugin: ToolPlugin<PresentHtmlData> = {
   viewComponent: wrapWithScope("html", View as unknown as Component),
   previewComponent: wrapWithScope("html", Preview as unknown as Component),
 };
-
-export default presentHtmlPlugin;
 export { TOOL_NAME };
 
 export const REGISTRATION: PluginRegistration = {

@@ -55,8 +55,6 @@ const generateImagePlugin: ToolPlugin<ImageToolData> = {
   viewComponent: wrapWithScope("image", View),
   previewComponent: wrapWithScope("image", Preview),
 };
-
-export default generateImagePlugin;
 export { TOOL_NAME };
 
 export const REGISTRATION: PluginRegistration = {

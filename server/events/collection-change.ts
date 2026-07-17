@@ -63,8 +63,3 @@ export function initCollectionChangePublisher(instance: IPubSub): void {
     }
   });
 }
-
-/** Detach the publisher (test teardown). No-op against an older package. */
-export function _resetCollectionChangePublisherForTesting(): void {
-  resolveSetPublisher()?.(null);
-}

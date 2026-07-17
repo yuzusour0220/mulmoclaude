@@ -34,8 +34,6 @@ const spreadsheetPlugin: ToolPlugin<SpreadsheetToolData> = {
   viewComponent: wrapWithScope("spreadsheet", View),
   previewComponent: wrapWithScope("spreadsheet", Preview),
 };
-
-export default spreadsheetPlugin;
 export { TOOL_NAME };
 
 export const REGISTRATION: PluginRegistration = {
