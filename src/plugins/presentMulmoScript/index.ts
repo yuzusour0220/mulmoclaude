@@ -98,8 +98,6 @@ const presentMulmoScriptPlugin: ToolPlugin<MulmoScriptData> = {
   previewComponent: wrapWithScope("mulmoScript", Preview as unknown as Component),
 };
 
-export default presentMulmoScriptPlugin;
-
 export const REGISTRATION: PluginRegistration = {
   toolName: TOOL_NAME,
   entry: presentMulmoScriptPlugin,

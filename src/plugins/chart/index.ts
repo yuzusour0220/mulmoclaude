@@ -46,8 +46,6 @@ const chartPlugin: ToolPlugin<PresentChartData> = {
   viewComponent: wrapWithScope("chart", View as unknown as Component),
   previewComponent: wrapWithScope("chart", Preview as unknown as Component),
 };
-
-export default chartPlugin;
 export { TOOL_NAME };
 
 export const REGISTRATION: PluginRegistration = {

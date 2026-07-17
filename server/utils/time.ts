@@ -47,6 +47,3 @@ export const SUBPROCESS_WORK_TIMEOUT_MS = ONE_MINUTE_MS;
 
 /** CLI subprocess timeout (claude -p for summarization, etc.) */
 export const CLI_SUBPROCESS_TIMEOUT_MS = 5 * ONE_MINUTE_MS;
-
-/** Maximum one-shot notification delay */
-export const MAX_NOTIFICATION_DELAY_SEC = 3_600; // 1 hour in seconds

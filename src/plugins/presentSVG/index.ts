@@ -39,8 +39,6 @@ const presentSvgPlugin: ToolPlugin<PresentSvgData> = {
   viewComponent: wrapWithScope("svg", View),
   previewComponent: wrapWithScope("svg", Preview),
 };
-
-export default presentSvgPlugin;
 export { TOOL_NAME };
 
 export const REGISTRATION: PluginRegistration = {
