@@ -215,6 +215,13 @@ export function createMulmoScriptServerOps(backend: MulmoScriptServerBackend) {
     const STORIES_PREFIX = `stories${path.sep}`;
     const relFromStories =
       wirePath === "stories" ? "" : wirePath.startsWith(STORIES_PREFIX) || wirePath.startsWith("stories/") ? wirePath.slice("stories/".length) : wirePath;
+    // A base path with no remainder ("stories", "artifacts/stories",
+    // trailing-slash variants) would resolve to the stories directory
+    // itself and hand downstream ops a directory where they expect a
+    // file — reject it, mirroring normalizeStoryPath's non-empty rule.
+    if (relFromStories === "") {
+      return opBadRequest("Invalid filePath");
+    }
     // resolveWithinRoot enforces both the realpath boundary AND
     // existence; ENOENT and traversal both produce null. Distinguish
     // them via a follow-up existsSync so 404 vs 400 stays accurate —

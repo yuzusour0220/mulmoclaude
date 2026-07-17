@@ -381,4 +381,13 @@ describe("resolveStory — wire path spellings", () => {
     assert.ok(!resolved.ok);
     assert.equal(resolved.code, "not_found");
   });
+
+  it("rejects base directory spellings with no file remainder", () => {
+    const ops = makeRealOps();
+    for (const spelling of ["stories", "stories/", "artifacts/stories", "artifacts/stories/"]) {
+      const resolved = ops.resolveStory(spelling);
+      assert.ok(!resolved.ok, `expected ${spelling} to be rejected`);
+      assert.equal(resolved.code, "bad_request");
+    }
+  });
 });
