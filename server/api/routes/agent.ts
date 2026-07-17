@@ -328,10 +328,10 @@ async function persistUserTurn(params: StartChatParams, ctx: { isFirstTurn: bool
   return validOrigin;
 }
 
-// Build the LLM-bound message (journal pointer + attached-file
-// markers) and kick off the detached background agent run. The
-// background run itself is fire-and-forget; this awaits only the
-// claudeSessionId read that must precede it.
+// Build the LLM-bound message (see decorateMessageForCli) and kick
+// off the detached background agent run. The background run itself is
+// fire-and-forget; this awaits only the claudeSessionId read that must
+// precede it (its presence decides whether the journal pointer is added).
 async function dispatchAgentRun(
   params: StartChatParams,
   ctx: { extras: RequestExtras; resultsFilePath: string; abortController: AbortController; validOrigin: SessionOrigin | undefined },
@@ -350,8 +350,12 @@ async function dispatchAgentRun(
     resumed: Boolean(claudeSessionId),
   });
 
-  const baseMessage = claudeSessionId ? message : prependJournalPointer(message, workspacePath);
-  const decoratedMessage = withAttachedFileMarker(baseMessage, extras.attachedFilePaths);
+  const decoratedMessage = decorateMessageForCli({
+    message,
+    workspaceDir: workspacePath,
+    attachedFilePaths: extras.attachedFilePaths,
+    resumed: Boolean(claudeSessionId),
+  });
 
   runAgentInBackground({
     decoratedMessage,
@@ -577,7 +581,9 @@ async function loadImageFromPath(value: string, declaredMimeType: string | undef
 // CodeRabbit review on #1045.
 const UNSAFE_MARKER_CHARS_RE = /[\r\n\]]/;
 
-/** Marker prepended to the LLM-bound user message that tells the
+type MarkerPosition = "prepend" | "append";
+
+/** Marker attached to the LLM-bound user message that tells the
  *  model which workspace files are attached / selected for this turn.
  *  One `[Attached file: <path>]` line is emitted per path so multi-
  *  file flows (e.g. paste one image + pick another → "combine these")
@@ -585,12 +591,31 @@ const UNSAFE_MARKER_CHARS_RE = /[\r\n\]]/;
  *  full list in `imagePaths`. The user's persisted (jsonl) and
  *  broadcast (UI) message is the raw text — these marker lines are
  *  added strictly on the path to Claude. The system prompt teaches
- *  the model how to interpret them. */
-export function withAttachedFileMarker(message: string, attachedFilePaths: string[]): string {
+ *  the model how to interpret them.
+ *
+ *  `position` defaults to `"prepend"`; a command turn passes `"append"`
+ *  so the leading `/` stays at position 0 (see `decorateMessageForCli`). */
+export function withAttachedFileMarker(message: string, attachedFilePaths: string[], position: MarkerPosition = "prepend"): string {
   const safePaths = attachedFilePaths.filter((relPath) => !UNSAFE_MARKER_CHARS_RE.test(relPath));
   if (safePaths.length === 0) return message;
   const markerLines = safePaths.map((relPath) => `[Attached file: ${relPath}]`).join("\n");
-  return `${markerLines}\n\n${message}`;
+  return position === "append" ? `${message}\n\n${markerLines}` : `${markerLines}\n\n${message}`;
+}
+
+/** Build the CLI-bound message, preserving a leading `/` as the CLI's
+ *  deterministic slash-command trigger. The CLI resolves a slash command
+ *  only when the message STARTS with `/name`; any decoration pushed in
+ *  front of it silently drops skill selection back to the model guessing
+ *  from descriptions (#2134). A slash-first message is a command, not an
+ *  open question — so skip the journal pointer (prior-session context is
+ *  irrelevant to a command) and append the file markers after the body
+ *  instead of prepending. Detection is position-0 `startsWith` to match
+ *  the CLI; the collection UI and manual entry emit no leading whitespace. */
+export function decorateMessageForCli(args: { message: string; workspaceDir: string; attachedFilePaths: string[]; resumed: boolean }): string {
+  const { message, workspaceDir, attachedFilePaths, resumed } = args;
+  const isCommand = message.startsWith("/");
+  const base = resumed || isCommand ? message : prependJournalPointer(message, workspaceDir);
+  return withAttachedFileMarker(base, attachedFilePaths, isCommand ? "append" : "prepend");
 }
 
 // ── HTTP route ──────────────────────────────────────────────────────

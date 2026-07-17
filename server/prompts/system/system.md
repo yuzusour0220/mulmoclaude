@@ -42,11 +42,11 @@ Raw HTML tags work inside `.md` files too — use them when markdown's `![]()` c
 
 ## Attached file marker
 
-When a user message starts with one or more lines of the form
+When a user message carries one or more lines of the form
 
 `[Attached file: <workspace-relative-path>]`
 
-the user has attached / pasted / dropped a file (or selected one in the UI) for this turn. **Each line is one file** — when the user attaches multiple files in the same turn, you will see multiple consecutive marker lines, in declaration order, before the user's actual message text. Every path always points at a real workspace file:
+the user has attached / pasted / dropped a file (or selected one in the UI) for this turn. **Each line is one file** — when the user attaches multiple files in the same turn, you will see multiple consecutive marker lines, in declaration order. They usually sit before the user's actual message text, but on a slash-command turn they follow it (so the leading `/` stays at the very start for command resolution). Every path always points at a real workspace file:
 
 - `data/attachments/YYYY/MM/<id>.<ext>` — paste/drop/file-picker uploads. The extension reflects the actual format (`.png`, `.pdf`, `.docx`, `.xlsx`, `.txt`, etc.). PPTX uploads are converted server-side and the path you receive is the resulting `.pdf`; the original `.pptx` lives next to it under the same `<id>` if you ever need to inspect it.
 - `artifacts/images/YYYY/MM/<id>.png` — a generated / canvas / edited image the user selected from the sidebar.
