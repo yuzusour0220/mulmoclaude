@@ -56,6 +56,15 @@ const persistRotatedTokens = (client: OAuth2Client, home?: string): void => {
 const REVOKED_GRANT_MESSAGE = "could not obtain a Google access token — the grant may have been revoked; re-link the account";
 
 const localAccessToken = async (saved: Credentials, home?: string): Promise<string> => {
+  // The saved token is bound to the client_id that minted it, so a link made
+  // with a since-removed desktop client cannot be renewed by anything else —
+  // including the broker. Re-linking is the only way out; say so, rather than
+  // letting the loader's "no desktop client" wording imply a setup problem.
+  if ((await clientSecretPresence(home)) !== "found") {
+    throw new Error(
+      "the saved Google link was created with an OAuth client that is no longer configured on this host — ask the user to link their Google account again in this app's settings",
+    );
+  }
   const client = createClient(await loadClientSecret(home));
   client.setCredentials(saved);
   persistRotatedTokens(client, home);
@@ -230,8 +239,16 @@ const authorizeWithBroker = async (server: http.Server, port: number, opts: Auth
 
 export async function authorizeGoogle(opts: AuthorizeGoogleOptions = {}): Promise<Credentials> {
   // A user-supplied client wins: it keeps the whole flow on this machine, and
-  // silently preferring the broker would ignore a deliberate setup.
-  const useLocalClient = (await clientSecretPresence(opts.home)) === "found";
+  // silently preferring the broker would ignore a deliberate setup. Two of
+  // them is unresolvable rather than a reason to fall back — the user meant to
+  // use one of theirs, and a broker link would quietly not be it.
+  const presence = await clientSecretPresence(opts.home);
+  if (presence === "ambiguous") {
+    // Same wording the loader raises, so the CLI and the settings UI (which
+    // disables linking in this state) agree on the fix.
+    await loadClientSecret(opts.home);
+  }
+  const useLocalClient = presence === "found";
   const { server, port } = await startLoopbackServer();
   try {
     const issuedVia: IssuedVia = useLocalClient ? "local" : "broker";
