@@ -10,6 +10,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 ---
 
+## npm packages — 2026-07-17 (8)
+
+- **`@mulmoclaude/mulmoscript-plugin@0.2.2`** — presentMulmoScript: updating a beat's `text` via the per-beat JSON source editor now drops that beat's cached narration audio, so the "Generate Audio" button reappears for the new text (previously only Play showed, with no way to re-generate). Audio files are content-addressed by text hash, so the view re-probes disk after the edit — reverting the text restores the existing audio without a paid TTS call.
+
+---
+
 ## npm packages — 2026-07-17 (7)
 
 presentMulmoScript `filePath` base clarified (the wire form `stories/<name>.json` has been **artifacts-relative, not workspace-relative**, ever since #284 moved the stories dir to `artifacts/stories/` — the tool description was never updated):
