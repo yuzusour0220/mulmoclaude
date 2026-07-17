@@ -9,6 +9,7 @@
 // below therefore return one path used for both purposes.
 
 const STORIES_DIR = "stories";
+const ARTIFACTS_DIR = "artifacts";
 const MAX_SLUG_LEN = 120;
 
 /** Lowercase-hyphen slug, capped at MAX_SLUG_LEN, with leading/trailing
@@ -38,12 +39,17 @@ export function storyFilePath(slugSource: string, now: Date = new Date()): strin
 
 /**
  * Normalize a caller-supplied wire path to the canonical
- * `stories/<rel>` form, or null when it can't be trusted. Accepts both the
- * canonical `stories/foo.json` convention and bare `foo.json` (the host route
- * historically allowed either). Rejects absolute paths, backslashes, and any
- * empty / `.` / `..` segment — the lexical guard before every
- * `files.artifacts` read/write (FileOps re-checks containment as
- * defence-in-depth).
+ * `stories/<rel>` form, or null when it can't be trusted. Accepts the
+ * canonical `stories/foo.json` convention, bare `foo.json` (the host route
+ * historically allowed either), and the workspace-relative spelling
+ * `artifacts/stories/foo.json` — the tool description called `filePath`
+ * "workspace-relative" for a long time, so agents legitimately send it.
+ * A leading `artifacts` segment is dropped only when `stories` follows;
+ * a bare `artifacts/foo.json` keeps its historical meaning (a file named
+ * `artifacts/foo.json` under the stories dir). Rejects absolute paths,
+ * backslashes, and any empty / `.` / `..` segment — the lexical guard
+ * before every `files.artifacts` read/write (FileOps re-checks
+ * containment as defence-in-depth).
  */
 export function normalizeStoryPath(filePath: string): string | null {
   if (filePath.length === 0 || filePath.includes("\\")) return null;
@@ -51,7 +57,8 @@ export function normalizeStoryPath(filePath: string): string | null {
   if (filePath.startsWith("/") || /^[A-Za-z]:/.test(filePath)) return null;
   const segments = filePath.split("/");
   if (segments.some((seg) => seg === "" || seg === "." || seg === "..")) return null;
-  const rest = segments[0] === STORIES_DIR ? segments.slice(1) : segments;
+  const trimmed = segments[0] === ARTIFACTS_DIR && segments[1] === STORIES_DIR ? segments.slice(1) : segments;
+  const rest = trimmed[0] === STORIES_DIR ? trimmed.slice(1) : trimmed;
   if (rest.length === 0) return null;
   return [STORIES_DIR, ...rest].join("/");
 }

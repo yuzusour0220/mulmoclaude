@@ -1,5 +1,8 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { mkdirSync, mkdtempSync, writeFileSync } from "fs";
+import { tmpdir } from "os";
+import path from "path";
 import type { FileOps } from "gui-chat-protocol";
 import type { MulmoBeat } from "@mulmocast/types";
 import { buildBeatIdIndex, createMulmoScriptServerOps, type StoryContext } from "../src/server/ops";
@@ -233,6 +236,34 @@ describe("generation tracker — edge-triggered publish + snapshot", () => {
     assert.deepEqual(events, [true]);
   });
 
+  it("keys tracker state and events on the canonical wire path for alias spellings", () => {
+    const events: string[] = [];
+    const ops = createMulmoScriptServerOps({
+      storiesDir: "/nonexistent/for-tests/artifacts/stories",
+      artifacts: stubFileOps,
+      writeFileAtomic: async () => {},
+      onGenerationEvent: (_sessionId, event) => events.push(event.filePath),
+    });
+    // Start under the artifacts/stories alias: the event and the
+    // snapshot must both surface the canonical form so canonical
+    // subscribers (the View) see them.
+    ops.publishGeneration(undefined, "beatImage", "artifacts/stories/x.json", "3", false);
+    assert.deepEqual(events, ["stories/x.json"]);
+    assert.deepEqual(ops.pendingGenerations("stories/x.json"), [{ kind: "beatImage", filePath: "stories/x.json", key: "3", done: false }]);
+    // The snapshot filter accepts the alias too.
+    assert.equal(ops.pendingGenerations("artifacts/stories/x.json").length, 1);
+
+    // A canonical-spelled start of the SAME work item dedupes against the
+    // alias-spelled one (same physical generation), and its finish
+    // clears the shared entry.
+    ops.publishGeneration(undefined, "beatImage", "stories/x.json", "3", false); // duplicate start — suppressed
+    assert.equal(events.length, 1);
+    ops.publishGeneration(undefined, "beatImage", "stories/x.json", "3", true); // first finish — suppressed
+    ops.publishGeneration(undefined, "beatImage", "artifacts/stories/x.json", "3", true); // last finish — published, canonical
+    assert.deepEqual(events, ["stories/x.json", "stories/x.json"]);
+    assert.equal(ops.pendingGenerations("stories/x.json").length, 0);
+  });
+
   it("dedupes the same physical work item across different chat sessions", () => {
     // The tracker keys on kind/filePath/key ONLY — two sessions rendering
     // the same beat of the same file are the same physical generation, so
@@ -313,5 +344,50 @@ describe("buildBeatIdIndex", () => {
     const index = buildBeatIdIndex(beats("dup", "dup"));
     assert.equal(index.size, 1);
     assert.equal(index.get("dup"), 1);
+  });
+});
+
+describe("resolveStory — wire path spellings", () => {
+  // Real temp dir: resolveStory realpaths the stories dir and requires
+  // the target to exist, so the stub storiesDir used above won't do.
+  function makeRealOps() {
+    const workspace = mkdtempSync(path.join(tmpdir(), "mulmoscript-resolve-"));
+    const storiesDir = path.join(workspace, "artifacts", "stories");
+    mkdirSync(storiesDir, { recursive: true });
+    writeFileSync(path.join(storiesDir, "foo.json"), "{}");
+    return createMulmoScriptServerOps({ storiesDir, artifacts: stubFileOps, writeFileAtomic: async () => {} });
+  }
+
+  it("resolves canonical, bare, and workspace-relative spellings to the same file", () => {
+    const ops = makeRealOps();
+    const canonical = ops.resolveStory("stories/foo.json");
+    assert.ok(canonical.ok);
+    for (const spelling of ["foo.json", "artifacts/stories/foo.json"]) {
+      const resolved = ops.resolveStory(spelling);
+      assert.ok(resolved.ok, `expected ${spelling} to resolve`);
+      assert.equal(resolved.absolutePath, canonical.absolutePath);
+    }
+  });
+
+  it("still rejects traversal under the artifacts/stories spelling", () => {
+    const ops = makeRealOps();
+    const resolved = ops.resolveStory("artifacts/stories/../../secret.json");
+    assert.equal(resolved.ok, false);
+  });
+
+  it("404s a missing file under the artifacts/stories spelling", () => {
+    const ops = makeRealOps();
+    const resolved = ops.resolveStory("artifacts/stories/missing.json");
+    assert.ok(!resolved.ok);
+    assert.equal(resolved.code, "not_found");
+  });
+
+  it("rejects base directory spellings with no file remainder", () => {
+    const ops = makeRealOps();
+    for (const spelling of ["stories", "stories/", "artifacts/stories", "artifacts/stories/"]) {
+      const resolved = ops.resolveStory(spelling);
+      assert.ok(!resolved.ok, `expected ${spelling} to be rejected`);
+      assert.equal(resolved.code, "bad_request");
+    }
   });
 });

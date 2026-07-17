@@ -38,6 +38,19 @@ describe("normalizeStoryPath", () => {
     assert.equal(normalizeStoryPath("stories/__movies__/bar.mp4"), "stories/__movies__/bar.mp4");
   });
 
+  it("accepts the workspace-relative artifacts/stories/ spelling", () => {
+    assert.equal(normalizeStoryPath("artifacts/stories/foo.json"), "stories/foo.json");
+    assert.equal(normalizeStoryPath("artifacts/stories/__movies__/bar.mp4"), "stories/__movies__/bar.mp4");
+  });
+
+  it("keeps a bare artifacts/ segment as a name under stories/", () => {
+    assert.equal(normalizeStoryPath("artifacts/foo.json"), "stories/artifacts/foo.json");
+  });
+
+  it("rejects artifacts/stories with no remainder", () => {
+    assert.equal(normalizeStoryPath("artifacts/stories"), null);
+  });
+
   it("rejects traversal, absolute, and non-canonical segments", () => {
     assert.equal(normalizeStoryPath("../secrets.json"), null);
     assert.equal(normalizeStoryPath("stories/../../etc/passwd"), null);

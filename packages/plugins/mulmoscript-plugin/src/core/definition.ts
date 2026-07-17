@@ -3,9 +3,9 @@ import type { ToolDefinition } from "gui-chat-protocol";
 export const TOOL_NAME = "presentMulmoScript";
 
 // Single source of truth for the presentMulmoScript tool schema, shared by
-// MulmoClaude (host built-in shim re-exports this) and MulmoTerminal. Kept
-// byte-identical to the former host definition so neither app's MCP surface
-// shifts on extraction.
+// MulmoClaude (host built-in shim re-exports this) and MulmoTerminal.
+// (Extracted byte-identical from the host definition; evolves here with the
+// package version.)
 export const TOOL_DEFINITION: ToolDefinition = {
   type: "function",
   name: TOOL_NAME,
@@ -14,7 +14,7 @@ export const TOOL_DEFINITION: ToolDefinition = {
 Two modes — provide EXACTLY ONE of \`script\` or \`filePath\`:
 
 1. **Create new** — pass \`script\` (full MulmoScript JSON). Server saves it to disk and presents it.
-2. **Re-display existing** — pass \`filePath\` (workspace-relative path returned by a previous call, e.g. "stories/my-story-1700000000000.json"). Much cheaper than re-sending the full script. Use whenever the user wants to revisit a presentation that was already created in this workspace.
+2. **Re-display existing** — pass \`filePath\` (the \`filePath\` returned by a previous call, e.g. "stories/my-story-1700000000000.json"; it is resolved against the workspace's \`artifacts/\` directory, NOT the workspace root). Much cheaper than re-sending the full script. Use whenever the user wants to revisit a presentation that was already created in this workspace.
 
 Optional \`autoGenerateMovie: true\` kicks off movie generation in the background, so the final video is ready by the time the user opens the canvas. Movie generation is expensive (multiple image + audio API calls + video encoding) — only set this when the user has explicitly asked for the movie. Default \`false\`.
 
@@ -108,7 +108,7 @@ IMPORTANT: "imagePrompt" and "moviePrompt" are plain string fields on the beat, 
       filePath: {
         type: "string",
         description:
-          "Workspace-relative path to an EXISTING MulmoScript JSON file (e.g. 'stories/my-story-1700000000000.json'). Use this to re-display a script previously saved in this workspace, instead of resending the full JSON. Do NOT pass alongside `script`.",
+          "Path of an EXISTING MulmoScript JSON file, as returned by a previous call (e.g. 'stories/my-story-1700000000000.json'). Resolved against the workspace's `artifacts/` directory, not the workspace root ('artifacts/stories/…' is also accepted). Use this to re-display a script previously saved in this workspace, instead of resending the full JSON. Do NOT pass alongside `script`.",
       },
       autoGenerateMovie: {
         type: "boolean",

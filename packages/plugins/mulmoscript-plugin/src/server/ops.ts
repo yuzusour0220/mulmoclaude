@@ -42,6 +42,7 @@ import {
 } from "mulmocast";
 import type { MulmoBeat, MulmoImagePromptMedia, MulmoStudioContext } from "@mulmocast/types";
 import type { MulmoScriptGenerationEvent } from "../core/contract";
+import { normalizeStoryPath } from "../core/paths";
 import { errorText, fileToDataUri, resolveWithinRoot, stripDataUri } from "./support";
 import { enableGraphAIErrorCapture, setMulmoErrorCaptureLogger, withMulmoErrorCapture } from "./mulmoErrorCapture";
 import type {
@@ -185,7 +186,7 @@ export function createMulmoScriptServerOps(backend: MulmoScriptServerBackend) {
    * Resolve and validate a stories wire path to its absolute realpath.
    *
    * Uses the realpath-based resolveWithinRoot helper to defeat
-   * symlink-based escapes. Callers pass workspace-relative paths like
+   * symlink-based escapes. Callers pass wire paths like
    * "stories/foo.json" or "stories/__movies__/bar.mp4". We strip the
    * leading "stories/" segment and resolve the remainder against the
    * realpath of the stories directory itself — this works whether
@@ -202,12 +203,25 @@ export function createMulmoScriptServerOps(backend: MulmoScriptServerBackend) {
     if (path.isAbsolute(filePath)) {
       return opBadRequest("Invalid filePath");
     }
+    // Accept the workspace-relative spelling "artifacts/stories/<rel>"
+    // the tool description historically taught (the wire form was truly
+    // workspace-relative before the stories dir moved under artifacts/
+    // in #284) by reducing it to the canonical "stories/<rel>".
+    const ARTIFACTS_STORIES = "artifacts/stories";
+    const wirePath = filePath === ARTIFACTS_STORIES || filePath.startsWith(`${ARTIFACTS_STORIES}/`) ? filePath.slice("artifacts/".length) : filePath;
     // Strip the optional "stories/" prefix so the remainder is a path
     // relative to storiesReal. Accepts both "stories/foo.json" (the
     // canonical caller convention) and bare "foo.json".
     const STORIES_PREFIX = `stories${path.sep}`;
     const relFromStories =
-      filePath === "stories" ? "" : filePath.startsWith(STORIES_PREFIX) || filePath.startsWith("stories/") ? filePath.slice("stories/".length) : filePath;
+      wirePath === "stories" ? "" : wirePath.startsWith(STORIES_PREFIX) || wirePath.startsWith("stories/") ? wirePath.slice("stories/".length) : wirePath;
+    // A base path with no remainder ("stories", "artifacts/stories",
+    // trailing-slash variants) would resolve to the stories directory
+    // itself and hand downstream ops a directory where they expect a
+    // file — reject it, mirroring normalizeStoryPath's non-empty rule.
+    if (relFromStories === "") {
+      return opBadRequest("Invalid filePath");
+    }
     // resolveWithinRoot enforces both the realpath boundary AND
     // existence; ENOENT and traversal both produce null. Distinguish
     // them via a follow-up existsSync so 404 vs 400 stays accurate —
@@ -271,8 +285,19 @@ export function createMulmoScriptServerOps(backend: MulmoScriptServerBackend) {
   // completion pulses) always publishes.
   const inFlightGenerations = new Map<string, { kind: GenerationKind; filePath: string; key: string; count: number }>();
 
+  /** Tracker state and events key on the canonical `stories/<rel>` wire
+   *  form: subscribers (the View's pubsub filter, `pendingGenerations`
+   *  callers) match by exact string, so the accepted alias spellings
+   *  (`artifacts/stories/<rel>`, bare `<rel>`) must collapse to the same
+   *  key as the canonical one (Codex P2 on #2139). Untrusted spellings
+   *  pass through unchanged — they never resolve, so they can't collide. */
+  function canonicalWirePath(filePath: string): string {
+    return normalizeStoryPath(filePath) ?? filePath;
+  }
+
   function publishGeneration(chatSessionId: string | undefined, kind: GenerationKind, filePath: string, key: string, finished: boolean, error?: string): void {
-    const mapKey = generationMapKey(kind, filePath, key);
+    const wirePath = canonicalWirePath(filePath);
+    const mapKey = generationMapKey(kind, wirePath, key);
     const existing = inFlightGenerations.get(mapKey);
     if (finished) {
       if (existing && existing.count > 1) {
@@ -285,16 +310,19 @@ export function createMulmoScriptServerOps(backend: MulmoScriptServerBackend) {
         existing.count += 1;
         return; // already reported as started
       }
-      inFlightGenerations.set(mapKey, { kind, filePath, key, count: 1 });
+      inFlightGenerations.set(mapKey, { kind, filePath: wirePath, key, count: 1 });
     }
-    const event: MulmoScriptGenerationEvent = { kind, filePath, key, done: finished, ...(error ? { error } : {}) };
+    const event: MulmoScriptGenerationEvent = { kind, filePath: wirePath, key, done: finished, ...(error ? { error } : {}) };
     backend.onGenerationEvent?.(chatSessionId, event);
   }
 
   /** Snapshot of generations currently in flight for one script — the
    *  View's mount-time catch-up, filtered to its wire `filePath`. */
   function pendingGenerations(filePath: string): MulmoScriptGenerationEvent[] {
-    return [...inFlightGenerations.values()].filter((entry) => entry.filePath === filePath).map(({ kind, key }) => ({ kind, filePath, key, done: false }));
+    const wirePath = canonicalWirePath(filePath);
+    return [...inFlightGenerations.values()]
+      .filter((entry) => entry.filePath === wirePath)
+      .map(({ kind, key }) => ({ kind, filePath: wirePath, key, done: false }));
   }
 
   // ── Op scaffolding ────────────────────────────────────────────
