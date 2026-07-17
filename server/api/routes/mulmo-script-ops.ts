@@ -138,11 +138,15 @@ export function resolveStory(filePath: string): { ok: true; absolutePath: string
     filePath === "stories" ? "" : filePath.startsWith(STORIES_PREFIX) || filePath.startsWith("stories/") ? filePath.slice("stories/".length) : filePath;
   // resolveWithinRoot enforces both the realpath boundary AND
   // existence; ENOENT and traversal both produce null. Distinguish
-  // them via a follow-up existsSync so 404 vs 400 stays accurate.
+  // them via a follow-up existsSync so 404 vs 400 stays accurate —
+  // but only consult the filesystem for lexically in-root candidates:
+  // a traversal path must never touch the fs (and gets a uniform
+  // bad_request so responses don't leak existence outside the root).
   const resolved = resolveWithinRoot(storiesReal, relFromStories);
   if (!resolved) {
     const candidate = path.resolve(storiesReal, relFromStories);
-    if (!existsSync(candidate)) {
+    const inRoot = candidate === storiesReal || candidate.startsWith(storiesReal + path.sep);
+    if (inRoot && !existsSync(candidate)) {
       return opNotFound(`File not found: ${filePath}`);
     }
     return opBadRequest("Invalid filePath");

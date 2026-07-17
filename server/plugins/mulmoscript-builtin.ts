@@ -67,8 +67,12 @@ function str(value: unknown): string | undefined {
   return typeof value === "string" && value !== "" ? value : undefined;
 }
 
+// Beat indexes must be non-negative integers — reject `-1` / `1.5` at the
+// dispatch boundary so invalid client input surfaces as a deterministic
+// bad_request instead of leaking into beat-indexed ops (where it would
+// index undefined beats and bubble up as server_error). Codex review.
 function num(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+  return typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : undefined;
 }
 
 interface BeatArgs {

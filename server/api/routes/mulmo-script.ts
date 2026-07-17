@@ -100,9 +100,18 @@ interface FilePathQuery {
   filePath?: string;
 }
 
+// Query params arrive as `string | string[] | …` at runtime (repeated
+// `?filePath=` keys become arrays); the typeof guards reject non-string
+// shapes before they can reach any path logic (CodeQL
+// js/type-confusion-through-parameter-tampering).
+function stringQuery(value: unknown): string | null {
+  return typeof value === "string" && value !== "" ? value : null;
+}
+
 function parseBeatQuery<TRes>(req: Request<object, TRes, object, BeatQuery>, res: Response): { filePath: string; beatIndex: number } | null {
-  const { filePath, beatIndex: beatIndexStr } = req.query;
-  const beatIndex = beatIndexStr !== undefined ? parseInt(beatIndexStr, 10) : undefined;
+  const filePath = stringQuery(req.query.filePath);
+  const beatIndexStr = stringQuery(req.query.beatIndex);
+  const beatIndex = beatIndexStr !== null ? parseInt(beatIndexStr, 10) : undefined;
   if (!filePath || beatIndex === undefined || isNaN(beatIndex)) {
     badRequest(res, "filePath and beatIndex are required");
     return null;
@@ -192,7 +201,7 @@ bindRoute(
   router,
   API_ROUTES.mulmoScript.movieStatus,
   async (req: Request<object, MovieStatusResponse, object, FilePathQuery>, res: Response<MovieStatusResponse>) => {
-    const { filePath } = req.query;
+    const filePath = stringQuery(req.query.filePath);
     if (!filePath) {
       badRequest(res, "filePath is required");
       return;
@@ -346,7 +355,8 @@ bindRoute(
   router,
   API_ROUTES.mulmoScript.characterImage,
   async (req: Request<object, CharacterImageResponse, object, CharacterImageQuery>, res: Response<CharacterImageResponse>) => {
-    const { filePath, key } = req.query;
+    const filePath = stringQuery(req.query.filePath);
+    const key = stringQuery(req.query.key);
     if (!filePath || !key) {
       badRequest(res, "filePath and key are required");
       return;
@@ -432,7 +442,7 @@ bindRoute(
   router,
   API_ROUTES.mulmoScript.pdfStatus,
   async (req: Request<object, PdfStatusResponse, object, FilePathQuery>, res: Response<PdfStatusResponse>) => {
-    const { filePath } = req.query;
+    const filePath = stringQuery(req.query.filePath);
     if (!filePath) {
       badRequest(res, "filePath is required");
       return;
