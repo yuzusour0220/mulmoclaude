@@ -12,7 +12,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import type { ToolResultComplete } from "gui-chat-protocol/vue";
-import type { MulmoScriptData } from "./index";
+import type { MulmoScriptData } from "../core/types";
 
 const props = defineProps<{ result: ToolResultComplete<MulmoScriptData> }>();
 

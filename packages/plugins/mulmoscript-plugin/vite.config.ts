@@ -1,33 +1,37 @@
 import { defineConfig } from "vite";
-import dts from "vite-plugin-dts";
+import vue from "@vitejs/plugin-vue";
+import tailwindcss from "@tailwindcss/vite";
+import { resolve } from "node:path";
 
-// Phase-1 server-only plugin: one entry, no Vue (mirrors x-plugin's build).
-// The core deliberately uses NO Node built-ins (chart/html precedent) so the
-// host's client-side definition shim can import TOOL_DEFINITION from `.`
-// without dragging server code into the browser bundle. `@mulmocast/types`
-// carries the zod schemas and is a runtime import — externalized so both
-// hosts resolve their own copy (version lockstep with `mulmocast`).
+// Two entries: the server-facing `.` core (save/update executes + tool
+// definition, imported by the host server build) and the browser `./vue`
+// (View/Preview). `vue` + `gui-chat-protocol/vue` are externalised so the
+// plugin and host share ONE instance (the injected PLUGIN_RUNTIME_KEY Symbol
+// must match); `@mulmocast/*` are externalised so both hosts resolve their
+// own copies (version lockstep with `mulmocast`). Mirrors html-plugin's
+// config. Declarations are emitted by vue-tsc (tsconfig.build.json) because
+// vite-plugin-dts and the Vue SFC transform disagree about .vue d.ts paths.
 export default defineConfig({
-  plugins: [
-    dts({
-      include: ["src/**/*.ts"],
-      outDir: "dist",
-      compilerOptions: { rootDir: "src" },
-    }),
-  ],
+  plugins: [vue(), tailwindcss()],
   build: {
     lib: {
-      entry: { index: "src/index.ts" },
-      // Dual ESM + CJS so `require("@mulmoclaude/mulmoscript-plugin")` works
-      // under the host's Docker CJS mode (the package.json `require`
-      // condition points at the .cjs artifact). Named exports only.
+      entry: {
+        index: resolve(__dirname, "src/index.ts"),
+        vue: resolve(__dirname, "src/vue/index.ts"),
+      },
+      name: "GUIChatPluginMulmoScript",
       formats: ["es", "cjs"],
       fileName: (format, entryName) => `${entryName}.${format === "es" ? "js" : "cjs"}`,
     },
     rollupOptions: {
-      external: ["@mulmocast/types", "gui-chat-protocol"],
-      output: { exports: "named" },
+      external: ["vue", "gui-chat-protocol", "gui-chat-protocol/vue", "@mulmocast/types", "@mulmocast/deck-web"],
+      output: {
+        exports: "named",
+        globals: { vue: "Vue" },
+        assetFileNames: "style.[ext]",
+      },
     },
+    cssCodeSplit: false,
     minify: false,
     sourcemap: true,
   },

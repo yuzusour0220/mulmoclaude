@@ -1,64 +1,32 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import type { Response } from "express";
 import type { MulmoBeat } from "@mulmocast/types";
-import { buildBeatIdIndex, withStoryContext } from "../../server/api/routes/mulmo-script.js";
+import { buildBeatIdIndex, runStoryOp, type OpResult, type StoryContext } from "../../server/api/routes/mulmo-script-ops.js";
 
 // buildBeatIdIndex only reads `beat.id`; the fixtures pass partial
 // beats cast to MulmoBeat (same convention as fakeContext below).
 const beats = (...ids: (string | undefined)[]): MulmoBeat[] => ids.map((beatId) => ({ id: beatId }) as unknown as MulmoBeat);
 
-interface RecordedResponse {
-  statusCode: number;
-  body: unknown;
-  headersSent: boolean;
-  status: (code: number) => RecordedResponse;
-  json: (payload: unknown) => RecordedResponse;
-}
-
-function makeRes(): RecordedResponse {
-  const rec: RecordedResponse = {
-    statusCode: 200,
-    body: undefined,
-    // Mirrors the Express flag — set true once any response is sent.
-    // Defaults to false so the happy path / error path tests below
-    // exercise the write branch of the double-write guard.
-    headersSent: false,
-    status(code: number) {
-      this.statusCode = code;
-      return this;
-    },
-    json(payload: unknown) {
-      this.body = payload;
-      this.headersSent = true;
-      return this;
-    },
-  };
-  return rec;
-}
-
-// A minimal stand-in for the mulmo studio context. `withStoryContext`
+// A minimal stand-in for the mulmo studio context. `runStoryOp`
 // treats it as an opaque value — it only checks truthiness and passes
 // the reference to the handler.
-const fakeContext = { studio: { script: {} } } as unknown as NonNullable<Parameters<Parameters<typeof withStoryContext>[3]>[0]["context"]>;
+const fakeContext = { studio: { script: {} } } as unknown as StoryContext;
 
-describe("withStoryContext — resolver rejects filePath", () => {
+const resolveOk = () => ({ ok: true, absolutePath: "/abs/stories/x.json" }) as const;
+
+describe("runStoryOp — resolver rejects filePath", () => {
   it("short-circuits without calling buildContext or handler", async () => {
-    const res = makeRes();
     let buildCalled = false;
     let handlerCalled = false;
-    await withStoryContext(
-      res as unknown as Response,
+    const result = await runStoryOp(
       "bad",
       {},
       async () => {
         handlerCalled = true;
+        return { ok: true };
       },
       {
-        resolveStoryPath: (_fp, resp) => {
-          (resp as unknown as RecordedResponse).status(400).json({ error: "bad" });
-          return null;
-        },
+        resolveStory: () => ({ ok: false, code: "bad_request", error: "bad" }),
         buildContext: async () => {
           buildCalled = true;
           return fakeContext;
@@ -67,155 +35,113 @@ describe("withStoryContext — resolver rejects filePath", () => {
     );
     assert.equal(handlerCalled, false);
     assert.equal(buildCalled, false);
-    assert.equal(res.statusCode, 400);
-    assert.deepEqual(res.body, { error: "bad" });
+    assert.deepEqual(result, { ok: false, code: "bad_request", error: "bad" });
   });
 });
 
-describe("withStoryContext — buildContext returns null", () => {
-  it("writes 500 with the standard mulmo-context error", async () => {
-    const res = makeRes();
+describe("runStoryOp — buildContext returns undefined", () => {
+  it("returns server_error with the standard mulmo-context message", async () => {
     let handlerCalled = false;
-    await withStoryContext(
-      res as unknown as Response,
+    const result = await runStoryOp(
       "stories/x.json",
       {},
       async () => {
         handlerCalled = true;
+        return { ok: true };
       },
       {
-        resolveStoryPath: () => "/abs/stories/x.json",
+        resolveStory: resolveOk,
         buildContext: async () => undefined,
       },
     );
     assert.equal(handlerCalled, false);
-    assert.equal(res.statusCode, 500);
-    assert.deepEqual(res.body, {
-      error: "Failed to initialize mulmo context",
-    });
+    assert.deepEqual(result, { ok: false, code: "server_error", error: "Failed to initialize mulmo context" });
   });
 
   it("uses onContextMissing override to emit a soft-fail payload", async () => {
-    // Some endpoints (e.g. GET /beat-audio) historically return a
-    // 200 `{ audio: null }` when the workspace context can't be
+    // Some ops (e.g. beatAudio) historically return an ok
+    // `{ audio: null }` when the workspace context can't be
     // initialised yet, so the frontend can silently retry. The
-    // override must bypass the default 500.
-    const res = makeRes();
+    // override must bypass the default server_error.
     let handlerCalled = false;
-    await withStoryContext(
-      res as unknown as Response,
+    const result: OpResult<{ audio: string | null }> = await runStoryOp<{ audio: string | null }>(
       "stories/x.json",
       {
-        onContextMissing: (resp) => (resp as unknown as RecordedResponse).json({ audio: null }),
+        onContextMissing: () => ({ ok: true, audio: null }),
       },
       async () => {
         handlerCalled = true;
+        return { ok: true, audio: "unreachable" };
       },
       {
-        resolveStoryPath: () => "/abs/stories/x.json",
+        resolveStory: resolveOk,
         buildContext: async () => undefined,
       },
     );
     assert.equal(handlerCalled, false);
-    // Status untouched (still 200 default) + soft-fail body written.
-    assert.equal(res.statusCode, 200);
-    assert.deepEqual(res.body, { audio: null });
+    assert.deepEqual(result, { ok: true, audio: null });
   });
 });
 
-describe("withStoryContext — handler throws", () => {
-  it("catches the error and emits 500 with errorMessage", async () => {
-    const res = makeRes();
-    await withStoryContext(
-      res as unknown as Response,
+describe("runStoryOp — handler throws", () => {
+  it("catches the error and returns server_error with errorMessage", async () => {
+    const result = await runStoryOp(
       "stories/x.json",
       {},
       async () => {
         throw new Error("boom");
       },
       {
-        resolveStoryPath: () => "/abs/stories/x.json",
+        resolveStory: resolveOk,
         buildContext: async () => fakeContext,
       },
     );
-    assert.equal(res.statusCode, 500);
-    assert.deepEqual(res.body, { error: "boom" });
+    assert.deepEqual(result, { ok: false, code: "server_error", error: "boom" });
   });
 
   it("handles a non-Error thrown value", async () => {
-    const res = makeRes();
-    await withStoryContext(
-      res as unknown as Response,
+    const result = await runStoryOp(
       "stories/x.json",
       {},
       async () => {
-        // eslint-disable-next-line no-throw-literal -- intentional non-Error throw, asserting withStoryContext converts unknown rejections to 500
+        // eslint-disable-next-line no-throw-literal -- intentional non-Error throw, asserting runStoryOp converts unknown rejections to server_error
         throw "plain string";
       },
       {
-        resolveStoryPath: () => "/abs/stories/x.json",
+        resolveStory: resolveOk,
         buildContext: async () => fakeContext,
       },
     );
-    assert.equal(res.statusCode, 500);
-    const body = res.body as { error: string };
-    assert.match(body.error, /plain string/);
-  });
-
-  it("does not double-write when handler already sent a response", async () => {
-    const res = makeRes();
-    await withStoryContext(
-      res as unknown as Response,
-      "stories/x.json",
-      {},
-      async () => {
-        // Simulate a handler that successfully wrote a response and
-        // THEN encountered an async error (e.g. a late fs.readFile).
-        (res as unknown as RecordedResponse).status(200).json({ ok: true });
-        throw new Error("post-response failure");
-      },
-      {
-        resolveStoryPath: () => "/abs/stories/x.json",
-        buildContext: async () => fakeContext,
-      },
-    );
-    // Original 200/{ok:true} preserved; helper's catch must NOT
-    // overwrite with 500 because headersSent is already true.
-    assert.equal(res.statusCode, 200);
-    assert.deepEqual(res.body, { ok: true });
+    assert.equal(result.ok, false);
+    if (!result.ok) assert.match(result.error, /plain string/);
   });
 });
 
-describe("withStoryContext — happy path", () => {
-  it("invokes handler with absoluteFilePath and context, no response written", async () => {
-    const res = makeRes();
+describe("runStoryOp — happy path", () => {
+  it("invokes handler with absoluteFilePath and context and returns its result", async () => {
     const received: { absoluteFilePath?: string; context?: unknown } = {};
-    await withStoryContext(
-      res as unknown as Response,
+    const result = await runStoryOp(
       "stories/x.json",
       {},
       async ({ absoluteFilePath, context }) => {
         received.absoluteFilePath = absoluteFilePath;
         received.context = context;
+        return { ok: true, image: "data:image/png;base64,AAAA" };
       },
       {
-        resolveStoryPath: () => "/abs/stories/x.json",
+        resolveStory: resolveOk,
         buildContext: async () => fakeContext,
       },
     );
     assert.equal(received.absoluteFilePath, "/abs/stories/x.json");
     assert.equal(received.context, fakeContext);
-    // Handler is responsible for writing the response. The helper
-    // itself should NOT have touched status/body on the happy path.
-    assert.equal(res.statusCode, 200);
-    assert.equal(res.body, undefined);
+    assert.deepEqual(result, { ok: true, image: "data:image/png;base64,AAAA" });
   });
 
   it("forwards the force option to buildContext", async () => {
-    const res = makeRes();
     let seenForce: boolean | undefined;
-    await withStoryContext(res as unknown as Response, "stories/x.json", { force: true }, async () => {}, {
-      resolveStoryPath: () => "/abs/stories/x.json",
+    await runStoryOp("stories/x.json", { force: true }, async () => ({ ok: true }), {
+      resolveStory: resolveOk,
       buildContext: async (_fp, force) => {
         seenForce = force;
         return fakeContext;
@@ -225,10 +151,9 @@ describe("withStoryContext — happy path", () => {
   });
 
   it("defaults force to false when option is omitted", async () => {
-    const res = makeRes();
     let seenForce: boolean | undefined;
-    await withStoryContext(res as unknown as Response, "stories/x.json", {}, async () => {}, {
-      resolveStoryPath: () => "/abs/stories/x.json",
+    await runStoryOp("stories/x.json", {}, async () => ({ ok: true }), {
+      resolveStory: resolveOk,
       buildContext: async (_fp, force) => {
         seenForce = force;
         return fakeContext;

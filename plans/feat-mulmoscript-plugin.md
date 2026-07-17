@@ -103,14 +103,39 @@ Accepted behavior deltas (all cosmetic / stricter-input only):
   longer collapse for the save/load slice (the movie dedup key still realpaths
   host-side).
 
-## Phase 2 — Vue extraction (follow-up PR)
+## Phase 2 — Vue extraction (DONE — same branch as phase 1)
 
-Add `./vue` + `./style.css` entries: port View.vue off
-`pluginEndpoints`/`apiCall` onto `useRuntime().dispatch` + `pubsub` (markdown /
-html precedent), move i18n into package `lang/`, carry the
-`@mulmocast/deck-web` dep. The `useActiveSession().pendingGenerations` coupling
-must become generic pubsub events. Reduce `src/plugins/presentMulmoScript/
-index.ts` to the chart-shim shape.
+`./vue` + `./style.css` entries shipped; the View/Preview moved into the
+package and the host became a consumer. The transport redesign:
+
+- **Dispatch envelope** (`core/contract.ts`): every backend call goes through
+  `useRuntime().dispatch({ kind, … })` → the built-in "mulmoScript" handler
+  (`server/plugins/mulmoscript-builtin.ts`). Responses are `{ ok: … }`
+  envelopes so business failures travel as data (no HTTP-status coupling).
+- **One implementation per op** (`server/api/routes/mulmo-script-ops.ts`):
+  the REST handlers' bodies were extracted into transport-free cores shared
+  by BOTH the legacy REST routes (kept for wire compat, incl. the SSE
+  streams) and the dispatch handler — no drift surface.
+- **SSE → long-held dispatch + pubsub**: `generateMovie` / `generatePdf`
+  dispatches resolve when the pipeline finishes; per-beat progress arrives on
+  the plugin pubsub channel `plugin:mulmoScript:generation`
+  (`server/events/mulmoscript-generation.ts` fans every generation
+  start/finish out to the session `pendingGenerations` channel AND the
+  plugin channel, and keeps the in-flight map behind the View's mount-time
+  `pendingGenerations` snapshot dispatch). This replaced BOTH the SSE stream
+  and the host-only `useActiveSession().pendingGenerations` watcher.
+- **Host adapter injection** (`vue/hostAdapter.ts`): the two genuinely
+  host-transport capabilities ride an optional Vue injection —
+  `chatSessionId` (session tagging for the sidebar indicator) and
+  `fetchMediaBlob` (bearer-authenticated movie/PDF bytes; download/clip-play
+  UI hides when absent). MulmoClaude provides both in
+  `src/plugins/presentMulmoScript/index.ts`; MulmoTerminal wires its own in
+  phase 3.
+- i18n moved into package `lang/` (8 locales, html-plugin `useT()` pattern);
+  the `pluginMulmoScript` blocks left the host locale files.
+- e2e mock fixtures now stub the dispatch URL
+  (`/api/plugins/runtime/mulmoScript/dispatch`) with kind-discriminated
+  route mocks.
 
 ## Phase 3 — heavy backends + MulmoTerminal wiring (follow-up PRs)
 
