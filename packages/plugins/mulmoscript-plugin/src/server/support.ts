@@ -4,7 +4,8 @@
 // security-critical primitive must not drift per host, so it ships with the
 // ops that depend on it.
 
-import { readFileSync, realpathSync } from "fs";
+import { realpathSync } from "fs";
+import { readFile } from "node:fs/promises";
 import path from "path";
 
 export function errorText(err: unknown): string {
@@ -43,7 +44,9 @@ export function resolveWithinRoot(rootReal: string, relPath: string): string | n
   return resolvedReal;
 }
 
-export function fileToDataUri(filePath: string, mimeType: string): string {
-  const data = readFileSync(filePath);
+// Async so reading a large generated image/audio file doesn't stall the
+// host's event loop (CodeRabbit on #2137).
+export async function fileToDataUri(filePath: string, mimeType: string): Promise<string> {
+  const data = await readFile(filePath);
   return `data:${mimeType};base64,${data.toString("base64")}`;
 }

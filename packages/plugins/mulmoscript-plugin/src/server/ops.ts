@@ -154,9 +154,14 @@ export function createMulmoScriptServerOps(backend: MulmoScriptServerBackend) {
 
   // The download / status ops expect "stories/<rel>" (historical
   // convention, independent of the on-disk location) — the wire format
-  // every endpoint keys on.
+  // every endpoint keys on. Relativize against the REALPATH root when it
+  // resolves: with a symlinked stories dir, mulmocast returns output
+  // paths under the link's target, and relativizing against the link
+  // itself would produce a traversal-like "stories/../../…" ref that
+  // resolveStory then rejects (CodeRabbit on #2137).
   function toStoryRef(absolutePath: string): string {
-    const rel = path.relative(storiesDir, absolutePath).split(path.sep).join("/");
+    const root = ensureStoriesReal() ?? storiesDir;
+    const rel = path.relative(root, absolutePath).split(path.sep).join("/");
     return rel ? `stories/${rel}` : "stories";
   }
 
@@ -338,7 +343,7 @@ export function createMulmoScriptServerOps(backend: MulmoScriptServerBackend) {
     return runStoryOp<{ image: string | null }>(filePath, { operation: "beat-image" }, async ({ context }) => {
       const { imagePath } = getBeatPngImagePath(context, beatIndex);
       if (!existsSync(imagePath)) return { ok: true, image: null };
-      return { ok: true, image: fileToDataUri(imagePath, "image/png") };
+      return { ok: true, image: await fileToDataUri(imagePath, "image/png") };
     });
   }
 
@@ -353,7 +358,7 @@ export function createMulmoScriptServerOps(backend: MulmoScriptServerBackend) {
         const beat = context.studio.script.beats[beatIndex];
         const audioPath = getBeatAudioPathOrUrl(beat.text ?? "", context, beat, context.lang);
         if (!audioPath || !existsSync(audioPath)) return { ok: true, audio: null };
-        return { ok: true, audio: fileToDataUri(audioPath, "audio/mpeg") };
+        return { ok: true, audio: await fileToDataUri(audioPath, "audio/mpeg") };
       },
     );
   }
@@ -376,7 +381,7 @@ export function createMulmoScriptServerOps(backend: MulmoScriptServerBackend) {
     return runStoryOp<{ image: string | null }>(filePath, { operation: "character-image" }, async ({ context }) => {
       const imagePath = getReferenceImagePath(context, key, "png");
       if (!existsSync(imagePath)) return { ok: true, image: null };
-      return { ok: true, image: fileToDataUri(imagePath, "image/png") };
+      return { ok: true, image: await fileToDataUri(imagePath, "image/png") };
     });
   }
 
@@ -427,7 +432,7 @@ export function createMulmoScriptServerOps(backend: MulmoScriptServerBackend) {
         if (!existsSync(imagePath)) {
           return opServerError("Image was not generated");
         }
-        return { ok: true, image: fileToDataUri(imagePath, "image/png") };
+        return { ok: true, image: await fileToDataUri(imagePath, "image/png") };
       });
       if (!result.ok) genError = result.error;
       return result;
@@ -464,7 +469,7 @@ export function createMulmoScriptServerOps(backend: MulmoScriptServerBackend) {
           });
           return opServerError("Audio was not generated");
         }
-        return { ok: true, audio: fileToDataUri(audioPath, "audio/mpeg") };
+        return { ok: true, audio: await fileToDataUri(audioPath, "audio/mpeg") };
       });
       if (!result.ok) genError = result.error;
       return result;
@@ -501,7 +506,7 @@ export function createMulmoScriptServerOps(backend: MulmoScriptServerBackend) {
         if (!existsSync(imagePath)) {
           return opServerError("Character image was not generated");
         }
-        return { ok: true, image: fileToDataUri(imagePath, "image/png") };
+        return { ok: true, image: await fileToDataUri(imagePath, "image/png") };
       });
       if (!result.ok) genError = result.error;
       return result;
@@ -519,7 +524,7 @@ export function createMulmoScriptServerOps(backend: MulmoScriptServerBackend) {
       // written PNG from surviving a crash mid-write (#881 v2).
       const base64 = stripDataUri(imageData);
       await backend.writeFileAtomic(imagePath, Buffer.from(base64, "base64"));
-      return { ok: true, image: fileToDataUri(imagePath, "image/png") };
+      return { ok: true, image: await fileToDataUri(imagePath, "image/png") };
     });
   }
 
@@ -528,7 +533,7 @@ export function createMulmoScriptServerOps(backend: MulmoScriptServerBackend) {
       const imagePath = getReferenceImagePath(context, key, "png");
       const base64 = stripDataUri(imageData);
       await backend.writeFileAtomic(imagePath, Buffer.from(base64, "base64"));
-      return { ok: true, image: fileToDataUri(imagePath, "image/png") };
+      return { ok: true, image: await fileToDataUri(imagePath, "image/png") };
     });
   }
 

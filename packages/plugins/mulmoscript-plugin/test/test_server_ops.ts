@@ -232,6 +232,51 @@ describe("generation tracker — edge-triggered publish + snapshot", () => {
     ops.publishGeneration(undefined, "beatAudio", "stories/x.json", "0", true);
     assert.deepEqual(events, [true]);
   });
+
+  it("dedupes the same physical work item across different chat sessions", () => {
+    // The tracker keys on kind/filePath/key ONLY — two sessions rendering
+    // the same beat of the same file are the same physical generation, so
+    // the second start is suppressed and the surviving finish carries the
+    // finishing caller's session tag.
+    const events: { sessionId: string | undefined; done: boolean }[] = [];
+    const ops = createMulmoScriptServerOps({
+      storiesDir: "/nonexistent/for-tests/artifacts/stories",
+      artifacts: stubFileOps,
+      writeFileAtomic: async () => {},
+      onGenerationEvent: (sessionId, event) => events.push({ sessionId, done: event.done }),
+    });
+    ops.publishGeneration("session-a", "beatImage", "stories/x.json", "3", false);
+    ops.publishGeneration("session-b", "beatImage", "stories/x.json", "3", false); // same work item — suppressed
+    ops.publishGeneration("session-b", "beatImage", "stories/x.json", "3", true); // first finish — suppressed (count 2→1)
+    ops.publishGeneration("session-a", "beatImage", "stories/x.json", "3", true); // last finish — published
+    assert.deepEqual(events, [
+      { sessionId: "session-a", done: false },
+      { sessionId: "session-a", done: true },
+    ]);
+    assert.equal(ops.pendingGenerations("stories/x.json").length, 0);
+  });
+
+  it("a finish-only pipeline pulse consumes an actively tracked same-key entry", () => {
+    // Documented semantics: the tracker cannot distinguish a movie
+    // pipeline's per-beat completion pulse from a tracked manual render's
+    // finish — a colliding pulse decrements the tracked entry (here:
+    // count 1 → delete + publish done). The View reloads the asset either
+    // way; the manual render's own finish then passes through as a
+    // second, untracked done pulse.
+    const events: boolean[] = [];
+    const ops = createMulmoScriptServerOps({
+      storiesDir: "/nonexistent/for-tests/artifacts/stories",
+      artifacts: stubFileOps,
+      writeFileAtomic: async () => {},
+      onGenerationEvent: (_sessionId, event) => events.push(event.done),
+    });
+    ops.publishGeneration(undefined, "beatImage", "stories/x.json", "1", false); // manual render start
+    ops.publishGeneration(undefined, "beatImage", "stories/x.json", "1", true); // pipeline pulse — consumes the entry
+    assert.deepEqual(events, [false, true]);
+    assert.equal(ops.pendingGenerations("stories/x.json").length, 0);
+    ops.publishGeneration(undefined, "beatImage", "stories/x.json", "1", true); // manual render's own finish — untracked pulse
+    assert.deepEqual(events, [false, true, true]);
+  });
 });
 
 describe("buildBeatIdIndex", () => {

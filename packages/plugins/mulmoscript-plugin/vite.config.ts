@@ -39,6 +39,7 @@ export default defineConfig({
         "fs",
         "path",
         "node:async_hooks",
+        "node:fs/promises",
       ],
       output: {
         exports: "named",
