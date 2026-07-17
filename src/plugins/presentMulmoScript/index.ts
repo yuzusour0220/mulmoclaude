@@ -2,7 +2,7 @@
 // (plans/feat-mulmoscript-plugin.md phase 2). View / Preview /
 // TOOL_DEFINITION come from @mulmoclaude/mulmoscript-plugin; the View
 // reaches host backends via useRuntime().dispatch → the built-in
-// "mulmoScript" dispatch handler (server/plugins/mulmoscript-builtin.ts)
+// "mulmoScript" dispatch handler (server/plugins/mulmoscript-server.ts)
 // and hears generation progress on the plugin pubsub channel. This adapter
 // keeps MulmoClaude's existing tool-call create path (POST
 // /api/mulmoScript/save) and injects the two host-transport capabilities

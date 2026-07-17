@@ -6,19 +6,27 @@
 // silence GraphAI's chatty info/debug output) turns off even the error
 // level, so the true cause used to vanish entirely.
 //
-// `graphai` is declared as a direct dependency pinned to the same range
-// mulmocast uses so both resolve to the single hoisted copy —
-// GraphAILogger state is module-local, and a second copy would break
-// this capture silently.
+// Moved verbatim from MulmoClaude's server/utils/mulmoErrorCapture.ts in
+// phase 3 (only mulmoScript code ever used it). Hosts must resolve ONE
+// hoisted `graphai` copy shared with their `mulmocast` — GraphAILogger
+// state is module-local, and a second copy would break this capture
+// silently. That's why `graphai` is a peer dependency.
 
 import { AsyncLocalStorage } from "node:async_hooks";
 import { GraphAILogger } from "graphai";
-import { isRecord } from "../../src/utils/types.js";
-import { log } from "../system/logger/index.js";
-import { errorMessage } from "./errors.js";
+import { errorText, isRecord } from "./support";
+import type { MulmoScriptServerLog } from "./types";
 
 const capturedErrors = new AsyncLocalStorage<string[]>();
 let loggerInstalled = false;
+let captureLog: MulmoScriptServerLog | null = null;
+
+/** Route captured GraphAI errors into the host logger. Set once by
+ *  `createMulmoScriptServerOps`; the GraphAILogger sink is global, so the
+ *  last-configured host logger wins (one ops instance per process). */
+export function setMulmoErrorCaptureLogger(log: MulmoScriptServerLog | null): void {
+  captureLog = log;
+}
 
 function formatLogArg(arg: unknown): string {
   if (typeof arg === "string") return arg;
@@ -32,7 +40,7 @@ function formatLogArg(arg: unknown): string {
 
 /**
  * Re-enable GraphAI's error level (everything else stays silenced) and
- * route it into the server logger + the per-operation capture store.
+ * route it into the host logger + the per-operation capture store.
  * Call after every `setGraphAILogger(false)` — that helper disables all
  * levels including error. Idempotent.
  */
@@ -43,7 +51,7 @@ export function enableGraphAIErrorCapture(): void {
   GraphAILogger.setLogger((level, ...args) => {
     if (level !== "error") return;
     const message = args.map(formatLogArg).join(" ");
-    log.warn("mulmocast", "generation error", { message });
+    captureLog?.warn("mulmocast generation error", { message });
     capturedErrors.getStore()?.push(message);
   });
 }
@@ -71,7 +79,7 @@ export function describeMulmoCause(err: unknown): string | null {
  * log the same error more than once.
  */
 export function composeMulmoErrorMessage(err: unknown, captured: readonly string[]): string {
-  const base = errorMessage(err);
+  const base = errorText(err);
   const details = [...new Set(captured)].filter((message) => message !== "" && message !== base);
   return [base, describeMulmoCause(err), ...details].filter(Boolean).join(" — ");
 }

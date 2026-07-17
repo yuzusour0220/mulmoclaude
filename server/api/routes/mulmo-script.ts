@@ -7,44 +7,23 @@ import {
   type SaveMulmoScriptArgs,
 } from "@mulmoclaude/mulmoscript-plugin";
 import { makeArtifactsFileOps } from "../../plugins/runtime.js";
-import {
-  beatAudioOp,
-  beatImageOp,
-  beatMovieOp,
-  characterImageOp,
-  ffmpegGuard,
-  guardStoryWirePath,
-  generateBeatAudioOp,
-  inFlightMovies,
-  inFlightPdfs,
-  movieStatusOp,
-  pdfStatusOp,
-  renderBeatOp,
-  renderCharacterOp,
-  resolveStory,
-  runMovieGeneration,
-  runPdfGeneration,
-  buildContext,
-  toStoryRef,
-  triggerAutoBackgroundMovie,
-  uploadBeatImageOp,
-  uploadCharacterImageOp,
-  type OpFailure,
-} from "./mulmo-script-ops.js";
+import { buildContext, type OpFailure } from "@mulmoclaude/mulmoscript-plugin/server";
+import { mulmoScriptOps } from "../../plugins/mulmoscript-server.js";
 import { errorMessage } from "../../utils/errors.js";
 import { badRequest, notFound, sendError } from "../../utils/httpError.js";
 import { getOptionalStringQuery, getSessionQuery } from "../../utils/request.js";
 import { API_ROUTES } from "../../../src/config/apiRoutes.js";
 import { bindRoute } from "../../utils/router.js";
-import { publishMulmoGeneration } from "../../events/mulmoscript-generation.js";
 import { GENERATION_KINDS } from "../../../src/types/events.js";
 
-// Express adapters over `mulmo-script-ops.ts`. Every op body lives there
-// (single source of truth, shared with the plugin dispatch handler in
-// `server/plugins/mulmoscript-builtin.ts`); these routes only validate
-// request shapes and map `OpFailure.code` back onto the pre-extraction
-// HTTP statuses. The save / reopen / update slice additionally delegates
-// to the shared @mulmoclaude/mulmoscript-plugin package (phase 1).
+// Express adapters over the shared ops instance from
+// `server/plugins/mulmoscript-server.ts`. Every op body lives in
+// @mulmoclaude/mulmoscript-plugin/server (phase 3 — single source of
+// truth, shared with the plugin dispatch handler and, in phase 3b, with
+// MulmoTerminal); these routes only validate request shapes and map
+// `OpFailure.code` back onto the pre-extraction HTTP statuses. The
+// save / reopen / update slice additionally delegates to the package's
+// phase-1 core executes.
 
 const router = Router();
 
@@ -157,8 +136,8 @@ function sendPackageFailure(res: Response, failure: MulmoScriptFailure): void {
 // so any per-mode logic on the client would be invisible to it.
 bindRoute(router, API_ROUTES.mulmoScript.save, async (req: Request<object, object, SaveMulmoScriptArgs>, res: Response) => {
   // Realpath symlink containment before the package's lexical guard —
-  // see guardStoryWirePath.
-  const guard = guardStoryWirePath(req.body?.filePath);
+  // see mulmoScriptOps.guardStoryWirePath.
+  const guard = mulmoScriptOps.guardStoryWirePath(req.body?.filePath);
   if (guard) {
     sendOpFailure(res, guard);
     return;
@@ -172,9 +151,9 @@ bindRoute(router, API_ROUTES.mulmoScript.save, async (req: Request<object, objec
   if (req.body?.autoGenerateMovie === true) {
     // The in-flight dedup + background pipeline key on the realpath, so
     // re-resolve the package's wire path host-side.
-    const resolved = resolveStory(outcome.filePath);
+    const resolved = mulmoScriptOps.resolveStory(outcome.filePath);
     if (resolved.ok) {
-      triggerAutoBackgroundMovie(resolved.absolutePath, outcome.filePath, getSessionQuery(req) || undefined);
+      mulmoScriptOps.triggerAutoBackgroundMovie(resolved.absolutePath, outcome.filePath, getSessionQuery(req) || undefined);
     }
   }
 
@@ -186,7 +165,7 @@ bindRoute(router, API_ROUTES.mulmoScript.save, async (req: Request<object, objec
 });
 
 bindRoute(router, API_ROUTES.mulmoScript.updateBeat, async (req: Request<object, object, unknown>, res: Response) => {
-  const guard = guardStoryWirePath((req.body as { filePath?: unknown } | undefined)?.filePath);
+  const guard = mulmoScriptOps.guardStoryWirePath((req.body as { filePath?: unknown } | undefined)?.filePath);
   if (guard) {
     sendOpFailure(res, guard);
     return;
@@ -200,7 +179,7 @@ bindRoute(router, API_ROUTES.mulmoScript.updateBeat, async (req: Request<object,
 });
 
 bindRoute(router, API_ROUTES.mulmoScript.updateScript, async (req: Request<object, object, unknown>, res: Response) => {
-  const guard = guardStoryWirePath((req.body as { filePath?: unknown } | undefined)?.filePath);
+  const guard = mulmoScriptOps.guardStoryWirePath((req.body as { filePath?: unknown } | undefined)?.filePath);
   if (guard) {
     sendOpFailure(res, guard);
     return;
@@ -216,7 +195,7 @@ bindRoute(router, API_ROUTES.mulmoScript.updateScript, async (req: Request<objec
 bindRoute(router, API_ROUTES.mulmoScript.beatImage, async (req: Request<object, BeatImageResponse, object, BeatQuery>, res: Response<BeatImageResponse>) => {
   const query = parseBeatQuery(req, res);
   if (!query) return;
-  const result = await beatImageOp(query.filePath, query.beatIndex);
+  const result = await mulmoScriptOps.beatImageOp(query.filePath, query.beatIndex);
   if (!result.ok) {
     sendOpFailure(res, result);
     return;
@@ -233,7 +212,7 @@ bindRoute(
       badRequest(res, "filePath is required");
       return;
     }
-    const result = await movieStatusOp(filePath);
+    const result = await mulmoScriptOps.movieStatusOp(filePath);
     if (!result.ok) {
       sendOpFailure(res, result);
       return;
@@ -245,7 +224,7 @@ bindRoute(
 bindRoute(router, API_ROUTES.mulmoScript.beatAudio, async (req: Request<object, BeatAudioResponse, object, BeatQuery>, res: Response<BeatAudioResponse>) => {
   const query = parseBeatQuery(req, res);
   if (!query) return;
-  const result = await beatAudioOp(query.filePath, query.beatIndex);
+  const result = await mulmoScriptOps.beatAudioOp(query.filePath, query.beatIndex);
   if (!result.ok) {
     sendOpFailure(res, result);
     return;
@@ -256,7 +235,7 @@ bindRoute(router, API_ROUTES.mulmoScript.beatAudio, async (req: Request<object, 
 bindRoute(router, API_ROUTES.mulmoScript.beatMovie, async (req: Request<object, BeatMovieResponse, object, BeatQuery>, res: Response<BeatMovieResponse>) => {
   const query = parseBeatQuery(req, res);
   if (!query) return;
-  const result = await beatMovieOp(query.filePath, query.beatIndex);
+  const result = await mulmoScriptOps.beatMovieOp(query.filePath, query.beatIndex);
   if (!result.ok) {
     sendOpFailure(res, result);
     return;
@@ -280,7 +259,7 @@ bindRoute(
       badRequest(res, "filePath and beatIndex are required");
       return;
     }
-    const result = await generateBeatAudioOp({ filePath, beatIndex, force, chatSessionId });
+    const result = await mulmoScriptOps.generateBeatAudioOp({ filePath, beatIndex, force, chatSessionId });
     if (!result.ok) {
       sendOpFailure(res, result);
       return;
@@ -295,7 +274,7 @@ bindRoute(router, API_ROUTES.mulmoScript.renderBeat, async (req: Request<object,
     badRequest(res, "filePath and beatIndex are required");
     return;
   }
-  const result = await renderBeatOp({ filePath, beatIndex, force, chatSessionId });
+  const result = await mulmoScriptOps.renderBeatOp({ filePath, beatIndex, force, chatSessionId });
   if (!result.ok) {
     sendOpFailure(res, result);
     return;
@@ -306,7 +285,7 @@ bindRoute(router, API_ROUTES.mulmoScript.renderBeat, async (req: Request<object,
 // SSE movie generation. Retained for wire compatibility (the extracted
 // View now uses the long-held `generateMovie` dispatch + generation
 // pubsub events instead); the pipeline itself is shared via
-// `runMovieGeneration`.
+// `mulmoScriptOps.runMovieGeneration`.
 bindRoute(router, API_ROUTES.mulmoScript.generateMovie, async (req: Request<object, object, { filePath: string; chatSessionId?: string }>, res: Response) => {
   const { filePath, chatSessionId } = req.body;
 
@@ -315,31 +294,31 @@ bindRoute(router, API_ROUTES.mulmoScript.generateMovie, async (req: Request<obje
     return;
   }
 
-  const ffmpeg = ffmpegGuard();
+  const ffmpeg = mulmoScriptOps.ffmpegGuard();
   if (ffmpeg) {
     sendOpFailure(res, ffmpeg);
     return;
   }
 
-  const resolved = resolveStory(filePath);
+  const resolved = mulmoScriptOps.resolveStory(filePath);
   if (!resolved.ok) {
     sendOpFailure(res, resolved);
     return;
   }
   const absoluteFilePath = resolved.absolutePath;
 
-  if (inFlightMovies.has(absoluteFilePath)) {
+  if (mulmoScriptOps.inFlightMovies.has(absoluteFilePath)) {
     badRequest(res, "Movie generation is already in progress for this script");
     return;
   }
 
   const send = beginSse(res);
 
-  inFlightMovies.add(absoluteFilePath);
-  publishMulmoGeneration(chatSessionId, GENERATION_KINDS.movie, filePath, "", false);
+  mulmoScriptOps.inFlightMovies.add(absoluteFilePath);
+  mulmoScriptOps.publishGeneration(chatSessionId, GENERATION_KINDS.movie, filePath, "", false);
   let genError: string | undefined;
   try {
-    const result = await runMovieGeneration(absoluteFilePath, (event) => {
+    const result = await mulmoScriptOps.runMovieGeneration(absoluteFilePath, (event) => {
       send({ type: `beat_${event.kind}_done`, beatIndex: event.beatIndex });
     });
     if (!result.ok) {
@@ -347,13 +326,13 @@ bindRoute(router, API_ROUTES.mulmoScript.generateMovie, async (req: Request<obje
       send({ type: "error", message: result.error });
       return;
     }
-    send({ type: "done", moviePath: toStoryRef(result.outputPath) });
+    send({ type: "done", moviePath: mulmoScriptOps.toStoryRef(result.outputPath) });
   } catch (err) {
     genError = errorMessage(err);
     send({ type: "error", message: genError });
   } finally {
-    inFlightMovies.delete(absoluteFilePath);
-    publishMulmoGeneration(chatSessionId, GENERATION_KINDS.movie, filePath, "", true, genError);
+    mulmoScriptOps.inFlightMovies.delete(absoluteFilePath);
+    mulmoScriptOps.publishGeneration(chatSessionId, GENERATION_KINDS.movie, filePath, "", true, genError);
     res.end();
   }
 });
@@ -388,7 +367,7 @@ bindRoute(
       badRequest(res, "filePath and key are required");
       return;
     }
-    const result = await characterImageOp(filePath, key);
+    const result = await mulmoScriptOps.characterImageOp(filePath, key);
     if (!result.ok) {
       sendOpFailure(res, result);
       return;
@@ -406,7 +385,7 @@ bindRoute(
       badRequest(res, "filePath, beatIndex, and imageData are required");
       return;
     }
-    const result = await uploadBeatImageOp(filePath, beatIndex, imageData);
+    const result = await mulmoScriptOps.uploadBeatImageOp(filePath, beatIndex, imageData);
     if (!result.ok) {
       sendOpFailure(res, result);
       return;
@@ -424,7 +403,7 @@ bindRoute(
       badRequest(res, "filePath and key are required");
       return;
     }
-    const result = await renderCharacterOp({ filePath, key, force, chatSessionId });
+    const result = await mulmoScriptOps.renderCharacterOp({ filePath, key, force, chatSessionId });
     if (!result.ok) {
       sendOpFailure(res, result);
       return;
@@ -442,7 +421,7 @@ bindRoute(
       badRequest(res, "filePath, key, and imageData are required");
       return;
     }
-    const result = await uploadCharacterImageOp(filePath, key, imageData);
+    const result = await mulmoScriptOps.uploadCharacterImageOp(filePath, key, imageData);
     if (!result.ok) {
       sendOpFailure(res, result);
       return;
@@ -457,7 +436,7 @@ bindRoute(router, API_ROUTES.mulmoScript.downloadMovie, (req: Request, res: Resp
     badRequest(res, "moviePath is required");
     return;
   }
-  const resolved = resolveStory(moviePath);
+  const resolved = mulmoScriptOps.resolveStory(moviePath);
   if (!resolved.ok) {
     sendOpFailure(res, resolved);
     return;
@@ -474,7 +453,7 @@ bindRoute(
       badRequest(res, "filePath is required");
       return;
     }
-    const result = await pdfStatusOp(filePath);
+    const result = await mulmoScriptOps.pdfStatusOp(filePath);
     if (!result.ok) {
       sendOpFailure(res, result);
       return;
@@ -491,28 +470,28 @@ async function handleGeneratePdf(req: Request<object, object, { filePath: string
     badRequest(res, "filePath is required");
     return;
   }
-  const ffmpeg = ffmpegGuard();
+  const ffmpeg = mulmoScriptOps.ffmpegGuard();
   if (ffmpeg) {
     sendOpFailure(res, ffmpeg);
     return;
   }
 
-  const resolved = resolveStory(filePath);
+  const resolved = mulmoScriptOps.resolveStory(filePath);
   if (!resolved.ok) {
     sendOpFailure(res, resolved);
     return;
   }
   const absoluteFilePath = resolved.absolutePath;
 
-  if (inFlightPdfs.has(absoluteFilePath)) {
+  if (mulmoScriptOps.inFlightPdfs.has(absoluteFilePath)) {
     badRequest(res, "PDF generation is already in progress for this script");
     return;
   }
 
   const send = beginSse(res);
 
-  inFlightPdfs.add(absoluteFilePath);
-  publishMulmoGeneration(chatSessionId, GENERATION_KINDS.pdf, filePath, "", false);
+  mulmoScriptOps.inFlightPdfs.add(absoluteFilePath);
+  mulmoScriptOps.publishGeneration(chatSessionId, GENERATION_KINDS.pdf, filePath, "", false);
   let genError: string | undefined;
   try {
     const context = await buildContext(absoluteFilePath);
@@ -521,19 +500,19 @@ async function handleGeneratePdf(req: Request<object, object, { filePath: string
       send({ type: "error", message: genError });
       return;
     }
-    const result = await runPdfGeneration(context, (beatIndex) => send({ type: "beat_image_done", beatIndex }));
+    const result = await mulmoScriptOps.runPdfGeneration(context, (beatIndex) => send({ type: "beat_image_done", beatIndex }));
     if (!result.ok) {
       genError = result.error;
       send({ type: "error", message: genError });
       return;
     }
-    send({ type: "done", pdfPath: toStoryRef(result.outputPath) });
+    send({ type: "done", pdfPath: mulmoScriptOps.toStoryRef(result.outputPath) });
   } catch (err) {
     genError = errorMessage(err);
     send({ type: "error", message: genError });
   } finally {
-    inFlightPdfs.delete(absoluteFilePath);
-    publishMulmoGeneration(chatSessionId, GENERATION_KINDS.pdf, filePath, "", true, genError);
+    mulmoScriptOps.inFlightPdfs.delete(absoluteFilePath);
+    mulmoScriptOps.publishGeneration(chatSessionId, GENERATION_KINDS.pdf, filePath, "", true, genError);
     res.end();
   }
 }
@@ -548,7 +527,7 @@ bindRoute(router, API_ROUTES.mulmoScript.downloadPdf, (req: Request, res: Respon
     badRequest(res, "pdfPath is required");
     return;
   }
-  const resolved = resolveStory(pdfPath);
+  const resolved = mulmoScriptOps.resolveStory(pdfPath);
   if (!resolved.ok) {
     sendOpFailure(res, resolved);
     return;

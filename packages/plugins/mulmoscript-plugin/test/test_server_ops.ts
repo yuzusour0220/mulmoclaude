@@ -1,7 +1,33 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import type { FileOps } from "gui-chat-protocol";
 import type { MulmoBeat } from "@mulmocast/types";
-import { buildBeatIdIndex, runStoryOp, type OpResult, type StoryContext } from "../../server/api/routes/mulmo-script-ops.js";
+import { buildBeatIdIndex, createMulmoScriptServerOps, type StoryContext } from "../src/server/ops";
+import type { OpResult } from "../src/server/types";
+
+// Ported from MulmoClaude's test/routes/test_mulmoScriptHelpers.ts when the
+// ops layer moved into this package (phase 3). `runStoryOp`'s `deps` param
+// lets these tests run without the full mulmocast stack.
+
+const stubFileOps: FileOps = {
+  read: async () => {
+    throw new Error("unused");
+  },
+  readBytes: async () => new Uint8Array(),
+  write: async () => {},
+  readDir: async () => [],
+  stat: async () => ({ mtimeMs: 0, size: 0 }),
+  exists: async () => false,
+  unlink: async () => {},
+};
+
+function makeOps() {
+  return createMulmoScriptServerOps({
+    storiesDir: "/nonexistent/for-tests/artifacts/stories",
+    artifacts: stubFileOps,
+    writeFileAtomic: async () => {},
+  });
+}
 
 // buildBeatIdIndex only reads `beat.id`; the fixtures pass partial
 // beats cast to MulmoBeat (same convention as fakeContext below).
@@ -16,9 +42,10 @@ const resolveOk = () => ({ ok: true, absolutePath: "/abs/stories/x.json" }) as c
 
 describe("runStoryOp — resolver rejects filePath", () => {
   it("short-circuits without calling buildContext or handler", async () => {
+    const ops = makeOps();
     let buildCalled = false;
     let handlerCalled = false;
-    const result = await runStoryOp(
+    const result = await ops.runStoryOp(
       "bad",
       {},
       async () => {
@@ -41,8 +68,9 @@ describe("runStoryOp — resolver rejects filePath", () => {
 
 describe("runStoryOp — buildContext returns undefined", () => {
   it("returns server_error with the standard mulmo-context message", async () => {
+    const ops = makeOps();
     let handlerCalled = false;
-    const result = await runStoryOp(
+    const result = await ops.runStoryOp(
       "stories/x.json",
       {},
       async () => {
@@ -63,8 +91,9 @@ describe("runStoryOp — buildContext returns undefined", () => {
     // `{ audio: null }` when the workspace context can't be
     // initialised yet, so the frontend can silently retry. The
     // override must bypass the default server_error.
+    const ops = makeOps();
     let handlerCalled = false;
-    const result: OpResult<{ audio: string | null }> = await runStoryOp<{ audio: string | null }>(
+    const result: OpResult<{ audio: string | null }> = await ops.runStoryOp<{ audio: string | null }>(
       "stories/x.json",
       {
         onContextMissing: () => ({ ok: true, audio: null }),
@@ -84,8 +113,9 @@ describe("runStoryOp — buildContext returns undefined", () => {
 });
 
 describe("runStoryOp — handler throws", () => {
-  it("catches the error and returns server_error with errorMessage", async () => {
-    const result = await runStoryOp(
+  it("catches the error and returns server_error with its message", async () => {
+    const ops = makeOps();
+    const result = await ops.runStoryOp(
       "stories/x.json",
       {},
       async () => {
@@ -100,11 +130,12 @@ describe("runStoryOp — handler throws", () => {
   });
 
   it("handles a non-Error thrown value", async () => {
-    const result = await runStoryOp(
+    const ops = makeOps();
+    const result = await ops.runStoryOp(
       "stories/x.json",
       {},
       async () => {
-        // eslint-disable-next-line no-throw-literal -- intentional non-Error throw, asserting runStoryOp converts unknown rejections to server_error
+        // intentional non-Error throw — asserting runStoryOp converts unknown rejections to server_error
         throw "plain string";
       },
       {
@@ -119,8 +150,9 @@ describe("runStoryOp — handler throws", () => {
 
 describe("runStoryOp — happy path", () => {
   it("invokes handler with absoluteFilePath and context and returns its result", async () => {
+    const ops = makeOps();
     const received: { absoluteFilePath?: string; context?: unknown } = {};
-    const result = await runStoryOp(
+    const result = await ops.runStoryOp(
       "stories/x.json",
       {},
       async ({ absoluteFilePath, context }) => {
@@ -139,8 +171,9 @@ describe("runStoryOp — happy path", () => {
   });
 
   it("forwards the force option to buildContext", async () => {
+    const ops = makeOps();
     let seenForce: boolean | undefined;
-    await runStoryOp("stories/x.json", { force: true }, async () => ({ ok: true }), {
+    await ops.runStoryOp("stories/x.json", { force: true }, async () => ({ ok: true }), {
       resolveStory: resolveOk,
       buildContext: async (_fp, force) => {
         seenForce = force;
@@ -151,8 +184,9 @@ describe("runStoryOp — happy path", () => {
   });
 
   it("defaults force to false when option is omitted", async () => {
+    const ops = makeOps();
     let seenForce: boolean | undefined;
-    await runStoryOp("stories/x.json", {}, async () => ({ ok: true }), {
+    await ops.runStoryOp("stories/x.json", {}, async () => ({ ok: true }), {
       resolveStory: resolveOk,
       buildContext: async (_fp, force) => {
         seenForce = force;
@@ -160,6 +194,43 @@ describe("runStoryOp — happy path", () => {
       },
     });
     assert.equal(seenForce, false);
+  });
+});
+
+describe("generation tracker — edge-triggered publish + snapshot", () => {
+  it("publishes first start / last finish only for duplicate runs", () => {
+    const events: { done: boolean; key: string }[] = [];
+    const ops = createMulmoScriptServerOps({
+      storiesDir: "/nonexistent/for-tests/artifacts/stories",
+      artifacts: stubFileOps,
+      writeFileAtomic: async () => {},
+      onGenerationEvent: (_sessionId, event) => events.push({ done: event.done, key: event.key }),
+    });
+    ops.publishGeneration(undefined, "beatImage", "stories/x.json", "3", false);
+    ops.publishGeneration(undefined, "beatImage", "stories/x.json", "3", false); // duplicate start — suppressed
+    assert.equal(events.length, 1);
+    assert.deepEqual(ops.pendingGenerations("stories/x.json"), [{ kind: "beatImage", filePath: "stories/x.json", key: "3", done: false }]);
+
+    ops.publishGeneration(undefined, "beatImage", "stories/x.json", "3", true); // first finish — suppressed (duplicate active)
+    assert.equal(events.length, 1);
+    assert.equal(ops.pendingGenerations("stories/x.json").length, 1);
+
+    ops.publishGeneration(undefined, "beatImage", "stories/x.json", "3", true); // last finish — published
+    assert.equal(events.length, 2);
+    assert.equal(events[1].done, true);
+    assert.equal(ops.pendingGenerations("stories/x.json").length, 0);
+  });
+
+  it("passes finish-only pulses through (no tracked start)", () => {
+    const events: boolean[] = [];
+    const ops = createMulmoScriptServerOps({
+      storiesDir: "/nonexistent/for-tests/artifacts/stories",
+      artifacts: stubFileOps,
+      writeFileAtomic: async () => {},
+      onGenerationEvent: (_sessionId, event) => events.push(event.done),
+    });
+    ops.publishGeneration(undefined, "beatAudio", "stories/x.json", "0", true);
+    assert.deepEqual(events, [true]);
   });
 });
 

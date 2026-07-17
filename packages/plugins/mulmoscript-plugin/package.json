@@ -1,7 +1,7 @@
 {
   "name": "@mulmoclaude/mulmoscript-plugin",
-  "version": "0.1.0",
-  "description": "presentMulmoScript — MulmoScript storyboard tool for MulmoClaude and MulmoTerminal. Server core (tool definition + save/reopen/update logic against the generic gui-chat-protocol files.artifacts capability) on `.`, Vue View/Preview on `./vue`. Heavy render backends stay host-side until phase 3 (see plans/feat-mulmoscript-plugin.md).",
+  "version": "0.2.0",
+  "description": "presentMulmoScript — MulmoScript storyboard tool for MulmoClaude and MulmoTerminal. Browser-safe core (tool definition + save/reopen/update logic against the generic gui-chat-protocol files.artifacts capability) on `.`, Vue View/Preview on `./vue`, and the Node-only ops layer (mulmocast render/movie/PDF orchestration + dispatch router, host backends injected) on `./server`.",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -18,6 +18,12 @@
       "import": "./dist/vue.js",
       "require": "./dist/vue.cjs",
       "default": "./dist/vue.js"
+    },
+    "./server": {
+      "types": "./dist/server/index.d.ts",
+      "import": "./dist/server.js",
+      "require": "./dist/server.cjs",
+      "default": "./dist/server.js"
     },
     "./style.css": "./dist/style.css"
   },
@@ -37,7 +43,9 @@
   "peerDependencies": {
     "@mulmocast/deck-web": "^1.1.1",
     "@mulmocast/types": "^2.8.1",
+    "graphai": "^2.0.18",
     "gui-chat-protocol": "^0.4.0",
+    "mulmocast": "^2.8.1",
     "vue": "^3.5.0"
   },
   "devDependencies": {
