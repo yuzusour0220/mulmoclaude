@@ -183,6 +183,36 @@ plugin via the `/skills` UI to refresh both the tgz and the ledger.
 A version skew on a peer dep means the plugin was built against an
 older host — bump the plugin via the Discover tab's update flow.
 
+## dataSource (CSV) collection reads fail — "DuckDB is unavailable on this host"
+
+A collection whose schema declares `dataSource` (external CSV) reads its rows
+through `@duckdb/node-api`, a NATIVE module with per-platform prebuilt
+bindings. When the binding is missing or fails to load, ONLY dataSource
+collections break (every file-backed collection keeps working) and reads
+fail with `DuckDB is unavailable on this host (@duckdb/node-api failed to
+load: …)`.
+
+Diagnosis + fixes, in order:
+
+1. **Reinstall dependencies** — `yarn install` at the app root. The usual
+   cause is an install that skipped the platform package
+   (`@duckdb/node-bindings-<platform>-<arch>`), e.g. after copying
+   `node_modules` between machines or architectures (an arm64 → x64 Docker
+   volume mount does exactly this).
+2. **Check the platform is supported** — `ls node_modules/@duckdb/ | cat`.
+   You should see a `node-bindings-<your platform>` package. If DuckDB ships
+   no prebuilt binding for the host (rare: musl/alpine, exotic arch), there
+   is no local fix — tell the user dataSource collections need a supported
+   platform (glibc Linux x64/arm64, macOS, Windows) and that their other
+   collections are unaffected.
+3. **Docker**: make sure the image installs dependencies INSIDE the
+   container (matching libc/arch) rather than bind-mounting a host
+   `node_modules`.
+
+Related, not an error: a dataSource CSV in Shift_JIS / UTF-16 is decoded
+automatically to a cache copy under the OS temp dir — never "fix" the
+user's file by re-encoding it.
+
 ## Fallback
 
 If none of the above matches the failing tool output:

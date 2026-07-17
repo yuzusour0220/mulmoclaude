@@ -126,7 +126,8 @@ skipped, never crashes the host):
 | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `title`                | Human name shown in the sidebar / header. Required.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | `icon`                 | A **Material Symbols** name (`receipt_long`, `people`, `schedule`, `menu_book`). Required.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| `dataPath`             | Workspace-relative records folder, e.g. `data/recipes/items`. Must stay under the workspace. Required.                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `dataPath`             | Workspace-relative records folder, e.g. `data/recipes/items`. Must stay under the workspace. Required — unless `dataSource` is set (declare exactly ONE of the two).                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `dataSource`           | Optional. `{ "type": "csv", "path": "data/students.csv" }` — the records ARE the rows of an external data file (workspace-relative, containment-checked like `dataPath`). Makes the collection **read-only** in every UI/tool write path; see "External data (CSV) collections" below. Mutually exclusive with `dataPath`, `singleton`, `ingest`, `spawn`, and `mutate` actions.                                                                                                                                                                                                     |
 | `primaryKey`           | The field name whose value is the filename. That field MUST set `primary: true`. The value must be a valid record id (see the **Records** section's id-charset rule). Required.                                                                                                                                                                                                                                                                                                                                                                                                    |
 | `singleton`            | Optional. When set, at most one record exists, pinned to this exact id (e.g. `me`). Host pre-fills + locks the create form and hides Add once it exists.                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | `fields`               | Ordered map of field-name → field spec. **Insertion order = column order** in the table. Required.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
@@ -904,6 +905,78 @@ directly:
   **act on any ⚠️ it returns**, rather than assuming every record landed.
   (This safety net applies after `putItems` batches too, but direct writes are
   where it earns its keep.)
+
+## External data (CSV) collections — `dataSource`
+
+When the user has a data file they want to "manage" / "visualize" / "見たい"
+(a student roster, an HR export, a product list — the BI use case), do NOT
+import the rows into record files. Define a collection **on top of** the file
+with `dataSource` — the file stays the single source of truth and the whole
+collection UI (table, kanban, calendar, custom views, remote views) works over
+its rows via the host's DuckDB-backed CSV store.
+
+**The schema-inference recipe** (user: "この CSV を管理したい" / "make this CSV a
+collection"):
+
+1. **Inspect the file** — Read the first ~30 lines. Note the header row
+   (column names), each column's apparent type, and which column uniquely
+   identifies a row.
+2. **Pick the key column** — set `primaryKey` to that column's name and flag
+   its field `primary: true`. Prefer an ID-ish column (student number, SKU,
+   email) over a name. Check for duplicates if unsure — duplicated key values
+   don't error, but the LAST row silently wins.
+   **Declare the key field as `type: "string"` even when the column is
+   numeric** (a row number, an integer ID): record ids are strings, and the
+   store overwrites the key field's value with the id — a `number`-typed key
+   would just hold a string anyway. Consequence to keep in mind: sorting by
+   the key column is lexicographic ("10" before "2"); if numeric ordering
+   matters to the user, sort by another column.
+3. **Declare `fields` matching the column names** — field name = CSV column
+   name, verbatim (Japanese column names are fine). Only declared fields
+   render as table columns; extra CSV columns still ride along in the record
+   detail. Use `number` / `date` / `enum` (when a column has a small closed
+   value set) / `string` for the rest — DuckDB sniffs the raw types, the
+   field spec controls rendering.
+4. **Set `displayField`** to the most human-readable column (a name). This
+   matters extra here: a key value that isn't a safe record id (Japanese
+   text, spaces) is hex-encoded into the record's address, and
+   `displayField` is what keeps lists and notifications readable.
+5. **Write the schema** with `dataSource` instead of `dataPath`, plus a
+   normal `SKILL.md`, under `data/skills/<slug>/` — same create flow as any
+   collection.
+
+Semantics to remember (and to tell the user):
+
+- **Read-only** — no Add/Edit/Delete in the UI, `putItems` refuses, HTTP
+  writes answer 405. To change the data, **edit or replace the file itself**
+  (you can do that with the normal file tools when asked); open views refresh
+  automatically via a file watcher.
+- **Encoding** — Shift_JIS / CP932 and UTF-16 files work as-is; the host
+  decodes to a cache copy and never rewrites the user's file. Don't convert
+  the file to UTF-8 "to be safe" — an Excel re-export would just undo it.
+- **Row cap** — `getItems` / the UI list stops at 5,000 rows (a warn is
+  logged). Fine for browsing; aggregation over big files is a later phase.
+- **Not registry material** — dataSource collections can't be imported from
+  or contributed to a registry (the data file is machine-local).
+
+Minimal example (Japanese roster, Shift_JIS file dropped at
+`data/students.csv`):
+
+```json
+{
+  "title": "生徒名簿",
+  "icon": "school",
+  "dataSource": { "type": "csv", "path": "data/students.csv" },
+  "primaryKey": "学籍番号",
+  "displayField": "氏名",
+  "fields": {
+    "学籍番号": { "type": "string", "label": "学籍番号", "primary": true },
+    "氏名": { "type": "string", "label": "氏名" },
+    "学年": { "type": "enum", "label": "学年", "values": ["1", "2", "3"] },
+    "入学日": { "type": "date", "label": "入学日" }
+  }
+}
+```
 
 ## End-to-end: creating a new collection skill
 

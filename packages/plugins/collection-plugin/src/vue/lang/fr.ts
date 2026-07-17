@@ -55,6 +55,9 @@ const frMessages: CollectionMessages = {
     confirmDeleteCollection:
       "Supprimer toute la collection « {title} », y compris tous ses enregistrements ? Une sauvegarde restaurable est archivée au préalable.",
     itemsEmpty: "Aucun élément pour l'instant. Cliquez sur + pour en ajouter un.",
+    readonlyChip: "Lecture seule",
+    itemsEmptyReadonly: "Le fichier de données ne contient pas encore de lignes. Ajoutez-en au fichier et elles apparaîtront ici.",
+    filter: { all: "Toutes", editable: "Modifiables", data: "Données" },
     notFound: "Collection introuvable",
     loadFailed: "Échec du chargement",
     requiredField: "Ce champ est obligatoire",

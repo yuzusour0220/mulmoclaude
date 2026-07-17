@@ -56,7 +56,10 @@
           <span>{{ action.label }}</span>
         </button>
 
+        <!-- Edit/Delete are absent (not disabled) on a read-only dataSource
+             collection — the server would answer 405 anyway. -->
         <button
+          v-if="!readonly"
           type="button"
           class="h-8 px-2.5 rounded border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 font-bold text-xs transition-all flex items-center gap-1"
           data-testid="collections-detail-edit"
@@ -67,6 +70,7 @@
         </button>
 
         <button
+          v-if="!readonly"
           type="button"
           class="h-8 px-2.5 rounded border border-rose-200 bg-white text-rose-600 hover:bg-rose-50 font-bold text-xs transition-all flex items-center gap-1"
           data-testid="collections-detail-remove"
@@ -556,6 +560,9 @@ const props = defineProps<{
   liveDerived: CollectionItem | null;
   viewTitle: string;
   isSingleton: boolean;
+  /** Read-only (dataSource) collection: hide the Edit/Delete buttons —
+   *  the record can only change by editing the external data file. */
+  readonly?: boolean;
   /** Shared rendering/derivation helpers + ref/embed caches. */
   render: CollectionRendering;
   locale: string;

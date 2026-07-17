@@ -7,13 +7,14 @@
 //
 // Factory (createGetCollection) keeps the mapping unit-testable with the engine
 // stubbed; the default export wires the real engine functions.
-import { listItems, loadCollection, toDetail } from "../../workspace/collections/index.js";
+import { loadCollection, storeFor, toDetail, type CollectionItem, type LoadedCollection } from "../../workspace/collections/index.js";
 import type { CommandHandler, JsonObject } from "../commandChannel.js";
 import { clampLimit, clampOffset, deriveItems, pageResult } from "./collectionPage.js";
 
 export interface GetCollectionDeps {
   loadCollection: typeof loadCollection;
-  listItems: typeof listItems;
+  /** Store-aware records loader (file records or a dataSource CSV's rows). */
+  listRecords: (collection: LoadedCollection) => Promise<CollectionItem[]>;
   toDetail: typeof toDetail;
 }
 
@@ -25,8 +26,8 @@ export const createGetCollection =
     const limit = clampLimit(params.limit);
     const collection = await deps.loadCollection(slug);
     if (!collection) throw new Error(`collection '${slug}' not found`);
-    const all = deriveItems(collection.schema, await deps.listItems(collection.dataDir));
+    const all = deriveItems(collection.schema, await deps.listRecords(collection));
     return pageResult(deps.toDetail(collection), all, offset, limit);
   };
 
-export const getCollection = createGetCollection({ loadCollection, listItems, toDetail });
+export const getCollection = createGetCollection({ loadCollection, listRecords: (collection) => storeFor(collection).list(), toDetail });

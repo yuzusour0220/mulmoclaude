@@ -39,9 +39,17 @@ function applyFeedSchemaDefaults(parsed: unknown, slug: string): unknown {
   return { ...obj, icon, dataPath: `data/feeds/${slug}` };
 }
 
-/** Result of the post-Zod acceptance gates: the resolved record dir on
- *  success, or a one-line reason discovery would skip the schema. */
-export type SchemaAcceptance = { ok: true; dataDir: string } | { ok: false; reason: string };
+/** Result of the post-Zod acceptance gates: the resolved record dir (and,
+ *  for a `dataSource` schema, the resolved data file) on success, or a
+ *  one-line reason discovery would skip the schema. */
+export type SchemaAcceptance = { ok: true; dataDir: string; dataSourceFile?: string } | { ok: false; reason: string };
+
+/** The conventional per-slug records dir a `dataSource` collection gets as
+ *  its `dataDir` (records never live there, but archive/delete paths stay
+ *  well-defined — same shape the registry's R3 normalization uses). */
+function conventionalDataPath(slug: string): string {
+  return `data/collections/${slug}/items`;
+}
 
 /** The acceptance gates discovery applies AFTER `CollectionSchemaZ` parses,
  *  before a schema becomes a live collection:
@@ -52,18 +60,28 @@ export type SchemaAcceptance = { ok: true; dataDir: string } | { ok: false; reas
  *    edit is dropped with no error;
  *  - a `feed` schema must declare an `ingest` block (else it's a dead,
  *    non-refreshable card);
- *  - `dataPath` must resolve INSIDE the workspace.
+ *  - `dataPath` — or a `dataSource`'s `path` — must resolve INSIDE the
+ *    workspace (same realpath containment for both).
  *
  *  Exported so `manageCollection`'s `putSchema` can run the SAME gates before
  *  it reports success — a schema that passes `CollectionSchemaZ` but fails one
  *  of these would otherwise write cleanly yet be skipped on the next discovery,
  *  hiding the collection (the exact failure that tool exists to prevent). */
-export function acceptParsedSchema(schema: CollectionSchema, opts: { source: CollectionSource; workspaceRoot: string }): SchemaAcceptance {
+export function acceptParsedSchema(schema: CollectionSchema, opts: { source: CollectionSource; workspaceRoot: string; slug: string }): SchemaAcceptance {
   const primaryField = schema.fields[schema.primaryKey];
   if (!primaryField) return { ok: false, reason: `primaryKey '${schema.primaryKey}' is not one of the declared fields` };
   if (primaryField.primary !== true) return { ok: false, reason: `the primaryKey field '${schema.primaryKey}' must be flagged \`primary: true\`` };
   if (opts.source === "feed" && !schema.ingest) return { ok: false, reason: "a feed schema must declare an `ingest` block" };
-  const dataDir = resolveDataDir(schema.dataPath, opts.workspaceRoot);
+  if (schema.dataSource !== undefined) {
+    // Same containment math as dataPath — resolveDataDir doesn't require
+    // the target to exist, so it validates a file path just as well.
+    const dataSourceFile = resolveDataDir(schema.dataSource.path, opts.workspaceRoot);
+    if (dataSourceFile === null) return { ok: false, reason: `dataSource.path '${schema.dataSource.path}' escapes the workspace` };
+    const dataDir = resolveDataDir(conventionalDataPath(opts.slug), opts.workspaceRoot);
+    if (dataDir === null) return { ok: false, reason: `slug '${opts.slug}' yields no workspace-contained data dir` };
+    return { ok: true, dataDir, dataSourceFile };
+  }
+  const dataDir = resolveDataDir(schema.dataPath ?? "", opts.workspaceRoot);
   if (dataDir === null) return { ok: false, reason: `dataPath '${schema.dataPath}' escapes the workspace` };
   return { ok: true, dataDir };
 }
@@ -106,13 +124,20 @@ async function loadOneCollection(skillsRoot: string, slug: string, source: Colle
   // workspace-contained dataPath) — shared with manageCollection's putSchema
   // so a validated write and discovery agree on what's a live collection.
   const schema = parsed.data;
-  const acceptance = acceptParsedSchema(schema, { source, workspaceRoot });
+  const acceptance = acceptParsedSchema(schema, { source, workspaceRoot, slug: safeName });
   if (!acceptance.ok) {
     log.warn("collections", "schema.json rejected after validation, skipping", { slug: safeName, reason: acceptance.reason });
     return null;
   }
 
-  return { slug: safeName, source, schema, dataDir: acceptance.dataDir, skillDir: path.join(skillsRoot, safeName) };
+  return {
+    slug: safeName,
+    source,
+    schema,
+    dataDir: acceptance.dataDir,
+    ...(acceptance.dataSourceFile !== undefined ? { dataSourceFile: acceptance.dataSourceFile } : {}),
+    skillDir: path.join(skillsRoot, safeName),
+  };
 }
 
 async function collectFromDir(skillsRoot: string, source: CollectionSource, workspaceRoot: string): Promise<LoadedCollection[]> {
@@ -203,7 +228,13 @@ export async function loadCollection(slug: string, opts: DiscoveryOptions = {}):
 }
 
 export function toSummary(collection: LoadedCollection): CollectionSummary {
-  return { slug: collection.slug, title: collection.schema.title, icon: collection.schema.icon, source: collection.source };
+  return {
+    slug: collection.slug,
+    title: collection.schema.title,
+    icon: collection.schema.icon,
+    source: collection.source,
+    ...(collection.schema.dataSource !== undefined ? { readonly: true as const } : {}),
+  };
 }
 
 export function toDetail(collection: LoadedCollection): CollectionDetail {

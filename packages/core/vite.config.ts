@@ -55,7 +55,21 @@ export default defineConfig({
       fileName: (format, entryName) => `${entryName}.${format === "es" ? "js" : "cjs"}`,
     },
     rollupOptions: {
-      external: [/^node:/, /^@receptron\//, /^firebase/, "zod", "gui-chat-protocol", "fast-xml-parser", "js-yaml", "google-auth-library"],
+      // @duckdb/node-api is a NATIVE module (prebuilt .node binding) — it can
+      // never be bundled; iconv-lite rides along as its decode companion so a
+      // downstream host resolves one consistent copy.
+      external: [
+        /^node:/,
+        /^@receptron\//,
+        /^firebase/,
+        /^@duckdb\//,
+        "iconv-lite",
+        "zod",
+        "gui-chat-protocol",
+        "fast-xml-parser",
+        "js-yaml",
+        "google-auth-library",
+      ],
       output: { exports: "named" },
     },
     minify: false,
