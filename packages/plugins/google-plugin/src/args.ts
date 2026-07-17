@@ -11,19 +11,52 @@ const IsoDateTimeWithOffset = z.string().refine(isIsoDateTimeWithOffset, {
   error: "must be an ISO 8601 date-time with a timezone offset (e.g. 2026-07-17T09:00:00+09:00)",
 });
 
+const MaxResults = z.number().int().min(1).max(MAX_LIST_RESULTS).optional();
+const NonEmpty = z.string().min(1);
+
 export const GoogleArgs = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("status") }),
+  // Calendar
   z.object({
     kind: z.literal("calendarListEvents"),
     timeMin: IsoDateTimeWithOffset.optional(),
-    maxResults: z.number().int().min(1).max(MAX_LIST_RESULTS).optional(),
+    maxResults: MaxResults,
   }),
   z.object({
     kind: z.literal("calendarCreateEvent"),
-    summary: z.string().min(1),
+    summary: NonEmpty,
     start: IsoDateTimeWithOffset,
     end: IsoDateTimeWithOffset,
     description: z.string().optional(),
   }),
+  // Tasks
+  z.object({ kind: z.literal("taskListsList") }),
+  z.object({
+    kind: z.literal("tasksList"),
+    taskListId: z.string().optional(),
+    maxResults: MaxResults,
+    showCompleted: z.boolean().optional(),
+  }),
+  z.object({
+    kind: z.literal("tasksCreate"),
+    title: NonEmpty,
+    notes: z.string().optional(),
+    due: IsoDateTimeWithOffset.optional(),
+    taskListId: z.string().optional(),
+  }),
+  z.object({
+    kind: z.literal("tasksComplete"),
+    taskId: NonEmpty,
+    taskListId: z.string().optional(),
+  }),
+  // Drive (drive.file scope — app-created files only)
+  z.object({ kind: z.literal("driveList"), maxResults: MaxResults }),
+  z.object({
+    kind: z.literal("driveCreate"),
+    name: NonEmpty,
+    content: z.string(),
+    mimeType: z.string().optional(),
+  }),
+  z.object({ kind: z.literal("driveRead"), fileId: NonEmpty }),
 ]);
 export type GoogleArgs = z.infer<typeof GoogleArgs>;

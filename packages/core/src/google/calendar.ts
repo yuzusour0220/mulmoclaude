@@ -1,15 +1,9 @@
-// Google Calendar v3 REST calls against the user's primary calendar. Plain
-// fetch instead of the `googleapis` SDK — two endpoints don't justify the
-// dependency (see plans/done/feat-google-oauth-calendar.md).
-import { errorMessage, isRecord, ONE_SECOND_MS, truncate } from "./util.js";
-import { fetchWithTimeout } from "./fetch.js";
+// Google Calendar v3 REST calls against the user's primary calendar.
+import { asRecord, googleApiError, googleRequest, stringField, DEFAULT_LIST_MAX_RESULTS } from "./apiClient.js";
+import { isRecord } from "./util.js";
 
 const CALENDAR_EVENTS_URL = "https://www.googleapis.com/calendar/v3/calendars/primary/events";
-const CALENDAR_TIMEOUT_MS = 30 * ONE_SECOND_MS;
-const ERROR_BODY_MAX_CHARS = 300;
-const HTTP_FORBIDDEN = 403;
-export const DEFAULT_LIST_MAX_RESULTS = 10;
-export const MAX_LIST_RESULTS = 50;
+const CALENDAR_API_LABEL = "Google Calendar API";
 
 export interface CalendarEventInput {
   summary: string;
@@ -41,35 +35,20 @@ const eventTime = (value: unknown): string => {
 };
 
 export const toEventSummary = (value: unknown): CalendarEventSummary => {
-  const record: Record<string, unknown> = isRecord(value) ? value : {};
+  const record = asRecord(value);
   return {
-    id: typeof record.id === "string" ? record.id : "",
-    summary: typeof record.summary === "string" ? record.summary : "",
+    id: stringField(record, "id"),
+    summary: stringField(record, "summary"),
     start: eventTime(record.start),
     end: eventTime(record.end),
-    htmlLink: typeof record.htmlLink === "string" ? record.htmlLink : "",
-    status: typeof record.status === "string" ? record.status : "",
+    htmlLink: stringField(record, "htmlLink"),
+    status: stringField(record, "status"),
   };
 };
 
-export const calendarApiError = (status: number, body: string): Error => {
-  const hint = status === HTTP_FORBIDDEN ? " (is the Google Calendar API enabled for the Cloud project?)" : "";
-  const detail = body ? ` — ${truncate(body, ERROR_BODY_MAX_CHARS)}` : "";
-  return new Error(`Google Calendar API: HTTP ${status}${hint}${detail}`);
-};
-
-const calendarRequest = async (accessToken: string, url: string, init: { method?: string; body?: string } = {}): Promise<unknown> => {
-  const response = await fetchWithTimeout(url, {
-    ...init,
-    timeoutMs: CALENDAR_TIMEOUT_MS,
-    headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
-  });
-  if (!response.ok) {
-    const body = await response.text().catch((err: unknown) => errorMessage(err));
-    throw calendarApiError(response.status, body);
-  }
-  return await response.json();
-};
+/** Kept as a named export for the existing unit tests / callers; the shared
+ *  helper now carries the wording. */
+export const calendarApiError = (status: number, body: string): Error => googleApiError(CALENDAR_API_LABEL, status, body);
 
 export async function createCalendarEvent(accessToken: string, input: CalendarEventInput): Promise<CalendarEventSummary> {
   const body = {
@@ -78,7 +57,7 @@ export async function createCalendarEvent(accessToken: string, input: CalendarEv
     start: { dateTime: input.startDateTime },
     end: { dateTime: input.endDateTime },
   };
-  const created = await calendarRequest(accessToken, CALENDAR_EVENTS_URL, { method: "POST", body: JSON.stringify(body) });
+  const created = await googleRequest(CALENDAR_API_LABEL, accessToken, CALENDAR_EVENTS_URL, { method: "POST", body: JSON.stringify(body) });
   return toEventSummary(created);
 }
 
@@ -89,7 +68,8 @@ export async function listCalendarEvents(accessToken: string, input: ListEventsI
     singleEvents: "true",
     orderBy: "startTime",
   });
-  const listed = await calendarRequest(accessToken, `${CALENDAR_EVENTS_URL}?${params.toString()}`);
-  const items = isRecord(listed) && Array.isArray(listed.items) ? listed.items : [];
+  const listed = await googleRequest(CALENDAR_API_LABEL, accessToken, `${CALENDAR_EVENTS_URL}?${params.toString()}`);
+  const record = asRecord(listed);
+  const items = Array.isArray(record.items) ? record.items : [];
   return items.map(toEventSummary);
 }

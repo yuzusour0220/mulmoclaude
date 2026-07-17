@@ -8,8 +8,11 @@ dispatch). Server-only — no Vue View.
   the host-neutral `~/.config/mulmo/google-token.json`, Calendar v3 REST).
   The host's settings UI, remote commands, auth CLI, and this tool share one
   link state — across hosts, too.
-- Kinds: `status`, `calendarListEvents`, `calendarCreateEvent`. Tasks / Drive
-  (`drive.file`) ride the same consent grant later (issue #2115).
+- Kinds: `status`; Calendar (`calendarListEvents`, `calendarCreateEvent`);
+  Tasks (`taskListsList`, `tasksList`, `tasksCreate`, `tasksComplete`);
+  Drive (`driveList`, `driveCreate`, `driveRead`).
+- **Drive is `drive.file`-scoped** — the app only ever sees files it created,
+  never the user's wider Drive. That's what keeps the scope non-sensitive.
 - Not linked yet? The tool's errors tell the LLM to guide the user to this
   app's settings — wording is host-neutral (#2128) because link flows differ
   per host (MulmoClaude: Settings → Plugins → Google or `yarn google:auth`;

@@ -326,6 +326,9 @@ This is independent of claude.ai Google connectors. Each failure names its missi
 - **Multiple client secrets** — ask the user to keep exactly one `client_secret_*.json` in
   `~/.secrets/`; the stored refresh token pairs with one OAuth client, so duplicates are refused
   rather than guessed at.
-- **HTTP 403 from a Google API** — the API is not enabled for the user's Cloud project. Ask them
-  to enable it in the Cloud Console (APIs & Services → Library — e.g. "Google Calendar API"),
-  then retry. No re-link needed.
+- **HTTP 403 from a Google API** — the API is not enabled for the user's Cloud project. The error
+  names the API; ask them to enable that one in the Cloud Console (APIs & Services → Library —
+  "Google Calendar API", "Google Tasks API", or "Google Drive API"), then retry. No re-link needed.
+- **Drive shows nothing / "I can't find the user's file"** — not an error. The app holds the
+  `drive.file` scope, so it can only ever see files IT created; the user's wider Drive is
+  invisible by design. Say so plainly instead of implying an empty Drive.
