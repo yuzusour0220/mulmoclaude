@@ -99,6 +99,45 @@ export function hasTraversalSegment(value: string): boolean {
   return value.split(/[/\\]/).some((segment) => segment === ".." || segment === ".");
 }
 
+// Lazily realpath a directory once and cache the result. Returns null
+// until the directory exists on disk (a fresh workspace hasn't created
+// it yet) and retries on the next call. The /artifacts/* static mounts
+// each need their storage root as a realpath for the traversal check,
+// but the root may not be materialised at boot.
+export function makeCachedRealpath(dir: string): () => Promise<string | null> {
+  let cached: string | null = null;
+  return async () => {
+    if (cached) return cached;
+    try {
+      cached = await promises.realpath(dir);
+      return cached;
+    } catch {
+      return null;
+    }
+  };
+}
+
+// Decode and traversal-guard an `/artifacts/*` request path against an
+// already-realpath'd storage root. Returns the in-root relative path to
+// serve, or null when the URL is malformed, escapes the root, or (when
+// `denyDotfiles`) touches a dotfile segment. The images / html / svg
+// static mounts share this so the decode + traversal + dotfile policy is
+// defined once. `rootReal` MUST be a realpath (see `resolveWithinRoot`).
+export function resolveArtifactRequestPath(rootReal: string, reqPath: string, denyDotfiles: boolean): string | null {
+  let relPath: string;
+  try {
+    // decodeURIComponent throws URIError on malformed escapes (`%ZZ`,
+    // stray `%`). Fail closed so a junk URL 404s instead of bubbling a
+    // 500 out of the express error chain.
+    relPath = decodeURIComponent(reqPath.replace(/^\//, ""));
+  } catch {
+    return null;
+  }
+  if (!resolveWithinRoot(rootReal, relPath)) return null;
+  if (denyDotfiles && containsDotfileSegment(relPath)) return null;
+  return relPath;
+}
+
 // `rootReal` MUST already be a realpath. Returns null on traversal or if either path doesn't exist on disk.
 export function resolveWithinRoot(rootReal: string, relPath: string): string | null {
   const normalized = path.normalize(relPath || "");
