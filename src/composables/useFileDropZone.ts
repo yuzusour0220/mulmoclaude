@@ -132,14 +132,3 @@ export function useFileDropZone(opts: UseFileDropZoneOptions): UseFileDropZoneRe
 
   return { isDragging, onDragenter, onDragover, onDragleave, onDrop };
 }
-
-/** Test-only reset. Removes the window listeners installed by
- *  `installWindowDefaultGuard` so a test can verify the install-once
- *  contract without leaking handlers across cases. */
-export function _resetFileDropZoneForTests(): void {
-  if (windowGuardHandler !== null && typeof window !== "undefined") {
-    window.removeEventListener("dragover", windowGuardHandler);
-    window.removeEventListener("drop", windowGuardHandler);
-  }
-  windowGuardHandler = null;
-}
