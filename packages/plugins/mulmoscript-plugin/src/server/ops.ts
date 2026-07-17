@@ -42,6 +42,7 @@ import {
 } from "mulmocast";
 import type { MulmoBeat, MulmoImagePromptMedia, MulmoStudioContext } from "@mulmocast/types";
 import type { MulmoScriptGenerationEvent } from "../core/contract";
+import { normalizeStoryPath } from "../core/paths";
 import { errorText, fileToDataUri, resolveWithinRoot, stripDataUri } from "./support";
 import { enableGraphAIErrorCapture, setMulmoErrorCaptureLogger, withMulmoErrorCapture } from "./mulmoErrorCapture";
 import type {
@@ -277,8 +278,19 @@ export function createMulmoScriptServerOps(backend: MulmoScriptServerBackend) {
   // completion pulses) always publishes.
   const inFlightGenerations = new Map<string, { kind: GenerationKind; filePath: string; key: string; count: number }>();
 
+  /** Tracker state and events key on the canonical `stories/<rel>` wire
+   *  form: subscribers (the View's pubsub filter, `pendingGenerations`
+   *  callers) match by exact string, so the accepted alias spellings
+   *  (`artifacts/stories/<rel>`, bare `<rel>`) must collapse to the same
+   *  key as the canonical one (Codex P2 on #2139). Untrusted spellings
+   *  pass through unchanged — they never resolve, so they can't collide. */
+  function canonicalWirePath(filePath: string): string {
+    return normalizeStoryPath(filePath) ?? filePath;
+  }
+
   function publishGeneration(chatSessionId: string | undefined, kind: GenerationKind, filePath: string, key: string, finished: boolean, error?: string): void {
-    const mapKey = generationMapKey(kind, filePath, key);
+    const wirePath = canonicalWirePath(filePath);
+    const mapKey = generationMapKey(kind, wirePath, key);
     const existing = inFlightGenerations.get(mapKey);
     if (finished) {
       if (existing && existing.count > 1) {
@@ -291,16 +303,19 @@ export function createMulmoScriptServerOps(backend: MulmoScriptServerBackend) {
         existing.count += 1;
         return; // already reported as started
       }
-      inFlightGenerations.set(mapKey, { kind, filePath, key, count: 1 });
+      inFlightGenerations.set(mapKey, { kind, filePath: wirePath, key, count: 1 });
     }
-    const event: MulmoScriptGenerationEvent = { kind, filePath, key, done: finished, ...(error ? { error } : {}) };
+    const event: MulmoScriptGenerationEvent = { kind, filePath: wirePath, key, done: finished, ...(error ? { error } : {}) };
     backend.onGenerationEvent?.(chatSessionId, event);
   }
 
   /** Snapshot of generations currently in flight for one script — the
    *  View's mount-time catch-up, filtered to its wire `filePath`. */
   function pendingGenerations(filePath: string): MulmoScriptGenerationEvent[] {
-    return [...inFlightGenerations.values()].filter((entry) => entry.filePath === filePath).map(({ kind, key }) => ({ kind, filePath, key, done: false }));
+    const wirePath = canonicalWirePath(filePath);
+    return [...inFlightGenerations.values()]
+      .filter((entry) => entry.filePath === wirePath)
+      .map(({ kind, key }) => ({ kind, filePath: wirePath, key, done: false }));
   }
 
   // ── Op scaffolding ────────────────────────────────────────────

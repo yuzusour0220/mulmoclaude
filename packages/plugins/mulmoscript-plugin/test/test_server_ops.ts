@@ -236,6 +236,34 @@ describe("generation tracker — edge-triggered publish + snapshot", () => {
     assert.deepEqual(events, [true]);
   });
 
+  it("keys tracker state and events on the canonical wire path for alias spellings", () => {
+    const events: string[] = [];
+    const ops = createMulmoScriptServerOps({
+      storiesDir: "/nonexistent/for-tests/artifacts/stories",
+      artifacts: stubFileOps,
+      writeFileAtomic: async () => {},
+      onGenerationEvent: (_sessionId, event) => events.push(event.filePath),
+    });
+    // Start under the artifacts/stories alias: the event and the
+    // snapshot must both surface the canonical form so canonical
+    // subscribers (the View) see them.
+    ops.publishGeneration(undefined, "beatImage", "artifacts/stories/x.json", "3", false);
+    assert.deepEqual(events, ["stories/x.json"]);
+    assert.deepEqual(ops.pendingGenerations("stories/x.json"), [{ kind: "beatImage", filePath: "stories/x.json", key: "3", done: false }]);
+    // The snapshot filter accepts the alias too.
+    assert.equal(ops.pendingGenerations("artifacts/stories/x.json").length, 1);
+
+    // A canonical-spelled start of the SAME work item dedupes against the
+    // alias-spelled one (same physical generation), and its finish
+    // clears the shared entry.
+    ops.publishGeneration(undefined, "beatImage", "stories/x.json", "3", false); // duplicate start — suppressed
+    assert.equal(events.length, 1);
+    ops.publishGeneration(undefined, "beatImage", "stories/x.json", "3", true); // first finish — suppressed
+    ops.publishGeneration(undefined, "beatImage", "artifacts/stories/x.json", "3", true); // last finish — published, canonical
+    assert.deepEqual(events, ["stories/x.json", "stories/x.json"]);
+    assert.equal(ops.pendingGenerations("stories/x.json").length, 0);
+  });
+
   it("dedupes the same physical work item across different chat sessions", () => {
     // The tracker keys on kind/filePath/key ONLY — two sessions rendering
     // the same beat of the same file are the same physical generation, so
