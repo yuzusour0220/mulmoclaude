@@ -56,6 +56,18 @@ Ships `@mulmoclaude/core@0.20.0`, `@mulmoclaude/google-plugin@0.1.0`, `@mulmocla
 
 ---
 
+## npm packages — 2026-07-17 (4)
+
+Package releases riding PR #2132 (Google Tasks / Drive tools, issue #2115):
+
+- **`@mulmoclaude/core@0.21.0`** — new Tasks engine (list lists / list / create / complete / delete, `@default` list alias) and Drive engine under the `drive.file` scope (list / multipart create / text-only read / delete). Multipart uploads use a per-request random boundary re-derived until it collides with no part, and `assertSafeMimeType` refuses non-token MIME values (part-header injection). The Calendar REST plumbing is extracted into a shared `apiClient.ts` (timeout, per-API 403 hint, error truncation, field mapping). `assets/helps/error-recovery.md` gains per-API 403 guidance plus the "Drive only sees this app's files" explanation.
+- **`@mulmoclaude/google-plugin@0.2.0`** — seven new kinds on the `google` tool: `taskListsList` / `tasksList` / `tasksCreate` / `tasksComplete` / `driveList` / `driveCreate` / `driveRead`. The description states the Drive visibility limit and the date-precision `due` so the agent can't over-promise.
+- **`@mulmoclaude/collection-plugin@0.11.3`** — core peer range widened to `^0.21.0`; no functional changes.
+
+Existing grants already carry `tasks` + `drive.file` (requested since core 0.20.0), so no re-link is needed.
+
+---
+
 ## npm packages — 2026-07-17 (3)
 
 Package releases riding PR #2130 (host-neutral link guidance, issue #2128):
