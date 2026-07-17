@@ -19,6 +19,14 @@ presentMulmoScript `filePath` base clarified (the wire form `stories/<name>.json
 
 ---
 
+## npm packages — 2026-07-17 (6)
+
+Package release riding PR #2137 (presentMulmoScript extraction, phase 3a of `plans/feat-mulmoscript-plugin.md`):
+
+- **`@mulmoclaude/mulmoscript-plugin@0.2.0`** — the entire server ops layer moves into a new Node-only **`./server`** entry so any host runs the SAME mulmocast orchestration: all op cores (probes, beat/character rendering, audio, uploads, movie/PDF pipelines, background `autoGenerateMovie`), the edge-triggered generation tracker + `pendingGenerations` snapshot, the dispatch kind router (`createMulmoScriptDispatchHandler`, carrying the realpath symlink-containment guard), and the GraphAI provider-error capture. Host transport is injected via `MulmoScriptServerBackend`; `mulmocast` + `graphai` become peers (must resolve to the host's single hoisted copies). Review hardening: `toStoryRef` relativizes against the realpath stories root; `fileToDataUri` reads asynchronously. MulmoClaude's four host-side files (`mulmo-script-ops.ts`, `mulmoscript-builtin.ts`, `events/mulmoscript-generation.ts`, `utils/mulmoErrorCapture.ts`) collapsed into one ~60-line binding (`server/plugins/mulmoscript-server.ts`). MulmoTerminal wiring is phase 3b.
+
+---
+
 ## npm packages — 2026-07-17 (5)
 
 Package release riding PR #2133 (presentMulmoScript extraction, phases 1+2 of `plans/feat-mulmoscript-plugin.md`):
