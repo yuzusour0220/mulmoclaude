@@ -1117,6 +1117,11 @@ async function updateBeat(index: number) {
   // matches previously generated audio (e.g. the edit was a revert),
   // the probe restores Play without a paid TTS call.
   if (beat.text !== prevText) {
+    // If this beat's old narration is mid-playback, stop it first —
+    // the deletes below remove the Play/Stop control from the row,
+    // which would otherwise leave the stale audio playing with no
+    // way to stop it (Codex review on #2143).
+    if (playingAudio.value?.index === index) stopAllPlayback();
     Reflect.deleteProperty(beatAudios, index);
     Reflect.deleteProperty(audioState, index);
     Reflect.deleteProperty(audioErrors, index);
