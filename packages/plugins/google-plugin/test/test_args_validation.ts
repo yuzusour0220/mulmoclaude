@@ -81,3 +81,74 @@ describe("GoogleArgs", () => {
     assert.throws(() => GoogleArgs.parse({ kind: "gmailSend" }));
   });
 });
+
+describe("GoogleArgs — tasks", () => {
+  it("parses taskListsList", () => {
+    assert.deepEqual(GoogleArgs.parse({ kind: "taskListsList" }), { kind: "taskListsList" });
+  });
+
+  it("parses tasksList with defaults omitted", () => {
+    assert.deepEqual(GoogleArgs.parse({ kind: "tasksList" }), { kind: "tasksList" });
+  });
+
+  it("parses tasksList with every option", () => {
+    const args = GoogleArgs.parse({ kind: "tasksList", taskListId: "abc", maxResults: 5, showCompleted: true });
+    assert.equal(args.kind, "tasksList");
+  });
+
+  it("rejects tasksList with an out-of-range maxResults", () => {
+    assert.throws(() => GoogleArgs.parse({ kind: "tasksList", maxResults: 500 }));
+  });
+
+  it("rejects a non-boolean showCompleted", () => {
+    assert.throws(() => GoogleArgs.parse({ kind: "tasksList", showCompleted: "yes" }));
+  });
+
+  it("parses tasksCreate with just a title", () => {
+    assert.deepEqual(GoogleArgs.parse({ kind: "tasksCreate", title: "Buy milk" }), { kind: "tasksCreate", title: "Buy milk" });
+  });
+
+  it("rejects tasksCreate with an empty title", () => {
+    assert.throws(() => GoogleArgs.parse({ kind: "tasksCreate", title: "" }));
+  });
+
+  it("rejects tasksCreate with a date-only due", () => {
+    assert.throws(() => GoogleArgs.parse({ kind: "tasksCreate", title: "x", due: "2026-07-18" }));
+  });
+
+  it("accepts tasksCreate with an offset-bearing due", () => {
+    const args = GoogleArgs.parse({ kind: "tasksCreate", title: "x", due: "2026-07-18T09:00:00+09:00" });
+    assert.equal(args.kind, "tasksCreate");
+  });
+
+  it("rejects tasksComplete without a taskId", () => {
+    assert.throws(() => GoogleArgs.parse({ kind: "tasksComplete" }));
+  });
+});
+
+describe("GoogleArgs — drive", () => {
+  it("parses driveList with defaults omitted", () => {
+    assert.deepEqual(GoogleArgs.parse({ kind: "driveList" }), { kind: "driveList" });
+  });
+
+  it("parses driveCreate and allows empty content", () => {
+    const args = GoogleArgs.parse({ kind: "driveCreate", name: "notes.txt", content: "" });
+    assert.equal(args.kind, "driveCreate");
+  });
+
+  it("rejects driveCreate with an empty name", () => {
+    assert.throws(() => GoogleArgs.parse({ kind: "driveCreate", name: "", content: "x" }));
+  });
+
+  it("rejects driveCreate without content", () => {
+    assert.throws(() => GoogleArgs.parse({ kind: "driveCreate", name: "notes.txt" }));
+  });
+
+  it("parses driveRead", () => {
+    assert.deepEqual(GoogleArgs.parse({ kind: "driveRead", fileId: "f1" }), { kind: "driveRead", fileId: "f1" });
+  });
+
+  it("rejects driveRead without a fileId", () => {
+    assert.throws(() => GoogleArgs.parse({ kind: "driveRead" }));
+  });
+});
