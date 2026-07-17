@@ -10,6 +10,34 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 ---
 
+## [1.2.0] - 2026-07-17
+
+**Google, without the setup.** Linking now takes a click and a consent screen — no Google Cloud project, no client JSON. And the agent can reach Tasks and Drive, not just Calendar.
+
+### Highlights
+
+#### Link Google with no Cloud setup (#2131, #2135)
+
+Google requires a client secret at its token endpoint even under PKCE, so users without their own Cloud project could not finish a link — the "OAuth クライアント認証情報が見つかりません" dead end. The **mulmoserver broker** (receptron/mulmoserver#54) now applies that secret. It is **stateless**: it stores no token and no authorization code, and its callback hands the *code* — never a token — back to your machine, which does the exchange itself. **Refresh tokens still live only on your machine** (`~/.config/mulmo/`), so there is no central store to breach.
+
+- Bring your own OAuth client? A **desktop** client JSON in `~/.secrets/` still wins and keeps the entire flow local — self-hosters lose nothing.
+- Tokens record which client minted them (`issuedVia`), so renewals use the right one. Existing links keep working untouched.
+- Hardening: the broker URL must be HTTPS unless loopback, and the consent URL it returns must be `https://accounts.google.com` before any browser opens.
+
+#### Google Tasks and Drive tools (#2115, #2132)
+
+The `google` tool gains seven kinds: list task lists, list / add / complete tasks, and list / create / read Drive files. Drive is `drive.file`-scoped — the app only ever sees files **it** created, never your wider Drive.
+
+> These shipped in packages on 2026-07-17 but could not reach `npx mulmoclaude@1.1.1` users: a 0.x caret range (`^0.1.1`) does not cross a minor, so the launcher never resolved them. This release is what actually delivers them.
+
+#### Host-neutral link guidance (#2128, #2130)
+
+The unlinked-state guidance named MulmoClaude-only flows, misdirecting MulmoTerminal users (the plugin runs on both). Wording is now host-neutral; each host's own help carries the specific steps.
+
+Ships `@mulmoclaude/core@0.22.0`, `@mulmoclaude/google-plugin@0.2.1`, `@mulmoclaude/collection-plugin@0.11.4`.
+
+---
+
 ## [1.1.1] - 2026-07-17
 
 Follow-up to 1.1.0: the Google OAuth token store becomes host-neutral.
