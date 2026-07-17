@@ -452,6 +452,53 @@ function pipeWithErrorHandling(stream: ReadStream, res: Response<ErrorResponse>)
   stream.pipe(res);
 }
 
+// Apply the UI-visibility filters (hidden dirs, sensitive files,
+// symlinks, .gitignore matches) to a single directory entry and stat
+// it. Returns the resolved child paths + stat, or null when the entry
+// should not surface. The recursive walk and the shallow lazy-expand
+// path share this so the filter policy lives in exactly one place.
+async function resolveVisibleChild(
+  entry: Dirent,
+  absPath: string,
+  relPath: string,
+  localFilter: GitignoreFilter | undefined,
+): Promise<{ childRel: string; childAbs: string; childStat: Stats } | null> {
+  if (HIDDEN_DIRS.has(entry.name)) return null;
+  if (!entry.isDirectory() && isSensitivePath(entry.name)) return null;
+  if (entry.isSymbolicLink()) return null;
+  const childRel = relPath ? path.join(relPath, entry.name) : entry.name;
+  // .gitignore check: for directories, append trailing / so
+  // directory-only patterns (e.g. "node_modules/") match.
+  if (localFilter) {
+    const testPath = entry.isDirectory() ? `${childRel}/` : childRel;
+    if (localFilter.ignores(testPath)) return null;
+  }
+  const childAbs = path.join(absPath, entry.name);
+  const childStat = await statSafeAsync(childAbs);
+  if (!childStat) return null;
+  return { childRel, childAbs, childStat };
+}
+
+// Await a directory's child-node promises, drop the filtered-out nulls,
+// sort (dirs before files, alphabetical within type), and wrap them in
+// the parent's `dir` TreeNode. Shared by the recursive and shallow
+// builders so the assembly + ordering is defined once.
+async function assembleDirNode(childPromises: Promise<TreeNode | null>[], relPath: string, modifiedMs: number): Promise<TreeNode> {
+  const resolved = await Promise.all(childPromises);
+  const children = resolved.filter((childNode): childNode is TreeNode => childNode !== null);
+  children.sort((leftChild, rightChild) => {
+    if (leftChild.type !== rightChild.type) return leftChild.type === "dir" ? -1 : 1;
+    return leftChild.name.localeCompare(rightChild.name);
+  });
+  return {
+    name: relPath ? path.basename(relPath) : "",
+    path: relPath,
+    type: "dir",
+    modifiedMs,
+    children,
+  };
+}
+
 // Async workspace tree walker — recurses through the workspace with
 // the same security filters as the original sync implementation
 // (hidden dirs, sensitive files, symlinks all rejected) and the same
@@ -489,55 +536,23 @@ export async function buildTreeAsync(absPath: string, relPath: string, gitFilter
   // root .gitignore (it's for git, not the UI). Pass a fresh empty
   // filter so children pick up THEIR .gitignore files.
   const localFilter = gitFilter ? gitFilter.childForDir(absPath) : new GitignoreFilter();
-  // Build every surviving child concurrently. Filter:
-  // skip hidden dirs, sensitive files, symlinks, .gitignore matches,
-  // and entries that fail to stat.
+  // Build every surviving child concurrently, recursing into the ones
+  // that pass the visibility filter.
   const childPromises: Promise<TreeNode | null>[] = entries.map(async (entry): Promise<TreeNode | null> => {
-    if (HIDDEN_DIRS.has(entry.name)) return null;
-    if (!entry.isDirectory() && isSensitivePath(entry.name)) return null;
-    if (entry.isSymbolicLink()) return null;
-    const childRel = relPath ? path.join(relPath, entry.name) : entry.name;
-    // .gitignore check: for directories, append trailing / so
-    // directory-only patterns (e.g. "node_modules/") match.
-    if (localFilter) {
-      const testPath = entry.isDirectory() ? `${childRel}/` : childRel;
-      if (localFilter.ignores(testPath)) return null;
-    }
-    const childAbs = path.join(absPath, entry.name);
-    const childStat = await statSafeAsync(childAbs);
-    if (!childStat) return null;
-    return buildTreeAsync(childAbs, childRel, localFilter);
+    const child = await resolveVisibleChild(entry, absPath, relPath, localFilter);
+    if (!child) return null;
+    return buildTreeAsync(child.childAbs, child.childRel, localFilter);
   });
-  const resolved = await Promise.all(childPromises);
-  const children = resolved.filter((childNode): childNode is TreeNode => childNode !== null);
-  children.sort((leftChild, rightChild) => {
-    if (leftChild.type !== rightChild.type) return leftChild.type === "dir" ? -1 : 1;
-    return leftChild.name.localeCompare(rightChild.name);
-  });
-  return {
-    name: relPath ? path.basename(relPath) : "",
-    path: relPath,
-    type: "dir",
-    modifiedMs: stat.mtimeMs,
-    children,
-  };
+  return assembleDirNode(childPromises, relPath, stat.mtimeMs);
 }
 
 // Map a single directory entry to a shallow TreeNode, applying the
 // same hidden/sensitive/symlink/gitignore filters as the recursive
 // walk. Returns null for entries that should not surface in the UI.
 async function dirEntryToNode(entry: Dirent, absPath: string, relPath: string, localFilter: GitignoreFilter | undefined): Promise<TreeNode | null> {
-  if (HIDDEN_DIRS.has(entry.name)) return null;
-  if (!entry.isDirectory() && isSensitivePath(entry.name)) return null;
-  if (entry.isSymbolicLink()) return null;
-  const childRel = relPath ? path.join(relPath, entry.name) : entry.name;
-  if (localFilter) {
-    const testPath = entry.isDirectory() ? `${childRel}/` : childRel;
-    if (localFilter.ignores(testPath)) return null;
-  }
-  const childAbs = path.join(absPath, entry.name);
-  const childStat = await statSafeAsync(childAbs);
-  if (!childStat) return null;
+  const child = await resolveVisibleChild(entry, absPath, relPath, localFilter);
+  if (!child) return null;
+  const { childRel, childStat } = child;
   if (childStat.isDirectory()) {
     return {
       name: entry.name,
@@ -580,19 +595,7 @@ export async function listDirShallow(absPath: string, relPath: string, gitFilter
   // filter so children pick up THEIR .gitignore files.
   const localFilter = gitFilter ? gitFilter.childForDir(absPath) : new GitignoreFilter();
   const childPromises = entries.map((entry) => dirEntryToNode(entry, absPath, relPath, localFilter));
-  const resolved = await Promise.all(childPromises);
-  const children = resolved.filter((childNode): childNode is TreeNode => childNode !== null);
-  children.sort((leftChild, rightChild) => {
-    if (leftChild.type !== rightChild.type) return leftChild.type === "dir" ? -1 : 1;
-    return leftChild.name.localeCompare(rightChild.name);
-  });
-  return {
-    name: relPath ? path.basename(relPath) : "",
-    path: relPath,
-    type: "dir",
-    modifiedMs: stat.mtimeMs,
-    children,
-  };
+  return assembleDirNode(childPromises, relPath, stat.mtimeMs);
 }
 
 router.get(API_ROUTES.files.tree, async (_req: Request<object, unknown, unknown, object>, res: Response<TreeNode | ErrorResponse>) => {

@@ -97,8 +97,7 @@ import { migrateCookingRecipesFromPlugin } from "./workspace/cooking-recipes/mig
 import { env, isAblated, isGeminiAvailable } from "./system/env.js";
 import { buildSandboxStatus } from "./api/sandboxStatus.js";
 import { existsSync, readFileSync } from "fs";
-import { realpath as fsRealpath } from "fs/promises";
-import { containsDotfileSegment, resolveWithinRoot } from "./utils/files/safe.js";
+import { makeCachedRealpath, resolveArtifactRequestPath } from "./utils/files/safe.js";
 import { cpus, loadavg } from "os";
 import { isDockerAvailable, ensureSandboxImage } from "./system/docker.js";
 import { maybeRunJournal } from "./workspace/journal/index.js";
@@ -355,17 +354,7 @@ app.use("/api", (req, res, next) => {
 //  3. `dotfiles: deny` + `fallthrough: false` on `express.static`
 //     itself, plus its built-in `..` normalize for path traversal.
 const IMAGE_EXT_RE = /\.(png|jpe?g|webp|gif|svg|mp4|webm|mov|m4v|ogv|mp3|ogg|oga|wav|m4a|aac)$/i;
-let imagesDirReal: string | null = null;
-async function getImagesDirReal(): Promise<string | null> {
-  if (imagesDirReal) return imagesDirReal;
-  try {
-    imagesDirReal = await fsRealpath(WORKSPACE_PATHS.images);
-    return imagesDirReal;
-  } catch {
-    // Dir not yet materialised (fresh workspace, no image saved).
-    return null;
-  }
-}
+const getImagesDirReal = makeCachedRealpath(WORKSPACE_PATHS.images);
 app.use(
   "/artifacts/images",
   async (req, res, next) => {
@@ -378,17 +367,9 @@ app.use(
       res.status(404).end();
       return;
     }
-    let relPath: string;
-    try {
-      // decodeURIComponent throws URIError on malformed escapes
-      // (`%ZZ`, stray `%`). Fail closed so a junk URL returns 404
-      // instead of bubbling a 500 out of the express error chain.
-      relPath = decodeURIComponent(req.path.replace(/^\//, ""));
-    } catch {
-      res.status(404).end();
-      return;
-    }
-    if (!resolveWithinRoot(root, relPath)) {
+    // No explicit dotfile check here: this mount never short-circuits,
+    // so `express.static`'s `dotfiles: "deny"` below is the authority.
+    if (resolveArtifactRequestPath(root, req.path, false) === null) {
       res.status(404).end();
       return;
     }
@@ -444,16 +425,7 @@ app.use(
 // eslint-disable-next-line sonarjs/regex-complexity -- flat extension allowlist with no nested quantifiers, ReDoS-safe; complexity is just the disjunction count
 const HTML_PREVIEW_EXT_RE = /\.(html?|png|jpe?g|webp|gif|svg|ico|mp4|webm|mov|m4v|ogv|mp3|ogg|oga|wav|m4a|aac)$/i;
 const HTML_DOCUMENT_EXT_RE = /\.html?$/i;
-let htmlsDirReal: string | null = null;
-async function getHtmlsDirReal(): Promise<string | null> {
-  if (htmlsDirReal) return htmlsDirReal;
-  try {
-    htmlsDirReal = await fsRealpath(WORKSPACE_PATHS.htmls);
-    return htmlsDirReal;
-  } catch {
-    return null;
-  }
-}
+const getHtmlsDirReal = makeCachedRealpath(WORKSPACE_PATHS.htmls);
 
 // Honour `X-Forwarded-*` so dev (Vite proxies `/artifacts/html` →
 // `localhost:3001` with `changeOrigin: true`) emits the browser-
@@ -492,26 +464,13 @@ app.use(
       res.status(404).end();
       return;
     }
-    let relPath: string;
-    try {
-      relPath = decodeURIComponent(req.path.replace(/^\//, ""));
-    } catch {
-      res.status(404).end();
-      return;
-    }
-    if (!resolveWithinRoot(root, relPath)) {
-      res.status(404).end();
-      return;
-    }
-    // Dotfile deny — `express.static` below enforces this for the
-    // non-HTML branch via `dotfiles: "deny"`, but the HTML short-
-    // circuit added in #1056 was bypassing the guard and would
-    // happily serve `/artifacts/html/.hidden.html` (Codex review on
-    // #1056). Apply the same policy uniformly so both branches
-    // refuse any path component starting with `.`. The helper
-    // splits on both `/` and `\` so an encoded backslash (`%5C`)
-    // can't sneak a `dir\.hidden.html` past the check on Windows.
-    if (containsDotfileSegment(relPath)) {
+    // denyDotfiles: the HTML short-circuit below serves the file itself
+    // (bypassing `express.static`'s `dotfiles: "deny"`), so this mount
+    // must reject dotfile segments in the guard — without it,
+    // `/artifacts/html/.hidden.html` would be served (Codex review on
+    // #1056).
+    const relPath = resolveArtifactRequestPath(root, req.path, true);
+    if (relPath === null) {
       res.status(404).end();
       return;
     }
@@ -564,16 +523,7 @@ const SVG_RESPONSE_CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src
 // `<img src>` request can't carry an Authorization header. Loopback-
 // only listener + `requireSameOrigin` remain the trust boundary.
 const SVG_EXT_RE = /\.svg$/i;
-let svgsDirReal: string | null = null;
-async function getSvgsDirReal(): Promise<string | null> {
-  if (svgsDirReal) return svgsDirReal;
-  try {
-    svgsDirReal = await fsRealpath(WORKSPACE_PATHS.svgs);
-    return svgsDirReal;
-  } catch {
-    return null;
-  }
-}
+const getSvgsDirReal = makeCachedRealpath(WORKSPACE_PATHS.svgs);
 app.use(
   "/artifacts/svg",
   async (req, res, next) => {
@@ -586,18 +536,10 @@ app.use(
       res.status(404).end();
       return;
     }
-    let relPath: string;
-    try {
-      relPath = decodeURIComponent(req.path.replace(/^\//, ""));
-    } catch {
-      res.status(404).end();
-      return;
-    }
-    if (!resolveWithinRoot(root, relPath)) {
-      res.status(404).end();
-      return;
-    }
-    if (containsDotfileSegment(relPath)) {
+    // denyDotfiles for the same reason as the html mount: this handler
+    // sets headers and serves via a bearer-bypassed <img> path, so the
+    // dotfile guard can't be left solely to `express.static`.
+    if (resolveArtifactRequestPath(root, req.path, true) === null) {
       res.status(404).end();
       return;
     }
