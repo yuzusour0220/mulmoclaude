@@ -189,3 +189,49 @@ describe("broker transport safety", () => {
     await assert.rejects(brokerStart(51234, "c".repeat(43), "not-a-url"), /invalid Google sign-in service URL/);
   });
 });
+
+// The auth URL is opened in the user's browser, and the broker base URL is
+// overridable — so the answer must be Google's consent page, nothing else.
+describe("brokerStart consent-URL validation", () => {
+  const withStub = async (authUrl: string, assertion: (baseUrl: string) => Promise<void>): Promise<void> => {
+    const stub = await startStubBroker({ "/googleOAuthStart": { body: { auth_url: authUrl, state: "s" } } });
+    try {
+      await assertion(stub.baseUrl);
+    } finally {
+      stub.close();
+    }
+  };
+
+  it("accepts Google's consent page", async () => {
+    await withStub("https://accounts.google.com/o/oauth2/v2/auth?client_id=x", async (baseUrl) => {
+      assert.match((await brokerStart(51234, "c".repeat(43), baseUrl)).authUrl, /accounts\.google\.com/);
+    });
+  });
+
+  it("refuses a look-alike host", async () => {
+    await withStub("https://accounts.google.com.evil.test/o/oauth2/v2/auth", async (baseUrl) => {
+      await assert.rejects(brokerStart(51234, "c".repeat(43), baseUrl), /not Google's consent page/);
+    });
+  });
+
+  it("refuses a cleartext consent page", async () => {
+    await withStub("http://accounts.google.com/o/oauth2/v2/auth", async (baseUrl) => {
+      await assert.rejects(brokerStart(51234, "c".repeat(43), baseUrl), /not Google's consent page/);
+    });
+  });
+
+  it("refuses an unparseable URL", async () => {
+    await withStub("not-a-url", async (baseUrl) => {
+      await assert.rejects(brokerStart(51234, "c".repeat(43), baseUrl), /unusable authorization URL/);
+    });
+  });
+
+  it("reports a non-JSON reply (proxy / captive portal) in actionable words", async () => {
+    const stub = await startStubBroker({ "/googleOAuthRefresh": { body: "<html>captive portal</html>" } });
+    try {
+      await assert.rejects(brokerRefresh("rt", stub.baseUrl), /malformed response/);
+    } finally {
+      stub.close();
+    }
+  });
+});

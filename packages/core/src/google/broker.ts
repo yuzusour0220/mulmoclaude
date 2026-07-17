@@ -68,7 +68,31 @@ const brokerFetch = async (url: string, init: { method?: string; body?: string }
     // codes / refresh tokens), so there is nothing more specific to surface.
     throw new Error(`Google sign-in service returned HTTP ${response.status}`);
   }
-  return await response.json();
+  try {
+    return await response.json();
+  } catch {
+    // A proxy / captive portal answering 200 with HTML would otherwise surface
+    // as a raw SyntaxError the agent can't act on.
+    throw new Error("Google sign-in service returned a malformed response");
+  }
+};
+
+const GOOGLE_CONSENT_HOST = "accounts.google.com";
+
+/** The returned URL is opened in the user's browser, so it must be Google's
+ *  own consent page and nothing else — a mis-pointed or hostile broker (the
+ *  base URL is overridable) could otherwise hand back a phishing page wearing
+ *  a sign-in flow. Cheap to assert, and Google's endpoint host is fixed. */
+const assertGoogleConsentUrl = (authUrl: string): void => {
+  let parsed: URL;
+  try {
+    parsed = new URL(authUrl);
+  } catch {
+    throw new Error("Google sign-in service returned an unusable authorization URL");
+  }
+  if (parsed.protocol !== "https:" || parsed.hostname !== GOOGLE_CONSENT_HOST) {
+    throw new Error(`Google sign-in service returned an authorization URL that is not Google's consent page (${parsed.protocol}//${parsed.host})`);
+  }
 };
 
 export async function brokerStart(port: number, codeChallenge: string, baseUrl = brokerBaseUrl()): Promise<BrokerStartResponse> {
@@ -78,6 +102,7 @@ export async function brokerStart(port: number, codeChallenge: string, baseUrl =
   if (typeof record.auth_url !== "string" || typeof record.state !== "string") {
     throw new Error("Google sign-in service returned an unexpected response (missing auth_url / state)");
   }
+  assertGoogleConsentUrl(record.auth_url);
   return { authUrl: record.auth_url, state: record.state };
 }
 
