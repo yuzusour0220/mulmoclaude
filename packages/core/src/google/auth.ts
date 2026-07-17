@@ -47,7 +47,9 @@ const persistRotatedTokens = (client: OAuth2Client, home?: string): void => {
 export async function getGoogleAccessToken(home?: string): Promise<string> {
   const saved = await loadGoogleTokens(home);
   if (!saved?.refresh_token) {
-    throw new Error("Google account not linked on this host — link it in Settings → Plugins → Google, or run `yarn google:auth`");
+    // Host-neutral wording — this engine ships to multiple hosts whose link
+    // flows differ (#2128); each host's own help carries the specific steps.
+    throw new Error("Google account not linked on this host — ask the user to link their Google account in this app's settings, then retry");
   }
   const client = createClient(await loadClientSecret(home));
   client.setCredentials(saved);

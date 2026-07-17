@@ -1,8 +1,8 @@
 // Server-only Google engine: local OAuth (loopback + PKCE), token store at
 // `~/.config/mulmo/google-token.json`, and Calendar v3 REST calls.
-// Shared by the host (remote-host handlers, /api/google routes, the
-// `yarn google:auth` CLI) and the google-calendar plugin — the token file has
-// a single owner, so every surface sees the same link state.
+// Shared by the hosts (remote-host handlers, /api routes, each host's auth
+// CLI) and the google plugin — the token file has a single owner, so every
+// surface sees the same link state.
 export { configureGoogleHost, type GoogleLogger } from "./host.js";
 export { isIsoDateTimeWithOffset } from "./datetime.js";
 export { googleConfigDir, googleSecretsDir, googleTokenPath, legacyGoogleTokenPath } from "./paths.js";
