@@ -29,6 +29,16 @@ describe("verifyHmacSignature", () => {
     assert.equal(verifyHmacSignature("payload", "short", SECRET), false);
   });
 
+  it("returns false (no throw) when a non-ASCII signature matches string length but not byte length", () => {
+    // Regression: the guard must compare BYTE lengths. A multi-byte char
+    // gives Buffer.from() more bytes than the JS string length, which
+    // would make timingSafeEqual throw if guarded by string length.
+    const expected = sign("payload"); // base64, all ASCII
+    const sameStringLenNonAscii = "é".repeat(expected.length);
+    assert.equal(sameStringLenNonAscii.length, expected.length);
+    assert.equal(verifyHmacSignature("payload", sameStringLenNonAscii, SECRET), false);
+  });
+
   it("supports hex encoding", () => {
     const body = "payload";
     assert.equal(verifyHmacSignature(body, sign(body, "hex"), SECRET, "SHA256", "hex"), true);

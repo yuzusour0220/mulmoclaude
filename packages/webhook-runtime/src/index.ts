@@ -71,9 +71,14 @@ export function createWebhookRateLimit(limitPerMinute = 120): RateLimitRequestHa
 
 // Timing-safe HMAC signature check. `algorithm` is the OpenSSL digest
 // name (e.g. "SHA256"); `encoding` is how the platform encodes the
-// signature it sends (LINE / LINE WORKS: base64; Meta: hex). Returns
-// false on a length mismatch before the constant-time compare, so
-// `timingSafeEqual` never throws on unequal buffers.
+// signature it sends (LINE / LINE WORKS: base64; Meta: hex).
+//
+// The length guard compares BYTE lengths, not string lengths: a
+// malformed non-ASCII signature can share `expected`'s JS string length
+// while `Buffer.from()` yields more bytes, and `timingSafeEqual` throws
+// on unequal-length buffers. Comparing the buffers keeps a bad signature
+// a deterministic `false` (fail closed) instead of a thrown 500 — this
+// is what the per-bridge `try/catch` wrappers used to guarantee.
 export function verifyHmacSignature(
   body: string,
   signature: string,
@@ -81,7 +86,8 @@ export function verifyHmacSignature(
   algorithm = "SHA256",
   encoding: crypto.BinaryToTextEncoding = "base64",
 ): boolean {
-  const expected = crypto.createHmac(algorithm, secret).update(body).digest(encoding);
-  if (expected.length !== signature.length) return false;
-  return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signature));
+  const expected = Buffer.from(crypto.createHmac(algorithm, secret).update(body).digest(encoding));
+  const provided = Buffer.from(signature);
+  if (expected.length !== provided.length) return false;
+  return crypto.timingSafeEqual(expected, provided);
 }
