@@ -69,6 +69,34 @@ import { clampCapabilities, mintViewToken, requireViewToken, type ViewCapability
 
 const router = Router();
 
+// Load a collection by slug or send a 404 and return null. Callers do
+// `const collection = await loadCollectionOr404(slug, res); if (!collection) return;`.
+// The load-or-404 preamble was repeated across ~16 route handlers.
+async function loadCollectionOr404(slug: string, res: Response): Promise<LoadedCollection | null> {
+  const collection = await loadCollection(slug);
+  if (!collection) {
+    notFound(res, `collection '${slug}' not found`);
+    return null;
+  }
+  return collection;
+}
+
+type CustomView = NonNullable<LoadedCollection["schema"]["views"]>[number];
+
+// Resolve a collection + one of its custom views by id, or send a 404
+// (missing collection or missing view) and return null. Shared by the
+// view-file / view-i18n / view-token routes.
+async function resolveCustomViewOr404(slug: string, viewId: string, res: Response): Promise<{ collection: LoadedCollection; view: CustomView } | null> {
+  const collection = await loadCollectionOr404(slug, res);
+  if (!collection) return null;
+  const view = (collection.schema.views ?? []).find((entry) => entry.id === viewId);
+  if (!view) {
+    notFound(res, `custom view '${viewId}' not found on collection '${slug}'`);
+    return null;
+  }
+  return { collection, view };
+}
+
 interface CollectionsListResponse {
   collections: CollectionSummary[];
 }
@@ -156,11 +184,8 @@ router.get(API_ROUTES.collections.list, async (_req: Request, res: Response<Coll
 });
 
 router.get(API_ROUTES.collections.detail, async (req: Request<{ slug: string }>, res: Response<CollectionDetailResponse>) => {
-  const collection = await loadCollection(req.params.slug);
-  if (!collection) {
-    notFound(res, `collection '${req.params.slug}' not found`);
-    return;
-  }
+  const collection = await loadCollectionOr404(req.params.slug, res);
+  if (!collection) return;
   try {
     const items = await listItems(collection.dataDir);
     // Best-effort validation: a malformed record is silently skipped at
@@ -193,11 +218,8 @@ router.get(API_ROUTES.collections.detail, async (req: Request<{ slug: string }>,
 // non-preset collections are deletable; see deleteCollection for the
 // scope rules and the archive layout.
 router.delete(API_ROUTES.collections.detail, async (req: Request<{ slug: string }>, res: Response<DeleteCollectionResponse>) => {
-  const collection = await loadCollection(req.params.slug);
-  if (!collection) {
-    notFound(res, `collection '${req.params.slug}' not found`);
-    return;
-  }
+  const collection = await loadCollectionOr404(req.params.slug, res);
+  if (!collection) return;
   try {
     const result = await deleteCollection(collection);
     if (result.kind !== "ok") {
@@ -218,11 +240,8 @@ function extractRecord(body: unknown): CollectionItem | null {
 }
 
 router.post(API_ROUTES.collections.items, async (req: Request<{ slug: string }>, res: Response<ItemMutationResponse>) => {
-  const collection = await loadCollection(req.params.slug);
-  if (!collection) {
-    notFound(res, `collection '${req.params.slug}' not found`);
-    return;
-  }
+  const collection = await loadCollectionOr404(req.params.slug, res);
+  if (!collection) return;
   const record = extractRecord(req.body);
   if (!record) {
     badRequest(res, "request body must be a JSON object");
@@ -260,11 +279,8 @@ router.post(API_ROUTES.collections.items, async (req: Request<{ slug: string }>,
 });
 
 router.put(API_ROUTES.collections.item, async (req: Request<{ slug: string; itemId: string }>, res: Response<ItemMutationResponse>) => {
-  const collection = await loadCollection(req.params.slug);
-  if (!collection) {
-    notFound(res, `collection '${req.params.slug}' not found`);
-    return;
-  }
+  const collection = await loadCollectionOr404(req.params.slug, res);
+  if (!collection) return;
   const record = extractRecord(req.body);
   if (!record) {
     badRequest(res, "request body must be a JSON object");
@@ -306,11 +322,8 @@ router.put(API_ROUTES.collections.item, async (req: Request<{ slug: string; item
 });
 
 router.delete(API_ROUTES.collections.item, async (req: Request<{ slug: string; itemId: string }>, res: Response<DeleteResponse>) => {
-  const collection = await loadCollection(req.params.slug);
-  if (!collection) {
-    notFound(res, `collection '${req.params.slug}' not found`);
-    return;
-  }
+  const collection = await loadCollectionOr404(req.params.slug, res);
+  if (!collection) return;
   try {
     const result = await deleteItem(collection.dataDir, req.params.itemId, { slug: collection.slug });
     if (result.kind === "invalid-id") {
@@ -351,11 +364,8 @@ interface RefreshResponse {
 // carries no `ingest` block (it's an ordinary skill collection, not a
 // feed). Backs the CollectionView "Refresh feed" button.
 router.post(API_ROUTES.collections.refresh, async (req: Request<{ slug: string }>, res: Response<RefreshResponse>) => {
-  const collection = await loadCollection(req.params.slug);
-  if (!collection) {
-    notFound(res, `collection '${req.params.slug}' not found`);
-    return;
-  }
+  const collection = await loadCollectionOr404(req.params.slug, res);
+  if (!collection) return;
   if (!collection.schema.ingest) {
     badRequest(res, `collection '${collection.slug}' is not a feed (no ingest config)`);
     return;
@@ -441,11 +451,8 @@ async function respondForMutateAction(
 // the hidden worker itself; for `kind: "mutate"`, it applies the
 // declarative write). No domain (invoice / PDF / role) literals.
 router.post(API_ROUTES.collections.itemAction, async (req: Request<{ slug: string; itemId: string; actionId: string }>, res: Response<ActionRunResponse>) => {
-  const collection = await loadCollection(req.params.slug);
-  if (!collection) {
-    notFound(res, `collection '${req.params.slug}' not found`);
-    return;
-  }
+  const collection = await loadCollectionOr404(req.params.slug, res);
+  if (!collection) return;
   const action = collection.schema.actions?.find((entry) => entry.id === req.params.actionId);
   if (!action) {
     notFound(res, `action '${req.params.actionId}' not found on collection '${collection.slug}'`);
@@ -506,11 +513,8 @@ async function buildCollectionActionSeed(collection: LoadedCollection, action: C
 // Like the per-record route but with no `itemId`: there is no record to read or
 // gate on, so the seed injects a progress summary instead. No domain literals.
 router.post(API_ROUTES.collections.collectionAction, async (req: Request<{ slug: string; actionId: string }>, res: Response<ActionRunResponse>) => {
-  const collection = await loadCollection(req.params.slug);
-  if (!collection) {
-    notFound(res, `collection '${req.params.slug}' not found`);
-    return;
-  }
+  const collection = await loadCollectionOr404(req.params.slug, res);
+  if (!collection) return;
   const action = collection.schema.collectionActions?.find((entry) => entry.id === req.params.actionId);
   if (!action) {
     notFound(res, `collection action '${req.params.actionId}' not found on collection '${collection.slug}'`);
@@ -628,16 +632,9 @@ router.get(API_ROUTES.collections.viewFile, async (req: Request<{ slug: string }
   try {
     const { slug } = req.params;
     const viewId = typeof req.query.id === "string" ? req.query.id : "";
-    const collection = await loadCollection(slug);
-    if (!collection) {
-      notFound(res, `collection '${slug}' not found`);
-      return;
-    }
-    const view = (collection.schema.views ?? []).find((entry) => entry.id === viewId);
-    if (!view) {
-      notFound(res, `custom view '${viewId}' not found on collection '${slug}'`);
-      return;
-    }
+    const resolved = await resolveCustomViewOr404(slug, viewId, res);
+    if (!resolved) return;
+    const { collection, view } = resolved;
     // Path-safe, source-aware read through the collections domain layer (no raw
     // fs / hardcoded subpaths in the route).
     const html = await readCustomViewHtml(collection, view.file);
@@ -670,11 +667,8 @@ router.get(API_ROUTES.collections.remoteView, async (req: Request<{ slug: string
     const { slug } = req.params;
     const viewId = typeof req.query.id === "string" ? req.query.id : "";
     const locale = typeof req.query.locale === "string" ? req.query.locale : "";
-    const collection = await loadCollection(slug);
-    if (!collection) {
-      notFound(res, `collection '${slug}' not found`);
-      return;
-    }
+    const collection = await loadCollectionOr404(slug, res);
+    if (!collection) return;
     const result = await buildRemoteView(collection, viewId, locale);
     if (result.kind !== "ok") {
       sendRemoteViewFailure(res, result, slug);
@@ -710,11 +704,8 @@ router.post(API_ROUTES.collections.remoteViewMutate, async (req: Request<{ slug:
       badRequest(res, "invalid mutate request — expected { op: 'update'|'delete', id, patch? }");
       return;
     }
-    const collection = await loadCollection(slug);
-    if (!collection) {
-      notFound(res, `collection '${slug}' not found`);
-      return;
-    }
+    const collection = await loadCollectionOr404(slug, res);
+    if (!collection) return;
     const result = await mutateRemoteView(collection, viewId, request);
     if (result.kind !== "ok") {
       sendMutateRemoteViewFailure(res, result, slug);
@@ -753,11 +744,8 @@ router.get(API_ROUTES.collections.remoteViewItems, async (req: Request<{ slug: s
   try {
     const { slug, viewId } = req.params;
     const request = { offset: clampOffset(req.query.offset), limit: clampLimit(req.query.limit), fields: normalizeFields(csvParam(req.query.fields)) };
-    const collection = await loadCollection(slug);
-    if (!collection) {
-      notFound(res, `collection '${slug}' not found`);
-      return;
-    }
+    const collection = await loadCollectionOr404(slug, res);
+    if (!collection) return;
     const result = await remoteViewItems(collection, viewId, request);
     if (result.kind !== "ok") {
       sendRemoteViewItemsFailure(res, result, slug);
@@ -788,16 +776,9 @@ router.get(API_ROUTES.collections.viewI18n, async (req: Request<{ slug: string }
     const { slug } = req.params;
     const viewId = typeof req.query.id === "string" ? req.query.id : "";
     const locale = typeof req.query.locale === "string" ? req.query.locale : "";
-    const collection = await loadCollection(slug);
-    if (!collection) {
-      notFound(res, `collection '${slug}' not found`);
-      return;
-    }
-    const view = (collection.schema.views ?? []).find((entry) => entry.id === viewId);
-    if (!view) {
-      notFound(res, `custom view '${viewId}' not found on collection '${slug}'`);
-      return;
-    }
+    const resolved = await resolveCustomViewOr404(slug, viewId, res);
+    if (!resolved) return;
+    const { collection, view } = resolved;
     if (!view.i18n) {
       // The view declared no translation file — return the empty contract so
       // the client doesn't have to special-case "no i18n" with a different
@@ -829,16 +810,9 @@ router.post(API_ROUTES.collections.viewToken, async (req: Request<{ slug: string
       badRequest(res, "`viewId` is required");
       return;
     }
-    const collection = await loadCollection(slug);
-    if (!collection) {
-      notFound(res, `collection '${slug}' not found`);
-      return;
-    }
-    const view = (collection.schema.views ?? []).find((entry) => entry.id === viewId);
-    if (!view) {
-      notFound(res, `custom view '${viewId}' not found on collection '${slug}'`);
-      return;
-    }
+    const resolved = await resolveCustomViewOr404(slug, viewId, res);
+    if (!resolved) return;
+    const { view } = resolved;
     const granted = clampCapabilities(view.capabilities, parseCapabilities(body.capabilities));
     const minted = mintViewToken(slug, granted);
     if (!minted) {
@@ -903,11 +877,8 @@ router.post(
   requireViewToken("write"),
   async (req: Request<{ slug: string; actionId: string }>, res: Response<ActionRunResponse>) => {
     try {
-      const collection = await loadCollection(req.params.slug);
-      if (!collection) {
-        notFound(res, `collection '${req.params.slug}' not found`);
-        return;
-      }
+      const collection = await loadCollectionOr404(req.params.slug, res);
+      if (!collection) return;
       const action = collection.schema.actions?.find((entry) => entry.id === req.params.actionId);
       if (!action) {
         notFound(res, `action '${req.params.actionId}' not found on collection '${collection.slug}'`);
@@ -971,11 +942,8 @@ function sendDeleteViewRefusal(res: Response, result: Exclude<DeleteViewResult, 
 // refuses user-scope + preset collections, consistent with collection delete.
 router.delete(API_ROUTES.collections.viewDelete, async (req: Request<{ slug: string; viewId: string }>, res: Response<DeleteViewResponse>) => {
   try {
-    const collection = await loadCollection(req.params.slug);
-    if (!collection) {
-      notFound(res, `collection '${req.params.slug}' not found`);
-      return;
-    }
+    const collection = await loadCollectionOr404(req.params.slug, res);
+    if (!collection) return;
     const result = await deleteCustomView(collection, req.params.viewId);
     if (result.kind !== "ok") {
       sendDeleteViewRefusal(res, result);
