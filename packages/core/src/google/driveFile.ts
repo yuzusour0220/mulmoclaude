@@ -2,6 +2,7 @@
 // ever sees files IT created, never the user's wider Drive. That narrow
 // scope is why this is non-sensitive and needs no Google verification
 // review; keep every call inside it.
+import { randomBytes } from "node:crypto";
 import { asRecord, googleRequest, stringField, DEFAULT_LIST_MAX_RESULTS } from "./apiClient.js";
 
 const DRIVE_FILES_URL = "https://www.googleapis.com/drive/v3/files";
@@ -64,29 +65,56 @@ export async function listDriveFiles(accessToken: string, input: ListDriveFilesI
 // Multipart upload: metadata part + media part in one request. Built by hand
 // because the `googleapis` SDK is the only alternative and this is the sole
 // multipart call in the engine.
-const MULTIPART_BOUNDARY = "mulmo-drive-boundary";
+const BOUNDARY_BYTES = 16;
 
-export const buildMultipartBody = (metadata: Record<string, string>, content: string, mimeType: string): string =>
+/** Fresh per request: a fixed boundary appearing inside file content would
+ *  split the payload at the wrong place, so Drive would store a truncated or
+ *  mangled file. Random 128 bits makes an accidental — or crafted — collision
+ *  infeasible; `newMultipartBoundary` is re-derived until it is absent from
+ *  the body it must delimit. */
+const newMultipartBoundary = (): string => `mulmo-drive-${randomBytes(BOUNDARY_BYTES).toString("hex")}`;
+
+// RFC 2045 token + parameters: no CR/LF (header injection into the part
+// headers) and no quotes/semicolons that would let a crafted value forge
+// extra headers or parameters.
+const MIME_TYPE_RE = /^[A-Za-z0-9!#$&^_.+-]+\/[A-Za-z0-9!#$&^_.+-]+$/;
+
+export const assertSafeMimeType = (mimeType: string): string => {
+  if (!MIME_TYPE_RE.test(mimeType)) throw new Error(`Google Drive API: invalid mimeType '${mimeType}' — expected a plain type/subtype such as text/plain`);
+  return mimeType;
+};
+
+export const buildMultipartBody = (metadata: Record<string, string>, content: string, mimeType: string, boundary: string): string =>
   [
-    `--${MULTIPART_BOUNDARY}`,
+    `--${boundary}`,
     "Content-Type: application/json; charset=UTF-8",
     "",
     JSON.stringify(metadata),
-    `--${MULTIPART_BOUNDARY}`,
+    `--${boundary}`,
     `Content-Type: ${mimeType}`,
     "",
     content,
-    `--${MULTIPART_BOUNDARY}--`,
+    `--${boundary}--`,
     "",
   ].join("\r\n");
 
+/** A boundary that appears nowhere in the parts it delimits. */
+export const pickBoundary = (parts: string[], generate: () => string = newMultipartBoundary): string => {
+  const collides = (candidate: string): boolean => parts.some((part) => part.includes(candidate));
+  let boundary = generate();
+  while (collides(boundary)) boundary = generate();
+  return boundary;
+};
+
 export async function createDriveFile(accessToken: string, input: CreateDriveFileInput): Promise<DriveFileSummary> {
-  const mimeType = input.mimeType ?? DEFAULT_MIME_TYPE;
+  const mimeType = assertSafeMimeType(input.mimeType ?? DEFAULT_MIME_TYPE);
+  const metadata = { name: input.name, mimeType };
+  const boundary = pickBoundary([input.content, JSON.stringify(metadata)]);
   const params = new URLSearchParams({ uploadType: "multipart", fields: FILE_FIELDS });
   const created = await googleRequest(DRIVE_API_LABEL, accessToken, `${DRIVE_UPLOAD_URL}?${params.toString()}`, {
     method: "POST",
-    contentType: `multipart/related; boundary=${MULTIPART_BOUNDARY}`,
-    body: buildMultipartBody({ name: input.name, mimeType }, input.content, mimeType),
+    contentType: `multipart/related; boundary=${boundary}`,
+    body: buildMultipartBody(metadata, input.content, mimeType, boundary),
   });
   return toDriveFileSummary(created);
 }

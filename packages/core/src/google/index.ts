@@ -47,11 +47,13 @@ export {
   type TaskSummary,
 } from "./tasks.js";
 export {
+  assertSafeMimeType,
   buildMultipartBody,
   createDriveFile,
   deleteDriveFile,
   isTextMimeType,
   listDriveFiles,
+  pickBoundary,
   readDriveFile,
   toDriveFileSummary,
   type CreateDriveFileInput,
