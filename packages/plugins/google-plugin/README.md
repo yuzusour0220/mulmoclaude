@@ -5,9 +5,13 @@ account** to the chat agent as one `google` tool (kind-discriminated
 dispatch). Server-only — no Vue View.
 
 - Engine: `@mulmoclaude/core/google` (OAuth loopback + PKCE, token store at
-  the host-neutral `~/.config/mulmo/google-token.json`, Calendar v3 REST).
-  The host's settings UI, remote commands, auth CLI, and this tool share one
-  link state — across hosts, too.
+  the host-neutral `~/.config/mulmo/google-token.json`, Calendar / Tasks /
+  Drive REST). The host's settings UI, remote commands, auth CLI, and this
+  tool share one link state — across hosts, too.
+- Linking needs **no Google Cloud setup**: the mulmoserver broker applies the
+  OAuth client secret Google requires and stores nothing; tokens stay on the
+  user's machine. A `~/.secrets/client_secret_*.json` (advanced) keeps the
+  whole flow local instead.
 - Kinds: `status`; Calendar (`calendarListEvents`, `calendarCreateEvent`);
   Tasks (`taskListsList`, `tasksList`, `tasksCreate`, `tasksComplete`);
   Drive (`driveList`, `driveCreate`, `driveRead`).

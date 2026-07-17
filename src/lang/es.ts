@@ -273,8 +273,6 @@ const esMessages = {
       connect: "Vincular cuenta de Google",
       unlink: "Desvincular",
       unlinkConfirm: "¿Desvincular la cuenta de Google? El token guardado se revocará y se eliminará de esta máquina.",
-      clientSecretMissing:
-        "No se encontraron credenciales de cliente OAuth. Descarga el JSON de cliente de aplicación de escritorio desde Google Cloud Console y colócalo en ~/.secrets/ (client_secret_*.json).",
       clientSecretAmbiguous:
         "Se encontraron varios archivos client_secret_*.json en ~/.secrets/. Conserva solo uno para que el token guardado siga emparejado con el cliente OAuth correcto.",
       loadError: "No se pudo cargar el estado de la vinculación con Google.",

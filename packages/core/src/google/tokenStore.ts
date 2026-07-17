@@ -10,9 +10,21 @@ import { googleTokenPath, legacyGoogleTokenPath } from "./paths.js";
 
 const TOKEN_FILE_MODE = 0o600;
 
-export function mergeGoogleTokens(existing: Credentials | null, incoming: Credentials): Credentials {
+/** Which client minted the grant: `local` = the user's own client JSON in
+ *  `~/.secrets/`, `broker` = the mulmoserver broker. Renewal must use the same
+ *  path, since only that client's secret can refresh its tokens. Absent on
+ *  tokens written before the broker existed — those are all `local`. */
+export type IssuedVia = "local" | "broker";
+
+export interface StoredGoogleTokens extends Credentials {
+  issuedVia?: IssuedVia;
+}
+
+export function mergeGoogleTokens(existing: StoredGoogleTokens | null, incoming: StoredGoogleTokens): StoredGoogleTokens {
   const merged = { ...existing, ...incoming };
   if (!incoming.refresh_token && existing?.refresh_token) merged.refresh_token = existing.refresh_token;
+  // A broker refresh response carries no marker; keep the one from the link.
+  if (!incoming.issuedVia && existing?.issuedVia) merged.issuedVia = existing.issuedVia;
   return merged;
 }
 
@@ -42,16 +54,16 @@ async function migrateLegacyTokenFile(home?: string): Promise<void> {
   await rm(legacy, { force: true });
 }
 
-export async function loadGoogleTokens(home?: string): Promise<Credentials | null> {
+export async function loadGoogleTokens(home?: string): Promise<StoredGoogleTokens | null> {
   await migrateLegacyTokenFile(home).catch(() => undefined);
-  const current = await readJsonOrNull<Credentials>(googleTokenPath(home));
+  const current = await readJsonOrNull<StoredGoogleTokens>(googleTokenPath(home));
   if (current) return current;
   // Migration is best-effort — a valid legacy token must still count as
   // linked even when the move failed (permissions, read-only fs, …).
-  return await readJsonOrNull<Credentials>(legacyGoogleTokenPath(home));
+  return await readJsonOrNull<StoredGoogleTokens>(legacyGoogleTokenPath(home));
 }
 
-export async function saveGoogleTokens(incoming: Credentials, home?: string): Promise<Credentials> {
+export async function saveGoogleTokens(incoming: StoredGoogleTokens, home?: string): Promise<StoredGoogleTokens> {
   const merged = mergeGoogleTokens(await loadGoogleTokens(home), incoming);
   await writeJsonAtomicWithMode(googleTokenPath(home), merged, TOKEN_FILE_MODE);
   return merged;

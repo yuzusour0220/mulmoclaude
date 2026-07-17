@@ -271,8 +271,6 @@ const jaMessages = {
       connect: "Google アカウントを連携",
       unlink: "連携を解除",
       unlinkConfirm: "Google アカウントの連携を解除しますか？保存済みトークンは無効化され、このマシンから削除されます。",
-      clientSecretMissing:
-        "OAuth クライアント認証情報が見つかりません。Google Cloud Console からデスクトップアプリ用のクライアント JSON をダウンロードし、~/.secrets/ に配置してください（client_secret_*.json）。",
       clientSecretAmbiguous:
         "~/.secrets/ に client_secret_*.json が複数見つかりました。保存済みトークンと OAuth クライアントの組み合わせがずれないよう、1つだけ残してください。",
       loadError: "Google 連携状態の取得に失敗しました。",
