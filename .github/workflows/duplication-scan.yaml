@@ -91,14 +91,20 @@ jobs:
       # the real signal.
       #
       # Tests are excluded: fixtures and arrange/act/assert scaffolding
-      # duplicate by nature, and 500+ alerts from test/ would drown the
-      # ~186 findings that are actually worth reading.
+      # duplicate by nature, and the 528 extra findings they bring would
+      # drown the ~186 that are actually worth reading.
+      #
+      # The test globs are written `**/test/**` rather than `test/**` to
+      # say "any test dir, at any depth" out loud — packages/*/test/ has
+      # to be excluded too. jscpd's --ignore globs are unanchored, so the
+      # two forms are equivalent today (verified: identical file and clone
+      # counts); the explicit form just doesn't depend on that.
       - name: Run jscpd
         run: |
           set -euo pipefail
           jscpd . \
             --format typescript \
-            --ignore "**/node_modules/**,**/dist/**,**/*.d.ts,test/**,e2e/**,e2e-live/**" \
+            --ignore "**/node_modules/**,**/dist/**,**/*.d.ts,**/test/**,**/e2e/**,**/e2e-live/**" \
             --reporters console,sarif \
             --output report
 
