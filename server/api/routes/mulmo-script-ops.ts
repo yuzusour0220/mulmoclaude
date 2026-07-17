@@ -268,12 +268,16 @@ export async function beatImageOp(filePath: string, beatIndex: number): Promise<
 // when nothing has been generated yet. Override the default
 // server_error-on-context-missing so the soft-fail contract is preserved.
 export async function beatAudioOp(filePath: string, beatIndex: number): Promise<OpResult<{ audio: string | null }>> {
-  return runStoryOp<{ audio: string | null }>(filePath, { operation: "beat-audio", onContextMissing: () => ({ ok: true, audio: null }) }, async ({ context }) => {
-    const beat = context.studio.script.beats[beatIndex];
-    const audioPath = getBeatAudioPathOrUrl(beat.text ?? "", context, beat, context.lang);
-    if (!audioPath || !existsSync(audioPath)) return { ok: true, audio: null };
-    return { ok: true, audio: fileToDataUri(audioPath, "audio/mpeg") };
-  });
+  return runStoryOp<{ audio: string | null }>(
+    filePath,
+    { operation: "beat-audio", onContextMissing: () => ({ ok: true, audio: null }) },
+    async ({ context }) => {
+      const beat = context.studio.script.beats[beatIndex];
+      const audioPath = getBeatAudioPathOrUrl(beat.text ?? "", context, beat, context.lang);
+      if (!audioPath || !existsSync(audioPath)) return { ok: true, audio: null };
+      return { ok: true, audio: fileToDataUri(audioPath, "audio/mpeg") };
+    },
+  );
 }
 
 // Probe for a beat's generated video clip. Preference order mirrors the
