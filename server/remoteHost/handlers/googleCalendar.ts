@@ -36,7 +36,9 @@ const optionalString = (params: JsonObject, key: string): string | undefined => 
   const value = params[key];
   if (value === undefined || value === null) return undefined;
   if (typeof value !== "string" || value.trim() === "") throw new Error(`${key} must be a non-empty string`);
-  return value;
+  // Return trimmed so whitespace can't reach the Google API (matches the
+  // plugin's Zod .trim() normalization).
+  return value.trim();
 };
 
 // Calendar's `dateTime`/`timeMin` are RFC3339 and reject date-only,

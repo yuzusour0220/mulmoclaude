@@ -176,6 +176,12 @@ describe("createGoogleCalendarListEvents", () => {
     assert.equal(calls.listInputs[0]?.calendarId, "team@group.calendar.google.com");
   });
 
+  it("trims a whitespace-padded calendarId before it reaches the engine", async () => {
+    const { deps, calls } = stubDeps();
+    await createGoogleCalendarListEvents(deps)({ calendarId: "  team@group.calendar.google.com  " });
+    assert.equal(calls.listInputs[0]?.calendarId, "team@group.calendar.google.com");
+  });
+
   it("rejects a malformed timeMin", async () => {
     const { deps } = stubDeps();
     await assert.rejects(
