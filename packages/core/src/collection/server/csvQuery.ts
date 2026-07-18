@@ -59,21 +59,39 @@ function whereFragment(cond: CollectionQueryWhere): { sql: string; params: unkno
   return { sql: `${lhs} ${operator} ?`, params: [cond.value] };
 }
 
-/** Compile a validated query. Returns the SQL (whose FIRST placeholder is
- *  the CSV path — the executor binds it) and the where-value parameters
- *  that follow it. Callers MUST have run `CollectionQueryZ` first; this
- *  function trusts the shape (aliases already charset-checked, orderBy
- *  membership already enforced). */
-export function compileCsvQuery(query: CollectionQuery, primaryKey: string): { sql: string; params: unknown[] } {
+/** Compile a validated query against `fromSql` (a table-function call
+ *  whose FIRST placeholder is the source path — the executor binds it).
+ *  Returns the SQL and the where-value parameters that follow the path.
+ *  Callers MUST have run `CollectionQueryZ` first; this function trusts
+ *  the shape (aliases already charset-checked, orderBy membership already
+ *  enforced). */
+function compileQuery(query: CollectionQuery, fromSql: string): { sql: string; params: unknown[] } {
   const groupBy = query.groupBy ?? [];
   const aggregates = Object.entries(query.aggregates ?? {});
   const selectList = [...groupBy.map(quoteIdent), ...aggregates.map(([alias, aggregate]) => `${aggregateExpr(aggregate)} AS ${quoteIdent(alias)}`)];
   const where = (query.where ?? []).map(whereFragment);
-  const clauses = [`SELECT ${selectList.join(", ")}`, `FROM read_csv(${readCsvArgs(primaryKey)})`];
+  const clauses = [`SELECT ${selectList.join(", ")}`, `FROM ${fromSql}`];
   if (where.length > 0) clauses.push(`WHERE ${where.map((fragment) => fragment.sql).join(" AND ")}`);
   if (groupBy.length > 0) clauses.push(`GROUP BY ${groupBy.map(quoteIdent).join(", ")}`);
   const orderBy = (query.orderBy ?? []).map((order) => quoteIdent(order.field) + (order.dir === "desc" ? " DESC" : " ASC"));
   if (orderBy.length > 0) clauses.push(`ORDER BY ${orderBy.join(", ")}`);
   clauses.push(`LIMIT ${query.limit ?? DEFAULT_QUERY_ROWS}`);
   return { sql: clauses.join(" "), params: where.flatMap((fragment) => fragment.params) };
+}
+
+/** Compile against a CSV file (the dataSource store's engine). */
+export function compileCsvQuery(query: CollectionQuery, primaryKey: string): { sql: string; params: unknown[] } {
+  return compileQuery(query, `read_csv(${readCsvArgs(primaryKey)})`);
+}
+
+/** Compile against a JSONL file of ENRICHED records — the file-backed
+ *  collections' engine (see `jsonlQuery.ts`). No VARCHAR key pin needed:
+ *  enriched record ids are already strings. `sample_size=-1` makes the
+ *  schema inference scan EVERY line — with the default sample, a sparse
+ *  optional/derived field first appearing past the sample would not be
+ *  inferred as a column and the query would binder-error on it (Codex P2
+ *  on #2165). The full scan costs nothing extra here: aggregation reads
+ *  the whole file anyway. */
+export function compileJsonlQuery(query: CollectionQuery): { sql: string; params: unknown[] } {
+  return compileQuery(query, `read_json(?, format='newline_delimited', sample_size=-1)`);
 }

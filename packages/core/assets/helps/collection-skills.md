@@ -854,6 +854,13 @@ records through **`manageCollection`**, not raw file I/O:
   / `fields` on large collections to keep the result small — e.g.
   `fields: ["id"]` to check for an id collision before an add.
 - **Delete** — remove the record file (`manageCollection` has no delete).
+- **Aggregate — `queryItems`.** Counts, sums, averages, group-bys on ANY
+  collection via a structured query (`groupBy` / `aggregates` / `where` /
+  `orderBy` / `limit` — full shape in the "External data (CSV) collections"
+  section below). On file-backed collections it aggregates the ENRICHED
+  records, so computed fields (`derived` / `rollup` / `toggle`) are
+  queryable columns — "sum of invoice totals" works even when `total` is a
+  formula. Prefer it over doing arithmetic on `getItems` output.
 - **Cross-collection questions — `getOntology`.** Returns every collection in
   the workspace with its `primaryKey`, effective `displayField`, record count,
   and its `ref` / `embed` / `backlinks` / `rollup` relations (field → related slug, including refs
@@ -961,10 +968,11 @@ Semantics to remember (and to tell the user):
   logged). Fine for browsing — but NEVER compute an aggregate from
   `getItems` output on a large file (a capped scan gives a silently wrong
   number). Use `queryItems` instead.
-- **Aggregation — `manageCollection` `queryItems`** (dataSource collections
-  only): a structured query over the WHOLE file (uncapped scan, DuckDB
-  underneath). Answer counts / sums / averages / group-bys with it —
-  don't shell out to python/pandas for questions it covers. Shape:
+- **Aggregation — `manageCollection` `queryItems`**: a structured query over
+  the WHOLE file (uncapped scan, DuckDB underneath). Answer counts / sums /
+  averages / group-bys with it — don't shell out to python/pandas for
+  questions it covers. (It works on EVERY collection — see the Records
+  section; this bullet is about the dataSource specifics.) Shape:
 
   ```json
   {

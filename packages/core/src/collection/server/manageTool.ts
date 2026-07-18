@@ -49,6 +49,7 @@ import { loadCollection, type DiscoveryOptions } from "./discovery";
 import type { LoadedCollection } from "./discoveredCollection";
 import { readItem, resolveCreateItemId, writeItem } from "./io";
 import { collectionWritable, readOnlyRefusal, storeFor } from "./store";
+import { runQueryOverRows } from "./jsonlQuery";
 import { enrichItems } from "./derive";
 import { validateCollectionRecords, validateRecordObject } from "./validate";
 import { buildWorkspaceOntology } from "./ontology";
@@ -288,16 +289,15 @@ async function putOneItem(
   return reject(itemId, "write refused: the collection's data dir escapes the workspace");
 }
 
-/** Aggregation over a dataSource collection's WHOLE file via the
- *  structured query DSL (`core/queryZ.ts`) — the paved road for counts /
- *  sums / group-bys that `getItems` (row-capped, unaggregated) can't
- *  answer honestly. File-backed collections have no query engine yet:
- *  refuse with a pointer instead of silently emulating. */
+/** Aggregation over a collection via the structured query DSL
+ *  (`core/queryZ.ts`) — the paved road for counts / sums / group-bys
+ *  that a row listing can't answer honestly. Two engines behind one
+ *  shape: a dataSource collection queries its CSV natively through the
+ *  store (`store.query`, uncapped whole-file scan); a file-backed
+ *  collection aggregates its ENRICHED records (computed fields —
+ *  `derived` / `rollup` / `toggle` — are real columns) through the same
+ *  compiled SQL over a temp JSONL (`runQueryOverRows`). */
 async function handleQueryItems(collection: LoadedCollection, queryArg: unknown, deps: ManageCollectionDeps): Promise<string> {
-  const store = storeFor(collection, { workspaceRoot: deps.workspaceRoot });
-  if (!store.query) {
-    return `manageCollection: '${collection.slug}' is file-backed — queryItems currently supports only dataSource (CSV) collections; use getItems (with \`fields\`) instead.`;
-  }
   const parsed = CollectionQueryZ.safeParse(queryArg);
   if (!parsed.success) {
     const lines = parsed.error.issues
@@ -305,7 +305,16 @@ async function handleQueryItems(collection: LoadedCollection, queryArg: unknown,
       .map((issue) => `- ${issue.path.map(String).join(".") || "(root)"}: ${defangForPrompt(issue.message)}`);
     return `manageCollection: \`query\` rejected — fix and retry:\n${lines.join("\n")}`;
   }
-  const rows = await store.query(parsed.data);
+  const store = storeFor(collection, { workspaceRoot: deps.workspaceRoot });
+  if (store.query) {
+    const rows = await store.query(parsed.data);
+    return JSON.stringify({ collection: collection.slug, count: rows.length, rows });
+  }
+  // File-backed: load through the guarded reader (symlink defenses) and
+  // enrich BEFORE DuckDB sees anything — a raw read_json over the record
+  // files would both follow symlinks and miss every computed field.
+  const enriched = await enrichItems(collection, await store.list(), deps);
+  const rows = await runQueryOverRows(enriched, parsed.data);
   return JSON.stringify({ collection: collection.slug, count: rows.length, rows });
 }
 
@@ -470,7 +479,7 @@ const MANAGE_COLLECTION_PROMPT =
   'For a question that spans collections ("which clients have unpaid invoices?"), start with `getOntology`: it lists every collection with its primaryKey, record count, and outbound `ref`/`embed` relations, so you know which collections to join before reading any records. ' +
   "`putItems` validates every row against the schema before writing (required fields, enum values, primaryKey = record id) and returns `{ written, rejected }`; fix each rejected row using its `problem` text and retry just those rows. Never include computed fields in a row you write. " +
   'To update a few fields of an existing record, use `mode: "merge"` with a partial row ({ id, <changed fields> }) — the default upsert replaces the WHOLE record, so a partial upsert would silently erase every optional field it omits. ' +
-  "On a dataSource (CSV) collection, answer aggregation questions (counts, sums, averages, group-bys) with `queryItems` — it scans the WHOLE file, while getItems is row-capped, so an aggregate computed from getItems output can be silently wrong on large files.";
+  "Answer aggregation questions (counts, sums, averages, group-bys) with `queryItems` on ANY collection — on a dataSource (CSV) collection it scans the whole file (getItems is row-capped, so aggregates computed from its output can be silently wrong on large files); on a file-backed collection it aggregates the enriched records, so computed fields (derived/rollup/toggle) are queryable columns.";
 
 /** Validate getItems' optional `ids`/`fields` args, then delegate. */
 async function dispatchGetItems(collection: LoadedCollection, args: Record<string, unknown>, deps: ManageCollectionDeps): Promise<string> {
@@ -551,7 +560,7 @@ const MANAGE_COLLECTION_DEFINITION = {
       query: {
         type: "object",
         description:
-          'queryItems (dataSource/CSV collections only): a structured aggregation query over the WHOLE file — `{ groupBy?: ["col"], aggregates?: { alias: { op: "count"|"sum"|"avg"|"min"|"max", column? } }, where?: [{ field, op, value }], orderBy?: [{ field, dir? }], limit? }`. At least one of groupBy/aggregates. Runs uncapped over the full file (unlike getItems), so use it for counts / sums / group-bys on large CSVs.',
+          'queryItems: a structured aggregation query — `{ groupBy?: ["col"], aggregates?: { alias: { op: "count"|"sum"|"avg"|"min"|"max", column? } }, where?: [{ field, op, value }], orderBy?: [{ field, dir? }], limit? }`. At least one of groupBy/aggregates. On a dataSource (CSV) collection it scans the WHOLE file uncapped (unlike getItems); on a file-backed collection it aggregates the ENRICHED records, so computed fields (derived/rollup/toggle) are queryable columns. Use it for counts / sums / averages / group-bys instead of arithmetic over getItems output.',
       },
     },
     required: ["action"],

@@ -353,16 +353,9 @@ describe("query DSL (v2)", () => {
     assert.equal(filtered[0]?.s, 2750 * 20);
   });
 
-  it("manageCollection queryItems: works on dataSource, refuses file-backed, rejects a bad query", async () => {
+  it("manageCollection queryItems: works on dataSource and rejects a bad query", async () => {
     writeSkill("students", CSV_SCHEMA);
     writeCsv("data/students.csv", "student_id,name,score\nS-1,A,10\nS-2,B,30\n");
-    writeSkill("plain", {
-      title: "Plain",
-      icon: "folder",
-      dataPath: "data/plain/items",
-      primaryKey: "id",
-      fields: { id: { type: "string", label: "ID", primary: true } },
-    });
     const tool = makeManageCollectionTool(discoveryOpts());
 
     const ok = JSON.parse(await tool.handler({ action: "queryItems", slug: "students", query: { aggregates: { total: { op: "sum", column: "score" } } } })) as {
@@ -370,10 +363,118 @@ describe("query DSL (v2)", () => {
     };
     assert.equal(ok.rows[0]?.total, 40);
 
-    const refused = await tool.handler({ action: "queryItems", slug: "plain", query: { aggregates: { n: { op: "count" } } } });
-    assert.match(refused, /file-backed/);
-
     const invalid = await tool.handler({ action: "queryItems", slug: "students", query: { aggregates: { "bad alias": { op: "count" } } } });
     assert.match(invalid, /rejected/);
+  });
+
+  it("queryItems on a FILE-BACKED collection aggregates ENRICHED records — derived fields are queryable columns", async () => {
+    writeSkill("orders", {
+      title: "Orders",
+      icon: "receipt_long",
+      dataPath: "data/orders/items",
+      primaryKey: "id",
+      fields: {
+        id: { type: "string", label: "ID", primary: true },
+        status: { type: "enum", label: "Status", values: ["open", "paid"] },
+        qty: { type: "number", label: "Qty" },
+        price: { type: "number", label: "Price" },
+        // Never stored — only exists after enrichment. A raw read of the
+        // record files would aggregate it as nothing.
+        total: { type: "derived", label: "Total", formula: "qty * price" },
+      },
+    });
+    const dataDir = path.join(workdir, "data/orders/items");
+    mkdirSync(dataDir, { recursive: true });
+    writeFileSync(path.join(dataDir, "o1.json"), JSON.stringify({ id: "o1", status: "paid", qty: 2, price: 10 }));
+    writeFileSync(path.join(dataDir, "o2.json"), JSON.stringify({ id: "o2", status: "paid", qty: 1, price: 5 }));
+    writeFileSync(path.join(dataDir, "o3.json"), JSON.stringify({ id: "o3", status: "open", qty: 4, price: 100 }));
+    const tool = makeManageCollectionTool(discoveryOpts());
+
+    const grouped = JSON.parse(
+      await tool.handler({
+        action: "queryItems",
+        slug: "orders",
+        query: {
+          groupBy: ["status"],
+          aggregates: { revenue: { op: "sum", column: "total" }, n: { op: "count" } },
+          orderBy: [{ field: "status", dir: "asc" }],
+        },
+      }),
+    ) as { rows: Record<string, unknown>[] };
+    assert.deepEqual(
+      grouped.rows.map((row) => [row.status, row.revenue, row.n]),
+      [
+        ["open", 400, 1],
+        ["paid", 25, 2],
+      ],
+    );
+
+    const filtered = JSON.parse(
+      await tool.handler({
+        action: "queryItems",
+        slug: "orders",
+        query: { aggregates: { revenue: { op: "sum", column: "total" } }, where: [{ field: "status", op: "eq", value: "paid" }] },
+      }),
+    ) as { rows: Record<string, unknown>[] };
+    assert.equal(filtered.rows[0]?.revenue, 25);
+  });
+
+  it("a schema field absent from EVERY record is still queryable (NULL column, not a binder error)", async () => {
+    writeSkill("orders", {
+      title: "Orders",
+      icon: "receipt_long",
+      dataPath: "data/orders/items",
+      primaryKey: "id",
+      fields: {
+        id: { type: "string", label: "ID", primary: true },
+        amount: { type: "number", label: "Amount" },
+        // Declared but never written by any record — the CSV analog is a
+        // header column with no values, which queries as NULLs.
+        discount: { type: "number", label: "Discount" },
+      },
+    });
+    const dataDir = path.join(workdir, "data/orders/items");
+    mkdirSync(dataDir, { recursive: true });
+    writeFileSync(path.join(dataDir, "o1.json"), JSON.stringify({ id: "o1", amount: 10 }));
+    writeFileSync(path.join(dataDir, "o2.json"), JSON.stringify({ id: "o2", amount: 5 }));
+    const tool = makeManageCollectionTool(discoveryOpts());
+
+    const result = JSON.parse(
+      await tool.handler({
+        action: "queryItems",
+        slug: "orders",
+        query: { aggregates: { s: { op: "sum", column: "discount" }, n: { op: "count", column: "discount" }, total: { op: "sum", column: "amount" } } },
+      }),
+    ) as { rows: Record<string, unknown>[] };
+    assert.deepEqual(result.rows, [{ s: null, n: 0, total: 15 }]);
+
+    const grouped = JSON.parse(
+      await tool.handler({ action: "queryItems", slug: "orders", query: { groupBy: ["discount"], aggregates: { n: { op: "count" } } } }),
+    ) as { rows: Record<string, unknown>[] };
+    assert.deepEqual(grouped.rows, [{ discount: null, n: 2 }]);
+  });
+
+  it("queryItems on an EMPTY file-backed collection keeps SQL semantics: scalar row for bare aggregates, [] for grouped", async () => {
+    writeSkill("empty", {
+      title: "Empty",
+      icon: "folder",
+      dataPath: "data/empty/items",
+      primaryKey: "id",
+      fields: {
+        id: { type: "string", label: "ID", primary: true },
+        amount: { type: "number", label: "Amount" },
+      },
+    });
+    const tool = makeManageCollectionTool(discoveryOpts());
+    // Aggregate-only over zero rows → ONE scalar row (count 0, sum NULL) —
+    // same shape the CSV path yields for a header-only file, so `rows[0]`
+    // readers never break on storage kind or emptiness.
+    const scalar = JSON.parse(
+      await tool.handler({ action: "queryItems", slug: "empty", query: { aggregates: { n: { op: "count" }, s: { op: "sum", column: "amount" } } } }),
+    ) as { rows: Record<string, unknown>[] };
+    assert.deepEqual(scalar.rows, [{ n: 0, s: null }]);
+    // Grouped over zero rows → zero groups.
+    const grouped = JSON.parse(await tool.handler({ action: "queryItems", slug: "empty", query: { groupBy: ["id"] } })) as { rows: unknown[] };
+    assert.deepEqual(grouped.rows, []);
   });
 });

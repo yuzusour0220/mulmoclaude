@@ -233,6 +233,12 @@ DSL の形（JSON、zod 検証、サーバー側で SQL にコンパイル。値
 実装項目:
 - store にオプショナルな `query()` を追加。DuckDB store はネイティブ、
   ファイル store は非対応（明確なエラー）から始める。
+  → **後続で全コレクション対応済み**: ファイル実体コレクションは
+  `listItems`（symlink 防御込み）→ `enrichItems`（derived/rollup/toggle が
+  実列になる）→ 一時 JSONL（0600）→ 同一コンパイル SQL の `read_json` で
+  同じ DSL を実行（`jsonlQuery.ts`）。DuckDB が生レコードファイルに直接
+  触れない設計（glob だと symlink 追随 + 計算列欠落の二重の罠）。
+  空コレクションは DuckDB を経由せず `[]`。
 - エージェント面: `manageCollection` に `queryItems` アクション。
 - ビュー面: view-token（read）スコープの `POST …/view-data/query`
   エンドポイント + custom-view help への契約追記。
