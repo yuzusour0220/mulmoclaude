@@ -4,8 +4,22 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
 import type { JsonObject } from "../../server/remoteHost/commandChannel.js";
-import { createGoogleCalendarCreateEvent, createGoogleCalendarListEvents, type GoogleCalendarDeps } from "../../server/remoteHost/handlers/googleCalendar.js";
-import { DEFAULT_LIST_MAX_RESULTS, MAX_LIST_RESULTS, type CalendarEventInput, type CalendarEventSummary, type ListEventsInput } from "@mulmoclaude/core/google";
+import {
+  createGoogleCalendarColors,
+  createGoogleCalendarCreateEvent,
+  createGoogleCalendarListCalendars,
+  createGoogleCalendarListEvents,
+  type GoogleCalendarDeps,
+} from "../../server/remoteHost/handlers/googleCalendar.js";
+import {
+  DEFAULT_LIST_MAX_RESULTS,
+  MAX_LIST_RESULTS,
+  type CalendarColors,
+  type CalendarEventInput,
+  type CalendarEventSummary,
+  type CalendarSummary,
+  type ListEventsInput,
+} from "@mulmoclaude/core/google";
 
 const sampleEvent: CalendarEventSummary = {
   id: "ev1",
@@ -14,6 +28,23 @@ const sampleEvent: CalendarEventSummary = {
   end: "2026-07-17T09:15:00+09:00",
   htmlLink: "https://calendar.google.com/event?eid=ev1",
   status: "confirmed",
+  colorId: "7",
+};
+
+const sampleCalendar: CalendarSummary = {
+  id: "team@group.calendar.google.com",
+  summary: "Team",
+  description: "",
+  primary: false,
+  accessRole: "reader",
+  backgroundColor: "#16a765",
+  foregroundColor: "#ffffff",
+  colorId: "8",
+};
+
+const sampleColors: CalendarColors = {
+  event: { "7": { background: "#5484ed", foreground: "#1d1d1d" } },
+  calendar: { "8": { background: "#16a765", foreground: "#1d1d1d" } },
 };
 
 interface StubCalls {
@@ -37,6 +68,8 @@ const stubDeps = (): { deps: GoogleCalendarDeps; calls: StubCalls } => {
       calls.listInputs.push(input);
       return [sampleEvent];
     },
+    listCalendars: async () => [sampleCalendar],
+    getColors: async () => sampleColors,
   };
   return { deps, calls };
 };
@@ -49,13 +82,27 @@ describe("createGoogleCalendarCreateEvent", () => {
     const result = await createGoogleCalendarCreateEvent(deps)({ ...validParams, description: "daily" });
     assert.deepEqual(result, { event: sampleEvent });
     assert.equal(calls.tokenRequests, 1);
-    assert.deepEqual(calls.createInputs, [{ summary: "Standup", startDateTime: validParams.start, endDateTime: validParams.end, description: "daily" }]);
+    assert.deepEqual(calls.createInputs, [
+      { summary: "Standup", startDateTime: validParams.start, endDateTime: validParams.end, description: "daily", calendarId: undefined, colorId: undefined },
+    ]);
   });
 
   it("passes description as undefined when omitted", async () => {
     const { deps, calls } = stubDeps();
     await createGoogleCalendarCreateEvent(deps)({ ...validParams });
     assert.equal(calls.createInputs[0]?.description, undefined);
+  });
+
+  it("threads calendarId and colorId through to the engine", async () => {
+    const { deps, calls } = stubDeps();
+    await createGoogleCalendarCreateEvent(deps)({ ...validParams, calendarId: "team@group.calendar.google.com", colorId: "7" });
+    assert.equal(calls.createInputs[0]?.calendarId, "team@group.calendar.google.com");
+    assert.equal(calls.createInputs[0]?.colorId, "7");
+  });
+
+  it("rejects an empty calendarId", async () => {
+    const { deps } = stubDeps();
+    await assert.rejects(Promise.resolve(createGoogleCalendarCreateEvent(deps)({ ...validParams, calendarId: "  " })), /calendarId must be a non-empty string/);
   });
 
   for (const key of ["summary", "start", "end"] as const) {
@@ -114,13 +161,25 @@ describe("createGoogleCalendarListEvents", () => {
     const { deps, calls } = stubDeps();
     const result = await createGoogleCalendarListEvents(deps)({});
     assert.deepEqual(result, { events: [sampleEvent] });
-    assert.deepEqual(calls.listInputs, [{ timeMin: undefined, maxResults: DEFAULT_LIST_MAX_RESULTS }]);
+    assert.deepEqual(calls.listInputs, [{ timeMin: undefined, maxResults: DEFAULT_LIST_MAX_RESULTS, calendarId: undefined }]);
   });
 
   it("passes a valid timeMin through", async () => {
     const { deps, calls } = stubDeps();
     await createGoogleCalendarListEvents(deps)({ timeMin: "2026-07-17T00:00:00Z" });
     assert.equal(calls.listInputs[0]?.timeMin, "2026-07-17T00:00:00Z");
+  });
+
+  it("targets a non-primary calendar via calendarId", async () => {
+    const { deps, calls } = stubDeps();
+    await createGoogleCalendarListEvents(deps)({ calendarId: "team@group.calendar.google.com" });
+    assert.equal(calls.listInputs[0]?.calendarId, "team@group.calendar.google.com");
+  });
+
+  it("trims a whitespace-padded calendarId before it reaches the engine", async () => {
+    const { deps, calls } = stubDeps();
+    await createGoogleCalendarListEvents(deps)({ calendarId: "  team@group.calendar.google.com  " });
+    assert.equal(calls.listInputs[0]?.calendarId, "team@group.calendar.google.com");
   });
 
   it("rejects a malformed timeMin", async () => {
@@ -165,4 +224,22 @@ describe("createGoogleCalendarListEvents", () => {
       assert.equal(calls.listInputs[0]?.maxResults, expected);
     });
   }
+});
+
+describe("createGoogleCalendarListCalendars", () => {
+  it("returns the calendars under { calendars }", async () => {
+    const { deps, calls } = stubDeps();
+    const result = await createGoogleCalendarListCalendars(deps)({});
+    assert.deepEqual(result, { calendars: [sampleCalendar] });
+    assert.equal(calls.tokenRequests, 1);
+  });
+});
+
+describe("createGoogleCalendarColors", () => {
+  it("returns the event/calendar palettes under { colors }", async () => {
+    const { deps, calls } = stubDeps();
+    const result = await createGoogleCalendarColors(deps)({});
+    assert.deepEqual(result, { colors: sampleColors });
+    assert.equal(calls.tokenRequests, 1);
+  });
 });

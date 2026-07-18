@@ -8,23 +8,37 @@
 import {
   createCalendarEvent,
   DEFAULT_LIST_MAX_RESULTS,
+  getCalendarColors,
   getGoogleAccessToken,
   isIsoDateTimeWithOffset,
   listCalendarEvents,
+  listCalendars,
   MAX_LIST_RESULTS,
+  type CalendarColorEntry,
 } from "@mulmoclaude/core/google";
-import type { CommandHandler, JsonObject } from "../commandChannel.js";
+import type { CommandHandler, JsonObject, JsonValue } from "../commandChannel.js";
 
 export interface GoogleCalendarDeps {
   getAccessToken: typeof getGoogleAccessToken;
   createEvent: typeof createCalendarEvent;
   listEvents: typeof listCalendarEvents;
+  listCalendars: typeof listCalendars;
+  getColors: typeof getCalendarColors;
 }
 
 const requiredString = (params: JsonObject, key: string): string => {
   const value = params[key];
   if (typeof value !== "string" || value.trim() === "") throw new Error(`${key} must be a non-empty string`);
   return value;
+};
+
+const optionalString = (params: JsonObject, key: string): string | undefined => {
+  const value = params[key];
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== "string" || value.trim() === "") throw new Error(`${key} must be a non-empty string`);
+  // Return trimmed so whitespace can't reach the Google API (matches the
+  // plugin's Zod .trim() normalization).
+  return value.trim();
 };
 
 // Calendar's `dateTime`/`timeMin` are RFC3339 and reject date-only,
@@ -47,6 +61,14 @@ const clampMaxResults = (value: unknown): number => {
   return Math.min(Math.max(value, 1), MAX_LIST_RESULTS);
 };
 
+// Spread rebuilds an anonymous object type — the named CalendarColorEntry
+// interface (no index signature) can't satisfy the channel's structural
+// JsonValue directly (same constraint as CalendarEventSummary).
+const toColorMapJson = (map: Record<string, CalendarColorEntry>): JsonObject =>
+  Object.fromEntries(
+    Object.entries(map).map(([colorId, entry]): [string, JsonValue] => [colorId, { background: entry.background, foreground: entry.foreground }]),
+  );
+
 export const createGoogleCalendarCreateEvent =
   (deps: GoogleCalendarDeps): CommandHandler =>
   async (params: JsonObject) => {
@@ -55,6 +77,8 @@ export const createGoogleCalendarCreateEvent =
       startDateTime: asDateTime(requiredString(params, "start"), "start"),
       endDateTime: asDateTime(requiredString(params, "end"), "end"),
       description: typeof params.description === "string" ? params.description : undefined,
+      calendarId: optionalString(params, "calendarId"),
+      colorId: optionalString(params, "colorId"),
     };
     const event = await deps.createEvent(await deps.getAccessToken(), input);
     // Spread rebuilds an anonymous object type — the CalendarEventSummary
@@ -68,10 +92,33 @@ export const createGoogleCalendarListEvents =
   async (params: JsonObject) => {
     const timeMin = optionalDateTime(params, "timeMin");
     const maxResults = clampMaxResults(params.maxResults);
-    const events = await deps.listEvents(await deps.getAccessToken(), { timeMin, maxResults });
+    const calendarId = optionalString(params, "calendarId");
+    const events = await deps.listEvents(await deps.getAccessToken(), { timeMin, maxResults, calendarId });
     return { events: events.map((event) => ({ ...event })) };
   };
 
-const deps: GoogleCalendarDeps = { getAccessToken: getGoogleAccessToken, createEvent: createCalendarEvent, listEvents: listCalendarEvents };
+export const createGoogleCalendarListCalendars =
+  (deps: GoogleCalendarDeps): CommandHandler =>
+  async () => {
+    const calendars = await deps.listCalendars(await deps.getAccessToken());
+    return { calendars: calendars.map((calendar) => ({ ...calendar })) };
+  };
+
+export const createGoogleCalendarColors =
+  (deps: GoogleCalendarDeps): CommandHandler =>
+  async () => {
+    const colors = await deps.getColors(await deps.getAccessToken());
+    return { colors: { event: toColorMapJson(colors.event), calendar: toColorMapJson(colors.calendar) } };
+  };
+
+const deps: GoogleCalendarDeps = {
+  getAccessToken: getGoogleAccessToken,
+  createEvent: createCalendarEvent,
+  listEvents: listCalendarEvents,
+  listCalendars,
+  getColors: getCalendarColors,
+};
 export const googleCalendarCreateEvent = createGoogleCalendarCreateEvent(deps);
 export const googleCalendarListEvents = createGoogleCalendarListEvents(deps);
+export const googleCalendarListCalendars = createGoogleCalendarListCalendars(deps);
+export const googleCalendarColors = createGoogleCalendarColors(deps);

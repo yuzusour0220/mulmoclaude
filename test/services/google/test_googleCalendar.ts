@@ -3,14 +3,17 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
-import { calendarApiError, toEventSummary } from "@mulmoclaude/core/google";
+import { calendarApiError, collectCalendarPages, toCalendarSummary, toEventSummary, type CalendarListPage } from "@mulmoclaude/core/google";
+
+const emptyEvent = { id: "", summary: "", start: "", end: "", htmlLink: "", status: "", colorId: "" };
 
 describe("toEventSummary", () => {
-  it("maps a timed event (dateTime)", () => {
+  it("maps a timed event (dateTime) with its colour", () => {
     const summary = toEventSummary({
       id: "ev1",
       summary: "Standup",
       status: "confirmed",
+      colorId: "7",
       htmlLink: "https://calendar.google.com/event?eid=ev1",
       start: { dateTime: "2026-07-17T09:00:00+09:00" },
       end: { dateTime: "2026-07-17T09:15:00+09:00" },
@@ -22,7 +25,12 @@ describe("toEventSummary", () => {
       end: "2026-07-17T09:15:00+09:00",
       htmlLink: "https://calendar.google.com/event?eid=ev1",
       status: "confirmed",
+      colorId: "7",
     });
+  });
+
+  it("leaves colorId empty when the event inherits the calendar colour", () => {
+    assert.equal(toEventSummary({ id: "ev2", start: { date: "2026-07-17" } }).colorId, "");
   });
 
   it("maps an all-day event (date)", () => {
@@ -37,16 +45,86 @@ describe("toEventSummary", () => {
   });
 
   it("fills empty strings for missing fields", () => {
-    assert.deepEqual(toEventSummary({}), { id: "", summary: "", start: "", end: "", htmlLink: "", status: "" });
+    assert.deepEqual(toEventSummary({}), emptyEvent);
   });
 
   it("tolerates a non-object payload", () => {
-    assert.deepEqual(toEventSummary(null), { id: "", summary: "", start: "", end: "", htmlLink: "", status: "" });
+    assert.deepEqual(toEventSummary(null), emptyEvent);
   });
 
   it("ignores non-string field values", () => {
-    const summary = toEventSummary({ id: 42, summary: ["x"], start: "not-an-object" });
-    assert.deepEqual(summary, { id: "", summary: "", start: "", end: "", htmlLink: "", status: "" });
+    const summary = toEventSummary({ id: 42, summary: ["x"], start: "not-an-object", colorId: 7 });
+    assert.deepEqual(summary, emptyEvent);
+  });
+});
+
+describe("toCalendarSummary", () => {
+  it("maps a calendar-list entry with its colours", () => {
+    const summary = toCalendarSummary({
+      id: "team@group.calendar.google.com",
+      summary: "Team",
+      description: "shared team calendar",
+      accessRole: "reader",
+      backgroundColor: "#16a765",
+      foregroundColor: "#ffffff",
+      colorId: "8",
+    });
+    assert.deepEqual(summary, {
+      id: "team@group.calendar.google.com",
+      summary: "Team",
+      description: "shared team calendar",
+      primary: false,
+      accessRole: "reader",
+      backgroundColor: "#16a765",
+      foregroundColor: "#ffffff",
+      colorId: "8",
+    });
+  });
+
+  it("marks the primary calendar only when primary === true", () => {
+    assert.equal(toCalendarSummary({ id: "primary", primary: true }).primary, true);
+    assert.equal(toCalendarSummary({ id: "other", primary: "true" }).primary, false);
+    assert.equal(toCalendarSummary({ id: "none" }).primary, false);
+  });
+
+  it("fills empty strings for missing fields and tolerates a non-object payload", () => {
+    const empty = { id: "", summary: "", description: "", primary: false, accessRole: "", backgroundColor: "", foregroundColor: "", colorId: "" };
+    assert.deepEqual(toCalendarSummary({}), empty);
+    assert.deepEqual(toCalendarSummary(null), empty);
+  });
+});
+
+describe("collectCalendarPages", () => {
+  it("returns a single page when there is no nextPageToken", async () => {
+    const calendars = await collectCalendarPages(async () => ({ items: [{ id: "a" }, { id: "b" }] }));
+    assert.deepEqual(
+      calendars.map((cal) => cal.id),
+      ["a", "b"],
+    );
+  });
+
+  it("follows nextPageToken and concatenates every page in order", async () => {
+    const pages: CalendarListPage[] = [{ items: [{ id: "a" }], nextPageToken: "p2" }, { items: [{ id: "b" }], nextPageToken: "p3" }, { items: [{ id: "c" }] }];
+    const seenTokens: (string | undefined)[] = [];
+    const calendars = await collectCalendarPages(async (pageToken) => {
+      seenTokens.push(pageToken);
+      return pages[seenTokens.length - 1];
+    });
+    assert.deepEqual(
+      calendars.map((cal) => cal.id),
+      ["a", "b", "c"],
+    );
+    assert.deepEqual(seenTokens, [undefined, "p2", "p3"]);
+  });
+
+  it("stops at the page cap even if the API keeps returning a token (no infinite loop)", async () => {
+    let calls = 0;
+    const calendars = await collectCalendarPages(async () => {
+      calls += 1;
+      return { items: [{ id: `c${calls}` }], nextPageToken: "always" };
+    }, 3);
+    assert.equal(calls, 3);
+    assert.equal(calendars.length, 3);
   });
 });
 

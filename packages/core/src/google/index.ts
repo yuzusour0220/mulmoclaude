@@ -16,6 +16,7 @@ export {
   unlinkGoogle,
   waitForAuthCode,
   GOOGLE_CALENDAR_SCOPE,
+  GOOGLE_CALENDARLIST_SCOPE,
   GOOGLE_TASKS_SCOPE,
   GOOGLE_DRIVE_FILE_SCOPE,
   GOOGLE_SCOPES,
@@ -26,11 +27,19 @@ export { createGoogleAuthFlow, googleAuthFlow, type GoogleAuthFlow, type GoogleA
 export { googleApiError, DEFAULT_LIST_MAX_RESULTS, MAX_LIST_RESULTS } from "./apiClient.js";
 export {
   calendarApiError,
+  collectCalendarPages,
   createCalendarEvent,
+  getCalendarColors,
   listCalendarEvents,
+  listCalendars,
+  toCalendarSummary,
   toEventSummary,
+  type CalendarColorEntry,
+  type CalendarColors,
   type CalendarEventInput,
   type CalendarEventSummary,
+  type CalendarListPage,
+  type CalendarSummary,
   type ListEventsInput,
 } from "./calendar.js";
 export {

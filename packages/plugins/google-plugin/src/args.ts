@@ -13,12 +13,18 @@ const IsoDateTimeWithOffset = z.string().refine(isIsoDateTimeWithOffset, {
 
 const MaxResults = z.number().int().min(1).max(MAX_LIST_RESULTS).optional();
 const NonEmpty = z.string().min(1);
+// Trimmed + non-empty: an empty/whitespace calendarId would build a malformed
+// `/calendars//events` URL, and colorId "" would be sent as a bad palette id.
+const OptionalNonEmpty = z.string().trim().min(1).optional();
 
 export const GoogleArgs = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("status") }),
   // Calendar
+  z.object({ kind: z.literal("calendarListCalendars") }),
+  z.object({ kind: z.literal("calendarColors") }),
   z.object({
     kind: z.literal("calendarListEvents"),
+    calendarId: OptionalNonEmpty,
     timeMin: IsoDateTimeWithOffset.optional(),
     maxResults: MaxResults,
   }),
@@ -28,6 +34,8 @@ export const GoogleArgs = z.discriminatedUnion("kind", [
     start: IsoDateTimeWithOffset,
     end: IsoDateTimeWithOffset,
     description: z.string().optional(),
+    calendarId: OptionalNonEmpty,
+    colorId: OptionalNonEmpty,
   }),
   // Tasks
   z.object({ kind: z.literal("taskListsList") }),

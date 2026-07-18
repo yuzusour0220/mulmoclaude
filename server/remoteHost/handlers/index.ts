@@ -6,7 +6,7 @@ import { getCollection } from "./getCollection.js";
 import { getFeed } from "./getFeed.js";
 import { getRemoteView } from "./getRemoteView.js";
 import { getRemoteViewItems } from "./getRemoteViewItems.js";
-import { googleCalendarCreateEvent, googleCalendarListEvents } from "./googleCalendar.js";
+import { googleCalendarColors, googleCalendarCreateEvent, googleCalendarListCalendars, googleCalendarListEvents } from "./googleCalendar.js";
 import { listAccountingBooks } from "./listAccountingBooks.js";
 import { listCollections } from "./listCollections.js";
 import { listFeeds } from "./listFeeds.js";
@@ -29,4 +29,6 @@ export const handlers: CommandHandlers = {
   startChat,
   "google.calendar.createEvent": googleCalendarCreateEvent,
   "google.calendar.listEvents": googleCalendarListEvents,
+  "google.calendar.listCalendars": googleCalendarListCalendars,
+  "google.calendar.colors": googleCalendarColors,
 };
