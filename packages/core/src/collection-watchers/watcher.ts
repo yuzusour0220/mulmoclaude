@@ -18,7 +18,8 @@
 
 import { watch, type FSWatcher } from "node:fs";
 import { mkdir } from "node:fs/promises";
-import { discoverCollections, loadCollection, type DiscoveryOptions, type LoadedCollection } from "../collection/server";
+import path from "node:path";
+import { discoverCollections, loadCollection, publishCollectionChange, type DiscoveryOptions, type LoadedCollection } from "../collection/server";
 import type { CollectionSchema } from "../collection";
 import { errMsg, log } from "./config.js";
 import { evalNow } from "./clock.js";
@@ -68,6 +69,12 @@ interface ReconcileSlot {
   pending: boolean;
 }
 const itemSlots = new Map<string, ReconcileSlot>();
+
+/** Trailing debounce per dataSource collection: an atomic file replace
+ *  (Excel save, editor rename) surfaces as 2-3 fs events — collapse them
+ *  into one change publish so live views refetch once. */
+const DATA_SOURCE_DEBOUNCE_MS = 300;
+const dataSourceTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 /** Test-only configuration knobs. Production callers pass nothing and get
  *  the live workspace defaults; tests pass a tmpdir-rooted `discoveryOpts`
@@ -142,6 +149,8 @@ export async function stopCollectionWatchers(): Promise<void> {
   }
   watchers.clear();
   itemSlots.clear();
+  for (const timer of dataSourceTimers.values()) clearTimeout(timer);
+  dataSourceTimers.clear();
   discoveryOpts = {};
   started = false;
 }
@@ -171,6 +180,9 @@ async function tickTimeTriggers(now: Date = evalNow()): Promise<void> {
       log().warn("trigger tick: bad cached schema", { slug: entry.slug, error: errMsg(err) });
       continue;
     }
+    // dataSource collections have no reconcilable record files (and zod
+    // forbids `spawn` on them) — the clock never changes their state.
+    if (schema.dataSource !== undefined) continue;
     if (!schema.triggerField && !schema.spawn) continue;
     await reconcileAllItems(entry.slug, schema, entry.dataDir, discoveryOpts, now);
   }
@@ -217,6 +229,20 @@ function stopVanishedWatchers(liveSlugs: Set<string>): boolean {
   return mutated;
 }
 
+/** True when a schema edit moved the collection's storage — a different
+ *  `dataSource.path`, a different `dataPath`, or a flip between the two
+ *  modes. The mounted fs.watch is bound to the OLD location, so it must
+ *  be remounted, not just re-reconciled. */
+function storagePathChanged(previousJson: string, next: LoadedCollection["schema"]): boolean {
+  let previous: LoadedCollection["schema"];
+  try {
+    previous = JSON.parse(previousJson) as LoadedCollection["schema"];
+  } catch {
+    return true; // unreadable cache — remount to be safe
+  }
+  return previous.dataSource?.path !== next.dataSource?.path || previous.dataPath !== next.dataPath;
+}
+
 /** Re-reconcile already-watched collections whose schema changed since
  *  the last tick. New collections fall through to `startNewWatchers`. */
 async function reconcileChangedSchemas(collections: readonly LoadedCollection[]): Promise<boolean> {
@@ -226,7 +252,31 @@ async function reconcileChangedSchemas(collections: readonly LoadedCollection[])
     if (!existing) continue;
     const nextJson = JSON.stringify(collection.schema);
     if (existing.schemaJson === nextJson) continue;
+    if (storagePathChanged(existing.schemaJson, collection.schema)) {
+      // Drop the stale mount; `startNewWatchers` (which runs right after
+      // this pass in syncWatchers) remounts on the new location. A
+      // dataSource collection also gets a change ping so open views
+      // refetch against the new file immediately.
+      log().info("watcher storage path changed, remounting", { slug: collection.slug });
+      try {
+        existing.watcher.close();
+      } catch {
+        /* best-effort */
+      }
+      watchers.delete(collection.slug);
+      if (collection.schema.dataSource !== undefined) publishCollectionChange({ slug: collection.slug, op: "upsert" });
+      mutated = true;
+      continue;
+    }
     existing.schemaJson = nextJson;
+    if (collection.schema.dataSource !== undefined) {
+      // No record files to reconcile — but a schema edit can change what
+      // the views render (fields, displayField, …), so ping them.
+      log().info("dataSource watcher schema changed, publishing", { slug: collection.slug });
+      publishCollectionChange({ slug: collection.slug, op: "upsert" });
+      mutated = true;
+      continue;
+    }
     log().info("watcher schema changed, re-reconciling", { slug: collection.slug });
     await reconcileAllItems(collection.slug, collection.schema, collection.dataDir, discoveryOpts);
     mutated = true;
@@ -238,10 +288,50 @@ async function startNewWatchers(collections: readonly LoadedCollection[]): Promi
   let mutated = false;
   for (const collection of collections) {
     if (watchers.has(collection.slug)) continue;
-    await startWatcherFor(collection.slug, collection.schema, collection.dataDir);
+    if (collection.schema.dataSource !== undefined) await startDataSourceWatcher(collection);
+    else await startWatcherFor(collection.slug, collection.schema, collection.dataDir);
     mutated = true;
   }
   return mutated;
+}
+
+/** Publish one (debounced) change event for a dataSource collection —
+ *  live views refetch the whole collection; no per-row diffing. */
+function scheduleDataSourcePublish(slug: string): void {
+  const existing = dataSourceTimers.get(slug);
+  if (existing) clearTimeout(existing);
+  const timer = setTimeout(() => {
+    dataSourceTimers.delete(slug);
+    publishCollectionChange({ slug, op: "upsert" });
+  }, DATA_SOURCE_DEBOUNCE_MS);
+  timer.unref?.();
+  dataSourceTimers.set(slug, timer);
+}
+
+/** Watch a dataSource collection's external data file. The watch mounts
+ *  on the PARENT directory (watching the file itself goes stale after an
+ *  atomic replace — the inode changes) and filters events to the file's
+ *  basename; a null filename (platform quirk) is treated as a hit. No
+ *  reconciler involvement — replacing the CSV just refreshes the views. */
+async function startDataSourceWatcher(collection: LoadedCollection): Promise<void> {
+  const file = collection.dataSourceFile;
+  if (file === undefined) return;
+  const dir = path.dirname(file);
+  const base = path.basename(file);
+  try {
+    await mkdir(dir, { recursive: true });
+    const watcher = watch(dir, { persistent: false }, (_eventType, filename) => {
+      if (filename !== null && filename !== base) return;
+      scheduleDataSourcePublish(collection.slug);
+    });
+    watcher.on("error", (err) => {
+      log().warn("dataSource watcher error", { slug: collection.slug, error: errMsg(err) });
+    });
+    watchers.set(collection.slug, { slug: collection.slug, dataDir: dir, watcher, schemaJson: JSON.stringify(collection.schema) });
+    log().info("dataSource watcher started", { slug: collection.slug, file });
+  } catch (err) {
+    log().warn("dataSource watcher start failed", { slug: collection.slug, error: errMsg(err) });
+  }
 }
 
 async function startWatcherFor(slug: string, schema: CollectionSchema, dataDir: string): Promise<void> {

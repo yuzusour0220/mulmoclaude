@@ -46,7 +46,8 @@ import { CollectionSchemaZ } from "../core/schemaZ";
 import { defangForPrompt } from "../core/promptSafety";
 import { loadCollection, type DiscoveryOptions } from "./discovery";
 import type { LoadedCollection } from "./discoveredCollection";
-import { listItems, readItem, resolveCreateItemId, writeItem } from "./io";
+import { readItem, resolveCreateItemId, writeItem } from "./io";
+import { collectionWritable, readOnlyRefusal, storeFor } from "./store";
 import { enrichItems } from "./derive";
 import { validateCollectionRecords, validateRecordObject } from "./validate";
 import { buildWorkspaceOntology } from "./ontology";
@@ -157,15 +158,16 @@ async function loadRequestedItems(
   ids: string[] | undefined,
   deps: ManageCollectionDeps,
 ): Promise<{ items: CollectionItem[]; missing: string[] }> {
-  if (!ids) return { items: await listItems(collection.dataDir, { workspaceRoot: deps.workspaceRoot }), missing: [] };
+  const store = storeFor(collection, { workspaceRoot: deps.workspaceRoot });
+  if (!ids) return { items: await store.list(), missing: [] };
   const items: CollectionItem[] = [];
   const missing: string[] = [];
   for (const recordId of ids) {
-    // readItem THROWS on a malformed record file (only ENOENT is null) —
-    // for the tool that's a `missing` entry, not a failed call: the
-    // warning scan that runs whenever something is missing then names
+    // The file store's read THROWS on a malformed record file (only ENOENT
+    // is null) — for the tool that's a `missing` entry, not a failed call:
+    // the warning scan that runs whenever something is missing then names
     // the broken file and how to fix it.
-    const item = await readItem(collection.dataDir, recordId, { workspaceRoot: deps.workspaceRoot }).catch(() => null);
+    const item = await store.read(recordId).catch(() => null);
     if (item) items.push(item);
     else missing.push(recordId);
   }
@@ -286,6 +288,12 @@ async function putOneItem(
 }
 
 async function handlePutItems(collection: LoadedCollection, args: PutItemsArgs, deps: ManageCollectionDeps): Promise<string> {
+  // Server-enforced read-only: a `dataSource` collection's rows live in
+  // the external data file — point the agent at the real update path
+  // instead of writing phantom record files.
+  if (!collectionWritable(collection)) {
+    return `manageCollection: ${readOnlyRefusal(collection.slug)} (its records are the rows of '${collection.schema.dataSource?.path}'; edit that file to change the data).`;
+  }
   const written: string[] = [];
   const rejected: RejectedRow[] = [];
   for (const record of args.items) {
@@ -400,7 +408,10 @@ function schemaDiscoveryGate(schema: CollectionSchema, base: string): string | n
   const primaryField = schema.fields[schema.primaryKey];
   if (!primaryField) return `primaryKey '${schema.primaryKey}' is not one of the declared fields`;
   if (primaryField.primary !== true) return `the primaryKey field '${schema.primaryKey}' must be flagged \`primary: true\``;
-  if (resolveDataDir(schema.dataPath, base) === null) return `dataPath '${schema.dataPath}' escapes the workspace`;
+  if (schema.dataPath !== undefined && resolveDataDir(schema.dataPath, base) === null) return `dataPath '${schema.dataPath}' escapes the workspace`;
+  if (schema.dataSource !== undefined && resolveDataDir(schema.dataSource.path, base) === null) {
+    return `dataSource.path '${schema.dataSource.path}' escapes the workspace`;
+  }
   return null;
 }
 

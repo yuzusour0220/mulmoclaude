@@ -10,6 +10,7 @@
 import { readdir } from "node:fs/promises";
 import path from "node:path";
 import { discoverCollections, type DiscoveryOptions } from "./discovery";
+import { collectionWritable, storeFor } from "./store";
 import { isRegularFile } from "./io";
 import { isContainedInRoot } from "./paths";
 import { getWorkspaceRoot } from "./host";
@@ -79,6 +80,23 @@ async function countRecordFiles(dataDir: string, workspaceRoot: string): Promise
   }
 }
 
+/** A collection's record count for the ontology. File-backed: the cheap
+ *  readdir count. `dataSource`-backed: the row count via the CSV store
+ *  (subject to its row cap) — the dataDir is a phantom there, so the
+ *  readdir count would always misreport 0. Fail-soft to 0 like
+ *  `countRecordFiles` (an unreadable file / missing DuckDB must not
+ *  break the whole ontology). */
+async function countRecords(collection: LoadedCollection, workspaceRoot: string): Promise<number> {
+  if (!collectionWritable(collection)) {
+    try {
+      return (await storeFor(collection, { workspaceRoot }).list()).length;
+    } catch {
+      return 0;
+    }
+  }
+  return countRecordFiles(collection.dataDir, workspaceRoot);
+}
+
 async function toOntologyEntry(collection: LoadedCollection, workspaceRoot: string): Promise<CollectionOntologyEntry> {
   const { schema } = collection;
   return {
@@ -87,7 +105,7 @@ async function toOntologyEntry(collection: LoadedCollection, workspaceRoot: stri
     icon: schema.icon,
     primaryKey: schema.primaryKey,
     displayField: schema.displayField ?? schema.primaryKey,
-    recordCount: await countRecordFiles(collection.dataDir, workspaceRoot),
+    recordCount: await countRecords(collection, workspaceRoot),
     relations: schemaRelations(schema),
   };
 }

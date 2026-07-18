@@ -50,6 +50,12 @@ export function notFound(res: Response, error: string): Response {
   return sendError(res, 404, error);
 }
 
+/** 405 Method Not Allowed — the resource exists but refuses this verb
+ *  (e.g. a write against a read-only `dataSource` collection). */
+export function methodNotAllowed(res: Response, error: string): Response {
+  return sendError(res, 405, error);
+}
+
 /** 409 Conflict — duplicate, concurrent modification, already running, etc. */
 export function conflict(res: Response, error: string): Response {
   return sendError(res, 409, error);

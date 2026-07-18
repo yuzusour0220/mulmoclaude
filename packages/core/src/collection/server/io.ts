@@ -434,7 +434,9 @@ export function promptPathsFor(collection: Pick<LoadedCollection, "slug" | "sche
   // inside the sandbox, cross-platform CLIs) accepts forward slashes on both
   // platforms, so the normalization is one-way safe. Codex review on #1897.
   const skillDir = raw.split(path.sep).join("/");
-  return { slug: collection.slug, dataPath: collection.schema.dataPath, skillDir };
+  // A `dataSource` collection has no record dir — its data location IS the
+  // external file, so that path is the honest value for scripts/templates.
+  return { slug: collection.slug, dataPath: collection.schema.dataPath ?? collection.schema.dataSource?.path ?? "", skillDir };
 }
 
 function formatPathsBlock(paths: CollectionPromptPaths | undefined): string {

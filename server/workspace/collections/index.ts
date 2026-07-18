@@ -11,6 +11,7 @@ export { validateCollectionRecords, validateRecordObject, COMPUTED_TYPES, type R
 export { buildWorkspaceOntology, schemaRelations, type CollectionOntologyEntry, type OntologyRelation } from "@mulmoclaude/core/collection/server";
 export { applyMutateAction, firstMutateParamProblem, type MutateActionOutcome } from "@mulmoclaude/core/collection/server";
 export { enrichItems, computeCollectionIcon } from "@mulmoclaude/core/collection/server";
+export { storeFor, collectionWritable, readOnlyRefusal, type CollectionStore } from "@mulmoclaude/core/collection/server";
 export { deleteCollection, deleteCollectionRefusalMessage, type DeleteCollectionResult } from "@mulmoclaude/core/collection/server";
 export { deleteCustomView, type DeleteViewResult } from "@mulmoclaude/core/collection/server";
 export {

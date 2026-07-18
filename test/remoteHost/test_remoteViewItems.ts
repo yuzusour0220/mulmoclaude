@@ -31,7 +31,7 @@ const RECORDS = [
 ];
 
 const deps = (overrides: Partial<RemoteViewItemsDeps> = {}): RemoteViewItemsDeps => ({
-  listItems: (async () => RECORDS) as unknown as RemoteViewItemsDeps["listItems"],
+  listRecords: (async () => RECORDS) as unknown as RemoteViewItemsDeps["listRecords"],
   // Identity stub: these fixtures have no computed fields, so the real resolver
   // (enrichItems) returns them unchanged — the builder just threads records through it.
   enrichItems: (async (_collection: unknown, items: unknown[]) => items) as unknown as RemoteViewItemsDeps["enrichItems"],

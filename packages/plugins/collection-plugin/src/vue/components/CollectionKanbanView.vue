@@ -25,6 +25,7 @@
           group="collection-kanban-cards"
           class="flex-1 overflow-y-auto p-2 space-y-2 min-h-[2rem]"
           :animation="150"
+          :disabled="readonly"
           @change="(e: DragChangeEvent) => onDragChange(column.value, e)"
         >
           <template #item="{ element }: { element: CollectionItem }">
@@ -44,7 +45,7 @@
                      this board's group field). Checking it sets the group
                      field, so the card also moves columns. -->
                 <input
-                  v-if="cardToggle"
+                  v-if="cardToggle && !readonly"
                   type="checkbox"
                   :checked="cardChecked(element)"
                   class="mt-0.5 h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500/20 cursor-pointer shrink-0"
@@ -90,6 +91,9 @@ const props = defineProps<{
   /** Primary-key → active-notification severity. Cards with a notification get
    *  a left accent in the matching bell colour (urgent red / nudge amber). */
   notified?: Map<string, NotifierSeverity>;
+  /** Read-only (dataSource) collection: dragging and the card toggle are
+   *  off — a move writes the group field, and there is nothing to write. */
+  readonly?: boolean;
 }>();
 
 const emit = defineEmits<{

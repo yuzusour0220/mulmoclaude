@@ -110,6 +110,23 @@ function isDataDirSafe(dataDir: string, slug: string, workspaceRoot: string): bo
   return acceptableRoots.some((root) => resolved === root || resolved.startsWith(root + path.sep));
 }
 
+/** Step 2 of the restore doc — how to bring the records back. A
+ *  `dataSource` collection has no record files to copy (its rows live in
+ *  the external data file, which the delete never touches). */
+function restoreRecordsStep(schema: LoadedCollection["schema"]): string {
+  if (schema.dataPath === undefined) {
+    return `2. Records: nothing to copy. This is a \`dataSource\` collection —
+   its records are the rows of \`${schema.dataSource?.path}\`, which the
+   delete never touched.`;
+  }
+  return `2. Copy the item data: \`cp\` every file under \`records/\` into
+   \`${schema.dataPath}/\`. The records are part of the collection and
+   must be restored. They are plain data files (NOT bridged), so use
+   \`cp\` — the Write-tool rule in step 1 applies ONLY to the skill
+   files, not to these records (there may be many; copy them, do not
+   Write them one by one).`;
+}
+
 function buildRestoreDoc(collection: LoadedCollection): string {
   const { slug, schema } = collection;
   return `# Restore "${schema.title}" (collection \`${slug}\`)
@@ -130,18 +147,13 @@ Follow these steps to restore it.
    \`.claude/skills/\` directly is not an option either: that path is
    permission-gated.)
 
-2. Copy the item data: \`cp\` every file under \`records/\` into
-   \`${schema.dataPath}/\`. The records are part of the collection and
-   must be restored. They are plain data files (NOT bridged), so use
-   \`cp\` — the Write-tool rule in step 1 applies ONLY to the skill
-   files, not to these records (there may be many; copy them, do not
-   Write them one by one).
+${restoreRecordsStep(schema)}
 
 3. Confirm the collection reappears at \`/collections/${slug}\`.
 
 - slug: \`${slug}\`
 - title: ${schema.title}
-- dataPath: \`${schema.dataPath}\`
+- dataPath: \`${schema.dataPath ?? `(dataSource) ${schema.dataSource?.path}`}\`
 `;
 }
 
