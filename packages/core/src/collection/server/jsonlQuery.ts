@@ -40,6 +40,31 @@ function emptyCollectionResult(query: CollectionQuery): Record<string, unknown>[
   return [Object.fromEntries(aggregates.map(([alias, aggregate]: [string, CollectionQueryAggregate]) => [alias, aggregate.op === "count" ? 0 : null]))];
 }
 
+/** The SOURCE columns a query reads: groupBy columns, aggregate input
+ *  columns, and where fields. (orderBy resolves to groupBy columns or
+ *  aggregate ALIASES — never to a new source column — so it adds none.) */
+function referencedSourceColumns(query: CollectionQuery): string[] {
+  const columns = new Set<string>(query.groupBy ?? []);
+  for (const aggregate of Object.values(query.aggregates ?? {})) {
+    if (aggregate.column !== undefined) columns.add(aggregate.column);
+  }
+  for (const cond of query.where ?? []) columns.add(cond.field);
+  return [...columns];
+}
+
+/** Referenced columns that appear in NO row — a freshly-added optional
+ *  field, or a derived field whose inputs no record has yet. DuckDB only
+ *  infers columns from keys that occur in the JSONL, so without help a
+ *  valid query on such a field binder-errors here while the CSV path
+ *  (whose header always declares the column) returns NULLs. Padding the
+ *  FIRST line with `col: null` makes the column exist (full-scan
+ *  inference unions keys across lines) with matching NULL semantics. */
+function absentReferencedColumns(rows: CollectionItem[], query: CollectionQuery): string[] {
+  const present = new Set<string>();
+  for (const row of rows) for (const key of Object.keys(row)) present.add(key);
+  return referencedSourceColumns(query).filter((column) => !present.has(column));
+}
+
 /** Run a validated query over enriched collection rows. */
 export async function runQueryOverRows(rows: CollectionItem[], query: CollectionQuery): Promise<Record<string, unknown>[]> {
   if (rows.length === 0) return emptyCollectionResult(query);
@@ -47,10 +72,17 @@ export async function runQueryOverRows(rows: CollectionItem[], query: Collection
   const jsonlPath = path.join(cacheDir(), `q-${randomBytes(8).toString("hex")}.jsonl`);
   try {
     // Stream row-by-row — a map+join would duplicate an uncapped
-    // collection as one giant string before writing it.
+    // collection as one giant string before writing it. The first line
+    // carries null placeholders for referenced-but-absent columns (see
+    // `absentReferencedColumns`); a row's own values always win.
+    const nullPads = Object.fromEntries(absentReferencedColumns(rows, query).map((column) => [column, null]));
     const handle = await open(jsonlPath, "wx", 0o600);
     try {
-      for (const row of rows) await handle.write(`${JSON.stringify(row)}\n`);
+      let first = true;
+      for (const row of rows) {
+        await handle.write(`${JSON.stringify(first ? { ...nullPads, ...row } : row)}\n`);
+        first = false;
+      }
     } finally {
       await handle.close();
     }

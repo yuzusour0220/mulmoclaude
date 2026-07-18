@@ -419,6 +419,41 @@ describe("query DSL (v2)", () => {
     assert.equal(filtered.rows[0]?.revenue, 25);
   });
 
+  it("a schema field absent from EVERY record is still queryable (NULL column, not a binder error)", async () => {
+    writeSkill("orders", {
+      title: "Orders",
+      icon: "receipt_long",
+      dataPath: "data/orders/items",
+      primaryKey: "id",
+      fields: {
+        id: { type: "string", label: "ID", primary: true },
+        amount: { type: "number", label: "Amount" },
+        // Declared but never written by any record — the CSV analog is a
+        // header column with no values, which queries as NULLs.
+        discount: { type: "number", label: "Discount" },
+      },
+    });
+    const dataDir = path.join(workdir, "data/orders/items");
+    mkdirSync(dataDir, { recursive: true });
+    writeFileSync(path.join(dataDir, "o1.json"), JSON.stringify({ id: "o1", amount: 10 }));
+    writeFileSync(path.join(dataDir, "o2.json"), JSON.stringify({ id: "o2", amount: 5 }));
+    const tool = makeManageCollectionTool(discoveryOpts());
+
+    const result = JSON.parse(
+      await tool.handler({
+        action: "queryItems",
+        slug: "orders",
+        query: { aggregates: { s: { op: "sum", column: "discount" }, n: { op: "count", column: "discount" }, total: { op: "sum", column: "amount" } } },
+      }),
+    ) as { rows: Record<string, unknown>[] };
+    assert.deepEqual(result.rows, [{ s: null, n: 0, total: 15 }]);
+
+    const grouped = JSON.parse(
+      await tool.handler({ action: "queryItems", slug: "orders", query: { groupBy: ["discount"], aggregates: { n: { op: "count" } } } }),
+    ) as { rows: Record<string, unknown>[] };
+    assert.deepEqual(grouped.rows, [{ discount: null, n: 2 }]);
+  });
+
   it("queryItems on an EMPTY file-backed collection keeps SQL semantics: scalar row for bare aggregates, [] for grouped", async () => {
     writeSkill("empty", {
       title: "Empty",
