@@ -452,7 +452,3 @@ export const BUILTIN_ROLE_IDS = {
 export type BuiltInRoleId = (typeof BUILTIN_ROLE_IDS)[keyof typeof BUILTIN_ROLE_IDS];
 
 export const DEFAULT_ROLE_ID: BuiltInRoleId = BUILTIN_ROLE_IDS.general;
-
-export function getRole(roleId: string): Role {
-  return ROLES.find((role) => role.id === roleId) ?? ROLES[0];
-}
