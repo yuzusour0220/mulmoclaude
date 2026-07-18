@@ -7,6 +7,11 @@ import { isRecord } from "./util.js";
 const CALENDAR_BASE_URL = "https://www.googleapis.com/calendar/v3";
 const CALENDAR_API_LABEL = "Google Calendar API";
 const DEFAULT_CALENDAR_ID = "primary";
+// CalendarList.list is paginated; page through nextPageToken so an account
+// with many subscribed calendars isn't silently truncated. The page cap is a
+// runaway guard — 250 * 40 = 10k calendars, far beyond any real account.
+const CALENDAR_LIST_PAGE_SIZE = 250;
+const MAX_CALENDAR_LIST_PAGES = 40;
 
 // `||` (not `??`) so an empty-string calendarId also falls back to primary
 // instead of building a malformed `/calendars//events` URL.
@@ -136,12 +141,39 @@ export async function listCalendarEvents(accessToken: string, input: ListEventsI
   return itemsOf(listed).map(toEventSummary);
 }
 
+export interface CalendarListPage {
+  items: unknown[];
+  nextPageToken?: string;
+}
+
+/** Pagination loop for CalendarList.list, extracted so it can be tested without
+ *  network. Stops at the last page (no token) or the runaway page cap. */
+export async function collectCalendarPages(
+  fetchPage: (pageToken?: string) => Promise<CalendarListPage>,
+  maxPages = MAX_CALENDAR_LIST_PAGES,
+): Promise<CalendarSummary[]> {
+  const calendars: CalendarSummary[] = [];
+  let pageToken: string | undefined;
+  for (let page = 0; page < maxPages; page += 1) {
+    const { items, nextPageToken } = await fetchPage(pageToken);
+    calendars.push(...items.map(toCalendarSummary));
+    if (!nextPageToken) break;
+    pageToken = nextPageToken;
+  }
+  return calendars;
+}
+
 /** The calendars the user has added/subscribed to (primary + secondary +
- *  shared), each with its id, name and colour. Needs the calendar-list read
- *  scope (GOOGLE_CALENDARLIST_SCOPE). */
+ *  shared), each with its id, name and colour, following pagination. Needs the
+ *  calendar-list read scope (GOOGLE_CALENDARLIST_SCOPE). */
 export async function listCalendars(accessToken: string): Promise<CalendarSummary[]> {
-  const listed = await googleRequest(CALENDAR_API_LABEL, accessToken, `${CALENDAR_BASE_URL}/users/me/calendarList`);
-  return itemsOf(listed).map(toCalendarSummary);
+  return collectCalendarPages(async (pageToken) => {
+    const params = new URLSearchParams({ maxResults: String(CALENDAR_LIST_PAGE_SIZE) });
+    if (pageToken) params.set("pageToken", pageToken);
+    const payload = await googleRequest(CALENDAR_API_LABEL, accessToken, `${CALENDAR_BASE_URL}/users/me/calendarList?${params.toString()}`);
+    const record = asRecord(payload);
+    return { items: itemsOf(payload), nextPageToken: typeof record.nextPageToken === "string" ? record.nextPageToken : undefined };
+  });
 }
 
 /** Resolve a `colorId` (on an event or calendar) to its hex background/foreground. */

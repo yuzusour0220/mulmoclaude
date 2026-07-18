@@ -27,6 +27,7 @@ export { createGoogleAuthFlow, googleAuthFlow, type GoogleAuthFlow, type GoogleA
 export { googleApiError, DEFAULT_LIST_MAX_RESULTS, MAX_LIST_RESULTS } from "./apiClient.js";
 export {
   calendarApiError,
+  collectCalendarPages,
   createCalendarEvent,
   getCalendarColors,
   listCalendarEvents,
@@ -37,6 +38,7 @@ export {
   type CalendarColors,
   type CalendarEventInput,
   type CalendarEventSummary,
+  type CalendarListPage,
   type CalendarSummary,
   type ListEventsInput,
 } from "./calendar.js";

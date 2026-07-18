@@ -3,7 +3,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
-import { calendarApiError, toCalendarSummary, toEventSummary } from "@mulmoclaude/core/google";
+import { calendarApiError, collectCalendarPages, toCalendarSummary, toEventSummary, type CalendarListPage } from "@mulmoclaude/core/google";
 
 const emptyEvent = { id: "", summary: "", start: "", end: "", htmlLink: "", status: "", colorId: "" };
 
@@ -91,6 +91,40 @@ describe("toCalendarSummary", () => {
     const empty = { id: "", summary: "", description: "", primary: false, accessRole: "", backgroundColor: "", foregroundColor: "", colorId: "" };
     assert.deepEqual(toCalendarSummary({}), empty);
     assert.deepEqual(toCalendarSummary(null), empty);
+  });
+});
+
+describe("collectCalendarPages", () => {
+  it("returns a single page when there is no nextPageToken", async () => {
+    const calendars = await collectCalendarPages(async () => ({ items: [{ id: "a" }, { id: "b" }] }));
+    assert.deepEqual(
+      calendars.map((cal) => cal.id),
+      ["a", "b"],
+    );
+  });
+
+  it("follows nextPageToken and concatenates every page in order", async () => {
+    const pages: CalendarListPage[] = [{ items: [{ id: "a" }], nextPageToken: "p2" }, { items: [{ id: "b" }], nextPageToken: "p3" }, { items: [{ id: "c" }] }];
+    const seenTokens: (string | undefined)[] = [];
+    const calendars = await collectCalendarPages(async (pageToken) => {
+      seenTokens.push(pageToken);
+      return pages[seenTokens.length - 1];
+    });
+    assert.deepEqual(
+      calendars.map((cal) => cal.id),
+      ["a", "b", "c"],
+    );
+    assert.deepEqual(seenTokens, [undefined, "p2", "p3"]);
+  });
+
+  it("stops at the page cap even if the API keeps returning a token (no infinite loop)", async () => {
+    let calls = 0;
+    const calendars = await collectCalendarPages(async () => {
+      calls += 1;
+      return { items: [{ id: `c${calls}` }], nextPageToken: "always" };
+    }, 3);
+    assert.equal(calls, 3);
+    assert.equal(calendars.length, 3);
   });
 });
 
