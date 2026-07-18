@@ -338,6 +338,7 @@ shipped builders produce, and asserts `handlePermission` comes back over the MCP
 - **"multiple client_secret_*.json files found"**.
 - **"Google Calendar API: HTTP 403"** with a hint about enabling the API.
 - **"could not obtain a Google access token"** (grant revoked).
+- `calendarListCalendars` / non-primary calendar lookups fail with **HTTP 401/403 / insufficient scope**, or the list comes back empty even though the user has other calendars.
 
 ### Cause
 
@@ -358,6 +359,11 @@ Two ways the link can be minted, and the tool picks automatically:
 - **Not linked / grant revoked** — ask the user to link (or re-link) the account from this app's
   settings, then retry. Do NOT tell them to create a Google Cloud project, and do NOT try to
   create or edit the token file yourself.
+- **Calendar-list / non-primary lookup fails with insufficient scope (or lists nothing)** — the
+  account was linked before the calendar-list read scope (`calendar.calendarlist.readonly`) was
+  added, so the stored grant predates it. Ask the user to re-link from settings to add the scope,
+  then retry. Reading events on a non-primary calendar by id needs no re-link once the calendar
+  list is visible.
 - **Sign-in service unreachable / HTTP error** — the broker is down or the network is blocked.
   It is only needed to link and to renew an expired access token; ask the user to retry shortly.
   (A user with their own `~/.secrets/client_secret_*.json` never depends on it.)

@@ -2080,16 +2080,6 @@
   resolved "https://registry.yarnpkg.com/@mulmochat-plugin/ui-image/-/ui-image-0.4.1.tgz#8fd3b1c4ffe21e6bc22761ff48eac03306e0d345"
   integrity sha512-I3AqTIuQPsSMNxDON9UTxT2KO57HV6uUVotCIFskV0UqBMQrQ3FUu8J+qXRWDdjPyYaHoC8AJsi91TbNrOMwng==
 
-"@mulmoclaude/core@^0.22.0":
-  version "0.22.1"
-  resolved "https://registry.yarnpkg.com/@mulmoclaude/core/-/core-0.22.1.tgz#56eecd90399b8dc3581eb1549beb923fa8504f39"
-  integrity sha512-BctuyJQOpCdiiz2z4RhAS6Ky4JDqw3+7R72E4O4x/2iFU1Q03w2pO0xDbU2/Pmbb9J+jhMau7AwXyjIWbiYadw==
-  dependencies:
-    fast-xml-parser "^5.10.1"
-    google-auth-library "^10.9.0"
-    js-yaml "^5.2.1"
-    zod "^4.4.3"
-
 "@napi-rs/wasm-runtime@^1.1.4", "@napi-rs/wasm-runtime@^1.1.5", "@napi-rs/wasm-runtime@^1.1.6":
   version "1.1.6"
   resolved "https://registry.yarnpkg.com/@napi-rs/wasm-runtime/-/wasm-runtime-1.1.6.tgz#ed33806d0f9be98dc76d0c3d4fd872fda701b5d5"

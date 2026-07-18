@@ -17,8 +17,11 @@ const NonEmpty = z.string().min(1);
 export const GoogleArgs = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("status") }),
   // Calendar
+  z.object({ kind: z.literal("calendarListCalendars") }),
+  z.object({ kind: z.literal("calendarColors") }),
   z.object({
     kind: z.literal("calendarListEvents"),
+    calendarId: z.string().optional(),
     timeMin: IsoDateTimeWithOffset.optional(),
     maxResults: MaxResults,
   }),
@@ -28,6 +31,8 @@ export const GoogleArgs = z.discriminatedUnion("kind", [
     start: IsoDateTimeWithOffset,
     end: IsoDateTimeWithOffset,
     description: z.string().optional(),
+    calendarId: z.string().optional(),
+    colorId: z.string().optional(),
   }),
   // Tasks
   z.object({ kind: z.literal("taskListsList") }),

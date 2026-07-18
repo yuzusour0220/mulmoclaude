@@ -22,12 +22,18 @@ import { clientSecretPresence, loadClientSecret, type InstalledClientSecret } fr
 import { deleteGoogleTokens, loadGoogleTokens, saveGoogleTokens, type IssuedVia } from "./tokenStore.js";
 
 export const GOOGLE_CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.events";
+/** Minimal read scope for the calendar list + per-calendar colours.
+ *  `calendar.events` already covers reading/writing events on any calendar, but
+ *  discovering WHICH calendars the user has (CalendarList.list) needs a
+ *  calendar-list read scope — this is the narrowest one that grants it. Kept in
+ *  step with the broker's consent scopes so local- and broker-linked accounts
+ *  grant the same set. */
+export const GOOGLE_CALENDARLIST_SCOPE = "https://www.googleapis.com/auth/calendar.calendarlist.readonly";
 export const GOOGLE_TASKS_SCOPE = "https://www.googleapis.com/auth/tasks";
 export const GOOGLE_DRIVE_FILE_SCOPE = "https://www.googleapis.com/auth/drive.file";
 /** Requested at consent as one set — matches the scopes registered on the
- *  OAuth consent screen, so a single re-link covers every supported API
- *  (Calendar now; Tasks / Drive tools ride the same grant later). */
-export const GOOGLE_SCOPES = [GOOGLE_CALENDAR_SCOPE, GOOGLE_TASKS_SCOPE, GOOGLE_DRIVE_FILE_SCOPE];
+ *  OAuth consent screen, so a single re-link covers every supported API. */
+export const GOOGLE_SCOPES = [GOOGLE_CALENDAR_SCOPE, GOOGLE_CALENDARLIST_SCOPE, GOOGLE_TASKS_SCOPE, GOOGLE_DRIVE_FILE_SCOPE];
 const CALLBACK_PATH = "/oauth2callback";
 const AUTH_TIMEOUT_MS = 5 * ONE_MINUTE_MS;
 const STATE_BYTES = 16;

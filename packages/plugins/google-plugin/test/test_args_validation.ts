@@ -58,6 +58,16 @@ describe("GoogleArgs", () => {
     assert.throws(() => GoogleArgs.parse({ kind: "calendarListEvents", maxResults: 2.5 }));
   });
 
+  it("parses calendarListCalendars and calendarColors", () => {
+    assert.deepEqual(GoogleArgs.parse({ kind: "calendarListCalendars" }), { kind: "calendarListCalendars" });
+    assert.deepEqual(GoogleArgs.parse({ kind: "calendarColors" }), { kind: "calendarColors" });
+  });
+
+  it("parses calendarListEvents targeting a non-primary calendar", () => {
+    const args = GoogleArgs.parse({ kind: "calendarListEvents", calendarId: "team@group.calendar.google.com" });
+    assert.equal(args.kind === "calendarListEvents" && args.calendarId, "team@group.calendar.google.com");
+  });
+
   it("parses a full calendarCreateEvent", () => {
     const args = GoogleArgs.parse({
       kind: "calendarCreateEvent",
@@ -65,8 +75,11 @@ describe("GoogleArgs", () => {
       start: "2026-07-17T09:00:00+09:00",
       end: "2026-07-17T09:15:00+09:00",
       description: "daily",
+      calendarId: "team@group.calendar.google.com",
+      colorId: "7",
     });
     assert.equal(args.kind, "calendarCreateEvent");
+    assert.equal(args.kind === "calendarCreateEvent" && args.colorId, "7");
   });
 
   it("rejects calendarCreateEvent with a date-only start", () => {

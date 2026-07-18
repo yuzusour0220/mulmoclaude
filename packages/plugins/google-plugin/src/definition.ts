@@ -14,12 +14,14 @@ export const TOOL_DEFINITION = {
     "This is independent of claude.ai Google connectors; the tool works without them. " +
     "If a call fails with 'Google account not linked', ask the user to link their Google account in this app's settings, then retry the original call.",
   description:
-    "Operate the user's Google services through the locally linked Google account: Calendar (primary calendar), Tasks, and Drive. Supported kinds:\n" +
+    "Operate the user's Google services through the locally linked Google account: Calendar, Tasks, and Drive. Supported kinds:\n" +
     " - `status`: report whether the Google account is linked on this machine — call this first when unsure.\n" +
     "\n" +
-    "Calendar:\n" +
-    " - `calendarListEvents`: list upcoming events. Optional `timeMin` (ISO 8601 date-time with timezone offset; default now) and `maxResults` (1-50, default 10).\n" +
-    " - `calendarCreateEvent`: create an event. Requires `summary`, `start`, `end` — ISO 8601 date-times WITH a timezone offset (e.g. 2026-07-17T09:00:00+09:00); optional `description`.\n" +
+    "Calendar (events default to the primary calendar; pass `calendarId` — from `calendarListCalendars` — to target another):\n" +
+    " - `calendarListCalendars`: list the calendars the user has added/subscribed to (`id`, `summary`, `primary`, `backgroundColor`/`foregroundColor` hex, `colorId`, `accessRole`). Call this to work with a non-primary calendar.\n" +
+    " - `calendarColors`: palettes that map an event/calendar `colorId` to hex — `event` for per-event colours, `calendar` for calendar colours.\n" +
+    " - `calendarListEvents`: list upcoming events (each carries `colorId`, empty when it inherits the calendar colour). Optional `calendarId`, `timeMin` (ISO 8601 date-time with timezone offset; default now), `maxResults` (1-50, default 10).\n" +
+    ' - `calendarCreateEvent`: create an event. Requires `summary`, `start`, `end` — ISO 8601 date-times WITH a timezone offset (e.g. 2026-07-17T09:00:00+09:00); optional `description`, `calendarId`, `colorId` (event palette id "1"-"11").\n' +
     "\n" +
     "Tasks:\n" +
     " - `taskListsList`: list the user's task lists (`id`, `title`). Only needed when the user means a list other than their default one.\n" +
@@ -38,6 +40,8 @@ export const TOOL_DEFINITION = {
         type: "string",
         enum: [
           "status",
+          "calendarListCalendars",
+          "calendarColors",
           "calendarListEvents",
           "calendarCreateEvent",
           "taskListsList",
@@ -49,6 +53,8 @@ export const TOOL_DEFINITION = {
           "driveRead",
         ],
       },
+      calendarId: { type: "string", description: "calendar kinds: target calendar id from calendarListCalendars (default: the user's primary)" },
+      colorId: { type: "string", description: 'calendarCreateEvent: optional event palette colour id "1"-"11"' },
       timeMin: { type: "string", description: "calendarListEvents: lower bound, ISO 8601 with timezone offset (default: now)" },
       maxResults: { type: "number", description: "list kinds: max items to return, 1-50 (default 10)" },
       summary: { type: "string", description: "calendarCreateEvent: event title" },

@@ -173,8 +173,10 @@ calling the collection engine directly. Added incrementally across phases:
 | `mutateRemoteViewItem` | Applies an update/delete from a mobile view; policy enforced **host-side** | 4 |
 | `startChat` | Starts a visible chat from the phone (message + optional role + attachments) | — |
 | `ingestAttachments` | Pulls staged files from Firebase Storage into the workspace | — |
-| `google.calendar.createEvent` | Creates a Google Calendar event (`{ event }`); params `summary`, `start`, `end` (ISO 8601), optional `description` | — |
-| `google.calendar.listEvents` | Upcoming primary-calendar events (`{ events }`); optional `timeMin`, `maxResults` (≤ 50) | — |
+| `google.calendar.createEvent` | Creates a Google Calendar event (`{ event }`); params `summary`, `start`, `end` (ISO 8601), optional `description`, `calendarId`, `colorId` | — |
+| `google.calendar.listEvents` | Upcoming events (`{ events }`, each with `colorId`); optional `calendarId` (default primary), `timeMin`, `maxResults` (≤ 50) | — |
+| `google.calendar.listCalendars` | Calendars the user has added/subscribed to (`{ calendars }` — id, summary, primary, colours) | — |
+| `google.calendar.colors` | Event/calendar colour palettes mapping `colorId` → hex (`{ colors }`) | — |
 
 The `google.calendar.*` handlers run against the **host's own Google OAuth
 grant** (independent of Firebase Auth): the user links the account once — from

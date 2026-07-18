@@ -13,8 +13,10 @@ import {
   createCalendarEvent,
   createDriveFile,
   createTask,
+  getCalendarColors,
   getGoogleAccessToken,
   listCalendarEvents,
+  listCalendars,
   listDriveFiles,
   listTaskLists,
   listTasks,
@@ -37,8 +39,15 @@ export default definePlugin(({ log }) => {
         const linked = Boolean(tokens?.refresh_token);
         return { ok: true, linked, clientSecret, ...(linked ? {} : { guidance: LINK_GUIDANCE }) };
       }
+      case "calendarListCalendars": {
+        return { ok: true, calendars: await listCalendars(await getGoogleAccessToken()) };
+      }
+      case "calendarColors": {
+        return { ok: true, colors: await getCalendarColors(await getGoogleAccessToken()) };
+      }
       case "calendarListEvents": {
         const events = await listCalendarEvents(await getGoogleAccessToken(), {
+          calendarId: args.calendarId,
           timeMin: args.timeMin,
           maxResults: args.maxResults ?? DEFAULT_LIST_MAX_RESULTS,
         });
@@ -50,6 +59,8 @@ export default definePlugin(({ log }) => {
           startDateTime: args.start,
           endDateTime: args.end,
           description: args.description,
+          calendarId: args.calendarId,
+          colorId: args.colorId,
         });
         // Log ids only — titles / bodies are personal content.
         log.info("calendar event created", { id: event.id });
