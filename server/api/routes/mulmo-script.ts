@@ -164,33 +164,28 @@ bindRoute(router, API_ROUTES.mulmoScript.save, async (req: Request<object, objec
   });
 });
 
-bindRoute(router, API_ROUTES.mulmoScript.updateBeat, async (req: Request<object, object, unknown>, res: Response) => {
+// The updateBeat / updateScript routes are identical except for which
+// package execute they call: guard the wire path, run the execute, map a
+// failure onto the pre-extraction status, else 200. Share the shell.
+async function runGuardedUpdate(req: Request<object, object, unknown>, res: Response, execute: typeof executeUpdateBeat): Promise<void> {
   const guard = mulmoScriptOps.guardStoryWirePath((req.body as { filePath?: unknown } | undefined)?.filePath);
   if (guard) {
     sendOpFailure(res, guard);
     return;
   }
-  const outcome = await executeUpdateBeat(makeExecuteContext(), req.body);
+  const outcome = await execute(makeExecuteContext(), req.body);
   if (!outcome.ok) {
     sendPackageFailure(res, outcome);
     return;
   }
   res.json({ ok: true });
-});
+}
 
-bindRoute(router, API_ROUTES.mulmoScript.updateScript, async (req: Request<object, object, unknown>, res: Response) => {
-  const guard = mulmoScriptOps.guardStoryWirePath((req.body as { filePath?: unknown } | undefined)?.filePath);
-  if (guard) {
-    sendOpFailure(res, guard);
-    return;
-  }
-  const outcome = await executeUpdateScript(makeExecuteContext(), req.body);
-  if (!outcome.ok) {
-    sendPackageFailure(res, outcome);
-    return;
-  }
-  res.json({ ok: true });
-});
+bindRoute(router, API_ROUTES.mulmoScript.updateBeat, (req: Request<object, object, unknown>, res: Response) => runGuardedUpdate(req, res, executeUpdateBeat));
+
+bindRoute(router, API_ROUTES.mulmoScript.updateScript, (req: Request<object, object, unknown>, res: Response) =>
+  runGuardedUpdate(req, res, executeUpdateScript),
+);
 
 bindRoute(router, API_ROUTES.mulmoScript.beatImage, async (req: Request<object, BeatImageResponse, object, BeatQuery>, res: Response<BeatImageResponse>) => {
   const query = parseBeatQuery(req, res);
