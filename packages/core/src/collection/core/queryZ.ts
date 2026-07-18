@@ -1,5 +1,5 @@
 // The aggregation-query DSL for `dataSource` collections (v2 of
-// plans/feat-collection-csv-duckdb-source.md). A structured JSON query —
+// plans/done/feat-collection-csv-duckdb-source.md). A structured JSON query —
 // NEVER raw SQL — because SQL-the-language isn't scoped to the data file
 // (`read_csv`/`read_text`/`COPY TO` reach the whole filesystem) and the
 // query authors (custom views, the agent) are influenceable by untrusted

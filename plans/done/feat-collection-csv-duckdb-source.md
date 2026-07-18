@@ -1,5 +1,18 @@
 # feat(collections): 外部データ (CSV) を実体とする read-only コレクション — DuckDB クエリエンジン
 
+> **Status: 完了 — plans/done へアーカイブ（2026-07-18）**
+>
+> - **v1（read-only CSV dataSource + DuckDB store）: 実装済み**（2026-07-17、PR #2158。実装記録は v1 節）。
+> - **v2（構造化集計 DSL + `queryItems` + `view-data/query`）: 実装済み**（2026-07-18、PR #2163 / #2165。
+>   file-backed コレクションも enriched JSONL 経由で同一 DSL に対応済み — `jsonlQuery.ts`）。
+> - **未実施のまま後続へ引き継いだ残件**: npx / Docker サンドボックスでの DuckDB install
+>   マトリクス検証（v1 受け入れ基準の残件）。
+> - **当初から別フェーズ**（未着手のままスコープ外として維持）: 一覧ページング、
+>   リモート（phone）ビューへのクエリ露出、v3（xlsx 等フォーマット追加・ネイティブ昇格・
+>   メトリクス定義）。
+> - **後続プラン**: [plans/feat-collection-bi-extensions.md](../feat-collection-bi-extensions.md)
+>   （時系列 bucketing / count distinct / xlsx / install 検証の引き継ぎ）。
+
 Date: 2026-07-17
 背景: ベータユーザーのフィードバック「データさえあれば可視化が作れる。Tableau も Looker もいらないのでは」。
 BI ツール代替のユースケース（学校の生徒管理、HR 系データの分析等）を、Collections の自然な拡張として取り込む。
@@ -201,7 +214,7 @@ interface CollectionStore {
    - 日本語カバレッジは自作必須（datablist には無い）: Shift_JIS の名簿、
      日本語キー値の UTF-8（hex ID 経路）、キー重複。
 
-### v2（BI の本丸: クエリ/集計）— 設計確定（2026-07-18、会話で決定）
+### v2（BI の本丸: クエリ/集計）— **実装済み（2026-07-18、PR #2163 / #2165）**
 
 **クエリ面は構造化 DSL（生 SQL は出さない）。** SQL は言語として CSV に
 スコープされない（`read_csv`/`read_text`/`COPY TO`/`INSTALL httpfs` で

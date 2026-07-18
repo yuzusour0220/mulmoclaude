@@ -1,6 +1,6 @@
 import "../../../server/workspace/collections/configure.js"; // configure @mulmoclaude/core/collection host binding for tests
 // dataSource (external read-only CSV) collections — v1 of
-// plans/feat-collection-csv-duckdb-source.md. Locks in:
+// plans/done/feat-collection-csv-duckdb-source.md. Locks in:
 //   (1) schema validation: dataPath/dataSource exclusivity + the
 //       read-only exclusions (singleton / ingest / spawn / mutate actions);
 //   (2) discovery: dataSourceFile resolution, containment, the
