@@ -281,6 +281,16 @@ const authorizeWithBroker = async (server: http.Server, port: number, opts: Auth
   return await brokerExchange({ code, state, codeVerifier });
 };
 
+// Persists the freshly linked tokens — unless a restart/cancel aborted this run
+// after the code came back. `waitForAuthCode` only guards the wait; the token
+// exchange and this save run past it, so an abandoned flow could otherwise
+// clobber the link the user actually kept. This re-checks the signal right
+// before the one persistent side effect.
+export const commitLinkedTokens = async (tokens: Credentials, issuedVia: IssuedVia, opts: AuthorizeGoogleOptions): Promise<Credentials> => {
+  if (opts.signal?.aborted) throw new Error(GOOGLE_AUTH_CANCELLED);
+  return await saveGoogleTokens({ ...tokens, issuedVia }, opts.home);
+};
+
 export async function authorizeGoogle(opts: AuthorizeGoogleOptions = {}): Promise<Credentials> {
   // A user-supplied client wins: it keeps the whole flow on this machine, and
   // silently preferring the broker would ignore a deliberate setup. Two of
@@ -299,7 +309,7 @@ export async function authorizeGoogle(opts: AuthorizeGoogleOptions = {}): Promis
     const tokens = useLocalClient
       ? await authorizeWithLocalClient(await loadClientSecret(opts.home), server, port, opts)
       : await authorizeWithBroker(server, port, opts);
-    return await saveGoogleTokens({ ...tokens, issuedVia }, opts.home);
+    return await commitLinkedTokens(tokens, issuedVia, opts);
   } finally {
     server.close();
   }
