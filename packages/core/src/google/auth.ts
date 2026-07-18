@@ -46,6 +46,9 @@ export interface AuthorizeGoogleOptions {
   /** Called with the consent URL; open it in a browser (and/or print it). */
   onAuthUrl?: (url: string) => void;
   timeoutMs?: number;
+  /** Abort a still-pending consent (a settings-UI restart, an explicit cancel).
+   *  Rejects the flow with {@link GOOGLE_AUTH_CANCELLED} and closes the loopback. */
+  signal?: AbortSignal;
 }
 
 const createClient = (secret: InstalledClientSecret, redirectUri?: string): OAuth2Client =>
@@ -167,35 +170,65 @@ const respondHtml = (res: http.ServerResponse, status: number, message: string):
   res.end(`<html><body><h3>${message}</h3></body></html>`);
 };
 
-export const waitForAuthCode = (server: http.Server, expectedState: string, timeoutMs: number): Promise<string> =>
-  new Promise((resolve, reject) => {
+/** Reject reason when a pending flow is torn down (a settings-UI restart or an
+ *  explicit cancel), kept distinct from a real authorization error so callers
+ *  can treat it as "user changed their mind", not "linking failed". */
+export const GOOGLE_AUTH_CANCELLED = "authorization cancelled";
+
+interface AuthCodeSettle {
+  resolve: (code: string) => void;
+  reject: (err: unknown) => void;
+}
+
+// Answers one loopback request. A terminal callback settles the flow; a
+// wrong-path or wrong-state request is answered but leaves the flow waiting —
+// a drive-by localhost probe or stale tab must not abort a pending consent.
+const handleCallbackRequest = (req: http.IncomingMessage, res: http.ServerResponse, expectedState: string, settle: AuthCodeSettle): void => {
+  const url = new URL(req.url ?? "/", "http://127.0.0.1");
+  if (url.pathname !== CALLBACK_PATH) {
+    res.writeHead(404);
+    res.end();
+    return;
+  }
+  if (url.searchParams.get("state") !== expectedState) {
+    respondHtml(res, 400, "Invalid authorization callback. You can close this tab.");
+    return;
+  }
+  try {
+    const code = authCodeFromCallback(url, expectedState);
+    respondHtml(res, 200, "Authorization complete — you can close this tab.");
+    settle.resolve(code);
+  } catch (err) {
+    // Static text only — the failure detail echoes query-string content, which
+    // must not be reflected into HTML. The CLI prints the detail.
+    respondHtml(res, 400, "Authorization failed — see the terminal for details. You can close this tab.");
+    settle.reject(err);
+  }
+};
+
+// Resolves with the OAuth code from the loopback callback, or rejects on the
+// timeout or on `signal` firing (a restart / cancel) — whichever comes first.
+export const waitForAuthCode = (server: http.Server, expectedState: string, timeoutMs: number, signal?: AbortSignal): Promise<string> =>
+  new Promise<string>((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error(`authorization timed out after ${timeoutMs / ONE_SECOND_MS}s`)), timeoutMs);
-    server.on("request", (req, res) => {
-      const url = new URL(req.url ?? "/", "http://127.0.0.1");
-      if (url.pathname !== CALLBACK_PATH) {
-        res.writeHead(404);
-        res.end();
-        return;
-      }
-      // A wrong-state request is not our callback (drive-by localhost probe
-      // or stale tab) — answer it but keep waiting for the real redirect, so
-      // an unauthenticated request can't abort the pending flow.
-      if (url.searchParams.get("state") !== expectedState) {
-        respondHtml(res, 400, "Invalid authorization callback. You can close this tab.");
-        return;
-      }
-      clearTimeout(timer);
-      try {
-        const code = authCodeFromCallback(url, expectedState);
-        respondHtml(res, 200, "Authorization complete — you can close this tab.");
+    const settle: AuthCodeSettle = {
+      resolve: (code) => {
+        clearTimeout(timer);
         resolve(code);
-      } catch (err) {
-        // Static text only — the failure detail echoes query-string content,
-        // which must not be reflected into HTML. The CLI prints the detail.
-        respondHtml(res, 400, "Authorization failed — see the terminal for details. You can close this tab.");
-        reject(err);
+      },
+      reject: (err) => {
+        clearTimeout(timer);
+        reject(err instanceof Error ? err : new Error(String(err)));
+      },
+    };
+    if (signal) {
+      if (signal.aborted) {
+        settle.reject(new Error(GOOGLE_AUTH_CANCELLED));
+        return;
       }
-    });
+      signal.addEventListener("abort", () => settle.reject(new Error(GOOGLE_AUTH_CANCELLED)), { once: true });
+    }
+    server.on("request", (req, res) => handleCallbackRequest(req, res, expectedState, settle));
   });
 
 // `access_type: offline` + `prompt: consent` force Google to return a refresh
@@ -229,7 +262,7 @@ const authorizeWithLocalClient = async (
   if (!codeChallenge) throw new Error("failed to derive a PKCE code challenge");
   const state = randomBytes(STATE_BYTES).toString("hex");
   opts.onAuthUrl?.(buildConsentUrl(client, codeChallenge, state));
-  const code = await waitForAuthCode(server, state, opts.timeoutMs ?? AUTH_TIMEOUT_MS);
+  const code = await waitForAuthCode(server, state, opts.timeoutMs ?? AUTH_TIMEOUT_MS, opts.signal);
   const { tokens } = await client.getToken({ code, codeVerifier });
   if (!tokens.refresh_token) {
     throw new Error("Google returned no refresh token — remove this app under Google Account → Security → Third-party access, then retry");
@@ -244,7 +277,7 @@ const authorizeWithBroker = async (server: http.Server, port: number, opts: Auth
   const { codeVerifier, codeChallenge } = await generatePkce();
   const { authUrl, state } = await brokerStart(port, codeChallenge);
   opts.onAuthUrl?.(authUrl);
-  const code = await waitForAuthCode(server, state, opts.timeoutMs ?? AUTH_TIMEOUT_MS);
+  const code = await waitForAuthCode(server, state, opts.timeoutMs ?? AUTH_TIMEOUT_MS, opts.signal);
   return await brokerExchange({ code, state, codeVerifier });
 };
 
