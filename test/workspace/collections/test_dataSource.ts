@@ -303,6 +303,9 @@ describe("query DSL (v2)", () => {
     // (alias vs groupBy, alias vs alias) are rejected.
     assert.equal(CollectionQueryZ.safeParse({ groupBy: ["Total"], aggregates: { total: { op: "count" } } }).success, false);
     assert.equal(CollectionQueryZ.safeParse({ aggregates: { total: { op: "count" }, Total: { op: "sum", column: "Price" } } }).success, false);
+    // ...and within groupBy itself — DuckDB would group once and auto-rename
+    // the duplicate SELECT column, breaking the result-key contract.
+    assert.equal(CollectionQueryZ.safeParse({ groupBy: ["category", "Category"] }).success, false);
   });
 
   it("compileCsvQuery keeps values in params (never in SQL) and quotes hostile identifiers", () => {

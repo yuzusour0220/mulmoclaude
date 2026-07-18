@@ -76,7 +76,17 @@ export const QueryOrderZ = z.object({
  *  whole-file scalar row, together a grouped aggregation. */
 export const CollectionQueryZ = z
   .object({
-    groupBy: z.array(z.string().min(1)).max(8).optional(),
+    // Case-insensitively unique: DuckDB treats `category` and `Category`
+    // as the SAME identifier, groups once, and auto-renames the duplicate
+    // SELECT column (`Category_1`) — silently breaking the result-key
+    // contract. Same rule as the alias refine below.
+    groupBy: z
+      .array(z.string().min(1))
+      .max(8)
+      .refine((columns) => new Set(columns.map((column) => column.toLowerCase())).size === columns.length, {
+        message: "`groupBy` columns must be unique (case-insensitively — SQL identifiers ignore case)",
+      })
+      .optional(),
     aggregates: z
       .record(z.string().regex(SAFE_ALIAS_PATTERN, "aggregate aliases must be simple identifiers (letters/digits/underscore)"), QueryAggregateZ)
       .optional(),
