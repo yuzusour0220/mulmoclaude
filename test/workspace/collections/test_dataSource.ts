@@ -294,6 +294,15 @@ describe("query DSL (v2)", () => {
       CollectionQueryZ.safeParse({ groupBy: ["Category"], aggregates: { n: { op: "count" } }, orderBy: [{ field: "n", dir: "desc" }] }).success,
       true,
     );
+    // Booleans are valid `in` members (boolean CSV columns are typed).
+    assert.equal(CollectionQueryZ.safeParse({ groupBy: ["a"], where: [{ field: "x", op: "in", value: [true, false] }] }).success, true);
+    // Aggregate count is bounded — one full-file scan must not be arbitrarily wide.
+    const wide = Object.fromEntries(Array.from({ length: 33 }, (_unused, index) => [`agg${index}`, { op: "count" }]));
+    assert.equal(CollectionQueryZ.safeParse({ aggregates: wide }).success, false);
+    // SQL identifiers are case-insensitive in DuckDB — cross-case collisions
+    // (alias vs groupBy, alias vs alias) are rejected.
+    assert.equal(CollectionQueryZ.safeParse({ groupBy: ["Total"], aggregates: { total: { op: "count" } } }).success, false);
+    assert.equal(CollectionQueryZ.safeParse({ aggregates: { total: { op: "count" }, Total: { op: "sum", column: "Price" } } }).success, false);
   });
 
   it("compileCsvQuery keeps values in params (never in SQL) and quotes hostile identifiers", () => {

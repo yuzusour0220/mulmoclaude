@@ -48,7 +48,7 @@ function whereFragment(cond: CollectionQueryWhere): { sql: string; params: unkno
   const column = quoteIdent(cond.field);
   const asText = `CAST(${column} AS VARCHAR)`;
   if (cond.op === "in") {
-    const values = cond.value as (string | number)[];
+    const values = cond.value as (string | number | boolean)[];
     const textual = values.every((value) => typeof value === "string");
     const lhs = textual ? asText : column;
     return { sql: `${lhs} IN (${values.map(() => "?").join(", ")})`, params: values };

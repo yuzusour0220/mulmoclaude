@@ -871,17 +871,50 @@ router.options(API_ROUTES.collections.viewDataQuery, viewDataCors, (_req: Reques
   res.sendStatus(204);
 });
 
+/** Per-slug in-flight cap for view-issued aggregation queries. The
+ *  per-minute limiter alone still lets a burst arrive CONCURRENTLY —
+ *  each query is a full-file DuckDB scan, so a runaway dashboard loop
+ *  could otherwise stack dozens of scans at once. Exported factory so
+ *  the unit test can drive the counter without HTTP. */
+export function makeViewQueryConcurrencyGuard(max: number) {
+  const inflight = new Map<string, number>();
+  return (req: Request<{ slug?: string }>, res: Response, next: NextFunction): void => {
+    const slug = req.params.slug ?? "";
+    const current = inflight.get(slug) ?? 0;
+    if (current >= max) {
+      res.status(429).json({ error: "too many concurrent queries for this collection — retry shortly" });
+      return;
+    }
+    inflight.set(slug, current + 1);
+    let released = false;
+    // `close` fires after the response finishes OR the client disconnects
+    // mid-request — either way the scan slot must come back exactly once.
+    res.once("close", () => {
+      if (released) return;
+      released = true;
+      const now = inflight.get(slug) ?? 1;
+      if (now <= 1) inflight.delete(slug);
+      else inflight.set(slug, now - 1);
+    });
+    next();
+  };
+}
+
+const VIEW_QUERY_MAX_CONCURRENT = 4;
+const viewQueryConcurrency = makeViewQueryConcurrencyGuard(VIEW_QUERY_MAX_CONCURRENT);
+
 // Scoped aggregation: run a structured query (the DSL — never raw SQL)
 // over a dataSource collection's whole data file. Read capability only:
 // the DSL is read-only by construction. Reuses the manageCollection
 // handler so a view can never do more than the agent's own queryItems
-// (same validation, same file-backed refusal). Rate-limited like the
-// mutate-action route — a runaway dashboard loop must not spin DuckDB
-// full-file scans unbounded.
+// (same validation, same file-backed refusal). Guarded twice: the
+// per-minute limiter (request volume) + the in-flight cap (concurrent
+// full-file scans).
 router.post(
   API_ROUTES.collections.viewDataQuery,
   viewDataCors,
   viewActionRateLimit,
+  viewQueryConcurrency,
   requireViewToken("read"),
   async (req: Request<{ slug: string }>, res: Response) => {
     try {
@@ -889,8 +922,11 @@ router.post(
       const raw = await manageCollection.handler({ action: "queryItems", slug: req.params.slug, query: body.query });
       sendToolResult(res, raw);
     } catch (err) {
+      // Log the detail server-side; the token holder gets a FIXED message —
+      // a raw DuckDB error can carry absolute paths / host internals, and a
+      // scoped view is not a trusted audience for those.
       log.warn("collections", "view-data query failed", { slug: req.params.slug.replace(/[\r\n]/g, " "), error: errorMessage(err) });
-      serverError(res, errorMessage(err));
+      serverError(res, "collection query failed");
     }
   },
 );

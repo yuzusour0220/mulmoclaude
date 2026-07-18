@@ -24,6 +24,10 @@ const SAFE_ALIAS_PATTERN = /^[A-Za-z_]\w{0,63}$/;
 export const MAX_QUERY_ROWS = 10000;
 /** Default row cap when the query declares no `limit`. */
 export const DEFAULT_QUERY_ROWS = 1000;
+/** Cap on aggregate expressions per query — a record shape has no
+ *  intrinsic size limit, and thousands of expressions would make one
+ *  full-file scan arbitrarily wide. */
+export const MAX_QUERY_AGGREGATES = 32;
 
 /** One aggregate column: `count` (rows; `column` optional to count
  *  non-null cells) or `sum`/`avg`/`min`/`max` over a named CSV column. */
@@ -50,7 +54,7 @@ export const QueryWhereZ = z
       z.number(),
       z.boolean(),
       z
-        .array(z.union([z.string(), z.number()]))
+        .array(z.union([z.string(), z.number(), z.boolean()]))
         .min(1)
         .max(100),
     ]),
@@ -84,12 +88,32 @@ export const CollectionQueryZ = z
     message: "declare at least one of `groupBy` (columns to bucket by) or `aggregates` (values to compute)",
     path: ["groupBy"],
   })
-  // An alias shadowing a groupBy column would make the SELECT list (and
-  // the result object) ambiguous.
-  .refine((query) => Object.keys(query.aggregates ?? {}).every((alias) => !(query.groupBy ?? []).includes(alias)), {
-    message: "aggregate aliases must not collide with `groupBy` column names",
+  .refine((query) => Object.keys(query.aggregates ?? {}).length <= MAX_QUERY_AGGREGATES, {
+    message: `\`aggregates\` supports at most ${MAX_QUERY_AGGREGATES} entries`,
     path: ["aggregates"],
   })
+  // An alias shadowing a groupBy column would make the SELECT list (and
+  // the result object) ambiguous. CASE-INSENSITIVE: DuckDB treats
+  // identifiers that differ only by case as the same name (quoting does
+  // not opt out), so `Total` vs `total` collide there even though they
+  // are distinct JSON keys here — reject both same-case and cross-case
+  // collisions, including between two aliases.
+  .refine(
+    (query) => {
+      const groupLower = new Set((query.groupBy ?? []).map((column) => column.toLowerCase()));
+      const seen = new Set<string>();
+      return Object.keys(query.aggregates ?? {}).every((alias) => {
+        const lower = alias.toLowerCase();
+        if (groupLower.has(lower) || seen.has(lower)) return false;
+        seen.add(lower);
+        return true;
+      });
+    },
+    {
+      message: "aggregate aliases must be unique and must not collide with `groupBy` column names (case-insensitively — SQL identifiers ignore case)",
+      path: ["aggregates"],
+    },
+  )
   // `orderBy` can only sort what the result actually contains.
   .refine(
     (query) => {
