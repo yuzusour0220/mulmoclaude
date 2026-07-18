@@ -108,4 +108,28 @@ describe("waitForAuthCode", () => {
       server.close();
     }
   });
+
+  it("rejects with 'cancelled' when the signal aborts mid-wait", async () => {
+    const { server } = await startServer();
+    const controller = new AbortController();
+    try {
+      const pending = waitForAuthCode(server, "expected", TEST_TIMEOUT_MS, controller.signal);
+      const expectation = assert.rejects(pending, /authorization cancelled/);
+      controller.abort();
+      await expectation;
+    } finally {
+      server.close();
+    }
+  });
+
+  it("rejects immediately when the signal is already aborted", async () => {
+    const { server } = await startServer();
+    const controller = new AbortController();
+    controller.abort();
+    try {
+      await assert.rejects(waitForAuthCode(server, "expected", TEST_TIMEOUT_MS, controller.signal), /authorization cancelled/);
+    } finally {
+      server.close();
+    }
+  });
 });

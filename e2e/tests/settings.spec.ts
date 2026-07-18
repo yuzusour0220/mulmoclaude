@@ -415,4 +415,31 @@ test.describe("Google account tab", () => {
     await expect(page.locator('[data-testid="settings-google-secret-ambiguous"]')).toBeVisible();
     await expect(page.locator('[data-testid="settings-google-connect-btn"]')).toBeDisabled();
   });
+
+  // A user who abandoned the browser consent must be able to link again without
+  // waiting out the server-side timeout — the button stays clickable while
+  // pending, and the click restarts the flow (backend aborts the stale one).
+  test("keeps the connect button clickable while a link is pending so the user can retry", async ({ page }) => {
+    await mockConfigApi(page);
+    await mockGoogleStatus(page, { linked: false, pending: true, clientSecret: "found", lastError: null });
+    let authorizeCalls = 0;
+    await page.route(
+      (url) => url.pathname === "/api/google/authorize",
+      (route) => {
+        authorizeCalls += 1;
+        return route.fulfill({ json: { authUrl: "https://accounts.google.com/o/oauth2/v2/auth?mock=retry" } });
+      },
+    );
+
+    await openGoogleTab(page);
+    await expect(page.locator('[data-testid="settings-google-status"]')).toContainText("Waiting for the browser consent");
+    const connect = page.locator('[data-testid="settings-google-connect-btn"]');
+    await expect(connect).toBeEnabled();
+
+    await page.evaluate(() => {
+      window.open = () => null;
+    });
+    await connect.click();
+    await expect.poll(() => authorizeCalls).toBe(1);
+  });
 });

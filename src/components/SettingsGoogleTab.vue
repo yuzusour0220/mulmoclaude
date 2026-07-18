@@ -11,10 +11,13 @@
 
     <div v-if="loaded" class="flex items-center gap-3">
       <span class="text-sm" :class="statusColour" data-testid="settings-google-status">{{ statusText }}</span>
+      <!-- Stays clickable while `pending`: a user who abandoned the browser
+           consent can restart the link instead of waiting out the server-side
+           timeout (the click aborts the stale flow and opens a fresh one). -->
       <button
         v-if="!linked"
         class="px-2 py-1 text-xs rounded bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50"
-        :disabled="busy || pending || clientSecret === 'ambiguous'"
+        :disabled="busy || clientSecret === 'ambiguous'"
         data-testid="settings-google-connect-btn"
         @click="connect"
       >

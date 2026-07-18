@@ -8,7 +8,16 @@ import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { authorizeGoogle, clientSecretPresence, getGoogleAccessToken, googleSecretsDir, googleTokenPath, saveGoogleTokens } from "@mulmoclaude/core/google";
+import {
+  authorizeGoogle,
+  clientSecretPresence,
+  commitLinkedTokens,
+  getGoogleAccessToken,
+  googleSecretsDir,
+  googleTokenPath,
+  loadGoogleTokens,
+  saveGoogleTokens,
+} from "@mulmoclaude/core/google";
 
 const desktopSecret = JSON.stringify({ installed: { client_id: "id-123", client_secret: "secret-456" } });
 
@@ -31,6 +40,27 @@ describe("authorizeGoogle client routing", () => {
     let issuedUrl: string | null = null;
     await assert.rejects(authorizeGoogle({ home, onAuthUrl: (url) => (issuedUrl = url), timeoutMs: 1_000 }), /multiple desktop-app client_secret/);
     assert.equal(issuedUrl, null);
+  });
+});
+
+// A restart/cancel can fire after the browser callback resolves, while the
+// token exchange is still in flight. commitLinkedTokens is the last checkpoint
+// before the one persistent side effect, so an abandoned run must not overwrite
+// the link the user actually kept.
+describe("commitLinkedTokens cancellation guard", () => {
+  it("persists the tokens when the flow was not cancelled", async () => {
+    const home = await makeFakeHome();
+    const saved = await commitLinkedTokens({ refresh_token: "rt-keep" }, "local", { home });
+    assert.equal(saved.refresh_token, "rt-keep");
+    assert.equal((await loadGoogleTokens(home))?.refresh_token, "rt-keep");
+  });
+
+  it("throws and writes nothing when the run was aborted after the code arrived", async () => {
+    const home = await makeFakeHome();
+    const controller = new AbortController();
+    controller.abort();
+    await assert.rejects(commitLinkedTokens({ refresh_token: "rt-stale" }, "local", { home, signal: controller.signal }), /authorization cancelled/);
+    assert.equal(await loadGoogleTokens(home), null);
   });
 });
 

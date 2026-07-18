@@ -12,9 +12,11 @@ export { deleteGoogleTokens, loadGoogleTokens, mergeGoogleTokens, saveGoogleToke
 export { brokerBaseUrl, brokerExchange, brokerRefresh, brokerStart, type BrokerStartResponse } from "./broker.js";
 export {
   authorizeGoogle,
+  commitLinkedTokens,
   getGoogleAccessToken,
   unlinkGoogle,
   waitForAuthCode,
+  GOOGLE_AUTH_CANCELLED,
   GOOGLE_CALENDAR_SCOPE,
   GOOGLE_CALENDARLIST_SCOPE,
   GOOGLE_TASKS_SCOPE,
