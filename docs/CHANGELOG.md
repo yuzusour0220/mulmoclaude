@@ -10,6 +10,26 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 ---
 
+## [1.3.0] - 2026-07-18
+
+**Your other calendars, in colour.** The Google tool now sees every calendar you've subscribed to — not just your primary — and carries each event's colour. Plus read-only CSV data collections backed by DuckDB.
+
+### Highlights
+
+#### Google Calendar — non-primary calendars & colours (#2162, #2164)
+
+The `google` tool can now list the calendars you've added or subscribed to — primary, secondary, and shared — with `calendarListCalendars`, and read or create events on any of them by passing `calendarId` (default: your primary). Colours come through too: every event carries its `colorId`, each calendar its background/foreground hex, and `calendarColors` resolves the palette. Calendar listing follows pagination, so accounts with many calendars aren't truncated.
+
+- Adds one minimal scope, `calendar.calendarlist.readonly`. **Existing users must re-link** (Settings → Plugins → Google) to grant it. Reading events on a known calendar id needs no re-link.
+
+#### Collections — CSV dataSource via DuckDB (#2158, #2163)
+
+Read-only collections backed by a CSV file, queried through DuckDB with a structured aggregation query DSL (`queryItems`).
+
+Ships `@mulmoclaude/core@0.23.0`, `@mulmoclaude/collection-plugin@0.12.0`, `@mulmoclaude/google-plugin@0.3.0`.
+
+---
+
 ## npm packages — 2026-07-17 (8)
 
 - **`@mulmoclaude/mulmoscript-plugin@0.2.2`** — presentMulmoScript: updating a beat's `text` via the per-beat JSON source editor now drops that beat's cached narration audio, so the "Generate Audio" button reappears for the new text (previously only Play showed, with no way to re-generate). Audio files are content-addressed by text hash, so the view re-probes disk after the edit — reverting the text restores the existing audio without a paid TTS call.
