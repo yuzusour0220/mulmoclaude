@@ -68,6 +68,18 @@ describe("GoogleArgs", () => {
     assert.equal(args.kind === "calendarListEvents" && args.calendarId, "team@group.calendar.google.com");
   });
 
+  it("rejects an empty or whitespace calendarId (would build /calendars//events)", () => {
+    assert.throws(() => GoogleArgs.parse({ kind: "calendarListEvents", calendarId: "" }));
+    assert.throws(() => GoogleArgs.parse({ kind: "calendarListEvents", calendarId: "   " }));
+    const create = { kind: "calendarCreateEvent", summary: "x", start: "2026-07-17T09:00:00Z", end: "2026-07-17T10:00:00Z" };
+    assert.throws(() => GoogleArgs.parse({ ...create, calendarId: "" }));
+  });
+
+  it("trims calendarId whitespace", () => {
+    const args = GoogleArgs.parse({ kind: "calendarListEvents", calendarId: "  team@group.calendar.google.com  " });
+    assert.equal(args.kind === "calendarListEvents" && args.calendarId, "team@group.calendar.google.com");
+  });
+
   it("parses a full calendarCreateEvent", () => {
     const args = GoogleArgs.parse({
       kind: "calendarCreateEvent",

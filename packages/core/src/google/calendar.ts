@@ -8,7 +8,9 @@ const CALENDAR_BASE_URL = "https://www.googleapis.com/calendar/v3";
 const CALENDAR_API_LABEL = "Google Calendar API";
 const DEFAULT_CALENDAR_ID = "primary";
 
-const eventsUrl = (calendarId: string | undefined): string => `${CALENDAR_BASE_URL}/calendars/${encodeURIComponent(calendarId ?? DEFAULT_CALENDAR_ID)}/events`;
+// `||` (not `??`) so an empty-string calendarId also falls back to primary
+// instead of building a malformed `/calendars//events` URL.
+const eventsUrl = (calendarId: string | undefined): string => `${CALENDAR_BASE_URL}/calendars/${encodeURIComponent(calendarId || DEFAULT_CALENDAR_ID)}/events`;
 
 export interface CalendarEventInput {
   summary: string;
