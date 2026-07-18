@@ -229,6 +229,20 @@ function stopVanishedWatchers(liveSlugs: Set<string>): boolean {
   return mutated;
 }
 
+/** True when a schema edit moved the collection's storage — a different
+ *  `dataSource.path`, a different `dataPath`, or a flip between the two
+ *  modes. The mounted fs.watch is bound to the OLD location, so it must
+ *  be remounted, not just re-reconciled. */
+function storagePathChanged(previousJson: string, next: LoadedCollection["schema"]): boolean {
+  let previous: LoadedCollection["schema"];
+  try {
+    previous = JSON.parse(previousJson) as LoadedCollection["schema"];
+  } catch {
+    return true; // unreadable cache — remount to be safe
+  }
+  return previous.dataSource?.path !== next.dataSource?.path || previous.dataPath !== next.dataPath;
+}
+
 /** Re-reconcile already-watched collections whose schema changed since
  *  the last tick. New collections fall through to `startNewWatchers`. */
 async function reconcileChangedSchemas(collections: readonly LoadedCollection[]): Promise<boolean> {
@@ -238,6 +252,22 @@ async function reconcileChangedSchemas(collections: readonly LoadedCollection[])
     if (!existing) continue;
     const nextJson = JSON.stringify(collection.schema);
     if (existing.schemaJson === nextJson) continue;
+    if (storagePathChanged(existing.schemaJson, collection.schema)) {
+      // Drop the stale mount; `startNewWatchers` (which runs right after
+      // this pass in syncWatchers) remounts on the new location. A
+      // dataSource collection also gets a change ping so open views
+      // refetch against the new file immediately.
+      log().info("watcher storage path changed, remounting", { slug: collection.slug });
+      try {
+        existing.watcher.close();
+      } catch {
+        /* best-effort */
+      }
+      watchers.delete(collection.slug);
+      if (collection.schema.dataSource !== undefined) publishCollectionChange({ slug: collection.slug, op: "upsert" });
+      mutated = true;
+      continue;
+    }
     existing.schemaJson = nextJson;
     if (collection.schema.dataSource !== undefined) {
       // No record files to reconcile — but a schema edit can change what

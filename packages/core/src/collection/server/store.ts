@@ -53,8 +53,8 @@ export function storeFor(collection: LoadedCollection, opts: IoOptions = {}): Co
     const key = collection.schema.primaryKey;
     return {
       capabilities: { writable: false },
-      list: () => (file === undefined ? Promise.resolve([]) : csvList(file, key)),
-      read: (itemId: string) => (file === undefined ? Promise.resolve(null) : csvRead(file, key, itemId)),
+      list: () => (file === undefined ? Promise.resolve([]) : csvList(file, key, opts.workspaceRoot)),
+      read: (itemId: string) => (file === undefined ? Promise.resolve(null) : csvRead(file, key, itemId, opts.workspaceRoot)),
     };
   }
   return {

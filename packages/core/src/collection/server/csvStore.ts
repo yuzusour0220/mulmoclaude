@@ -26,14 +26,14 @@
 // dataSource collections break — see
 // packages/core/assets/helps/error-recovery.md.
 
-import { mkdir, open, readFile, rename, stat, writeFile } from "node:fs/promises";
+import { lstat, mkdir, open, readdir, readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
 import { createHash, randomBytes } from "node:crypto";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import iconv from "iconv-lite";
 import type { CollectionItem } from "../core/schema";
-import { log } from "./host";
-import { safeRecordId } from "./paths";
+import { getWorkspaceRoot, log } from "./host";
+import { isContainedInRoot, safeRecordId } from "./paths";
 
 /** `list()` row cap. Over-cap files are truncated with a warn — the v1
  *  contract is "browse + per-record views", not full-table analytics. */
@@ -104,6 +104,26 @@ function quoteIdent(name: string): string {
   return `"${name.replaceAll('"', '""')}"`;
 }
 
+/** Single-quote a SQL string literal (a `types={...}` struct key). */
+function quoteLiteral(value: string): string {
+  return `'${value.replaceAll("'", "''")}'`;
+}
+
+/** The `read_csv` argument list: the (prepared) path plus a `types` pin
+ *  forcing the key column to VARCHAR. Without the pin DuckDB's sniffer
+ *  turns `001` into BIGINT 1 — leading zeros vanish and distinct keys
+ *  collapse, so record addressing silently misses rows. */
+function readCsvArgs(primaryKey: string): string {
+  return `?, types={${quoteLiteral(primaryKey)}: 'VARCHAR'}`;
+}
+
+/** True when a thrown DuckDB error is the `types` pin naming a column the
+ *  CSV doesn't have — the schema/file-mismatch case the caller downgrades
+ *  to "empty collection + warn" instead of a 500. */
+function isMissingKeyColumnError(err: unknown): boolean {
+  return String(err).includes("do not exist in the CSV");
+}
+
 // ---------------------------------------------------------------------------
 // Encoding: never touch the user's file — decode to a tmpdir cache copy
 // ---------------------------------------------------------------------------
@@ -161,6 +181,27 @@ async function pathExists(target: string): Promise<boolean> {
   }
 }
 
+/** Best-effort removal of older decode-cache entries for the same source
+ *  path — a frequently-replaced large CSV would otherwise accumulate one
+ *  full copy per (mtime, size) forever. Runs AFTER the current copy is
+ *  published; a concurrent reader holding an old fd is unaffected
+ *  (unlink-while-open is safe on POSIX). */
+async function evictSupersededCache(key: string, keepBasename: string): Promise<void> {
+  try {
+    const entries = await readdir(cacheDir());
+    await Promise.all(
+      entries.filter((name) => name.startsWith(`${key}-`) && name !== keepBasename).map((name) => unlink(path.join(cacheDir(), name)).catch(() => undefined)),
+    );
+  } catch {
+    // cache dir missing / unreadable — nothing to evict
+  }
+}
+
+/** Decode the whole file into a UTF-8 cache copy and return its path.
+ *  Cache key = (path, mtime, size), so a replaced CSV re-decodes and an
+ *  unchanged one never does; superseded copies are evicted. The cache
+ *  lives in the SHARED OS tmpdir, so the dir is 0700 and files 0600 —
+ *  decoded rows must not be readable by other local users. */
 async function decodeToCache(absPath: string, info: { mtimeMs: number; size: number }): Promise<string> {
   const key = createHash("sha256").update(absPath).digest("hex").slice(0, 16);
   const cached = path.join(cacheDir(), `${key}-${Math.trunc(info.mtimeMs)}-${info.size}.csv`);
@@ -168,30 +209,52 @@ async function decodeToCache(absPath: string, info: { mtimeMs: number; size: num
     const whole = await readFile(absPath);
     const encoding = fallbackEncoding(whole);
     const text = iconv.decode(whole, encoding);
-    await mkdir(cacheDir(), { recursive: true });
+    await mkdir(cacheDir(), { recursive: true, mode: 0o700 });
     // Unique tmp name + rename in the SAME dir — atomic publish, and a
     // concurrent decode of the same file just wins/loses the rename cleanly.
     const tmp = `${cached}.${randomBytes(4).toString("hex")}.tmp`;
-    await writeFile(tmp, text, "utf-8");
+    await writeFile(tmp, text, { encoding: "utf-8", mode: 0o600 });
     await rename(tmp, cached);
     log.info("collections", "decoded non-UTF-8 dataSource file to cache", { path: absPath, encoding });
+    await evictSupersededCache(key, path.basename(cached));
   }
   return cached;
 }
 
-/** Return a path DuckDB can read as UTF-8: the original file when it
- *  already is UTF-8 (the cheap, common case — only the head is sniffed),
- *  else a decoded cache copy (see `decodeToCache`). Returns null when the
- *  file doesn't exist (a missing dataSource file = an empty collection,
- *  mirroring listItems' missing-dir contract). */
-async function ensureUtf8CsvPath(absPath: string): Promise<string | null> {
+/** Re-validate the dataSource file at READ time, mirroring the JSON
+ *  store's per-read defenses: realpath containment (a symlink swapped in
+ *  after discovery must not walk out of the workspace) and an lstat
+ *  regular-file check (a symlink leaf is refused outright, even one
+ *  pointing inside the workspace — same rule as `isRegularFile` on
+ *  record files). Returns the stat info, or null for "no readable file"
+ *  (ENOENT / refused), which callers render as an empty collection. */
+async function safeCsvStat(absPath: string, workspaceRoot: string): Promise<{ mtimeMs: number; size: number } | null> {
+  if (!isContainedInRoot(absPath, workspaceRoot)) {
+    log.warn("collections", "dataSource read refused: path escapes workspace", { path: absPath });
+    return null;
+  }
   let info;
   try {
-    info = await stat(absPath);
+    info = await lstat(absPath);
   } catch (err) {
     if ((err as { code?: string }).code === "ENOENT") return null;
     throw err;
   }
+  if (!info.isFile()) {
+    log.warn("collections", "dataSource read refused: not a regular file (symlink?)", { path: absPath });
+    return null;
+  }
+  return info;
+}
+
+/** Return a path DuckDB can read as UTF-8: the original file when it
+ *  already is UTF-8 (the cheap, common case — only the head is sniffed),
+ *  else a decoded cache copy (see `decodeToCache`). Returns null when
+ *  there is no readable file (missing, symlink, or containment-refused —
+ *  see `safeCsvStat`), which callers render as an empty collection. */
+async function ensureUtf8CsvPath(absPath: string, workspaceRoot: string): Promise<string | null> {
+  const info = await safeCsvStat(absPath, workspaceRoot);
+  if (info === null) return null;
   const head = await readHead(absPath, SNIFF_BYTES);
   // Drop the tail bytes of a full-length sample so a multibyte char split
   // at the boundary can't read as invalid UTF-8.
@@ -250,18 +313,27 @@ async function queryCsv(sql: string, params: unknown[]): Promise<Record<string, 
 // The store operations (consumed by storeFor in ./store)
 // ---------------------------------------------------------------------------
 
-/** Every row of the CSV as records — capped, deduped, id-encoded. */
-export async function csvList(absPath: string, primaryKey: string): Promise<CollectionItem[]> {
-  const utf8Path = await ensureUtf8CsvPath(absPath);
+/** Every row of the CSV as records — capped, deduped, id-encoded. The
+ *  key column is pinned to VARCHAR (see `readCsvArgs`). `workspaceRoot`
+ *  drives the per-read containment check; omitted, the configured host
+ *  root is used. */
+export async function csvList(absPath: string, primaryKey: string, workspaceRoot?: string): Promise<CollectionItem[]> {
+  const utf8Path = await ensureUtf8CsvPath(absPath, workspaceRoot ?? getWorkspaceRoot());
   if (utf8Path === null) return [];
-  const rows = await queryCsv(`SELECT * FROM read_csv(?) LIMIT ${MAX_CSV_ROWS + 1}`, [utf8Path]);
+  let rows: Record<string, unknown>[];
+  try {
+    rows = await queryCsv(`SELECT * FROM read_csv(${readCsvArgs(primaryKey)}) LIMIT ${MAX_CSV_ROWS + 1}`, [utf8Path]);
+  } catch (err) {
+    // The VARCHAR pin names a column the CSV doesn't have — a schema/file
+    // mismatch, rendered as an empty collection with a warn (same outcome
+    // the pre-pin `primaryKey in row` check produced), not a 500.
+    if (!isMissingKeyColumnError(err)) throw err;
+    log.warn("collections", "dataSource CSV has no primaryKey column — every row is skipped", { path: absPath, primaryKey });
+    return [];
+  }
   if (rows.length > MAX_CSV_ROWS) {
     log.warn("collections", "dataSource CSV truncated to row cap", { path: absPath, cap: MAX_CSV_ROWS });
     rows.length = MAX_CSV_ROWS;
-  }
-  if (rows.length > 0 && !(primaryKey in rows[0])) {
-    log.warn("collections", "dataSource CSV has no primaryKey column — every row is skipped", { path: absPath, primaryKey });
-    return [];
   }
   const items = rows.map((row) => csvRowToItem(row, primaryKey)).filter((item): item is CollectionItem => item !== null);
   const skipped = rows.length - items.length;
@@ -272,18 +344,28 @@ export async function csvList(absPath: string, primaryKey: string): Promise<Coll
   return deduped.items;
 }
 
+/** The scan-order ordinal column the last-match read adds. Underscore
+ *  prefix keeps it out of any plausible CSV header namespace; it is
+ *  stripped from the returned record either way. */
+const ROW_ORDINAL = "__mc_row";
+
 /** One record by id. The comparison value rides as a prepared-statement
- *  parameter; the LAST matching row wins, consistent with csvList's
- *  dedupe. */
-export async function csvRead(absPath: string, primaryKey: string, itemId: string): Promise<CollectionItem | null> {
-  const utf8Path = await ensureUtf8CsvPath(absPath);
+ *  parameter, and the LAST matching row is selected IN DuckDB (scan-order
+ *  ordinal + LIMIT 1) — a CSV with thousands of duplicate keys must not
+ *  materialize them all for one detail read. Consistent with csvList's
+ *  last-wins dedupe. */
+export async function csvRead(absPath: string, primaryKey: string, itemId: string, workspaceRoot?: string): Promise<CollectionItem | null> {
+  const utf8Path = await ensureUtf8CsvPath(absPath, workspaceRoot ?? getWorkspaceRoot());
   if (utf8Path === null) return null;
   const rawKey = decodeCsvRecordId(itemId);
   // Errors (missing key column, malformed CSV, DuckDB unavailable)
   // propagate — a clear 500 with the DuckDB message beats a silent 404.
-  const sql = `SELECT * FROM read_csv(?) WHERE CAST(${quoteIdent(primaryKey)} AS VARCHAR) = ?`;
+  const sql =
+    `SELECT * FROM (SELECT *, row_number() OVER () AS ${quoteIdent(ROW_ORDINAL)} FROM read_csv(${readCsvArgs(primaryKey)})) ` +
+    `WHERE CAST(${quoteIdent(primaryKey)} AS VARCHAR) = ? ORDER BY ${quoteIdent(ROW_ORDINAL)} DESC LIMIT 1`;
   const rows = await queryCsv(sql, [utf8Path, rawKey]);
-  const last = rows.at(-1);
+  const last = rows.at(0);
   if (last === undefined) return null;
-  return csvRowToItem(last, primaryKey);
+  const { [ROW_ORDINAL]: __ordinal, ...record } = last;
+  return csvRowToItem(record, primaryKey);
 }

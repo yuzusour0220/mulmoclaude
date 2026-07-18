@@ -14,7 +14,7 @@ import "../../../server/workspace/collections/configure.js"; // configure @mulmo
 
 import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import iconv from "iconv-lite";
@@ -201,6 +201,39 @@ describe("DuckDB CSV store", () => {
     // Source of truth untouched — still Shift_JIS bytes on disk.
     const { readFileSync } = await import("node:fs");
     assert.deepEqual(readFileSync(file), sjis);
+  });
+
+  it("keeps numeric-looking string keys textual — leading zeros survive and stay distinct", async () => {
+    writeSkill("students", CSV_SCHEMA);
+    writeCsv("data/students.csv", "student_id,name,score\n001,First,1\n1,Second,2\n001,Third,3\n");
+    const collection = await loadCollection("students", discoveryOpts());
+    assert.ok(collection);
+    const store = storeFor(collection, { workspaceRoot: workdir });
+    const items = await store.list();
+    // "001" and "1" are DIFFERENT keys (the VARCHAR pin defeats the
+    // sniffer's BIGINT coercion); the duplicate "001" collapses last-wins.
+    assert.deepEqual(items.map((item) => item.student_id).sort(), ["001", "1"]);
+    const zeroPadded = await store.read("001");
+    assert.equal(zeroPadded?.name, "Third");
+    assert.equal((await store.read("1"))?.name, "Second");
+  });
+
+  it("refuses a symlink swapped in AFTER discovery (read-time containment race)", async () => {
+    // A symlink present AT discovery is already refused by resolveDataDir's
+    // realpath containment (the collection never loads). This models the
+    // TOCTOU race instead: discover against a legit file, then swap it for
+    // a symlink pointing outside the workspace before the read.
+    writeSkill("students", CSV_SCHEMA);
+    writeCsv("data/students.csv", "student_id,name,score\nS-1,Legit,1\n");
+    const collection = await loadCollection("students", discoveryOpts());
+    assert.ok(collection);
+    const outside = path.join(emptyUserDir, "outside.csv");
+    writeFileSync(outside, "student_id,name,score\nS-9,Leak,0\n");
+    rmSync(path.join(workdir, "data/students.csv"));
+    symlinkSync(outside, path.join(workdir, "data/students.csv"));
+    const store = storeFor(collection, { workspaceRoot: workdir });
+    assert.deepEqual(await store.list(), []);
+    assert.equal(await store.read("S-9"), null);
   });
 
   it("treats a missing dataSource file as an empty collection", async () => {
