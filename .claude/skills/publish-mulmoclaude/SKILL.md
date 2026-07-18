@@ -181,9 +181,9 @@ for pkg in $(jq -r '.dependencies | keys[] | select(startswith("@mulmoclaude/"))
 done
 ```
 
-### 7. Tag + GitHub release (only for @mulmobridge/* packages that were cascade-bumped)
+### 7. Tag + GitHub release for cascade-bumped @mulmobridge/* / @mulmoclaude/* packages
 
-The user has said that `mulmoclaude`'s own launches don't need GitHub releases yet. Only publish releases for the dependent packages that got bumped in §2.
+§7 covers ONLY the shared packages that got bumped + published in §2 / §6 (the `@mulmobridge/*` and `@mulmoclaude/*` scoped packages). They each get a `--latest=false` package release. The app-level `mulmoclaude` release is separate and **mandatory** — see §9.
 
 ```bash
 # Per bumped package:
@@ -207,19 +207,56 @@ EOF
 
 `--latest=false` is mandatory for package releases so they don't displace the latest `vX.Y.Z` app release.
 
-### 8. Commit + PR
+### 8. Commit + PR (version bumps + CHANGELOG)
 
-Commit the real (non-test) version bumps + dep additions, push to a feature branch, open a PR. Never push directly to main. **The root `package.json` bump from §5.5 MUST be part of this commit** so `/release-app` reads the correct version straight away.
+Commit the real (non-test) version bumps + dep additions **and the §9 CHANGELOG entry**, push to a feature branch, open a PR. Never push directly to main. **The root `package.json` bump from §5.5 MUST be part of this commit** so the app release reads the correct version straight away.
 
 ```bash
 git add package.json \
         packages/protocol/package.json packages/chat-service/package.json \
         packages/mulmoclaude/package.json packages/mulmoclaude/bin/mulmoclaude.js \
+        docs/CHANGELOG.md \
         yarn.lock
 git commit -m "chore(mulmoclaude): bump launcher + root to X.Y.Z"
 git push -u origin <branch>
 gh pr create --title "..." --body "..."
 ```
+
+### 9. App GitHub release (`vX.Y.Z`) + CHANGELOG — mark **latest**
+
+A launcher publish is not done until it has a visible, changelog-backed `latest` release. Fold this in here (don't defer to a separate `/release-app` run) so `npx mulmoclaude@X.Y.Z` always corresponds to a `vX.Y.Z` release + CHANGELOG entry.
+
+**MUST run `date +%Y-%m-%d`** for the release date — never guess it.
+
+**9a. CHANGELOG** (write it as part of the §8 PR). Prepend a `## [X.Y.Z] - YYYY-MM-DD` section to `docs/CHANGELOG.md`, right below `## [Unreleased]`, in the app-release format:
+- a one-line **bold tagline**,
+- a `### Highlights` block with `#### <feature> (#issue, #pr)` subsections,
+- a closing `Ships \`@mulmoclaude/core@<v>\`, …` line naming every scoped package version this launcher pulls in.
+
+**9b. Tag + release at the merged bump commit.** After the §8 PR merges, tag `main` (the tag MUST point at the commit whose root `package.json` is `X.Y.Z`):
+
+```bash
+git checkout main && git pull
+git tag "vX.Y.Z"
+git push origin "vX.Y.Z"        # release-flow exception to no-direct-push — confirm with the user first
+LAST=$(git tag -l 'v*' --sort=-v:refname | sed -n 2p)   # previous app tag, for the compare link
+gh release create "vX.Y.Z" --repo receptron/mulmoclaude --latest \
+  --title "vX.Y.Z — <short description>" \
+  --notes "$(cat <<'EOF'
+## Highlights
+
+### <Feature>
+
+<one or two paragraphs — reuse the 9a CHANGELOG highlights>
+
+## Full Changelog
+
+See [CHANGELOG.md](https://github.com/receptron/mulmoclaude/blob/main/docs/CHANGELOG.md#xyz---yyyy-mm-dd).
+EOF
+)"
+```
+
+`--latest` is **mandatory** here — the opposite of §7's `--latest=false`. The app release is the version users see as current; only ONE release carries `latest`, and it is this one. The scoped `@mulmoclaude/*` / `@mulmobridge/*` package releases from §7 MUST stay `--latest=false` so they never displace it.
 
 ### Lessons that drove this skill (keep in mind when extending it)
 
