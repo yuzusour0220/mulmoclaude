@@ -710,7 +710,7 @@ function fieldDrivenFromFieldCarried(schema: FieldDrivenSchemaView): boolean {
  *  workspace-relative and containment-checked exactly like `dataPath`. The
  *  row-id column is the schema's existing `primaryKey` — there is
  *  deliberately no second key concept here.
- *  See plans/feat-collection-csv-duckdb-source.md. */
+ *  See plans/done/feat-collection-csv-duckdb-source.md. */
 export const DataSourceZ = z.object({
   type: z.literal("csv"),
   path: z.string().min(1),
