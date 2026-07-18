@@ -419,20 +419,27 @@ describe("query DSL (v2)", () => {
     assert.equal(filtered.rows[0]?.revenue, 25);
   });
 
-  it("queryItems on an EMPTY file-backed collection returns no rows", async () => {
+  it("queryItems on an EMPTY file-backed collection keeps SQL semantics: scalar row for bare aggregates, [] for grouped", async () => {
     writeSkill("empty", {
       title: "Empty",
       icon: "folder",
       dataPath: "data/empty/items",
       primaryKey: "id",
-      fields: { id: { type: "string", label: "ID", primary: true } },
+      fields: {
+        id: { type: "string", label: "ID", primary: true },
+        amount: { type: "number", label: "Amount" },
+      },
     });
     const tool = makeManageCollectionTool(discoveryOpts());
-    const result = JSON.parse(await tool.handler({ action: "queryItems", slug: "empty", query: { aggregates: { n: { op: "count" } } } })) as {
-      count: number;
-      rows: unknown[];
-    };
-    assert.equal(result.count, 0);
-    assert.deepEqual(result.rows, []);
+    // Aggregate-only over zero rows → ONE scalar row (count 0, sum NULL) —
+    // same shape the CSV path yields for a header-only file, so `rows[0]`
+    // readers never break on storage kind or emptiness.
+    const scalar = JSON.parse(
+      await tool.handler({ action: "queryItems", slug: "empty", query: { aggregates: { n: { op: "count" }, s: { op: "sum", column: "amount" } } } }),
+    ) as { rows: Record<string, unknown>[] };
+    assert.deepEqual(scalar.rows, [{ n: 0, s: null }]);
+    // Grouped over zero rows → zero groups.
+    const grouped = JSON.parse(await tool.handler({ action: "queryItems", slug: "empty", query: { groupBy: ["id"] } })) as { rows: unknown[] };
+    assert.deepEqual(grouped.rows, []);
   });
 });

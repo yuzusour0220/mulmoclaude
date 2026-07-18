@@ -19,29 +19,51 @@
 // enrichment lives in `derive.ts`, which itself consumes `storeFor`, so
 // wiring it into the store would create an import cycle).
 
-import { mkdir, unlink, writeFile } from "node:fs/promises";
+import { mkdir, open, unlink } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
 import path from "node:path";
 import type { CollectionItem } from "../core/schema";
-import type { CollectionQuery } from "../core/queryZ";
+import type { CollectionQuery, CollectionQueryAggregate } from "../core/queryZ";
 import { compileJsonlQuery } from "./csvQuery";
 import { cacheDir, normalizeCsvValue, queryCsv } from "./csvStore";
+import { log } from "./host";
 
-/** Run a validated query over enriched collection rows. An empty
- *  collection short-circuits to `[]` — DuckDB has no file to infer a
- *  schema from, and "no rows" is the honest answer for every query
- *  shape (a global count over nothing reads better as absent than as a
- *  fabricated `{n: 0}` row with no other columns). */
+/** SQL semantics for an aggregate-only query over ZERO rows: one scalar
+ *  row (`count` = 0, everything else NULL) — the same shape the CSV path
+ *  produces for a header-only file, so callers reading `rows[0]` never
+ *  break on storage kind or emptiness. A grouped query over zero rows is
+ *  zero groups (`[]`), also matching SQL. Synthesized here because DuckDB
+ *  has no empty file to infer a schema from. */
+function emptyCollectionResult(query: CollectionQuery): Record<string, unknown>[] {
+  if ((query.groupBy?.length ?? 0) > 0) return [];
+  const aggregates = Object.entries(query.aggregates ?? {});
+  return [Object.fromEntries(aggregates.map(([alias, aggregate]: [string, CollectionQueryAggregate]) => [alias, aggregate.op === "count" ? 0 : null]))];
+}
+
+/** Run a validated query over enriched collection rows. */
 export async function runQueryOverRows(rows: CollectionItem[], query: CollectionQuery): Promise<Record<string, unknown>[]> {
-  if (rows.length === 0) return [];
+  if (rows.length === 0) return emptyCollectionResult(query);
   await mkdir(cacheDir(), { recursive: true, mode: 0o700 });
   const jsonlPath = path.join(cacheDir(), `q-${randomBytes(8).toString("hex")}.jsonl`);
-  await writeFile(jsonlPath, `${rows.map((row) => JSON.stringify(row)).join("\n")}\n`, { encoding: "utf-8", mode: 0o600 });
   try {
+    // Stream row-by-row — a map+join would duplicate an uncapped
+    // collection as one giant string before writing it.
+    const handle = await open(jsonlPath, "wx", 0o600);
+    try {
+      for (const row of rows) await handle.write(`${JSON.stringify(row)}\n`);
+    } finally {
+      await handle.close();
+    }
     const { sql, params } = compileJsonlQuery(query);
     const result = await queryCsv(sql, [jsonlPath, ...params]);
     return result.map((row) => Object.fromEntries(Object.entries(row).map(([key, value]) => [key, normalizeCsvValue(value)])));
   } finally {
-    await unlink(jsonlPath).catch(() => undefined);
+    // The finally covers the WRITE too — a partially-written file from a
+    // rejected write must not linger in the shared tmpdir. A failed unlink
+    // (other than "never created") is only logged: throwing here would
+    // mask the query's own error.
+    await unlink(jsonlPath).catch((err: unknown) => {
+      if ((err as { code?: string }).code !== "ENOENT") log.warn("collections", "temp JSONL cleanup failed", { path: jsonlPath, error: String(err) });
+    });
   }
 }

@@ -132,8 +132,12 @@ const { rows } = await res.json(); // [{ Category, total, n }, ...] — chart th
   `groupBy`/`aggregates`; `orderBy` sorts by a groupBy column or an
   aggregate alias; result rows clamp at 1,000 by default.
 - Structured JSON only — there is **no SQL surface**, by design.
-- Combine with `onChange` (below) to re-run the query when the data
-  changes — a replaced CSV or edited records — that's a live dashboard.
+- Combine with `onChange` (below) to stay live: in the callback, re-run
+  **this POST query** (wrap it in your own `refresh()` and register that)
+  — NOT the `?fields=` record read from the section above, which would
+  silently repaint an aggregation view with non-aggregated data. A
+  replaced CSV or edited records then redraw the chart — that's a live
+  dashboard.
 
 ### Writing records (only with the `write` capability)
 

@@ -86,7 +86,12 @@ export function compileCsvQuery(query: CollectionQuery, primaryKey: string): { s
 
 /** Compile against a JSONL file of ENRICHED records — the file-backed
  *  collections' engine (see `jsonlQuery.ts`). No VARCHAR key pin needed:
- *  enriched record ids are already strings. */
+ *  enriched record ids are already strings. `sample_size=-1` makes the
+ *  schema inference scan EVERY line — with the default sample, a sparse
+ *  optional/derived field first appearing past the sample would not be
+ *  inferred as a column and the query would binder-error on it (Codex P2
+ *  on #2165). The full scan costs nothing extra here: aggregation reads
+ *  the whole file anyway. */
 export function compileJsonlQuery(query: CollectionQuery): { sql: string; params: unknown[] } {
-  return compileQuery(query, `read_json(?, format='newline_delimited')`);
+  return compileQuery(query, `read_json(?, format='newline_delimited', sample_size=-1)`);
 }
