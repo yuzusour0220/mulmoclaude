@@ -943,7 +943,10 @@ collection"):
    `displayField` is what keeps lists and notifications readable.
 5. **Write the schema** with `dataSource` instead of `dataPath`, plus a
    normal `SKILL.md`, under `data/skills/<slug>/` — same create flow as any
-   collection.
+   collection. In the SKILL body, point aggregation questions at
+   `manageCollection` `queryItems` (see below) — NOT at python/pandas and
+   NOT at `getItems`; SKILL.md text outlives help updates, so a wrong
+   steer here misroutes every future session on this collection.
 
 Semantics to remember (and to tell the user):
 
