@@ -101,12 +101,14 @@ toggles, embeds) — the same numbers the user sees elsewhere.
   / shows one record at a time. Combinable with `fields`.
 - The primary key is always returned regardless of `fields`.
 
-### Aggregation queries (dataSource/CSV collections; `read` capability)
+### Aggregation queries (`read` capability)
 
-On a collection backed by an external CSV (`dataSource` in its schema), a
-view can run structured aggregations over the WHOLE file — the honest way
-to chart big data (the record read above is row-capped at 5,000; an
-aggregate computed from it would be silently wrong):
+A view can run structured aggregations over the collection — on a
+`dataSource` (CSV) collection this scans the WHOLE file (the record read
+above is row-capped at 5,000 there, so an aggregate computed from it would
+be silently wrong); on a file-backed collection it aggregates the ENRICHED
+records, so computed fields (`derived` / `rollup` / `toggle`) are queryable
+columns:
 
 ```js
 const res = await fetch(dataUrl + "/query", {
@@ -130,10 +132,8 @@ const { rows } = await res.json(); // [{ Category, total, n }, ...] — chart th
   `groupBy`/`aggregates`; `orderBy` sorts by a groupBy column or an
   aggregate alias; result rows clamp at 1,000 by default.
 - Structured JSON only — there is **no SQL surface**, by design.
-- A file-backed (non-dataSource) collection answers 400 ("file-backed") —
-  compute from the record read instead there.
-- Combine with `onChange` (below) to re-run the query when the CSV is
-  replaced — that's a live dashboard.
+- Combine with `onChange` (below) to re-run the query when the data
+  changes — a replaced CSV or edited records — that's a live dashboard.
 
 ### Writing records (only with the `write` capability)
 

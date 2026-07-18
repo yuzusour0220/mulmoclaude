@@ -135,7 +135,7 @@ function fallbackEncoding(buf: Buffer): string {
   return "cp932";
 }
 
-function cacheDir(): string {
+export function cacheDir(): string {
   return path.join(tmpdir(), "mulmoclaude-csv-utf8");
 }
 
@@ -282,7 +282,7 @@ async function duckDbInstance(): ReturnType<DuckDbModule["DuckDBInstance"]["crea
   }
 }
 
-async function queryCsv(sql: string, params: unknown[]): Promise<Record<string, unknown>[]> {
+export async function queryCsv(sql: string, params: unknown[]): Promise<Record<string, unknown>[]> {
   const instance = await duckDbInstance();
   const connection = await instance.connect();
   try {
