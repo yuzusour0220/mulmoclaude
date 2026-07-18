@@ -33,8 +33,6 @@ const editImagesPlugin: ToolPlugin<ImageToolData> = {
   viewComponent: wrapWithScope("image", View),
   previewComponent: wrapWithScope("image", Preview),
 };
-
-export default editImagesPlugin;
 export { TOOL_NAME };
 
 export const REGISTRATION: PluginRegistration = {

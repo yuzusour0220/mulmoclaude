@@ -14,10 +14,9 @@
 //   WHATSAPP_ALLOWED_NUMBERS  — CSV of phone numbers (empty = all)
 
 import "dotenv/config";
-import crypto from "crypto";
-import express, { type Request, type Response } from "express";
-import rateLimit, { ipKeyGenerator } from "express-rate-limit";
+import type { Request, Response } from "express";
 import { createBridgeClient } from "@mulmobridge/client";
+import { createWebhookApp, createWebhookRateLimit, verifyHmacSignature } from "@mulmobridge/webhook-runtime";
 import { narrowChallenge } from "./verify.js";
 
 const TRANSPORT_ID = "whatsapp";
@@ -93,10 +92,8 @@ async function sendWhatsAppMessage(recipientId: string, text: string): Promise<v
 // ── Signature verification (x-hub-signature-256) ────────────────
 
 function verifyWebhookSignature(rawBody: string, signature: string): boolean {
-  const expected = crypto.createHmac("sha256", appSecret).update(rawBody).digest("hex");
-  const provided = signature.replace("sha256=", "");
-  if (expected.length !== provided.length) return false;
-  return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(provided));
+  // Meta prefixes the hex digest with `sha256=`; strip it before comparing.
+  return verifyHmacSignature(rawBody, signature.replace("sha256=", ""), appSecret, "sha256", "hex");
 }
 
 // ── Payload extraction ──────────────────────────────────────────
@@ -141,57 +138,10 @@ function extractTextMessages(body: unknown): WhatsAppTextMessage[] {
 
 // ── Webhook server ──────────────────────────────────────────────
 
-const app = express();
-app.disable("x-powered-by");
-
-// Honour an explicit `trust proxy` setting so `req.ip` (the
-// rate-limit key below) reflects the real client IP rather than
-// the load balancer's. Default `false` for safety; operators
-// behind a known LB choose from:
-//   - hop count:  BRIDGE_TRUST_PROXY=1
-//   - boolean:    BRIDGE_TRUST_PROXY=true / false
-//   - preset:     BRIDGE_TRUST_PROXY=loopback
-//   - CIDR list:  BRIDGE_TRUST_PROXY=10.0.0.0/8,192.168.0.0/16
-// Without this every webhook looks like it comes from one IP and
-// the limiter degrades into a global throttle. The boolean branch
-// is required because Express does NOT auto-convert string
-// "true"/"false" — without this, `BRIDGE_TRUST_PROXY=true` is read
-// as a (never-matching) CIDR rule (Codex reviews on #1326).
-const trustProxyEnv = process.env.BRIDGE_TRUST_PROXY;
-if (trustProxyEnv) {
-  const lower = trustProxyEnv.toLowerCase();
-  const numeric = Number(trustProxyEnv);
-  const value: boolean | number | string =
-    lower === "true" ? true : lower === "false" ? false : Number.isInteger(numeric) && numeric >= 0 ? numeric : trustProxyEnv;
-  app.set("trust proxy", value);
-}
-
-// Parse as raw text so we can verify the HMAC before JSON parsing
-app.use(express.text({ type: "application/json" }));
-
-// Per-IP throttle on the webhook endpoint. CodeQL's
-// `js/missing-rate-limiting` rule recognises `express-rate-limit`
-// specifically, and Meta's platform sends well under 120 req/min/IP
-// during normal use, so the cap exists to bound a flood / stuck
-// retry loop. The verification GET shares the limiter since a
-// flood of bogus `hub.challenge` probes would otherwise hammer
-// us just as effectively.
-const webhookRateLimit = rateLimit({
-  windowMs: 60_000,
-  limit: 120,
-  standardHeaders: "draft-7",
-  legacyHeaders: false,
-  // Explicit keyGenerator routed through `ipKeyGenerator(...)`. The
-  // raw `req.ip` reading isn't safe on its own — IPv6 clients can
-  // rotate addresses within a /56 prefix and evade per-client limits.
-  // `express-rate-limit`'s `ipKeyGenerator` normalises both IPv4
-  // and IPv6 (folding IPv6 to its /56 subnet by default), which is
-  // what `req.ip` alone misses. The `app.set("trust proxy", ...)`
-  // block above is what makes `req.ip` reflect the real client
-  // rather than the LB. Together: explicit + IPv6-safe + proxy-
-  // aware (Codex reviews iter-1 + iter-2 on #1326).
-  keyGenerator: (req) => ipKeyGenerator(req.ip ?? "", 56),
-});
+const app = createWebhookApp();
+// The verification GET shares the limiter since a flood of bogus
+// `hub.challenge` probes would otherwise hammer us just as effectively.
+const webhookRateLimit = createWebhookRateLimit();
 
 // Webhook verification (GET).
 //

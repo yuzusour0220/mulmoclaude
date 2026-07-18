@@ -52,8 +52,6 @@ const markdownPlugin: ToolPlugin<MarkdownToolData> = {
   viewComponent: wrapWithScope("markdown", View as unknown as Component),
   previewComponent: wrapWithScope("markdown", Preview as unknown as Component),
 };
-
-export default markdownPlugin;
 export { TOOL_NAME };
 
 export const REGISTRATION: PluginRegistration = {

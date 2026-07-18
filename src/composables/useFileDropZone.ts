@@ -36,10 +36,9 @@ export interface UseFileDropZoneOptions {
 }
 
 // Module-scope so the install-once contract holds across multiple
-// `useFileDropZone` consumers. The handler reference is retained
-// so `_resetFileDropZoneForTests` can actually remove the listeners
-// (a naive reset that only flipped the flag would leak handlers
-// across test runs — Sourcery review on PR #1331).
+// `useFileDropZone` consumers. The handler reference is retained so the
+// listeners it installs can be removed again (a flag-only guard would leak
+// handlers — Sourcery review on PR #1331).
 let windowGuardHandler: ((event: DragEvent) => void) | null = null;
 
 function isFileDrag(event: DragEvent): boolean {
@@ -131,15 +130,4 @@ export function useFileDropZone(opts: UseFileDropZoneOptions): UseFileDropZoneRe
   });
 
   return { isDragging, onDragenter, onDragover, onDragleave, onDrop };
-}
-
-/** Test-only reset. Removes the window listeners installed by
- *  `installWindowDefaultGuard` so a test can verify the install-once
- *  contract without leaking handlers across cases. */
-export function _resetFileDropZoneForTests(): void {
-  if (windowGuardHandler !== null && typeof window !== "undefined") {
-    window.removeEventListener("dragover", windowGuardHandler);
-    window.removeEventListener("drop", windowGuardHandler);
-  }
-  windowGuardHandler = null;
 }

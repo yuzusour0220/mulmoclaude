@@ -117,9 +117,3 @@ export function pluginPageRoute(name: string): string {
 export function pluginAllPluginNames(): readonly string[] {
   return requireContext().getAllPluginNames();
 }
-
-/** Test-only: drop the installed context so the next `installHostContext`
- *  starts from a clean slate. Production code should not call this. */
-export function resetHostContextForTest(): void {
-  installedContext = null;
-}

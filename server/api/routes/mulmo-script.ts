@@ -282,30 +282,44 @@ bindRoute(router, API_ROUTES.mulmoScript.renderBeat, async (req: Request<object,
   res.json({ image: result.image });
 });
 
+interface GenerationRequestBody {
+  filePath: string;
+  chatSessionId?: string;
+}
+
+// Validate the `{ filePath }` body, run the ffmpeg guard, and resolve the
+// script to an absolute path — responding (400 / op-failure) and returning
+// null on any failure. Shared by the movie and PDF SSE routes.
+function resolveStoryRequest(
+  req: Request<object, object, GenerationRequestBody>,
+  res: Response,
+): { filePath: string; absoluteFilePath: string; chatSessionId?: string } | null {
+  const { filePath, chatSessionId } = req.body;
+  if (typeof filePath !== "string" || !filePath) {
+    badRequest(res, "filePath is required");
+    return null;
+  }
+  const ffmpeg = mulmoScriptOps.ffmpegGuard();
+  if (ffmpeg) {
+    sendOpFailure(res, ffmpeg);
+    return null;
+  }
+  const resolved = mulmoScriptOps.resolveStory(filePath);
+  if (!resolved.ok) {
+    sendOpFailure(res, resolved);
+    return null;
+  }
+  return { filePath, absoluteFilePath: resolved.absolutePath, chatSessionId };
+}
+
 // SSE movie generation. Retained for wire compatibility (the extracted
 // View now uses the long-held `generateMovie` dispatch + generation
 // pubsub events instead); the pipeline itself is shared via
 // `mulmoScriptOps.runMovieGeneration`.
 bindRoute(router, API_ROUTES.mulmoScript.generateMovie, async (req: Request<object, object, { filePath: string; chatSessionId?: string }>, res: Response) => {
-  const { filePath, chatSessionId } = req.body;
-
-  if (typeof filePath !== "string" || !filePath) {
-    badRequest(res, "filePath is required");
-    return;
-  }
-
-  const ffmpeg = mulmoScriptOps.ffmpegGuard();
-  if (ffmpeg) {
-    sendOpFailure(res, ffmpeg);
-    return;
-  }
-
-  const resolved = mulmoScriptOps.resolveStory(filePath);
-  if (!resolved.ok) {
-    sendOpFailure(res, resolved);
-    return;
-  }
-  const absoluteFilePath = resolved.absolutePath;
+  const parsed = resolveStoryRequest(req, res);
+  if (!parsed) return;
+  const { filePath, absoluteFilePath, chatSessionId } = parsed;
 
   if (mulmoScriptOps.inFlightMovies.has(absoluteFilePath)) {
     badRequest(res, "Movie generation is already in progress for this script");
@@ -465,23 +479,9 @@ bindRoute(
 // SSE PDF generation — retained for wire compatibility, same as the
 // movie SSE route above.
 async function handleGeneratePdf(req: Request<object, object, { filePath: string; chatSessionId?: string }>, res: Response): Promise<void> {
-  const { filePath, chatSessionId } = req.body;
-  if (typeof filePath !== "string" || !filePath) {
-    badRequest(res, "filePath is required");
-    return;
-  }
-  const ffmpeg = mulmoScriptOps.ffmpegGuard();
-  if (ffmpeg) {
-    sendOpFailure(res, ffmpeg);
-    return;
-  }
-
-  const resolved = mulmoScriptOps.resolveStory(filePath);
-  if (!resolved.ok) {
-    sendOpFailure(res, resolved);
-    return;
-  }
-  const absoluteFilePath = resolved.absolutePath;
+  const parsed = resolveStoryRequest(req, res);
+  if (!parsed) return;
+  const { filePath, absoluteFilePath, chatSessionId } = parsed;
 
   if (mulmoScriptOps.inFlightPdfs.has(absoluteFilePath)) {
     badRequest(res, "PDF generation is already in progress for this script");
