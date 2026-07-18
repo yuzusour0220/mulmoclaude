@@ -201,11 +201,46 @@ interface CollectionStore {
    - 日本語カバレッジは自作必須（datablist には無い）: Shift_JIS の名簿、
      日本語キー値の UTF-8（hex ID 経路）、キー重複。
 
-### v2（BI の本丸: クエリ/集計）
-- store にオプショナルな `query()`（集計）を追加。DuckDB store はネイティブ、
-  ファイル store は非対応から始める。
-- 集計結果を custom view のチャートに流す口（ダッシュボード as データ）。
-- `LIMIT` ガードを「一覧はページング / 集計はフル」に置き換え。
+### v2（BI の本丸: クエリ/集計）— 設計確定（2026-07-18、会話で決定）
+
+**クエリ面は構造化 DSL（生 SQL は出さない）。** SQL は言語として CSV に
+スコープされない（`read_csv`/`read_text`/`COPY TO`/`INSTALL httpfs` で
+ファイルシステム全域 + ネットワークに届く）うえ、発行者（custom view /
+エージェント）は untrusted コンテンツ（injected CSV セル、registry 由来
+ビュー）に誘導されうる — DSL は構造的にエスケープを表現できない。
+表現力が足りなくなったら、DuckDB の untrusted-SQL モード
+（`enable_external_access=false` + `lock_configuration=true`、テーブルへの
+事前ロード必須）を同じエンドポイント裏の逃げ道として後付けする。
+
+**ダッシュボードはオンデマンド**（custom view がクエリエンドポイントを
+叩いてチャートを描く）。名前付きメトリクス（セマンティックレイヤー）は
+実利用で繰り返しが見えてから（v3）。
+
+DSL の形（JSON、zod 検証、サーバー側で SQL にコンパイル。値は全て
+プリペアドパラメータ、列名/エイリアスは識別子クオート）:
+
+```jsonc
+{
+  "groupBy": ["Category"],                       // 任意
+  "aggregates": { "total": { "op": "sum", "column": "Price" },
+                   "n": { "op": "count" } },      // count/sum/avg/min/max
+  "where": [{ "field": "Availability", "op": "eq", "value": "in_stock" }],
+  "orderBy": [{ "field": "total", "dir": "desc" }], // groupBy 列 or 集計エイリアス
+  "limit": 100                                    // clamp（default 1000 / max 10000）
+}
+```
+
+実装項目:
+- store にオプショナルな `query()` を追加。DuckDB store はネイティブ、
+  ファイル store は非対応（明確なエラー）から始める。
+- エージェント面: `manageCollection` に `queryItems` アクション。
+- ビュー面: view-token（read）スコープの `POST …/view-data/query`
+  エンドポイント + custom-view help への契約追記。
+- **集計はフルスキャン（5,000 行キャップ非適用）** — 「切った上での集計は
+  嘘」の解消。**一覧のページングは v2 から明示的に外す**（テーブル/検索/
+  kanban の UI 契約全体に波及するため別フェーズ。一覧は現行キャップ+warn
+  のまま = ブラウズ用途としては誠実）。
+- リモート（phone）ビューへのクエリ露出も別フェーズ。
 
 ### v3 以降（このプランのスコープ外、方向だけ記録）
 - フォーマット追加: xlsx / json / parquet / sqlite（DuckDB 拡張で読める）。

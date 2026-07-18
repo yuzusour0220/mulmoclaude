@@ -357,6 +357,12 @@ const HOST_API_ROUTES = {
      *  capability on the view token; mutate kind ONLY — a view token must
      *  never be able to start LLM work (chat/agent stay bearer-guarded). */
     viewDataAction: "/api/collections/:slug/view-data/actions/:actionId",
+    /** POST → run a structured aggregation query (body: { query }) over a
+     *  dataSource collection's WHOLE data file → { collection, count, rows }.
+     *  Requires only the `read` capability on the view token — the DSL is
+     *  read-only by construction (see core/queryZ.ts); 400 on a file-backed
+     *  collection (no query engine). Backs chart-drawing custom views. */
+    viewDataQuery: "/api/collections/:slug/view-data/query",
     /** DELETE → remove one custom view: drop it from schema.json `views[]` and
      *  unlink its `views/<file>.html` (global-bearer auth) → { deleted, viewId }.
      *  Source-aware; refuses user-scope + preset collections. */

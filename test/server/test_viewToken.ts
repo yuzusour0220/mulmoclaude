@@ -110,6 +110,10 @@ describe("viewToken — isViewDataPath", () => {
   it("matches the token-scoped mutate-action path (both mount bases)", () => {
     assert.equal(isViewDataPath("/collections/my-slug/view-data/actions/assign"), true);
     assert.equal(isViewDataPath("/api/collections/my-slug/view-data/actions/assign"), true);
+    // The aggregation-query endpoint — missing from this matcher, the route
+    // is unreachable from sandboxed views (Codex P1 on #2163).
+    assert.equal(isViewDataPath("/collections/my-slug/view-data/query"), true);
+    assert.equal(isViewDataPath("/api/collections/my-slug/view-data/query"), true);
   });
 
   it("does not match sibling collection routes", () => {

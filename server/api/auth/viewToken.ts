@@ -136,10 +136,16 @@ export function requireViewToken(action: ViewCapability) {
 // with an optional tail — the combined form trips the unsafe-regex lint.
 const VIEW_DATA_PATH_RE = /^\/(?:api\/)?collections\/[^/]+\/view-data$/;
 const VIEW_DATA_ACTION_PATH_RE = /^\/(?:api\/)?collections\/[^/]+\/view-data\/actions\/[^/]+$/;
+const VIEW_DATA_QUERY_PATH_RE = /^\/(?:api\/)?collections\/[^/]+\/view-data\/query$/;
 
-/** True for the view-data endpoint paths (either mount base). Used in
- *  `server/index.ts` to exempt these routes from the global bearer + CSRF
- *  guards — they are guarded instead by {@link requireViewToken}. */
+/** True for the view-data endpoint paths (either mount base): the record
+ *  read/write base path, the token-scoped mutate-action endpoint, and the
+ *  aggregation-query endpoint. Used in `server/index.ts` to exempt these
+ *  routes from the global bearer + CSRF guards — they are guarded instead
+ *  by {@link requireViewToken}. A path missing here makes its endpoint
+ *  UNREACHABLE from a sandboxed view (the global guards reject first) —
+ *  add every new `/view-data/...` route to this matcher AND to the
+ *  coverage in `test/server/test_viewToken.ts`. */
 export function isViewDataPath(pathname: string): boolean {
-  return VIEW_DATA_PATH_RE.test(pathname) || VIEW_DATA_ACTION_PATH_RE.test(pathname);
+  return VIEW_DATA_PATH_RE.test(pathname) || VIEW_DATA_ACTION_PATH_RE.test(pathname) || VIEW_DATA_QUERY_PATH_RE.test(pathname);
 }

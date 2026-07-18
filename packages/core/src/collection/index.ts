@@ -6,6 +6,10 @@
 // the Vue surfaces live in @mulmoclaude/collection-plugin/vue.
 
 export * from "./core/schema";
+// Type-only: queryZ carries zod, which stays OUT of the browser bundle
+// (same rule as schemaZ) — servers import `CollectionQueryZ` via
+// `collection/server`; browser code needs only the derived types.
+export type { CollectionQuery, CollectionQueryAggregate, CollectionQueryOrder, CollectionQueryWhere } from "./core/queryZ";
 export * from "./core/ids";
 export * from "./core/uiTypes";
 export * from "./core/presentCollection";
