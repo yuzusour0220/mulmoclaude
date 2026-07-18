@@ -32,6 +32,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import iconv from "iconv-lite";
 import type { CollectionItem } from "../core/schema";
+import type { CollectionQuery } from "../core/queryZ";
+import { compileCsvQuery, quoteIdent, readCsvArgs } from "./csvQuery";
 import { getWorkspaceRoot, log } from "./host";
 import { isContainedInRoot, safeRecordId } from "./paths";
 
@@ -97,24 +99,6 @@ export function dedupeByRecordId(items: CollectionItem[], primaryKey: string): {
   const byId = new Map<string, CollectionItem>();
   for (const item of items) byId.set(String(item[primaryKey]), item);
   return { items: [...byId.values()], duplicates: items.length - byId.size };
-}
-
-/** Double-quote a SQL identifier (the schema's primaryKey column name). */
-function quoteIdent(name: string): string {
-  return `"${name.replaceAll('"', '""')}"`;
-}
-
-/** Single-quote a SQL string literal (a `types={...}` struct key). */
-function quoteLiteral(value: string): string {
-  return `'${value.replaceAll("'", "''")}'`;
-}
-
-/** The `read_csv` argument list: the (prepared) path plus a `types` pin
- *  forcing the key column to VARCHAR. Without the pin DuckDB's sniffer
- *  turns `001` into BIGINT 1 — leading zeros vanish and distinct keys
- *  collapse, so record addressing silently misses rows. */
-function readCsvArgs(primaryKey: string): string {
-  return `?, types={${quoteLiteral(primaryKey)}: 'VARCHAR'}`;
 }
 
 /** True when a thrown DuckDB error is the `types` pin naming a column the
@@ -368,4 +352,17 @@ export async function csvRead(absPath: string, primaryKey: string, itemId: strin
   if (last === undefined) return null;
   const { [ROW_ORDINAL]: __ordinal, ...record } = last;
   return csvRowToItem(record, primaryKey);
+}
+
+/** Run a validated aggregation query (the structured DSL — see
+ *  `core/queryZ.ts`) over the WHOLE file: no row cap on the scan (a
+ *  capped aggregate would be a wrong number), only the result-row LIMIT
+ *  the compiler emits. Values are normalized like list/read rows so a
+ *  chart consumer gets plain JSON scalars. */
+export async function csvRunQuery(absPath: string, primaryKey: string, query: CollectionQuery, workspaceRoot?: string): Promise<Record<string, unknown>[]> {
+  const utf8Path = await ensureUtf8CsvPath(absPath, workspaceRoot ?? getWorkspaceRoot());
+  if (utf8Path === null) return [];
+  const { sql, params } = compileCsvQuery(query, primaryKey);
+  const rows = await queryCsv(sql, [utf8Path, ...params]);
+  return rows.map((row) => Object.fromEntries(Object.entries(row).map(([key, value]) => [key, normalizeCsvValue(value)])));
 }

@@ -43,6 +43,7 @@ import path from "node:path";
 import { COMPUTED_TYPES } from "../core/schema";
 import type { CollectionItem, CollectionSchema } from "../core/schema";
 import { CollectionSchemaZ } from "../core/schemaZ";
+import { CollectionQueryZ } from "../core/queryZ";
 import { defangForPrompt } from "../core/promptSafety";
 import { loadCollection, type DiscoveryOptions } from "./discovery";
 import type { LoadedCollection } from "./discoveredCollection";
@@ -287,6 +288,27 @@ async function putOneItem(
   return reject(itemId, "write refused: the collection's data dir escapes the workspace");
 }
 
+/** Aggregation over a dataSource collection's WHOLE file via the
+ *  structured query DSL (`core/queryZ.ts`) — the paved road for counts /
+ *  sums / group-bys that `getItems` (row-capped, unaggregated) can't
+ *  answer honestly. File-backed collections have no query engine yet:
+ *  refuse with a pointer instead of silently emulating. */
+async function handleQueryItems(collection: LoadedCollection, queryArg: unknown, deps: ManageCollectionDeps): Promise<string> {
+  const store = storeFor(collection, { workspaceRoot: deps.workspaceRoot });
+  if (!store.query) {
+    return `manageCollection: '${collection.slug}' is file-backed — queryItems currently supports only dataSource (CSV) collections; use getItems (with \`fields\`) instead.`;
+  }
+  const parsed = CollectionQueryZ.safeParse(queryArg);
+  if (!parsed.success) {
+    const lines = parsed.error.issues
+      .slice(0, MAX_SCHEMA_ISSUES)
+      .map((issue) => `- ${issue.path.map(String).join(".") || "(root)"}: ${defangForPrompt(issue.message)}`);
+    return `manageCollection: \`query\` rejected — fix and retry:\n${lines.join("\n")}`;
+  }
+  const rows = await store.query(parsed.data);
+  return JSON.stringify({ collection: collection.slug, count: rows.length, rows });
+}
+
 async function handlePutItems(collection: LoadedCollection, args: PutItemsArgs, deps: ManageCollectionDeps): Promise<string> {
   // Server-enforced read-only: a `dataSource` collection's rows live in
   // the external data file — point the agent at the real update path
@@ -447,7 +469,8 @@ const MANAGE_COLLECTION_PROMPT =
   "`getItems` is the only way to see computed values — `derived` fields (e.g. a portfolio's value), `toggle` projections, and `embed` records are host-computed and never present in the stored JSON files. On large collections pass `ids` and/or `fields` to keep the result small. " +
   'For a question that spans collections ("which clients have unpaid invoices?"), start with `getOntology`: it lists every collection with its primaryKey, record count, and outbound `ref`/`embed` relations, so you know which collections to join before reading any records. ' +
   "`putItems` validates every row against the schema before writing (required fields, enum values, primaryKey = record id) and returns `{ written, rejected }`; fix each rejected row using its `problem` text and retry just those rows. Never include computed fields in a row you write. " +
-  'To update a few fields of an existing record, use `mode: "merge"` with a partial row ({ id, <changed fields> }) — the default upsert replaces the WHOLE record, so a partial upsert would silently erase every optional field it omits.';
+  'To update a few fields of an existing record, use `mode: "merge"` with a partial row ({ id, <changed fields> }) — the default upsert replaces the WHOLE record, so a partial upsert would silently erase every optional field it omits. ' +
+  "On a dataSource (CSV) collection, answer aggregation questions (counts, sums, averages, group-bys) with `queryItems` — it scans the WHOLE file, while getItems is row-capped, so an aggregate computed from getItems output can be silently wrong on large files.";
 
 /** Validate getItems' optional `ids`/`fields` args, then delegate. */
 async function dispatchGetItems(collection: LoadedCollection, args: Record<string, unknown>, deps: ManageCollectionDeps): Promise<string> {
@@ -469,61 +492,75 @@ async function manageCollectionHandler(deps: ManageCollectionDeps, args: Record<
   if (!slug) return "manageCollection: `slug` is required (the collection's slug).";
   if (action === "getSchema") return handleGetSchema(slug, deps);
   if (action === "putSchema") return handlePutSchema(slug, args.schema, deps);
-  if (action !== "getItems" && action !== "putItems") {
-    return 'manageCollection: `action` must be "getItems", "putItems", "getOntology", "schemaDocs", "getSchema", or "putSchema".';
+  if (action !== "getItems" && action !== "putItems" && action !== "queryItems") {
+    return 'manageCollection: `action` must be "getItems", "putItems", "queryItems", "getOntology", "schemaDocs", "getSchema", or "putSchema".';
   }
   const collection = await loadCollection(slug, deps);
   if (!collection) return unknownCollection(slug);
   if (action === "getItems") return dispatchGetItems(collection, args, deps);
+  if (action === "queryItems") return handleQueryItems(collection, args.query, deps);
   const parsed = parsePutItems(args, slug);
   if (typeof parsed === "string") return parsed;
   return handlePutItems(collection, parsed, deps);
 }
 
-export function makeManageCollectionTool(deps: ManageCollectionDeps = {}) {
-  return {
-    definition: {
-      name: "manageCollection",
-      description:
-        "Read and write a schema-driven collection through the host — both its records and its structure. getItems returns records WITH computed values (derived formulas, toggles, embeds) the stored JSON files don't contain; putItems validates each row against the schema before writing. getOntology maps the whole workspace: every collection with its record count and outbound ref/embed relations — call it first for cross-collection questions. schemaDocs returns the collection-authoring reference; getSchema/putSchema read and validate-then-write the collection's schema.json. Prefer it over raw file I/O on collections.",
-      inputSchema: {
+// Static tool definition, hoisted out of the factory so the function body
+// stays within the line budget (the schema only ever grows).
+const MANAGE_COLLECTION_DEFINITION = {
+  name: "manageCollection",
+  description:
+    "Read and write a schema-driven collection through the host — both its records and its structure. getItems returns records WITH computed values (derived formulas, toggles, embeds) the stored JSON files don't contain; putItems validates each row against the schema before writing. getOntology maps the whole workspace: every collection with its record count and outbound ref/embed relations — call it first for cross-collection questions. schemaDocs returns the collection-authoring reference; getSchema/putSchema read and validate-then-write the collection's schema.json. Prefer it over raw file I/O on collections.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      action: {
+        type: "string",
+        enum: ["getItems", "putItems", "queryItems", "getOntology", "schemaDocs", "getSchema", "putSchema"],
+        description: "What to do.",
+      },
+      slug: {
+        type: "string",
+        description: "The collection's slug (its directory name, e.g. `stock-quotes`). Required for everything except schemaDocs and getOntology.",
+      },
+      ids: {
+        type: "array",
+        items: { type: "string" },
+        description: "getItems: only these record ids (primary-key values). Omit for all records.",
+      },
+      fields: {
+        type: "array",
+        items: { type: "string" },
+        description: "getItems: only these fields per record (the primary key is always included). Omit for all fields. Use on large collections.",
+      },
+      items: {
+        type: "array",
+        items: { type: "object" },
+        description: "putItems: the record objects to store. Each must carry the schema's primaryKey value (it doubles as the filename).",
+      },
+      mode: {
+        type: "string",
+        enum: ["upsert", "create", "merge"],
+        description:
+          'putItems: "upsert" (default) replaces existing records WHOLE; "create" rejects rows whose id already exists; "merge" updates only the fields a row carries, keeping the rest of the existing record (rejects unknown ids). Use "merge" when changing a few fields.',
+      },
+      schema: {
         type: "object",
-        properties: {
-          action: { type: "string", enum: ["getItems", "putItems", "getOntology", "schemaDocs", "getSchema", "putSchema"], description: "What to do." },
-          slug: {
-            type: "string",
-            description: "The collection's slug (its directory name, e.g. `stock-quotes`). Required for everything except schemaDocs and getOntology.",
-          },
-          ids: {
-            type: "array",
-            items: { type: "string" },
-            description: "getItems: only these record ids (primary-key values). Omit for all records.",
-          },
-          fields: {
-            type: "array",
-            items: { type: "string" },
-            description: "getItems: only these fields per record (the primary key is always included). Omit for all fields. Use on large collections.",
-          },
-          items: {
-            type: "array",
-            items: { type: "object" },
-            description: "putItems: the record objects to store. Each must carry the schema's primaryKey value (it doubles as the filename).",
-          },
-          mode: {
-            type: "string",
-            enum: ["upsert", "create", "merge"],
-            description:
-              'putItems: "upsert" (default) replaces existing records WHOLE; "create" rejects rows whose id already exists; "merge" updates only the fields a row carries, keeping the rest of the existing record (rejects unknown ids). Use "merge" when changing a few fields.',
-          },
-          schema: {
-            type: "object",
-            description:
-              "putSchema: the full collection schema object (same shape as schema.json — title, icon, dataPath, primaryKey, fields, …). Call getSchema first for the current one, and schemaDocs for the field DSL.",
-          },
-        },
-        required: ["action"],
+        description:
+          "putSchema: the full collection schema object (same shape as schema.json — title, icon, dataPath, primaryKey, fields, …). Call getSchema first for the current one, and schemaDocs for the field DSL.",
+      },
+      query: {
+        type: "object",
+        description:
+          'queryItems (dataSource/CSV collections only): a structured aggregation query over the WHOLE file — `{ groupBy?: ["col"], aggregates?: { alias: { op: "count"|"sum"|"avg"|"min"|"max", column? } }, where?: [{ field, op, value }], orderBy?: [{ field, dir? }], limit? }`. At least one of groupBy/aggregates. Runs uncapped over the full file (unlike getItems), so use it for counts / sums / group-bys on large CSVs.',
       },
     },
+    required: ["action"],
+  },
+};
+
+export function makeManageCollectionTool(deps: ManageCollectionDeps = {}) {
+  return {
+    definition: MANAGE_COLLECTION_DEFINITION,
 
     // Collections are workspace data every role can already reach via
     // raw Read/Write/Edit — gating the SAFER path per-role would only

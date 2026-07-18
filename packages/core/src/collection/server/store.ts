@@ -13,10 +13,11 @@
 // can't be authored by accident.
 
 import type { CollectionItem } from "../core/schema";
+import type { CollectionQuery } from "../core/queryZ";
 import { isReadOnlySchema } from "../core/schema";
 import type { LoadedCollection } from "./discoveredCollection";
 import { listItems, readItem, type IoOptions } from "./io";
-import { csvList, csvRead } from "./csvStore";
+import { csvList, csvRead, csvRunQuery } from "./csvStore";
 
 export interface CollectionStoreCapabilities {
   readonly writable: boolean;
@@ -28,6 +29,11 @@ export interface CollectionStore {
   list: () => Promise<CollectionItem[]>;
   /** One record by id, or null when missing/invalid. */
   read: (itemId: string) => Promise<CollectionItem | null>;
+  /** Aggregation over the WHOLE data set (the structured DSL,
+   *  `core/queryZ.ts`) — present only on stores with a native query
+   *  engine (the CSV store). Absent ⇒ the collection doesn't support
+   *  queries yet; callers surface a clear error, never emulate. */
+  query?: (query: CollectionQuery) => Promise<Record<string, unknown>[]>;
 }
 
 /** True when the collection accepts UI/tool writes. A `dataSource`
@@ -55,6 +61,7 @@ export function storeFor(collection: LoadedCollection, opts: IoOptions = {}): Co
       capabilities: { writable: false },
       list: () => (file === undefined ? Promise.resolve([]) : csvList(file, key, opts.workspaceRoot)),
       read: (itemId: string) => (file === undefined ? Promise.resolve(null) : csvRead(file, key, itemId, opts.workspaceRoot)),
+      query: (query: CollectionQuery) => (file === undefined ? Promise.resolve([]) : csvRunQuery(file, key, query, opts.workspaceRoot)),
     };
   }
   return {

@@ -21,6 +21,8 @@ import iconv from "iconv-lite";
 
 import {
   collectionWritable,
+  CollectionQueryZ,
+  compileCsvQuery,
   csvRowToItem,
   decodeCsvRecordId,
   dedupeByRecordId,
@@ -28,6 +30,7 @@ import {
   encodeCsvRecordId,
   loadCollection,
   makeManageCollectionTool,
+  MAX_CSV_ROWS,
   normalizeCsvValue,
   storeFor,
   toSummary,
@@ -276,5 +279,89 @@ describe("read-only write guards", () => {
     const mutate = createMutateRemoteView(deps);
     const result = await mutate(collection, "cards", { op: "update", id: "S-001", patch: { name: "x" } });
     assert.equal(result.kind, "read-only-collection");
+  });
+});
+
+describe("query DSL (v2)", () => {
+  it("CollectionQueryZ rejects unsafe aliases, empty queries, dangling orderBy, and scalar `in`", () => {
+    assert.equal(CollectionQueryZ.safeParse({}).success, false); // neither groupBy nor aggregates
+    assert.equal(CollectionQueryZ.safeParse({ aggregates: { "a; DROP": { op: "count" } } }).success, false);
+    assert.equal(CollectionQueryZ.safeParse({ aggregates: { "total price": { op: "count" } } }).success, false);
+    assert.equal(CollectionQueryZ.safeParse({ aggregates: { total: { op: "sum" } } }).success, false); // sum needs column
+    assert.equal(CollectionQueryZ.safeParse({ groupBy: ["a"], orderBy: [{ field: "ghost" }] }).success, false);
+    assert.equal(CollectionQueryZ.safeParse({ groupBy: ["a"], where: [{ field: "x", op: "in", value: "scalar" }] }).success, false);
+    assert.equal(
+      CollectionQueryZ.safeParse({ groupBy: ["Category"], aggregates: { n: { op: "count" } }, orderBy: [{ field: "n", dir: "desc" }] }).success,
+      true,
+    );
+  });
+
+  it("compileCsvQuery keeps values in params (never in SQL) and quotes hostile identifiers", () => {
+    const parsed = CollectionQueryZ.parse({
+      groupBy: ['evil"col'],
+      aggregates: { n: { op: "count" } },
+      where: [{ field: "name", op: "eq", value: "'; DROP TABLE x; --" }],
+    });
+    const { sql, params } = compileCsvQuery(parsed, "id");
+    assert.ok(!sql.includes("DROP"), "value text must never reach the SQL string");
+    assert.deepEqual(params, ["'; DROP TABLE x; --"]);
+    assert.ok(sql.includes('"evil""col"'), "identifiers are double-quote escaped");
+    assert.ok(sql.includes("LIMIT 1000"), "default result clamp applies");
+  });
+
+  it("aggregates over the WHOLE file — beyond the list row cap — with group-by / where / orderBy", async () => {
+    writeSkill("students", CSV_SCHEMA);
+    const rows = Array.from(
+      { length: MAX_CSV_ROWS + 500 },
+      (_unused, index) => `S-${index},Name${index},${index % 2 === 0 ? 10 : 20},${index % 2 === 0 ? "a" : "b"}`,
+    );
+    writeCsv("data/students.csv", `student_id,name,score,bucket\n${rows.join("\n")}\n`);
+    const collection = await loadCollection("students", discoveryOpts());
+    assert.ok(collection);
+    const store = storeFor(collection, { workspaceRoot: workdir });
+    assert.ok(store.query);
+
+    const total = await store.query({ aggregates: { n: { op: "count" } } });
+    assert.equal(total[0]?.n, MAX_CSV_ROWS + 500); // uncapped scan — list() would stop at MAX_CSV_ROWS
+
+    const grouped = await store.query({
+      groupBy: ["bucket"],
+      aggregates: { n: { op: "count" }, avgScore: { op: "avg", column: "score" } },
+      orderBy: [{ field: "bucket", dir: "asc" }],
+    });
+    assert.deepEqual(
+      grouped.map((row) => [row.bucket, row.n, row.avgScore]),
+      [
+        ["a", 2750, 10],
+        ["b", 2750, 20],
+      ],
+    );
+
+    const filtered = await store.query({ aggregates: { s: { op: "sum", column: "score" } }, where: [{ field: "bucket", op: "eq", value: "b" }] });
+    assert.equal(filtered[0]?.s, 2750 * 20);
+  });
+
+  it("manageCollection queryItems: works on dataSource, refuses file-backed, rejects a bad query", async () => {
+    writeSkill("students", CSV_SCHEMA);
+    writeCsv("data/students.csv", "student_id,name,score\nS-1,A,10\nS-2,B,30\n");
+    writeSkill("plain", {
+      title: "Plain",
+      icon: "folder",
+      dataPath: "data/plain/items",
+      primaryKey: "id",
+      fields: { id: { type: "string", label: "ID", primary: true } },
+    });
+    const tool = makeManageCollectionTool(discoveryOpts());
+
+    const ok = JSON.parse(await tool.handler({ action: "queryItems", slug: "students", query: { aggregates: { total: { op: "sum", column: "score" } } } })) as {
+      rows: Record<string, unknown>[];
+    };
+    assert.equal(ok.rows[0]?.total, 40);
+
+    const refused = await tool.handler({ action: "queryItems", slug: "plain", query: { aggregates: { n: { op: "count" } } } });
+    assert.match(refused, /file-backed/);
+
+    const invalid = await tool.handler({ action: "queryItems", slug: "students", query: { aggregates: { "bad alias": { op: "count" } } } });
+    assert.match(invalid, /rejected/);
   });
 });

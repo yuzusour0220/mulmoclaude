@@ -865,6 +865,36 @@ router.get(API_ROUTES.collections.viewData, viewDataCors, requireViewToken("read
   }
 });
 
+// Preflight for the token-scoped query endpoint (POST + JSON from a
+// sandboxed opaque-origin iframe — same CORS story as view-data itself).
+router.options(API_ROUTES.collections.viewDataQuery, viewDataCors, (_req: Request, res: Response) => {
+  res.sendStatus(204);
+});
+
+// Scoped aggregation: run a structured query (the DSL — never raw SQL)
+// over a dataSource collection's whole data file. Read capability only:
+// the DSL is read-only by construction. Reuses the manageCollection
+// handler so a view can never do more than the agent's own queryItems
+// (same validation, same file-backed refusal). Rate-limited like the
+// mutate-action route — a runaway dashboard loop must not spin DuckDB
+// full-file scans unbounded.
+router.post(
+  API_ROUTES.collections.viewDataQuery,
+  viewDataCors,
+  viewActionRateLimit,
+  requireViewToken("read"),
+  async (req: Request<{ slug: string }>, res: Response) => {
+    try {
+      const body = (req.body ?? {}) as { query?: unknown };
+      const raw = await manageCollection.handler({ action: "queryItems", slug: req.params.slug, query: body.query });
+      sendToolResult(res, raw);
+    } catch (err) {
+      log.warn("collections", "view-data query failed", { slug: req.params.slug.replace(/[\r\n]/g, " "), error: errorMessage(err) });
+      serverError(res, errorMessage(err));
+    }
+  },
+);
+
 // Scoped write: validated putItems. Requires the `write` capability.
 router.put(API_ROUTES.collections.viewData, viewDataCors, requireViewToken("write"), async (req: Request<{ slug: string }>, res: Response) => {
   try {

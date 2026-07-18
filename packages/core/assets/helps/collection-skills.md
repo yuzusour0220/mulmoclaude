@@ -955,7 +955,32 @@ Semantics to remember (and to tell the user):
   decodes to a cache copy and never rewrites the user's file. Don't convert
   the file to UTF-8 "to be safe" — an Excel re-export would just undo it.
 - **Row cap** — `getItems` / the UI list stops at 5,000 rows (a warn is
-  logged). Fine for browsing; aggregation over big files is a later phase.
+  logged). Fine for browsing — but NEVER compute an aggregate from
+  `getItems` output on a large file (a capped scan gives a silently wrong
+  number). Use `queryItems` instead.
+- **Aggregation — `manageCollection` `queryItems`** (dataSource collections
+  only): a structured query over the WHOLE file (uncapped scan, DuckDB
+  underneath). Answer counts / sums / averages / group-bys with it —
+  don't shell out to python/pandas for questions it covers. Shape:
+
+  ```json
+  {
+    "groupBy": ["Category"],
+    "aggregates": { "total": { "op": "sum", "column": "Price" }, "n": { "op": "count" } },
+    "where": [{ "field": "Availability", "op": "eq", "value": "in_stock" }],
+    "orderBy": [{ "field": "total", "dir": "desc" }],
+    "limit": 100
+  }
+  ```
+
+  Ops: `count` (column optional) / `sum` / `avg` / `min` / `max`; `where`
+  ops are the familiar `eq/ne/in/gt/gte/lt/lte/contains`; `orderBy` sorts
+  by a groupBy column or an aggregate alias; result rows are clamped
+  (default 1,000). At least one of `groupBy`/`aggregates` is required.
+  `sum`/`avg` skip non-numeric cells. A custom view can run the same
+  query shape via `POST <dataUrl>/query` with its read token — see
+  `config/helps/custom-view.md` — which is how dataSource dashboards
+  chart live data.
 - **Not registry material** — dataSource collections can't be imported from
   or contributed to a registry (the data file is machine-local).
 
