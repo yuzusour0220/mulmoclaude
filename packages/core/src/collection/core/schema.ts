@@ -21,6 +21,7 @@ import type {
   ActionSpecZ,
   CollectionSchemaZ,
   CustomViewZ,
+  DataSourceZ,
   DynamicIconRuleZ,
   DynamicIconSourceZ,
   DynamicIconSpecZ,
@@ -201,15 +202,32 @@ export type DynamicIconSpec = z.infer<typeof DynamicIconSpecZ>;
  *  subsystem's `IngestSpec` is the same union under its historical name. */
 export type CollectionIngestSpec = z.infer<typeof IngestZ>;
 
+/** The `dataSource` block: this collection's records are the rows of an
+ *  external read-only data file (v1: CSV). See `DataSourceZ`. */
+export type CollectionDataSource = z.infer<typeof DataSourceZ>;
+
 /** The whole `schema.json` contract. Key-level docs live on
  *  `CollectionSchemaZ` in `./schemaZ`. */
 export type CollectionSchema = z.infer<typeof CollectionSchemaZ>;
+
+/** True when `schema` declares an external `dataSource` — i.e. the
+ *  collection is READ-ONLY through every UI/tool write path (updates
+ *  happen by editing/replacing the data file itself). Isomorphic: both
+ *  the server write guards and the client's control hiding key off this
+ *  one predicate. */
+export function isReadOnlySchema(schema: Pick<CollectionSchema, "dataSource">): boolean {
+  return schema.dataSource !== undefined;
+}
 
 export interface CollectionSummary {
   slug: string;
   title: string;
   icon: string;
   source: CollectionSource;
+  /** Present (true) when the collection is backed by an external
+   *  `dataSource` and therefore read-only in every UI/tool write path.
+   *  Absent-when-writable, matching the other optional summary flags. */
+  readonly?: true;
   /** Slugs of the source collection(s) a `dynamicIcon` icon was computed
    *  from — present only when `schema.dynamicIcon` is set. Lets a client
    *  know which collection change-channel(s) to watch for a live icon

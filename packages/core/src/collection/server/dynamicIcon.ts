@@ -5,7 +5,7 @@
 
 import { firstDateField, resolveIcon, selectDynamicRecord } from "../core/dynamicIcon";
 import { loadCollection, type DiscoveryOptions } from "./discovery";
-import { listItems } from "./io";
+import { storeFor } from "./store";
 import { log } from "./host";
 import type { LoadedCollection } from "./discoveredCollection";
 import type { CollectionItem } from "../core/schema";
@@ -43,7 +43,7 @@ export async function computeCollectionIcon(collection: LoadedCollection, opts: 
   try {
     const source = await loadCollection(spec.source.collection, opts);
     if (!source) return spec.fallback ?? schema.icon;
-    const items = await listItems(source.dataDir, { workspaceRoot: opts.workspaceRoot });
+    const items = await storeFor(source, { workspaceRoot: opts.workspaceRoot }).list();
     const ordered = sortByPrimaryKey(items, source.schema.primaryKey);
     const orderBy = spec.source.orderBy ?? firstDateField(source.schema);
     const recordsById = buildRecordsById(ordered, source.schema.primaryKey);

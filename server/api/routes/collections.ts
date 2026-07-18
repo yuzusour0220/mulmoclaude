@@ -12,6 +12,7 @@ import { Router, Request, Response, NextFunction } from "express";
 import { API_ROUTES } from "../../../src/config/apiRoutes.js";
 import { actionVisible } from "@mulmoclaude/core/collection";
 import {
+  collectionWritable,
   computeCollectionIcon,
   discoverCollections,
   generateItemId,
@@ -19,16 +20,16 @@ import {
   deleteCollectionRefusalMessage,
   deleteCustomView,
   deleteItem,
-  listItems,
   loadCollection,
-  readItem,
   readSkillTemplate,
   readCustomViewHtml,
   readCustomViewI18n,
+  readOnlyRefusal,
   buildActionSeedPrompt,
   buildCollectionActionSeedPrompt,
   promptPathsFor,
   resolveCreateItemId,
+  storeFor,
   toDetail,
   toSummary,
   applyMutateAction,
@@ -57,7 +58,7 @@ import {
   type RemoteViewItemsResult,
 } from "../../workspace/collections/remoteView.js";
 import { clampLimit, clampOffset, normalizeFields, normalizeMutate } from "@mulmoclaude/core/remote-view";
-import { badRequest, notFound, conflict, forbidden, serverError, serviceUnavailable } from "../../utils/httpError.js";
+import { badRequest, notFound, conflict, forbidden, methodNotAllowed, serverError, serviceUnavailable } from "../../utils/httpError.js";
 import { ONE_MINUTE_MS } from "../../utils/time.js";
 import { errorMessage } from "../../utils/errors.js";
 import { log } from "../../system/logger/index.js";
@@ -187,7 +188,7 @@ router.get(API_ROUTES.collections.detail, async (req: Request<{ slug: string }>,
   const collection = await loadCollectionOr404(req.params.slug, res);
   if (!collection) return;
   try {
-    const items = await listItems(collection.dataDir);
+    const items = await storeFor(collection).list();
     // Best-effort validation: a malformed record is silently skipped at
     // read time, so surface the problems here too (the same pass
     // presentCollection runs) and let the view offer a Repair button.
@@ -242,6 +243,10 @@ function extractRecord(body: unknown): CollectionItem | null {
 router.post(API_ROUTES.collections.items, async (req: Request<{ slug: string }>, res: Response<ItemMutationResponse>) => {
   const collection = await loadCollectionOr404(req.params.slug, res);
   if (!collection) return;
+  if (!collectionWritable(collection)) {
+    methodNotAllowed(res, readOnlyRefusal(collection.slug));
+    return;
+  }
   const record = extractRecord(req.body);
   if (!record) {
     badRequest(res, "request body must be a JSON object");
@@ -281,6 +286,10 @@ router.post(API_ROUTES.collections.items, async (req: Request<{ slug: string }>,
 router.put(API_ROUTES.collections.item, async (req: Request<{ slug: string; itemId: string }>, res: Response<ItemMutationResponse>) => {
   const collection = await loadCollectionOr404(req.params.slug, res);
   if (!collection) return;
+  if (!collectionWritable(collection)) {
+    methodNotAllowed(res, readOnlyRefusal(collection.slug));
+    return;
+  }
   const record = extractRecord(req.body);
   if (!record) {
     badRequest(res, "request body must be a JSON object");
@@ -324,6 +333,10 @@ router.put(API_ROUTES.collections.item, async (req: Request<{ slug: string; item
 router.delete(API_ROUTES.collections.item, async (req: Request<{ slug: string; itemId: string }>, res: Response<DeleteResponse>) => {
   const collection = await loadCollectionOr404(req.params.slug, res);
   if (!collection) return;
+  if (!collectionWritable(collection)) {
+    methodNotAllowed(res, readOnlyRefusal(collection.slug));
+    return;
+  }
   try {
     const result = await deleteItem(collection.dataDir, req.params.itemId, { slug: collection.slug });
     if (result.kind === "invalid-id") {
@@ -459,7 +472,7 @@ router.post(API_ROUTES.collections.itemAction, async (req: Request<{ slug: strin
     return;
   }
   try {
-    const record = await readItem(collection.dataDir, req.params.itemId);
+    const record = await storeFor(collection).read(req.params.itemId);
     if (!record) {
       notFound(res, `item '${req.params.itemId}' not found`);
       return;
@@ -476,6 +489,12 @@ router.post(API_ROUTES.collections.itemAction, async (req: Request<{ slug: strin
     // the declarative write itself (require was just enforced above,
     // same visibility-is-authorization rule as the seeded kinds).
     if (action.kind === "mutate") {
+      // Schema validation already rejects mutate actions on a dataSource
+      // collection; this is the defensive server-side twin.
+      if (!collectionWritable(collection)) {
+        methodNotAllowed(res, readOnlyRefusal(collection.slug));
+        return;
+      }
       await respondForMutateAction(res, collection, action, req.params.itemId, req.body as { params?: unknown } | undefined);
       return;
     }
@@ -505,7 +524,7 @@ router.post(API_ROUTES.collections.itemAction, async (req: Request<{ slug: strin
 async function buildCollectionActionSeed(collection: LoadedCollection, action: CollectionSeededAction): Promise<ActionSeedResponse | null> {
   const template = await readSkillTemplate(collection.skillDir, action.template);
   if (template === null) return null;
-  const items = await listItems(collection.dataDir);
+  const items = await storeFor(collection).list();
   log.info("collections", "collection action seed built", { slug: collection.slug, actionId: action.id, items: items.length });
   return { prompt: buildCollectionActionSeedPrompt(items, collection.schema, template, promptPathsFor(collection, workspacePath)), role: action.role };
 }
@@ -686,6 +705,7 @@ router.get(API_ROUTES.collections.remoteView, async (req: Request<{ slug: string
 function sendMutateRemoteViewFailure(res: Response, result: Exclude<MutateRemoteViewResult, { kind: "ok" }>, slug: string): void {
   const message = mutateRemoteViewFailureMessage(result, slug);
   if (result.kind === "view-not-found" || result.kind === "item-not-found") notFound(res, message);
+  else if (result.kind === "read-only-collection") methodNotAllowed(res, message);
   else if (result.kind === "not-writable" || result.kind === "delete-not-allowed" || result.kind === "field-not-editable" || result.kind === "path-escape")
     forbidden(res, message);
   else badRequest(res, message);
@@ -894,7 +914,7 @@ router.post(
         badRequest(res, "`itemId` is required (the record's primary-key value)");
         return;
       }
-      const record = await readItem(collection.dataDir, itemId);
+      const record = await storeFor(collection).read(itemId);
       if (!record) {
         notFound(res, `item '${itemId}' not found`);
         return;

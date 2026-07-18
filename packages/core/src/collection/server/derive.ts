@@ -10,7 +10,7 @@ import { backlinkRows, projectBacklinkRow, rollupValue } from "../core/backlinks
 import { deriveAll, type DeriveRefRecords } from "../core/deriveAll";
 import { loadCollection, type DiscoveryOptions } from "./discovery";
 import type { LoadedCollection } from "./discoveredCollection";
-import { listItems } from "./io";
+import { storeFor } from "./store";
 import { embedTargetId } from "../core/schema";
 import type { CollectionFieldSpec, CollectionItem, CollectionSchema } from "../core/schema";
 
@@ -61,7 +61,7 @@ interface LinkedTarget {
 async function loadTarget(slug: string, opts: DiscoveryOptions): Promise<LinkedTarget | null> {
   const target = await loadCollection(slug, opts);
   if (!target) return null;
-  const items = await listItems(target.dataDir, { workspaceRoot: opts.workspaceRoot });
+  const items = await storeFor(target, { workspaceRoot: opts.workspaceRoot }).list();
   const byId: Record<string, CollectionItem> = {};
   for (const item of items) {
     const itemId = item[target.schema.primaryKey];

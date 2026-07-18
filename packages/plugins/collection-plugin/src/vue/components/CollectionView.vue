@@ -21,8 +21,27 @@
         <h1 class="text-base font-bold text-slate-800 truncate">
           {{ collection?.title ?? t("collectionsView.title") }}
         </h1>
-        <span v-if="collection" class="block text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+        <span v-if="collection" class="block text-[10px] text-slate-400 font-bold uppercase tracking-wider truncate">
           {{ collection.slug }}
+          <!-- dataSource chip: sets the read-only expectation up front and
+               links to the file that IS the data (the one editable thing). -->
+          <template v-if="isReadOnly">
+            <span
+              class="inline-flex items-center gap-0.5 ml-1.5 px-1.5 py-px rounded bg-amber-50 text-amber-700 border border-amber-200 normal-case tracking-normal"
+              data-testid="collections-readonly-chip"
+            >
+              <span class="material-icons text-[11px]">lock</span>
+              {{ t("collectionsView.readonlyChip") }}
+            </span>
+            <a
+              v-if="dataSourceRoute"
+              :href="dataSourceRoute ?? undefined"
+              class="ml-1 normal-case tracking-normal font-mono font-normal text-slate-500 hover:text-indigo-700 hover:underline"
+              data-testid="collections-readonly-source"
+              @click="activatePathLink($event, dataSourceRoute ?? '', true)"
+              >{{ collection.schema.dataSource?.path }}</a
+            >
+          </template>
         </span>
       </div>
 
@@ -383,6 +402,7 @@
               :live-derived="liveDerived"
               :view-title="viewTitle"
               :is-singleton="isSingleton"
+              :readonly="isReadOnly"
               :render="render"
               :locale="locale"
               @submit="saveEditor"
@@ -431,6 +451,7 @@
             :group-field="kanbanGroupField"
             :selected="viewing ? String(viewing[collection.schema.primaryKey] ?? '') : undefined"
             :notified="notifiedSeverities"
+            :readonly="isReadOnly"
             @select="onCalendarSelect"
             @move="onKanbanMove"
           />
@@ -455,7 +476,7 @@
 
       <div v-else-if="items.length === 0 && editing?.mode !== 'create'" class="flex flex-col items-center justify-center py-20 text-sm text-slate-400 gap-2">
         <span class="material-icons text-4xl text-slate-300">folder_open</span>
-        <p class="font-semibold text-slate-600">{{ t("collectionsView.itemsEmpty") }}</p>
+        <p class="font-semibold text-slate-600">{{ t(isReadOnly ? "collectionsView.itemsEmptyReadonly" : "collectionsView.itemsEmpty") }}</p>
       </div>
 
       <div
@@ -540,7 +561,7 @@
                       v-if="field.type === 'toggle'"
                       type="checkbox"
                       :checked="toggleChecked(item, field)"
-                      :disabled="isRowInlineSaving(item)"
+                      :disabled="isReadOnly || isRowInlineSaving(item)"
                       class="h-5 w-5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500/20 cursor-pointer align-middle disabled:opacity-50 disabled:cursor-not-allowed"
                       :data-testid="`collections-inline-toggle-${key}-${item[collection.schema.primaryKey]}`"
                       :aria-label="field.label"
@@ -556,7 +577,7 @@
                       v-else-if="field.type === 'boolean'"
                       type="checkbox"
                       :checked="item[key] === true"
-                      :disabled="isRowInlineSaving(item)"
+                      :disabled="isReadOnly || isRowInlineSaving(item)"
                       class="h-5 w-5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500/20 cursor-pointer align-middle disabled:opacity-50 disabled:cursor-not-allowed"
                       :data-testid="`collections-inline-bool-${key}-${item[collection.schema.primaryKey]}`"
                       :aria-label="field.label"
@@ -585,7 +606,7 @@
                     <select
                       v-else-if="field.type === 'enum' && Array.isArray(field.values) && field.values.length > 0"
                       :value="item[key] == null ? '' : String(item[key])"
-                      :disabled="isRowInlineSaving(item)"
+                      :disabled="isReadOnly || isRowInlineSaving(item)"
                       class="rounded-lg border px-2 py-0.5 text-[11px] font-semibold focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                       :class="enumControlClass(String(key), item[key])"
                       :data-testid="`collections-inline-enum-${key}-${item[collection.schema.primaryKey]}`"
@@ -692,6 +713,7 @@
         :live-derived="liveDerived"
         :view-title="viewTitle"
         :is-singleton="isSingleton"
+        :readonly="isReadOnly"
         :render="render"
         :locale="locale"
         @submit="saveEditor"
@@ -1622,10 +1644,24 @@ const listColumnFields = computed<[string, FieldSpec][]>(() =>
  *  exactly one record, its primary key fixed to the declared value. */
 const isSingleton = computed<boolean>(() => Boolean(collection.value?.schema.singleton));
 
+/** True when the collection is backed by an external `dataSource` (CSV) —
+ *  read-only in every write surface here; the server enforces the same
+ *  rule with 405s, this just keeps dead controls off the screen. */
+const isReadOnly = computed<boolean>(() => collection.value?.schema.dataSource !== undefined);
+
+/** File-explorer route for the dataSource file (the one editable thing
+ *  about a read-only collection), or null on a router-less host. */
+const dataSourceRoute = computed<string | null>(() => {
+  const sourcePath = collection.value?.schema.dataSource?.path;
+  return sourcePath ? fileRoutePath(sourcePath) : null;
+});
+
 /** Whether the Add button should show. Always for a normal collection;
- *  for a singleton only until its one record exists. */
+ *  for a singleton only until its one record exists; never for a
+ *  read-only (dataSource) collection. */
 const canCreate = computed<boolean>(() => {
   if (!collection.value) return false;
+  if (isReadOnly.value) return false;
   return !(isSingleton.value && items.value.length > 0);
 });
 
@@ -2144,7 +2180,7 @@ function isRowInlineSaving(item: CollectionItem): boolean {
  *  race the in-flight one. On failure, roll the cell back and surface the
  *  error. Bypasses the detail/edit panel entirely. */
 async function commitInlineEdit(item: CollectionItem, key: string, field: FieldSpec, raw: boolean | string): Promise<void> {
-  if (!collection.value) return;
+  if (!collection.value || isReadOnly.value) return;
   const { slug } = collection.value;
   const itemId = rowId(item);
   if (!itemId || inlineSavingRows.value.has(itemId)) return;

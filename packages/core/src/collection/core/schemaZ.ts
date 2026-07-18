@@ -699,6 +699,24 @@ function fieldDrivenFromFieldCarried(schema: FieldDrivenSchemaView): boolean {
 }
 
 // ---------------------------------------------------------------------------
+// dataSource (external read-only data file)
+// ---------------------------------------------------------------------------
+
+/** External-data collection: the records ARE the rows of a user-supplied
+ *  data file (v1: CSV), queried through DuckDB — never copied into
+ *  `<dataDir>/<id>.json` files. Declaring `dataSource` makes the collection
+ *  **read-only** in every UI/tool write path; updates happen by replacing /
+ *  editing the file itself (file-watch republishes the views). `path` is
+ *  workspace-relative and containment-checked exactly like `dataPath`. The
+ *  row-id column is the schema's existing `primaryKey` — there is
+ *  deliberately no second key concept here.
+ *  See plans/feat-collection-csv-duckdb-source.md. */
+export const DataSourceZ = z.object({
+  type: z.literal("csv"),
+  path: z.string().min(1),
+});
+
+// ---------------------------------------------------------------------------
 // The whole schema
 // ---------------------------------------------------------------------------
 
@@ -706,7 +724,10 @@ export const CollectionSchemaZ = z
   .object({
     title: z.string().min(1),
     icon: z.string().min(1),
-    dataPath: z.string().min(1),
+    // Exactly one of `dataPath` (native JSON-file records) or `dataSource`
+    // (external read-only data file) — enforced by a refine below.
+    dataPath: z.string().min(1).optional(),
+    dataSource: DataSourceZ.optional(),
     primaryKey: z.string().min(1),
     // When set, the collection holds at most one record whose primary
     // key is this exact value (e.g. `me` for the business profile).
@@ -775,6 +796,31 @@ export const CollectionSchemaZ = z
     // schema validates unchanged; `source` is required within it.
     dynamicIcon: DynamicIconSpecZ.optional(),
   })
+  // Exactly one storage declaration: native records need `dataPath`, an
+  // external data file needs `dataSource`. Neither (nowhere to read) and
+  // both (ambiguous which wins) are equally meaningless — fail loudly at
+  // load instead of picking silently.
+  .refine((schema) => (schema.dataPath !== undefined) !== (schema.dataSource !== undefined), {
+    message: "declare exactly one of `dataPath` (native JSON records) or `dataSource` (external read-only data file), never both or neither",
+    path: ["dataPath"],
+  })
+  // A `dataSource` collection is read-only by definition, so schema-level
+  // write machinery can never fire: `singleton` pins CREATES, `ingest`
+  // REFILLS records, `spawn` WRITES successor records. Rejecting them at
+  // validation kills whole classes of writes before any runtime guard.
+  .refine((schema) => schema.dataSource === undefined || (schema.singleton === undefined && schema.ingest === undefined && schema.spawn === undefined), {
+    message: "a `dataSource` collection is read-only — it cannot declare `singleton`, `ingest`, or `spawn` (all of them write records)",
+    path: ["dataSource"],
+  })
+  // Same rule for declarative host writes: a mutate action writes the
+  // record it's invoked on.
+  .refine(
+    (schema) => schema.dataSource === undefined || [...(schema.actions ?? []), ...(schema.collectionActions ?? [])].every((action) => action.kind !== "mutate"),
+    {
+      message: 'a `dataSource` collection is read-only — its actions cannot use `kind: "mutate"` (a host write); use `chat`/`agent` actions instead',
+      path: ["dataSource"],
+    },
+  )
   // The singleton value becomes a record id (and thus a `<id>.json`
   // filename), so it must satisfy the SAME record-id rule the write path
   // enforces — otherwise the create form would lock the primary key to a

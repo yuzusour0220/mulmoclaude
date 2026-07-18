@@ -20,6 +20,8 @@ export type { LoadedCollection } from "./discoveredCollection";
 export * from "./paths";
 export * from "./templatePath";
 export * from "./io";
+export * from "./store";
+export { MAX_CSV_ROWS, encodeCsvRecordId, decodeCsvRecordId, normalizeCsvValue, csvRowToItem, dedupeByRecordId } from "./csvStore";
 export * from "./validate";
 export * from "./mutate";
 export * from "./discovery";

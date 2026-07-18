@@ -52,6 +52,10 @@ async function listRecordFilenames(dataDir: string, workspaceRoot: string): Prom
 }
 
 export async function validateCollectionRecords(collection: LoadedCollection, opts: { workspaceRoot?: string } = {}): Promise<RecordIssue[]> {
+  // A `dataSource` collection has no record FILES to validate — its rows
+  // come from the external data file (type mismatches there surface as
+  // raw values in the views, not as repairable record files).
+  if (collection.schema.dataSource !== undefined) return [];
   const workspaceRoot = opts.workspaceRoot ?? getWorkspaceRoot();
   const entries = await listRecordFilenames(collection.dataDir, workspaceRoot);
   const issues: RecordIssue[] = [];
